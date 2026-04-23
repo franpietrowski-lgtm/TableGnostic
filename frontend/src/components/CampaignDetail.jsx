@@ -184,17 +184,19 @@ function KnowledgeTab({ camp, nodes, onRefresh }) {
       </div>
       {showNew && (
         <form onSubmit={create} className="card-mystic p-5 mb-4 grid md:grid-cols-2 gap-3" data-testid="new-node-form">
-          <select className="select" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
+          <select className="select" value={form.type} data-testid="node-type"
+                  onChange={(e) => setForm({ ...form, type: e.target.value })}>
             {["npc","location","item","event","quest","lore","faction","creature"].map((t) => <option key={t}>{t}</option>)}
           </select>
-          <input className="input" placeholder="Title" value={form.title} required
+          <input className="input" placeholder="Title" value={form.title} required data-testid="node-title"
                  onChange={(e) => setForm({ ...form, title: e.target.value })}/>
-          <textarea className="input md:col-span-2" placeholder="Content (your own prose, lore, secrets…)" value={form.content}
+          <textarea className="input md:col-span-2" placeholder="Content (your own prose, lore, secrets…)"
+                    value={form.content} data-testid="node-content"
                     onChange={(e) => setForm({ ...form, content: e.target.value })}/>
-          <input className="input" placeholder="tags, comma-separated" value={form.tags}
+          <input className="input" placeholder="tags, comma-separated" value={form.tags} data-testid="node-tags"
                  onChange={(e) => setForm({ ...form, tags: e.target.value })}/>
           {camp.is_gm && (
-            <select className="select" value={form.visibility}
+            <select className="select" value={form.visibility} data-testid="node-visibility"
                     onChange={(e) => setForm({ ...form, visibility: e.target.value })}>
               <option value="gm_only">GM only</option>
               <option value="shared">Shared with table</option>
@@ -202,7 +204,7 @@ function KnowledgeTab({ camp, nodes, onRefresh }) {
           )}
           <div className="md:col-span-2 flex justify-end gap-2">
             <button type="button" onClick={() => setShowNew(false)} className="btn btn-ghost">Cancel</button>
-            <button type="submit" className="btn btn-primary">Weave</button>
+            <button type="submit" className="btn btn-primary" data-testid="node-submit">Weave</button>
           </div>
         </form>
       )}
@@ -296,25 +298,26 @@ function CustomTab({ campId, customs, onRefresh }) {
       </p>
 
       <form onSubmit={save} className="card-mystic p-5 mb-6 grid md:grid-cols-2 gap-3" data-testid="custom-form">
-        <select className="select" value={form.kind}
+        <select className="select" value={form.kind} data-testid="rule-kind"
                 onChange={(e) => setForm({ ...form, kind: e.target.value })}>
           <option value="attribute">Attribute</option>
           <option value="defect">Defect</option>
           <option value="skill">Skill</option>
         </select>
-        <input className="input" placeholder="Name" value={form.name} required
+        <input className="input" placeholder="Name" value={form.name} required data-testid="rule-name"
                onChange={(e) => setForm({ ...form, name: e.target.value })}/>
-        <input className="input" type="number" step="0.5" placeholder="Cost per level"
+        <input className="input" type="number" step="0.5" placeholder="Cost per level" data-testid="rule-cost"
                value={form.cost_per_level} onChange={(e) => setForm({ ...form, cost_per_level: e.target.value })}/>
-        <input className="input" placeholder="Category (Greater/Lesser/Serious, or Group tier)" value={form.category}
-               onChange={(e) => setForm({ ...form, category: e.target.value })}/>
-        <input className="input md:col-span-2" placeholder="Page reference (e.g. Custom · Homebrew 1.2)" value={form.page_ref}
+        <input className="input" placeholder="Category (Greater/Lesser/Serious, or Group tier)" data-testid="rule-category"
+               value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}/>
+        <input className="input md:col-span-2" placeholder="Page reference (e.g. Custom · Homebrew 1.2)"
+               value={form.page_ref} data-testid="rule-pageref"
                onChange={(e) => setForm({ ...form, page_ref: e.target.value })}/>
         <textarea className="input md:col-span-2" placeholder="Your description / mechanics notes"
-                  value={form.description_note}
+                  value={form.description_note} data-testid="rule-description"
                   onChange={(e) => setForm({ ...form, description_note: e.target.value })}/>
         <div className="md:col-span-2 flex justify-end">
-          <button className="btn btn-primary" type="submit">Save</button>
+          <button className="btn btn-primary" type="submit" data-testid="rule-submit">Save</button>
         </div>
       </form>
 
