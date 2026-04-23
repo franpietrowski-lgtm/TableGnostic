@@ -1,0 +1,437 @@
+import React, { useEffect, useMemo, useState } from "react";
+import { useNavigate, useParams, Link } from "react-router-dom";
+import { api, formatApiErrorDetail } from "../lib/api";
+import { Plus, X, Save, Trash2, BookOpen } from "lucide-react";
+
+const emptyChar = (campaign_id) => ({
+  campaign_id, name: "", concept: "", power_level: "Heroic", total_points: 120,
+  stats: { body: 4, mind: 4, soul: 4 },
+  attributes: [], defects: [], skills: [], notes: "", published: false,
+});
+
+export default function CharacterBuilder() {
+  const params = useParams();
+  const nav = useNavigate();
+  const campaignIdFromUrl = params.id; // for /campaigns/:id/characters/new
+  const charId = params.id && window.location.pathname.includes("/characters/") ? params.id : null;
+
+  const [ref, setRef] = useState(null);
+  const [customs, setCustoms] = useState([]);
+  const [ch, setCh] = useState(null);
+  const [err, setErr] = useState("");
+
+  useEffect(() => {
+    (async () => {
+      const r = await api.get("/besm/reference").then((x) => x.data);
+      setRef(r);
+      if (charId && window.location.pathname.includes("/edit")) {
+        const existing = await api.get(`/characters/${charId}`).then((x) => x.data);
+        setCh(existing);
+        const cu = await api.get(`/campaigns/${existing.campaign_id}/custom`).then((x) => x.data).catch(() => []);
+        setCustoms(cu);
+      } else {
+        setCh(emptyChar(campaignIdFromUrl));
+        const cu = await api.get(`/campaigns/${campaignIdFromUrl}/custom`).then((x) => x.data).catch(() => []);
+        setCustoms(cu);
+      }
+    })();
+  }, [campaignIdFromUrl, charId]);
+
+  const pointsForPowerLevel = (pl) => (ref?.power_levels.find((p) => p.name === pl)?.points || 120);
+  useEffect(() => { if (ch && ref) setCh((c) => ({ ...c, total_points: pointsForPowerLevel(c.power_level) })); // eslint-disable-next-line
+  }, [ch?.power_level, ref]);
+
+  const spent = useMemo(() => {
+    if (!ch) return { stat_cost: 0, attribute_cost: 0, skill_cost: 0, defect_points: 0, total_spent: 0 };
+    const stat_cost = ch.stats.body + ch.stats.mind + ch.stats.soul;
+    const attribute_cost = ch.attributes.reduce((s, a) => {
+      const base = (a.cost_per_level || 0) * (a.level || 0);
+      const mods = (a.enhancements.length - a.limiters.length) * (a.level || 0);
+      return s + base + mods;
+    }, 0);
+    const skill_cost = ch.skills.reduce((s, k) => s + (k.cost_per_level || 0) * (k.level || 0), 0);
+    const defect_points = ch.defects.reduce((s, d) => s + (d.points_per_rank || 0) * (d.rank || 0), 0);
+    return {
+      stat_cost, attribute_cost, skill_cost, defect_points,
+      total_spent: stat_cost + attribute_cost + skill_cost + defect_points,
+    };
+  }, [ch]);
+
+  if (!ch || !ref) return <div className="p-10 text-mist">Summoning the forge…</div>;
+
+  const remaining = ch.total_points - spent.total_spent;
+
+  const derived = (() => {
+    const attrMap = Object.fromEntries(ch.attributes.map((a) => [a.name, a]));
+    const lv = (n) => attrMap[n]?.level || 0;
+    const { body, mind, soul } = ch.stats;
+    const cv = Math.floor((body + mind + soul) / 3);
+    return {
+      cv, atk: cv + lv("Attack Mastery"), dfn: cv - 2 + lv("Defence Mastery"),
+      hp: (body + soul) * 5 + lv("Tough") * 5,
+      ep: (mind + soul) * 5 + lv("Energised") * 5,
+      dm: 5 + lv("Massive Damage") * 5,
+    };
+  })();
+
+  const addAttribute = (base) => {
+    setCh({
+      ...ch, attributes: [...ch.attributes, {
+        name: base.name, level: 1, cost_per_level: base.cost_per_level || 0,
+        enhancements: [], limiters: [], page: base.page, note: base.note || "",
+        custom_attribute_id: base.id || null,
+      }],
+    });
+  };
+  const addDefect = (base) => {
+    setCh({
+      ...ch, defects: [...ch.defects, {
+        name: base.name, rank: 1, points_per_rank: base.points_per_rank || 0,
+        category: base.category || "Custom", page: base.page, note: base.note || "",
+      }],
+    });
+  };
+  const addSkill = (base) => {
+    setCh({
+      ...ch, skills: [...ch.skills, {
+        group: base.name, level: 1, cost_per_level: base.cost_per_level || 1, page: base.page,
+      }],
+    });
+  };
+
+  const save = async () => {
+    setErr("");
+    try {
+      const payload = { ...ch };
+      if (charId && window.location.pathname.includes("/edit")) {
+        const { data } = await api.put(`/characters/${charId}`, payload);
+        nav(`/app/characters/${data.id}`);
+      } else {
+        const { data } = await api.post("/characters", payload);
+        nav(`/app/characters/${data.id}`);
+      }
+    } catch (e) { setErr(formatApiErrorDetail(e.response?.data?.detail) || e.message); }
+  };
+
+  const customAttrs = customs.filter((c) => c.kind === "attribute");
+  const customDefects = customs.filter((c) => c.kind === "defect");
+  const customSkills = customs.filter((c) => c.kind === "skill");
+
+  return (
+    <div className="px-8 md:px-12 py-10 max-w-7xl">
+      <Link to={`/app/campaigns/${ch.campaign_id}`} className="text-xs font-ui uppercase tracking-widest text-gold/70">
+        ← Campaign
+      </Link>
+      <div className="mt-3 flex items-start justify-between flex-wrap gap-4">
+        <div>
+          <div className="label-ref mb-1">Character Forge · BESM 4E</div>
+          <h1 className="font-display text-4xl text-parchment tracking-wide">
+            {ch.name || "Unnamed Soul"}
+          </h1>
+        </div>
+        <div className="card-mystic px-5 py-3 text-right">
+          <div className="label-ref">Points</div>
+          <div className="font-display text-2xl text-gold">{remaining} / {ch.total_points}</div>
+          <div className="text-[10px] font-ui tracking-widest uppercase text-mist">
+            stats {spent.stat_cost} · attrs {spent.attribute_cost} · skills {spent.skill_cost} · defects {spent.defect_points}
+          </div>
+        </div>
+      </div>
+
+      {err && <div className="mt-3 text-ember text-sm">{err}</div>}
+
+      <div className="mt-8 grid lg:grid-cols-3 gap-6">
+        {/* LEFT: core */}
+        <div className="card-mystic p-6 space-y-4">
+          <div className="label-ref">Identity</div>
+          <input className="input" placeholder="Name" value={ch.name}
+                 onChange={(e) => setCh({ ...ch, name: e.target.value })} data-testid="char-name"/>
+          <textarea className="input" placeholder="Concept / archetype"
+                    value={ch.concept} onChange={(e) => setCh({ ...ch, concept: e.target.value })} data-testid="char-concept"/>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label-ref block mb-1">Power Level</label>
+              <select className="select" value={ch.power_level}
+                      onChange={(e) => setCh({ ...ch, power_level: e.target.value })} data-testid="char-power-level">
+                {ref.power_levels.map((p) => <option key={p.name}>{p.name}</option>)}
+              </select>
+              <div className="text-[10px] text-gold/60 mt-1 font-ui uppercase tracking-widest">
+                {ref.power_levels.find((p) => p.name === ch.power_level)?.points} pts · p.{ref.power_levels.find((p) => p.name === ch.power_level)?.page} BESM 4E
+              </div>
+            </div>
+            <div>
+              <label className="label-ref block mb-1">Total Points</label>
+              <input type="number" className="input" value={ch.total_points}
+                     onChange={(e) => setCh({ ...ch, total_points: +e.target.value })} data-testid="char-total"/>
+            </div>
+          </div>
+
+          <div className="divider-sigil" />
+          <div className="label-ref">Core Stats · p.71 BESM 4E</div>
+          <div className="grid grid-cols-3 gap-3">
+            {["body", "mind", "soul"].map((s) => (
+              <div key={s}>
+                <label className="label-ref block mb-1">{s.toUpperCase()}</label>
+                <input type="number" min={1} max={20} className="input text-center font-display text-xl"
+                       value={ch.stats[s]}
+                       onChange={(e) => setCh({ ...ch, stats: { ...ch.stats, [s]: +e.target.value } })}
+                       data-testid={`stat-${s}`}/>
+              </div>
+            ))}
+          </div>
+
+          <div className="divider-sigil" />
+          <div className="label-ref">Derived · ch.8 p.168 BESM 4E</div>
+          <div className="grid grid-cols-3 gap-2 text-center">
+            {[
+              ["CV", derived.cv], ["ATK", derived.atk], ["DEF", derived.dfn],
+              ["HP", derived.hp], ["EP", derived.ep], ["DM", derived.dm],
+            ].map(([l, v]) => (
+              <div key={l} className="border border-gold/15 py-2 rounded-sm">
+                <div className="label-ref">{l}</div>
+                <div className="font-display text-gold text-lg">{v}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="divider-sigil" />
+          <textarea className="input" placeholder="Notes, backstory, moves…"
+                    value={ch.notes} onChange={(e) => setCh({ ...ch, notes: e.target.value })} data-testid="char-notes"/>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <button onClick={save} className="btn btn-primary" data-testid="save-character-btn">
+              <Save className="w-4 h-4"/> Save
+            </button>
+          </div>
+        </div>
+
+        {/* RIGHT: modular lists */}
+        <div className="lg:col-span-2 space-y-6">
+          <ListSection
+            title="Attributes · p.74–132 BESM 4E"
+            testIdPrefix="attributes"
+            items={ch.attributes}
+            options={[
+              ...ref.attributes.map((a) => ({ ...a, _group: "Core" })),
+              ...customAttrs.map((c) => ({ ...c, _group: "Custom (GM)" })),
+            ]}
+            enhancementOpts={ref.enhancements}
+            limiterOpts={ref.limiters}
+            onAdd={addAttribute}
+            renderRow={(a, idx) => (
+              <AttributeRow key={idx} idx={idx} a={a} ref={ref}
+                onUpdate={(next) => {
+                  const arr = [...ch.attributes]; arr[idx] = next;
+                  setCh({ ...ch, attributes: arr });
+                }}
+                onRemove={() => {
+                  const arr = [...ch.attributes]; arr.splice(idx, 1);
+                  setCh({ ...ch, attributes: arr });
+                }}/>
+            )}
+            kind="attribute"
+          />
+
+          <ListSection
+            title="Defects · p.154 BESM 4E"
+            testIdPrefix="defects"
+            items={ch.defects}
+            options={[
+              ...ref.defects.map((d) => ({ ...d, _group: d.category })),
+              ...customDefects.map((c) => ({
+                ...c, _group: "Custom (GM)",
+                points_per_rank: -Math.abs(+c.cost_per_level || 1), category: c.category || "Custom"
+              })),
+            ]}
+            onAdd={addDefect}
+            renderRow={(d, idx) => (
+              <DefectRow key={idx} idx={idx} d={d}
+                onUpdate={(next) => {
+                  const arr = [...ch.defects]; arr[idx] = next;
+                  setCh({ ...ch, defects: arr });
+                }}
+                onRemove={() => {
+                  const arr = [...ch.defects]; arr.splice(idx, 1);
+                  setCh({ ...ch, defects: arr });
+                }}/>
+            )}
+            kind="defect"
+          />
+
+          <ListSection
+            title="Skill Groups · p.120 BESM 4E"
+            testIdPrefix="skills"
+            items={ch.skills}
+            options={[
+              ...ref.skill_groups.map((s) => ({ ...s })),
+              ...customSkills.map((c) => ({ ...c, _group: "Custom (GM)" })),
+            ]}
+            onAdd={addSkill}
+            renderRow={(s, idx) => (
+              <SkillRow key={idx} idx={idx} s={s}
+                onUpdate={(next) => {
+                  const arr = [...ch.skills]; arr[idx] = next;
+                  setCh({ ...ch, skills: arr });
+                }}
+                onRemove={() => {
+                  const arr = [...ch.skills]; arr.splice(idx, 1);
+                  setCh({ ...ch, skills: arr });
+                }}/>
+            )}
+            kind="skill"
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ListSection({ title, items, options, onAdd, renderRow, kind, testIdPrefix }) {
+  const [show, setShow] = useState(false);
+  const [q, setQ] = useState("");
+  const filtered = options.filter((o) => o.name.toLowerCase().includes(q.toLowerCase()));
+  return (
+    <div className="card-mystic p-5">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="h-arcane text-sm">{title}</h3>
+        <button onClick={() => setShow(!show)} className="btn btn-ghost text-xs" data-testid={`add-${testIdPrefix}-btn`}>
+          <Plus className="w-3 h-3"/> Add
+        </button>
+      </div>
+      {items.length === 0 && <div className="text-mist italic font-body text-xs">None selected.</div>}
+      <div className="space-y-2">{items.map((it, i) => renderRow(it, i))}</div>
+
+      {show && (
+        <div className="mt-4 border-t border-gold/10 pt-4">
+          <input className="input mb-3" placeholder={`Search ${kind}s…`} value={q} onChange={(e) => setQ(e.target.value)}
+                 data-testid={`search-${testIdPrefix}`}/>
+          <div className="max-h-72 overflow-auto scroll-stylish grid sm:grid-cols-2 gap-2">
+            {filtered.map((o, i) => (
+              <button key={i} onClick={() => { onAdd(o); setShow(false); setQ(""); }}
+                      className="text-left p-2 border border-gold/10 rounded-sm hover:border-gold/40 hover:bg-gold/5"
+                      data-testid={`opt-${testIdPrefix}-${o.name.replace(/\s+/g,'-')}`}>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-sm text-parchment font-ui">{o.name}</div>
+                  <span className="text-[10px] text-gold/70 font-ui">
+                    {kind === "defect" ? `${o.points_per_rank || -1}/rank` : `${o.cost_per_level ?? 0} pts/lvl`}
+                  </span>
+                </div>
+                <div className="text-[10px] text-mist font-ui flex items-center gap-1 mt-0.5">
+                  <BookOpen className="w-3 h-3"/> {o.page ? `p.${o.page} BESM 4E` : (o.page_ref || "—")}
+                  {o._group && <span className="ml-2 tag">{o._group}</span>}
+                </div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AttributeRow({ idx, a, ref, onUpdate, onRemove }) {
+  const [openCust, setOpenCust] = useState(false);
+  const toggle = (kind, name) => {
+    const list = a[kind].includes(name) ? a[kind].filter((x) => x !== name) : [...a[kind], name];
+    onUpdate({ ...a, [kind]: list });
+  };
+  const cost = (a.cost_per_level * a.level) + (a.enhancements.length - a.limiters.length) * a.level;
+  return (
+    <div className="border border-gold/15 rounded-sm p-3" data-testid={`attr-row-${idx}`}>
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div>
+          <div className="text-sm text-parchment font-ui">{a.name}</div>
+          <div className="text-[10px] font-ui text-mist uppercase tracking-widest flex items-center gap-1">
+            <BookOpen className="w-3 h-3"/> {a.page ? `p.${a.page} BESM 4E` : "Custom"}
+            {a.note && <span className="ml-1 text-gold/70">({a.note})</span>}
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="label-ref">LVL</label>
+          <input type="number" min={1} max={10} className="input w-20 text-center"
+                 value={a.level} onChange={(e) => onUpdate({ ...a, level: +e.target.value })}
+                 data-testid={`attr-level-${idx}`}/>
+          <span className="text-gold font-display">{cost} pts</span>
+          <button onClick={onRemove} className="text-ember/70 hover:text-ember" data-testid={`attr-remove-${idx}`}><X className="w-4 h-4"/></button>
+        </div>
+      </div>
+      <div className="mt-2 flex gap-2 text-[10px]">
+        <button className="btn btn-ghost text-[10px] py-1" onClick={() => setOpenCust(!openCust)}
+                data-testid={`attr-cust-${idx}`}>
+          {openCust ? "Hide" : "Customise"} ({a.enhancements.length}↑ / {a.limiters.length}↓)
+        </button>
+      </div>
+      {openCust && (
+        <div className="mt-2 grid md:grid-cols-2 gap-3">
+          <div>
+            <div className="label-ref mb-1">Enhancements (+1/lvl each) · p.145</div>
+            <div className="flex flex-wrap gap-1">
+              {ref.enhancements.map((e) => (
+                <button key={e.name} onClick={() => toggle("enhancements", e.name)}
+                        className={`tag ${a.enhancements.includes(e.name) ? "border-gold text-gold-bright bg-gold/15" : ""}`}>
+                  {e.name}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div>
+            <div className="label-ref mb-1">Limiters (-1/lvl each) · p.148</div>
+            <div className="flex flex-wrap gap-1">
+              {ref.limiters.map((l) => (
+                <button key={l.name} onClick={() => toggle("limiters", l.name)}
+                        className={`tag ${a.limiters.includes(l.name) ? "border-ember text-ember bg-ember/15" : ""}`}>
+                  {l.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DefectRow({ idx, d, onUpdate, onRemove }) {
+  const pts = d.points_per_rank * d.rank;
+  return (
+    <div className="border border-gold/15 rounded-sm p-3 flex items-center justify-between gap-2 flex-wrap"
+         data-testid={`defect-row-${idx}`}>
+      <div>
+        <div className="text-sm text-parchment font-ui">{d.name}</div>
+        <div className="text-[10px] font-ui text-mist uppercase tracking-widest flex items-center gap-1">
+          <BookOpen className="w-3 h-3"/> {d.page ? `p.${d.page} BESM 4E` : "Custom"} · {d.category}
+        </div>
+      </div>
+      <div className="flex items-center gap-2">
+        <label className="label-ref">RANK</label>
+        <input type="number" min={1} max={3} className="input w-20 text-center"
+               value={d.rank} onChange={(e) => onUpdate({ ...d, rank: +e.target.value })}
+               data-testid={`defect-rank-${idx}`}/>
+        <span className="text-ember font-display">{pts} pts</span>
+        <button onClick={onRemove} className="text-ember/70 hover:text-ember"><X className="w-4 h-4"/></button>
+      </div>
+    </div>
+  );
+}
+
+function SkillRow({ idx, s, onUpdate, onRemove }) {
+  return (
+    <div className="border border-gold/15 rounded-sm p-3 flex items-center justify-between gap-2 flex-wrap"
+         data-testid={`skill-row-${idx}`}>
+      <div>
+        <div className="text-sm text-parchment font-ui">{s.group}</div>
+        <div className="text-[10px] font-ui text-mist uppercase tracking-widest flex items-center gap-1">
+          <BookOpen className="w-3 h-3"/> {s.page ? `p.${s.page} BESM 4E` : "Custom"} · {s.cost_per_level} pts/lvl
+        </div>
+      </div>
+      <div className="flex items-center gap-2">
+        <label className="label-ref">LVL</label>
+        <input type="number" min={1} max={6} className="input w-20 text-center"
+               value={s.level} onChange={(e) => onUpdate({ ...s, level: +e.target.value })}
+               data-testid={`skill-level-${idx}`}/>
+        <span className="text-gold font-display">{s.cost_per_level * s.level} pts</span>
+        <button onClick={onRemove} className="text-ember/70 hover:text-ember"><X className="w-4 h-4"/></button>
+      </div>
+    </div>
+  );
+}

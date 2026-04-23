@@ -1,0 +1,37 @@
+{
+  "summary": "Backend-only testing for Table-Gnostic (BESM 4E TTRPG). Built comprehensive pytest suite covering health, JWT auth (register/login/me via both Bearer and cookie), BESM reference data counts + source metadata, campaigns + RBAC, custom GM rules, character creation with derived-value math, nodes visibility/reveal flow, edges, sessions, chat, dice (simple/modifier/stat-ref notations), initiative sort/delete, round advance with effect expiry, damage system chat, and WebSocket broadcast. 40/40 tests passed (100%).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/auth/register", "issue": "No cleanup of test-created users; repeated runs leave TEST_ users in DB. Non-blocking for tests (unique uuid) but consider a maintenance cleanup."},
+      {"endpoint": "CORS", "issue": "allow_origins=['*'] with allow_credentials=False. Frontend uses Bearer so it works, but if cookie auth is ever needed cross-origin, this has to be tightened to explicit origins with credentials=True."},
+      {"endpoint": "POST /api/dice", "issue": "success is computed as total <= target (roll-under). Semantics OK for BESM but comment in code is self-contradicting; document clearly or parameterise."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py is ~1000 lines — consider splitting into modules (auth, campaigns, characters, sessions, dice, ws) for maintainability.",
+    "WebSocket /api/ws/session/{sid} has NO authentication — any client that knows the session id can subscribe to chat/dice/initiative broadcasts. Add a token query-param check before bus.join.",
+    "@app.on_event('startup') is deprecated in modern FastAPI; migrate to lifespan context.",
+    "calc_derived floors CV via integer division which can go negative if stats are 0; no guardrails on stat ranges.",
+    "roll_dice allows stat refs that silently resolve to 0 when character_id missing — consider warning in response.",
+    "Login brute-force store updates locked_until on every failure instead of only after threshold; may extend lockout unnecessarily but behaviour is still 5-strike based.",
+    "Password reset token stores datetime as naive; compare uses replace(tzinfo=utc) — acceptable but fragile.",
+    "list_characters/list_nodes have no pagination caps beyond .to_list(500) — fine for MVP."
+  ],
+  "updated_files": [
+    "/app/backend/tests/backend_test.py"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "not tested (backend-only request)"},
+  "test_credentials": "admin@tablegnostic.com/admin123, gm@tablegnostic.com/gm123456, player@tablegnostic.com/player12345 — all verified working.",
+  "seed_data_creation": "Tests create TEST_ prefixed campaigns/characters/nodes/effects on the fly; campaign fixture teardown deletes its cascade. Some TEST_ users remain from register tests (harmless, uuid-unique).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All backend endpoints verified functional. Derived calc formula confirmed: CV=floor((B+M+S)/3), HP=(B+S)*5+Tough*5, EP=(M+S)*5+Energised*5, DM=5+MassiveDamage*5. Dice roller supports stat refs: body/mind/soul/cv/atk/def/combat_value/attack_value/defence_value. WebSocket at wss://<host>/api/ws/session/{sid} broadcasts type=chat|dice|initiative|round|effect. Note the WS has no auth — flag before prod. Pytest file at /app/backend/tests/backend_test.py runs in ~9s.",
+  "rca of the issue": "N/A — no functional issues found."
+}
