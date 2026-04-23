@@ -473,17 +473,23 @@ async def forgot_password(body: ForgotIn):
     email = body.email.lower()
     user = await db.users.find_one({"email": email})
     if user:
-        token = secrets.token_urlsafe(32)
-        await db.password_reset_tokens.insert_one({
-            "token": token, "user_id": user["id"],
-            "expires_at": datetime.now(timezone.utc) + timedelta(hours=1),
-            "used": False,
-        })
-        base = FRONTEND_PUBLIC_URL or ""
-        reset_link = f"{base}/reset?token={token}" if base else f"/reset?token={token}"
-        print(f"[Password reset] {email} -> {reset_link}")
-        await send_password_reset_email(email, reset_link, user.get("name", ""))
-    # Always return ok (don't leak whether email exists)
+        try:
+            token = secrets.token_urlsafe(32)
+            await db.password_reset_tokens.insert_one({
+                "token": token, "user_id": user["id"],
+                "expires_at": datetime.now(timezone.utc) + timedelta(hours=1),
+                "used": False,
+            })
+            base = FRONTEND_PUBLIC_URL or ""
+            reset_link = f"{base}/reset?token={token}" if base else f"/reset?token={token}"
+            print(f"[Password reset] {email} -> {reset_link}")
+            try:
+                await send_password_reset_email(email, reset_link, user.get("name", ""))
+            except Exception as e:
+                print(f"[email:error] {e}")  # never leak delivery status
+        except Exception as e:
+            print(f"[forgot-password:error] {e}")
+    # Always return ok (don't leak whether email exists or whether delivery succeeded)
     return {"ok": True}
 
 @api.post("/auth/reset-password")
