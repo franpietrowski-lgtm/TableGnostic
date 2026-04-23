@@ -1,0 +1,37 @@
+{
+  "summary": "Frontend E2E testing for Table-Gnostic V1 MVP. Verified Landing, Auth (Demo GM prefill + submit), Dashboard, Campaign create (Forge a new rite modal), Campaign detail tabs (Characters/Knowledge Web/Sessions/Custom Rules — Custom is GM-only and visible), Character Forge (BESM reference panel, add Attribute=Flight, add Defect, add Skill Group, Save → /app/characters/:id), Character Sheet (stats + derived CV=4/HP=40/EP=40/DM=5, source refs 'P.N BESM 4E', quick-Body/Mind/Soul/Attack/Defence/Initiative buttons + Edit btn), Sessions (Start session prompt dialog → /app/sessions/:id with 3-col layout Initiative | Chat | Dice Altar, chat send, dice 2d6 → log '9 [5,4]'), Reference (Attributes default + search + Defects tab), Logout → landing. Two forms lack the data-testids implied by the review spec.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "CampaignDetail KnowledgeWeb inline form", "issue": "Node form fields and submit button missing data-testids. Spec expects node-title/node-content/node-type/node-visibility/node-submit. Form works manually (visible with type select 'npc', title input, content textarea, tags input, GM only selector, Weave button) but not automatable.", "selector": "Form inside tab-knowledge (Weave a node)", "priority": "MEDIUM"},
+      {"component": "CampaignDetail Custom Rules inline form", "issue": "The custom-rule creation form is open inline by default (no new-rule-btn). All fields (kind select, name input, cost input, category input, description textarea, Save button) lack data-testids. Cannot be driven by automated tests as currently specified.", "selector": "Form inside tab-custom", "priority": "MEDIUM"},
+      {"component": "CharacterBuilder ListSection/AttributeRow", "issue": "React console warning: 'Function components cannot be given refs. Check the render method of ListSection.' Use React.forwardRef for AttributeRow/DefectRow/SkillRow. Non-blocking but polluting console.", "selector": "AttributeRow inside ListSection", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Auth page", "issues": ["Native HTML password input (black background, default browser UI) contrasts oddly with the gold/dark theme — inputs are visible but flat. Minor."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/test_reports/iteration_1.json",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Add data-testids to KnowledgeWeb node form in CampaignDetail.jsx: node-title, node-content, node-type, node-visibility, node-submit (or save-node-btn).",
+    "Add data-testids to Custom Rules form in CampaignDetail.jsx: rule-kind, rule-name, rule-cost, rule-category, rule-description, rule-submit (or save-rule-btn). Also note there is no new-rule-btn — form is permanently open; either hide behind a toggle with new-rule-btn or keep as-is but add testids.",
+    "Wrap CharacterBuilder row components (AttributeRow/DefectRow/SkillRow) in React.forwardRef to silence ref warning."
+  ],
+  "critical_code_review_comments": [
+    "Two CampaignDetail sub-forms (Knowledge Web, Custom Rules) don't follow the data-testid convention that the rest of the app does. Reduces automated test coverage.",
+    "Landing/Hero copy is split across two lines ('Not the system.' + italic 'The table.') — works visually but a single Playwright text match on the full phrase fails. Consider aria-label on the combined hero for test anchoring.",
+    "Char sheet source label uses uppercase 'P.94' while the MVP description says 'p.N' — cosmetic; update convention in either code or spec for consistency."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (iteration_1 — not re-run)", "frontend": "~85% (11/13 scenarios fully verified; 2 scenarios — Knowledge node creation visible persistence, Custom rule creation visible persistence — not verified due to missing data-testids on forms, though the UI flows render)"},
+  "test_credentials": "gm@tablegnostic.com / gm123456 — worked via demo-gm-btn prefill.",
+  "seed_data_creation": "Created 1 campaign ('TEST Campaign E2E'), 1 character ('TEST Grimshade' — Flight x1, Achilles Heel x1, Adventuring x1, 120 pts Heroic), 1 session ('Test Session'). Knowledge node 'TEST Veiled Archon' was composed in the form but NOT saved (submit button not resolvable by testid). Custom Rule 'Aether Sense' not saved for the same reason.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "After main agent adds data-testids to the two inline forms, retest: (a) create node with type=npc, visibility=gm_only and verify it renders in the list with reveal-<id> control; (b) create custom rule kind=attribute, name='Aether Sense', cost=2 and verify it appears in 'No custom rules yet.' becomes a list. Everything else is verified green. Session dice log shows rolls as uppercase '2D6' in UI — adjust case-insensitive assertions. Char sheet source label is 'P.94 BESM 4E' (capital P).",
+  "rca of the issue": "Two CampaignDetail inline forms were implemented without following the data-testid convention that Auth, Shell, Campaigns, CharacterBuilder, CharacterSheet, SessionView and Reference all follow. The underlying React + form code works (manually usable), the gap is purely at the test-hook layer."
+}
