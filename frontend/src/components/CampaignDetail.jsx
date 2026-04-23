@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import { api, formatApiErrorDetail } from "../lib/api";
 import * as Tabs from "@radix-ui/react-tabs";
-import { Users, Plus, UserPlus2, ArrowRight, Trash2, Sparkles, Eye, EyeOff, Link as LinkIcon, Wand2 } from "lucide-react";
+import { Users, Plus, UserPlus2, ArrowRight, Trash2, Sparkles, Eye, EyeOff, Link as LinkIcon, Wand2, Shield, Copy, RefreshCw, Check, Save } from "lucide-react";
 
 export default function CampaignDetail() {
   const { id } = useParams();
@@ -79,12 +79,13 @@ export default function CampaignDetail() {
       <div className="divider-sigil my-8" />
 
       <Tabs.Root defaultValue="characters">
-        <Tabs.List className="flex gap-2 border-b border-gold/10 pb-3">
+        <Tabs.List className="flex gap-2 border-b border-gold/10 pb-3 flex-wrap">
           {[
             ["characters", "Characters"],
             ["knowledge", "Knowledge Web"],
             ["sessions", "Sessions"],
-            ...(camp.is_gm ? [["custom", "Custom Rules"]] : []),
+            ["primer", "Player Primer"],
+            ...(camp.is_gm ? [["custom", "Custom Rules"], ["invite", "Invite & Share"]] : []),
           ].map(([v, l]) => (
             <Tabs.Trigger key={v} value={v}
               className="px-4 py-2 text-xs font-ui tracking-widest uppercase text-mist hover:text-parchment
@@ -104,9 +105,17 @@ export default function CampaignDetail() {
         <Tabs.Content value="sessions" className="pt-6">
           <SessionsTab camp={camp} sessions={sessions} onStart={startSession} />
         </Tabs.Content>
+        <Tabs.Content value="primer" className="pt-6">
+          <PrimerTab camp={camp} onRefresh={load} />
+        </Tabs.Content>
         {camp.is_gm && (
           <Tabs.Content value="custom" className="pt-6">
             <CustomTab campId={id} customs={customs} onRefresh={load} />
+          </Tabs.Content>
+        )}
+        {camp.is_gm && (
+          <Tabs.Content value="invite" className="pt-6">
+            <InviteTab camp={camp} onRefresh={load} />
           </Tabs.Content>
         )}
       </Tabs.Root>
@@ -345,3 +354,151 @@ function CustomTab({ campId, customs, onRefresh }) {
     </div>
   );
 }
+
+function PrimerTab({ camp, onRefresh }) {
+  const [primer, setPrimer] = useState(camp.player_primer || "");
+  const [allowedA, setAllowedA] = useState((camp.allowed_attributes || []).join(", "));
+  const [prohibA, setProhibA] = useState((camp.prohibited_attributes || []).join(", "));
+  const [allowedD, setAllowedD] = useState((camp.allowed_defects || []).join(", "));
+  const [prohibD, setProhibD] = useState((camp.prohibited_defects || []).join(", "));
+  const [allowedS, setAllowedS] = useState((camp.allowed_skill_groups || []).join(", "));
+  const [prohibS, setProhibS] = useState((camp.prohibited_skill_groups || []).join(", "));
+  const [saved, setSaved] = useState(false);
+  const [err, setErr] = useState("");
+  const parse = (s) => s.split(",").map((x) => x.trim()).filter(Boolean);
+
+  const save = async () => {
+    setErr(""); setSaved(false);
+    try {
+      const payload = { ...camp,
+        player_primer: primer,
+        allowed_attributes: parse(allowedA),
+        prohibited_attributes: parse(prohibA),
+        allowed_defects: parse(allowedD),
+        prohibited_defects: parse(prohibD),
+        allowed_skill_groups: parse(allowedS),
+        prohibited_skill_groups: parse(prohibS),
+      };
+      delete payload.is_gm; delete payload.members; delete payload.id;
+      delete payload.gm_id; delete payload.gm_name; delete payload.member_ids;
+      delete payload.invite_token; delete payload.created_at;
+      await api.put(`/campaigns/${camp.id}`, payload);
+      setSaved(true); setTimeout(() => setSaved(false), 1800);
+      onRefresh();
+    } catch (e) { setErr(e.response?.data?.detail || e.message); }
+  };
+
+  return (
+    <div className="max-w-3xl">
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="label-ref">Player Primer</div>
+          <h3 className="h-arcane text-sm mt-1">What players need to know before they forge a character</h3>
+        </div>
+        {camp.is_gm && (
+          <button onClick={save} className="btn btn-primary" data-testid="primer-save-btn">
+            <Save className="w-4 h-4"/> {saved ? "Saved" : "Save"}
+          </button>
+        )}
+      </div>
+      <p className="text-xs text-mist font-body mt-2 italic">
+        Visible to all seated players. Use it to establish the setting, the tone, what's allowed,
+        what's off the table, and what the table expects from each character's arc.
+      </p>
+      <div className="divider-sigil my-4"/>
+
+      {camp.is_gm ? (
+        <textarea className="input min-h-[220px] font-body" placeholder="Welcome to the campaign. In this world…"
+                  value={primer} onChange={(e) => setPrimer(e.target.value)} data-testid="primer-input"/>
+      ) : (
+        <div className="card-mystic p-5 whitespace-pre-wrap text-parchment/90 font-body leading-relaxed" data-testid="primer-readonly">
+          {camp.player_primer || <span className="text-mist italic">The Game Master hasn't written a primer yet.</span>}
+        </div>
+      )}
+
+      {camp.is_gm && (
+        <>
+          <div className="divider-sigil my-6"/>
+          <div className="label-ref mb-2 flex items-center gap-2">Allow / Prohibit Lists <Shield className="w-3 h-3"/></div>
+          <p className="text-xs text-mist font-body mb-4 italic">
+            Leave <b>Allowed</b> empty to permit everything, or list names to restrict the character forge
+            to only those entries. <b>Prohibited</b> items are always hidden from the player picker.
+          </p>
+          <div className="grid md:grid-cols-2 gap-4">
+            <ListField label="Allowed Attributes" value={allowedA} setValue={setAllowedA} testid="allowed-attrs"
+                       hint="e.g. Attack Mastery, Combat Technique, Flight, Heightened Senses"/>
+            <ListField label="Prohibited Attributes" value={prohibA} setValue={setProhibA} testid="prohibited-attrs"
+                       hint="e.g. Mind Control, Dynamic Powers"/>
+            <ListField label="Allowed Defects" value={allowedD} setValue={setAllowedD} testid="allowed-defects"
+                       hint="Narrow to flaws that fit the setting"/>
+            <ListField label="Prohibited Defects" value={prohibD} setValue={setProhibD} testid="prohibited-defects"
+                       hint="e.g. Awkward Size, Vulnerability"/>
+            <ListField label="Allowed Skill Groups" value={allowedS} setValue={setAllowedS} testid="allowed-skills"/>
+            <ListField label="Prohibited Skill Groups" value={prohibS} setValue={setProhibS} testid="prohibited-skills"/>
+          </div>
+          {err && <div className="mt-3 text-ember text-sm">{err}</div>}
+        </>
+      )}
+    </div>
+  );
+}
+
+function ListField({ label, value, setValue, testid, hint }) {
+  return (
+    <div>
+      <label className="label-ref block mb-1">{label}</label>
+      <input className="input" placeholder="comma-separated names"
+             value={value} onChange={(e) => setValue(e.target.value)} data-testid={testid}/>
+      {hint && <div className="text-[10px] text-mist/70 italic mt-1">{hint}</div>}
+    </div>
+  );
+}
+
+function InviteTab({ camp, onRefresh }) {
+  const [copied, setCopied] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const inviteUrl = `${window.location.origin}/invite/${camp.invite_token}`;
+  const copy = async () => {
+    try { await navigator.clipboard.writeText(inviteUrl); setCopied(true); setTimeout(() => setCopied(false), 1500); }
+    catch { alert("Copy failed. Long-press the link to copy manually."); }
+  };
+  const regen = async () => {
+    if (!window.confirm("Revoke the old link and issue a new one?")) return;
+    setBusy(true);
+    try { await api.post(`/campaigns/${camp.id}/regenerate-invite`); onRefresh(); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <div className="max-w-2xl">
+      <div className="label-ref">Invite & Share</div>
+      <h3 className="h-arcane text-sm mt-1">A direct path to the table</h3>
+      <p className="text-xs text-mist font-body mt-2 italic">
+        Share this link by DM, Discord, or email. Anyone who opens it will see a summary of the campaign
+        and — if signed in — can claim a seat instantly.
+      </p>
+
+      <div className="card-mystic p-5 mt-6" data-testid="invite-card">
+        <div className="label-ref mb-2">Invite link</div>
+        <div className="flex items-center gap-2">
+          <input className="input font-mono text-[11px]" readOnly value={inviteUrl} data-testid="invite-url"/>
+          <button onClick={copy} className="btn" data-testid="invite-copy-btn">
+            {copied ? <Check className="w-4 h-4 text-gold-bright"/> : <Copy className="w-4 h-4"/>}
+            {copied ? "Copied" : "Copy"}
+          </button>
+        </div>
+        <div className="mt-4 flex gap-2">
+          <button onClick={regen} disabled={busy} className="btn btn-danger text-xs" data-testid="invite-regen-btn">
+            <RefreshCw className="w-3 h-3"/> Revoke & regenerate
+          </button>
+        </div>
+        <div className="mt-4 text-[10px] font-ui uppercase tracking-widest text-mist/70">
+          {camp.visibility === "public"
+            ? "Public campaign — also discoverable in the Seekers' Hall."
+            : "Private campaign — only this link grants a seat."}
+        </div>
+      </div>
+    </div>
+  );
+}
+

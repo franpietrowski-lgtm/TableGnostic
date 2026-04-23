@@ -13,6 +13,7 @@ import SessionView from "./components/SessionView";
 import Reference from "./components/Reference";
 import CampaignGenesis from "./components/CampaignGenesis";
 import Discover from "./components/Discover";
+import Invite from "./components/Invite";
 
 function Protected({ children }) {
   const { user, loading } = useAuth();
@@ -38,6 +39,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Landing />} />
           <Route path="/auth" element={<Auth />} />
+          <Route path="/invite/:token" element={<Invite />} />
           <Route element={<Protected><Shell /></Protected>}>
             <Route path="/app" element={<Dashboard />} />
             <Route path="/app/campaigns" element={<Campaigns />} />

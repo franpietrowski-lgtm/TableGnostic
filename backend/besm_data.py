@@ -240,7 +240,39 @@ POWER_LEVELS = [
 # Knowledge node types (app-level, not BESM-specific)
 NODE_TYPES = ["npc", "location", "item", "event", "quest", "lore", "faction", "creature"]
 
-# Dice notation targets (p.177, Table-16)
+# BESM Extras — Rule Expansions & Character Options (Dyskami, v1.1.2)
+# This is a separate book; source references use the "BESM Extras" label.
+BOOK_EXTRAS = "BESM Extras"
+
+EXTRAS_RULES = [
+    # Chapter 1 — Stats & Values
+    {"name": "Shock Value", "category": "Stat Extension", "page": 14, "summary": "gritty injury tracking"},
+    {"name": "Sanity Points", "category": "Stat Extension", "page": 15, "summary": "horror / mental strain track"},
+    # Chapter 2 — Skills
+    {"name": "Skill Ranks", "category": "Skill Expansion", "page": 19, "summary": "rank-based skill progression (Rank 1–5)"},
+    {"name": "Genius Skills", "category": "Skill Expansion", "page": 23, "summary": "prodigy-level bonus rules"},
+    {"name": "Skill Specialisations", "category": "Skill Expansion", "page": 24, "summary": "narrow-focus bonuses"},
+    {"name": "Individual Skills", "category": "Skill Expansion", "page": 26, "summary": "replace Skill Groups with single skills"},
+    {"name": "Templates and Skills", "category": "Skill Expansion", "page": 26, "summary": "pre-built skill template kits"},
+    # Chapter 3 — Expanded Attributes / Enh / Lim (page refs vary)
+    # Chapter 4 — Combat
+    {"name": "Morale for NPCs", "category": "Combat Option", "page": 51, "summary": "rout / surrender mechanics"},
+    {"name": "Mass Combat", "category": "Combat Option", "page": 52, "summary": "large-scale engagements"},
+    {"name": "Critical Hits", "category": "Combat Option", "page": 56},
+    {"name": "Critical Failures", "category": "Combat Option", "page": 57},
+    {"name": "Grappling (Expanded)", "category": "Combat Option", "page": 58},
+    {"name": "Tactical Combat", "category": "Combat Option", "page": 60},
+    {"name": "Combined Attacks", "category": "Combat Option", "page": 62},
+    # Chapter 6 — Power Packs & Bundles
+    {"name": "Power Packs", "category": "Character Option", "page": 73, "summary": "themed attribute bundles (e.g. Wizardry)"},
+    {"name": "Power Bundles", "category": "Character Option", "page": 76, "summary": "mix-and-match attribute packages"},
+    # Chapter 7 — Hazards
+    {"name": "Poisons", "category": "Hazard", "page": 80},
+    {"name": "Disease", "category": "Hazard", "page": 82},
+    {"name": "Deprivation", "category": "Hazard", "page": 84},
+    {"name": "Threat Scores", "category": "Hazard", "page": 86},
+    {"name": "Artificial Intelligences", "category": "NPC Type", "page": 93},
+]
 TARGET_NUMBERS = [
     {"difficulty": "Easy", "tn": 6, "page": 177},
     {"difficulty": "Average", "tn": 8, "page": 177},

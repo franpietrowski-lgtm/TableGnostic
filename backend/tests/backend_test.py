@@ -864,3 +864,226 @@ class TestCORS:
         aco = r.headers.get("access-control-allow-origin")
         # Should NOT echo evil.example.com
         assert aco != "https://evil.example.com", f"unexpected allow-origin={aco}"
+
+
+# ---------------- Iteration 4: BESM Extras ----------------
+
+class TestBESMExtras:
+    def test_extras_book_and_rules_count(self):
+        r = requests.get(f"{API}/besm/reference")
+        assert r.status_code == 200
+        d = r.json()
+        assert d.get("extras_book") == "BESM Extras"
+        assert "extras_rules" in d
+        assert len(d["extras_rules"]) == 21, f"got {len(d['extras_rules'])} extras rules"
+
+    def test_extras_rules_source_and_page(self):
+        d = requests.get(f"{API}/besm/reference").json()
+        for item in d["extras_rules"]:
+            assert "name" in item
+            assert "source" in item
+            assert item["source"]["book"] == "BESM Extras"
+            assert isinstance(item["source"]["page"], int)
+
+    def test_extras_rules_contain_key_items(self):
+        d = requests.get(f"{API}/besm/reference").json()
+        names = [x["name"] for x in d["extras_rules"]]
+        for n in ["Shock Value", "Sanity Points", "Skill Ranks", "Power Packs"]:
+            assert n in names, f"missing extras rule {n}"
+
+
+# ---------------- Iteration 4: Campaign primer + invite token ----------------
+
+@pytest.fixture(scope="session")
+def primer_campaign(gm_token):
+    """Campaign with primer + allow/prohibit lists — used for invite tests."""
+    payload = {
+        "name": f"TEST_Primer_{uuid.uuid4().hex[:6]}",
+        "description": "primer test",
+        "visibility": "public",
+        "max_players": 3,
+        "player_primer": "Only human-scope powers",
+        "prohibited_attributes": ["Mind Control", "Dynamic Powers"],
+        "allowed_attributes": [],
+        "prohibited_defects": [],
+        "prohibited_skill_groups": ["Warrior"],
+    }
+    r = requests.post(f"{API}/campaigns", json=payload, headers=h(gm_token))
+    assert r.status_code == 200, r.text
+    camp = r.json()
+    yield camp
+    requests.delete(f"{API}/campaigns/{camp['id']}", headers=h(gm_token))
+
+
+class TestCampaignPrimer:
+    def test_create_returns_primer_and_invite(self, primer_campaign):
+        assert primer_campaign["player_primer"] == "Only human-scope powers"
+        assert primer_campaign["prohibited_attributes"] == ["Mind Control", "Dynamic Powers"]
+        assert primer_campaign["prohibited_skill_groups"] == ["Warrior"]
+        # invite_token: non-empty URL-safe ~22 chars (token_urlsafe(16) = 22)
+        tok = primer_campaign.get("invite_token")
+        assert isinstance(tok, str) and len(tok) >= 16
+
+    def test_get_campaign_returns_primer(self, gm_token, primer_campaign):
+        r = requests.get(f"{API}/campaigns/{primer_campaign['id']}", headers=h(gm_token))
+        assert r.status_code == 200
+        d = r.json()
+        assert d["player_primer"] == "Only human-scope powers"
+        assert d["prohibited_attributes"] == ["Mind Control", "Dynamic Powers"]
+        assert d.get("invite_token") == primer_campaign["invite_token"]
+
+    def test_put_campaign_updates_primer_and_preserves_meta(self, gm_token, primer_campaign):
+        original_token = primer_campaign["invite_token"]
+        original_gm = primer_campaign["gm_id"]
+        original_created = primer_campaign["created_at"]
+        payload = {
+            "name": primer_campaign["name"],
+            "description": primer_campaign["description"],
+            "visibility": "public",
+            "max_players": primer_campaign["max_players"],
+            "power_level": "Heroic",
+            "player_primer": "Updated primer — street-level only",
+            "prohibited_attributes": ["Mind Control"],
+            "allowed_attributes": [],
+        }
+        r = requests.put(f"{API}/campaigns/{primer_campaign['id']}",
+                         json=payload, headers=h(gm_token))
+        assert r.status_code == 200, r.text
+        d = r.json()
+        assert d["player_primer"] == "Updated primer — street-level only"
+        assert d["prohibited_attributes"] == ["Mind Control"]
+        # preserved fields
+        assert d["id"] == primer_campaign["id"]
+        assert d["gm_id"] == original_gm
+        assert d["invite_token"] == original_token
+        assert d["created_at"] == original_created
+
+    def test_put_campaign_non_gm_403(self, player_token, primer_campaign):
+        r = requests.put(f"{API}/campaigns/{primer_campaign['id']}",
+                         json={"name": "hijack", "description": "x"},
+                         headers=h(player_token))
+        assert r.status_code == 403
+
+
+# ---------------- Iteration 4: Invite token flow ----------------
+
+class TestInviteFlow:
+    def test_public_invite_lookup_no_auth(self, primer_campaign):
+        tok = primer_campaign["invite_token"]
+        r = requests.get(f"{API}/invites/{tok}")  # NO auth header
+        assert r.status_code == 200, r.text
+        d = r.json()
+        assert d["campaign_id"] == primer_campaign["id"]
+        assert d["name"] == primer_campaign["name"]
+        assert d["gm_name"]
+        assert "seated" in d and "max_players" in d and "full" in d
+        assert d["full"] is False
+
+    def test_invite_lookup_invalid_404(self):
+        r = requests.get(f"{API}/invites/bogus-token-xyz")
+        assert r.status_code == 404
+
+    def test_accept_invite_requires_auth(self, primer_campaign):
+        tok = primer_campaign["invite_token"]
+        r = requests.post(f"{API}/invites/{tok}/accept")
+        assert r.status_code == 401
+
+    def test_accept_invite_adds_player(self, gm_token, player_token, primer_campaign):
+        tok = primer_campaign["invite_token"]
+        r = requests.post(f"{API}/invites/{tok}/accept", headers=h(player_token))
+        assert r.status_code == 200, r.text
+        d = r.json()
+        assert d["ok"] is True
+        assert d["campaign_id"] == primer_campaign["id"]
+        # Verify membership
+        cr = requests.get(f"{API}/campaigns/{primer_campaign['id']}", headers=h(gm_token))
+        member_ids = cr.json().get("member_ids", [])
+        player_me = requests.get(f"{API}/auth/me", headers=h(player_token)).json()
+        assert player_me["id"] in member_ids
+
+    def test_accept_invite_idempotent_already_member(self, player_token, primer_campaign):
+        tok = primer_campaign["invite_token"]
+        r = requests.post(f"{API}/invites/{tok}/accept", headers=h(player_token))
+        assert r.status_code == 200
+        d = r.json()
+        assert d["ok"] is True
+        assert d.get("already") in (True, "gm")
+
+    def test_accept_invite_as_gm_returns_already_gm(self, gm_token, primer_campaign):
+        tok = primer_campaign["invite_token"]
+        r = requests.post(f"{API}/invites/{tok}/accept", headers=h(gm_token))
+        assert r.status_code == 200
+        assert r.json().get("already") == "gm"
+
+    def test_regenerate_invite_gm_only(self, gm_token, player_token, primer_campaign):
+        # Non-GM forbidden
+        bad = requests.post(
+            f"{API}/campaigns/{primer_campaign['id']}/regenerate-invite",
+            headers=h(player_token))
+        assert bad.status_code == 403
+
+        old_token = primer_campaign["invite_token"]
+        r = requests.post(
+            f"{API}/campaigns/{primer_campaign['id']}/regenerate-invite",
+            headers=h(gm_token))
+        assert r.status_code == 200, r.text
+        new_token = r.json()["invite_token"]
+        assert new_token and new_token != old_token
+
+        # Old token should now 404
+        old_lookup = requests.get(f"{API}/invites/{old_token}")
+        assert old_lookup.status_code == 404
+
+        # New token should resolve
+        new_lookup = requests.get(f"{API}/invites/{new_token}")
+        assert new_lookup.status_code == 200
+        assert new_lookup.json()["campaign_id"] == primer_campaign["id"]
+
+    def test_accept_invite_table_full(self, gm_token):
+        """Create a 1-seat campaign, fill it, and have a 2nd user hit 'Table full'."""
+        r = requests.post(f"{API}/campaigns",
+                          json={"name": f"TEST_Full_{uuid.uuid4().hex[:6]}",
+                                "description": "full test",
+                                "visibility": "public", "max_players": 1},
+                          headers=h(gm_token))
+        assert r.status_code == 200
+        camp = r.json()
+        tok = camp["invite_token"]
+        try:
+            # Register user A, accept
+            ea = f"TEST_{uuid.uuid4().hex[:6]}@t.com"
+            ra = requests.post(f"{API}/auth/register",
+                               json={"email": ea, "password": "password123",
+                                     "name": "A"}).json()
+            acc_a = requests.post(f"{API}/invites/{tok}/accept",
+                                  headers=h(ra["access_token"]))
+            assert acc_a.status_code == 200
+
+            # Register user B, accept → should be 400 table full
+            eb = f"TEST_{uuid.uuid4().hex[:6]}@t.com"
+            rb = requests.post(f"{API}/auth/register",
+                               json={"email": eb, "password": "password123",
+                                     "name": "B"}).json()
+            acc_b = requests.post(f"{API}/invites/{tok}/accept",
+                                  headers=h(rb["access_token"]))
+            assert acc_b.status_code == 400, acc_b.text
+        finally:
+            requests.delete(f"{API}/campaigns/{camp['id']}", headers=h(gm_token))
+
+
+# ---------------- Iteration 4: Forgot password (Resend stub) ----------------
+
+class TestForgotPassword:
+    def test_forgot_password_known_email_returns_ok(self):
+        """RESEND_API_KEY empty → should NOT error, returns {ok:true} and logs link."""
+        r = requests.post(f"{API}/auth/forgot-password",
+                          json={"email": GM_EMAIL})
+        assert r.status_code == 200, r.text
+        assert r.json() == {"ok": True}
+
+    def test_forgot_password_unknown_email_returns_ok(self):
+        """Does not leak whether email exists."""
+        r = requests.post(f"{API}/auth/forgot-password",
+                          json={"email": f"nope_{uuid.uuid4().hex[:6]}@nowhere.xyz"})
+        assert r.status_code == 200
+        assert r.json() == {"ok": True}

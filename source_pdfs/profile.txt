@@ -1,0 +1,553 @@
+EXPANDED CHARACTER RECORD JOURNAL
+                                                Your anime and manga characters
+                                                can’t be expected to keep all their
+                                                 notes on random pieces of paper
+                                                    They deserve their own
+                                                 BESM CHARACTER FOLIO
+                                                          This is the ultimate character sheet
+                                                        and bookkeeping journal for detailing
+                                                       characters from any style of campaign.
+                                                     The folio includes: a deluxe multi-page
+                                                   character sheet with expanded areas for
+                                                      game stats and descriptions; sections
+                                                      for detailing your character’s abilities,
+                                                       background, history, and personality;
+                                                       and journal pages on which you can
+                                                        record your character’s adventures.
+
+                                                                Explore, learn, and connect at
+
+                                                                BESM4.life
+                                                                BESM4.life
+                                                                                     ISBN 978-1-989695-02-9
+
+
+
+DYSKAMI
+Publishing Company                                                TRI-STAT
+                                                                                     9 781989 695029
+                                                                     SYSTEM
+
+ ©2020 White Wolf Entertainment AB   info@dyskami.ca     Production #JPG803   DriveThruRPG PDF Edition
+                      CHARACTER FOLIO
+YOUR STORY AWAITS....
+   The BESM Character Folio is your ultimate Fourth Edition character sheet and player bookkeeping tool!
+   Let’s face it: a simple character sheet just doesn’t cut it at today’s gaming table and your imagination deserves a larger
+canvas to express itself. On the following pages, you will describe your character and their adventures in intimate detail,
+adding depth and personality to your creation as they explore, play, and grow throughout your campaign.
+    This deluxe 24-page character sheet features expanded sections for detailing your character’s Attributes, Defects,
+Enhancements and Limiters, Weapons, Companions, Items, mecha and vehicles, equipment and gear, physical traits and
+description, family, personality, history, allies, future goals, advancement allocation, and session notes. As the complete
+story of your anime character, the BESM Character Folio is a window into your character’s soul!
+
+
+                                                                                  Usual Combat Form
+                                                                  ARMOUR DAMAGE                                                      RANGE
+
+                                                                                                  Weapon x Multiplier + ACV       From Range Enhancement
+
+
+
+
+                                                                          Movement Speed (kph)
+                                                                   WALK                      JOG                      RUN                SPRINT
+COVER ARTWORK BY
+   NIKO GEYER                                                         1x Body                 1.5x Body               2x Body                 4-5x Body
+
+
+GRAPHIC PRODUCTION BY
+   MARK MACKINNON                                                           Jumping Distance (m)
+                                                                                                                                                           PAGE
+The Skills and Power Packs sections (pages 6 and 7) are             UP/BACK                       STANDING                          RUNNING                  1
+optional rules detailed in the BESM Extras sourcebook
+
+BESM is a trademark of White Wolf Entertainment AB                      1/8x Body                         1/4x Body                         Body
+
+© 2020 White Wolf Entertainment AB
+www.white-wolf.com
+                                                                         Lift and Manoeuvre (kg)
+Production #JPG803         ISBN 978-1-989695-02-9
+Printed in China. First Printing – January 2020                          LIFT MASS                             MANOEUVRE MASS
+All rights reserved under international law. No part of this
+book may be reproduced in part or in whole, in any form
+                                                                                20-30 kg x Body                                 10-15 kg x Body
+or by any means, without permission from the publisher,
+except for or brief quotes for use in reviews.
+info@dyskami.ca                  http://BESM4.life                              Target Numbers (TN)
+                                                                  Difficulty                      TN           Interpretation
+                                                                                                               Almost everyone will
+                                                                 Simple                           6            succeed
+                                                                                                               Characters will very
+                                                                 Easy                             9            rarely fail
+                                                                                                               Success often requires some
+   TRI-STAT                                                      Average                          12           talent or training
+      SYSTEM
+                                                                                                               Success often requires
+                                                                 Difficult                        15           above-average ability
+
+
+DYSKAMI
+                                                                                                               Success often requires
+                                                                 Challenging                      18           significant ability
+                                                                                                               Success requires exceptional
+                                                                 Unlikely                         21           ability
+
+Publishing Company                                               Improbable                       24           Success requires
+                                                                                                               unparalleled ability
+       NOTES
+
+
+
+
+PAGE
+  2
+ILLUSTRATIONS
+
+
+
+
+                PAGE
+                  3
+       BASIC INFORMATION
+       Character Name:
+       Alias:
+                                                                   BODY MIND SOUL
+       Player Name:
+       Starting Points:
+                                                                  Stat Cost: ______       Stat Cost: ______      Stat Cost: ______
+       Current Points:
+                                                                    Shortcoming              Shortcoming           Shortcoming
+       Size Template:
+                                                                  _______________         _______________       _______________
+       Race Template:
+                                                                  _______________         _______________       _______________
+       Class Template:
+       Age and Gender:
+                                                                   HEALTH                  ENERGY                  SHOCK
+       Height and Weight:
+                                                                   POINTS                  POINTS                  VALUE
+       Homeworld:                                                   (Body + Soul) x5        (Mind + Soul) x5      Health Points ÷5
+
+       Habitat:
+       Campaign Title:
+       Game Master:
+       Creation Date:                                            Current Health Points:
+       Retirement Date:                                          Current Energy Points:
+
+PAGE
+  4
+                                   BASE VALUE                 MODIFIED                  MODIFIED                MODIFIED
+                                   (Body + Mind + Soul) ÷3    VALUE A                   VALUE B                  VALUE C
+       ATTACK
+       COMBAT VALUE                                          When:_____________        When:_____________      When:_____________
+
+       DEFENCE
+       COMBAT VALUE                                          When:_____________        When:_____________      When:_____________
+
+
+       DAMAGE
+       MULTIPLIER                                            When:_____________        When:_____________      When:_____________
+
+
+
+
+                            PHYSICAL DESCRIPTION AND IMPORTANT NOTES
+                        ATTRIBUTES
+ATTRIBUTE   ACTUAL   EFFECTIVE ENHANCEMENTS   COST/   FINAL
+  NAME       LEVEL     LEVEL     & LIMITERS   LEVEL   COST
+
+
+
+
+                                                              PAGE
+                                                                5
+
+
+
+
+                                    TOTAL POINT COST ______
+       DEFECTS & SKILLS
+                                                                POINTS/      POINT
+           DEFECT NAME                            RANK                                     NOTES
+                                                                 RANK      RETURNED
+
+
+
+
+                                          TOTAL POINTS RETURNED _________
+PAGE
+  6
+
+                                                                                      POINTS/    TOTAL
+                SKILL NAME                                SPECIALISATION     RANK      RANK      POINTS
+
+
+
+
+       Total Skill Points = 10 x Skills Attribute Level
+                                                                             TOTAL SKILL POINTS _________
+                               POWER PACKS
+                POWER PACK                          POWER PACK
+Pack Name:                          Pack Name:
+Source of Power:                    Source of Power:
+Net Effective Level:                Net Effective Level:
+Description:                        Description:
+
+
+
+
+     Enhancements        Limiters        Enhancements        Limiters
+
+
+
+
+                                                                        PAGE
+                                                                          7
+
+
+                POWER PACK                          POWER PACK
+Pack Name:                          Pack Name:
+Source of Power:                    Source of Power:
+Net Effective Level:                Net Effective Level:
+Description:                        Description:
+
+
+
+
+     Enhancements        Limiters        Enhancements        Limiters
+       ITEMS
+           ITEM NAME:                                              POINT COST:
+           DESCRIPTION:
+           ATTRIBUTE OR                 LEVEL OR EFFECTIVE ENHANCEMENTS     COST/   FINAL
+           DEFECT NAME                    RANK     LEVEL     & LIMITERS     LEVEL   COST
+
+
+
+
+       Item Point Cost = One-Half the
+       Total Points allocated to Item           TOTAL ATTRIBUTE & DEFECT POINT COST ______
+PAGE
+  8
+
+
+
+           ITEM NAME:                                              POINT COST:
+           DESCRIPTION:
+           ATTRIBUTE OR                 LEVEL OR EFFECTIVE ENHANCEMENTS     COST/   FINAL
+           DEFECT NAME                    RANK     LEVEL     & LIMITERS     LEVEL   COST
+
+
+
+
+       Item Point Cost = One-Half the
+       Total Points allocated to Item           TOTAL ATTRIBUTE & DEFECT POINT COST ______
+                                                                 ITEMS
+    ITEM NAME:                                              POINT COST:
+    DESCRIPTION:
+    ATTRIBUTE OR                 LEVEL OR EFFECTIVE ENHANCEMENTS     COST/   FINAL
+    DEFECT NAME                    RANK     LEVEL     & LIMITERS     LEVEL   COST
+
+
+
+
+Item Point Cost = One-Half the
+Total Points allocated to Item           TOTAL ATTRIBUTE & DEFECT POINT COST ______
+                                                                                      PAGE
+                                                                                        9
+
+
+
+    ITEM NAME:                                              POINT COST:
+    DESCRIPTION:
+    ATTRIBUTE OR                 LEVEL OR EFFECTIVE ENHANCEMENTS     COST/   FINAL
+    DEFECT NAME                    RANK     LEVEL     & LIMITERS     LEVEL   COST
+
+
+
+
+Item Point Cost = One-Half the
+Total Points allocated to Item           TOTAL ATTRIBUTE & DEFECT POINT COST ______
+       MECHA & VEHICLES
+          MECHA NAME:                                                 POINT COST:
+          DESCRIPTION:
+        SPEED                            SPEED             ARMOUR           SIZE &
+        (GROUND)                         (OTHER)           & HEALTH         CAPACITY
+           ATTRIBUTE OR                  LEVEL OR EFFECTIVE ENHANCEMENTS       COST/   FINAL
+           DEFECT NAME                     RANK     LEVEL     & LIMITERS       LEVEL   COST
+
+
+
+
+       Mecha Point Cost = One-Half the
+       Total Points allocated to Mecha             TOTAL ATTRIBUTE & DEFECT POINT COST ______
+PAGE
+ 10
+
+
+          MECHA NAME:                                                 POINT COST:
+          DESCRIPTION:
+        SPEED                            SPEED             ARMOUR           SIZE &
+        (GROUND)                         (OTHER)           & HEALTH         CAPACITY
+           ATTRIBUTE OR                  LEVEL OR EFFECTIVE ENHANCEMENTS       COST/   FINAL
+           DEFECT NAME                     RANK     LEVEL     & LIMITERS       LEVEL   COST
+
+
+
+
+       Mecha Point Cost = One-Half the
+       Total Points allocated to Mecha             TOTAL ATTRIBUTE & DEFECT POINT COST ______
+                                          WEAPONS
+         WEAPON ATTRIBUTE                     WEAPON ATTRIBUTE
+Weapon Name:                         Weapon Name:
+Source of Power:                     Source of Power:
+Description:                         Description:
+Actual/Effective Level:              Actual/Effective Level:
+Point Cost:                          Point Cost:
+Weapon Damage:                       Weapon Damage:
+     Enhancements         Limiters        Enhancements         Limiters
+
+
+
+
+                                                                          PAGE
+                                                                           11
+
+
+         WEAPON ATTRIBUTE                     WEAPON ATTRIBUTE
+Weapon Name:                         Weapon Name:
+Source of Power:                     Source of Power:
+Description:                         Description:
+Actual/Effective Level:              Actual/Effective Level:
+Point Cost:                          Point Cost:
+Weapon Damage:                       Weapon Damage:
+     Enhancements         Limiters        Enhancements         Limiters
+       COMPANIONS
+          COMPANION NAME:                                                   LEVEL:
+          DESCRIPTION:
+        SIZE                           BODY               MIND             SOUL
+        RANK
+        ATTACK                         DEFENCE            HEALTH           ENERGY
+        COMBAT                         COMBAT             POINTS           POINTS
+        DAMAGE                         SPEED              SPEED            ARMOUR
+        MULTIPLIER                     (GROUND)           (OTHER)
+
+           ATTRIBUTE OR                LEVEL OR EFFECTIVE ENHANCEMENTS        COST/   FINAL
+           DEFECT NAME                   RANK     LEVEL     & LIMITERS        LEVEL   COST
+
+
+
+
+PAGE
+ 12
+
+
+
+
+       Each Companion Level provides
+       up to 10 Character Points                  TOTAL ATTRIBUTE & DEFECT POINT COST ______
+                                            COMPANIONS
+   COMPANION NAME:                                                   LEVEL:
+   DESCRIPTION:
+ SIZE                           BODY               MIND             SOUL
+ RANK
+ ATTACK                         DEFENCE            HEALTH           ENERGY
+ COMBAT                         COMBAT             POINTS           POINTS
+ DAMAGE                         SPEED              SPEED            ARMOUR
+ MULTIPLIER                     (GROUND)           (OTHER)
+
+    ATTRIBUTE OR                LEVEL OR EFFECTIVE ENHANCEMENTS        COST/   FINAL
+    DEFECT NAME                   RANK     LEVEL     & LIMITERS        LEVEL   COST
+
+
+
+
+                                                                                        PAGE
+                                                                                         13
+
+
+
+
+Each Companion Level provides
+up to 10 Character Points                  TOTAL ATTRIBUTE & DEFECT POINT COST ______
+       EQUIPMENT & DICE
+         EQUIPMENT, GEAR, LOCATIONS, AND IMPORTANT POSSESSIONS
+
+
+
+
+PAGE
+ 14
+
+
+
+         EDGES – SUMMARY                 OBSTACLES – SUMMARY
+          Situation     Major/Minor?        Situation     Major/Minor?
+                                       GOALS
+CHARACTER GOALS   PROGRESS NOTES   RESOLUTION AND RESULTS
+
+
+
+
+                                                            PAGE
+                                                             15
+       FAMILY
+       Name:                                                  Name:
+       Relation:                                              Relation:
+       Location:                                              Location:
+       Notes:                                                 Notes:
+
+
+
+
+       Name:                                                  Name:
+       Relation:                                              Relation:
+       Location:                                              Location:
+       Notes:                                                 Notes:
+
+
+
+
+PAGE
+ 16
+
+
+
+
+                                       FAMILY TREE
+
+
+
+
+                   Draw connecting lineage lines to indicate family tree relations as appropriate
+                         HISTORY
+          EVENT       EVENTS OF SIGNIFICANCE
+AGE   CIRCUMSTANCES   AND RELATIONSHIP NOTES
+
+
+
+
+                                               PAGE
+                                                17
+       PERSONALITY PROFILE
+       PERSONALITY TRAITS
+
+
+
+       STRENGTHS
+
+
+
+       WEAKNESSES
+
+
+
+       LIKES
+
+
+
+       DISLIKES
+
+
+
+       SOURCES OF POWER
+
+PAGE
+ 18
+       SOURCES OF COMFORT
+
+
+
+       BELIEF SYSTEM
+
+
+
+       ASSUMED RESPONSIBILITIES
+
+
+
+       POLITICAL LEANINGS
+
+
+
+       DEFINING ELEMENTS
+
+
+
+       ROMANTIC INTERESTS
+         CHARACTER GROUP
+HOW OUR GROUP CAME TOGETHER
+
+
+
+MY ROLE WITHIN THE GROUP
+
+
+
+OTHER GROUP MEMBERS AND THEIR ROLES
+
+
+
+
+MY PERSPECTIVES ON TEAMMATES
+
+
+
+
+                                      PAGE
+                                       19
+GROUP DYNAMICS
+
+
+
+ROMANCES
+
+
+
+ALLIES
+
+
+
+RIVALS
+
+
+
+NOTABLE GROUP EVENTS
+       ADVANCEMENT
+       AWARD    POINTS
+               AWARDED EVENT TRIGGER   ADVANCEMENT ALLOCATION
+        DATE
+
+
+
+
+PAGE
+ 20
+JOURNAL
+
+
+
+
+          PAGE
+           21
+       JOURNAL
+
+
+
+
+PAGE
+ 22
+JOURNAL
+
+
+
+
+          PAGE
+           23
+       JOURNAL
+
+
+
+
+PAGE
+ 24
+

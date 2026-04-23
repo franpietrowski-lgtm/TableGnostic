@@ -12,7 +12,7 @@ export default function Auth() {
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => { if (user) nav("/app"); }, [user, nav]);
+  useEffect(() => { if (user) nav(sp.get("redirect") || "/app"); }, [user, nav, sp]);
 
   const onSubmit = async (e) => {
     e.preventDefault();
@@ -20,7 +20,7 @@ export default function Auth() {
     try {
       if (mode === "login") await login(form.email, form.password);
       else await register(form.email, form.password, form.name);
-      nav("/app");
+      nav(sp.get("redirect") || "/app");
     } catch (e) {
       setErr(formatApiErrorDetail(e.response?.data?.detail) || e.message);
     } finally { setBusy(false); }

@@ -2,6 +2,7 @@
 from dotenv import load_dotenv
 load_dotenv()
 
+import asyncio
 import os
 import random
 import re
@@ -12,6 +13,7 @@ from typing import List, Optional, Literal, Dict, Any
 
 import bcrypt
 import jwt
+import resend
 from bson import ObjectId
 from fastapi import FastAPI, HTTPException, Depends, Request, Response, APIRouter, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -19,9 +21,9 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, EmailStr, Field
 
 from besm_data import (
-    BOOK, CORE_STATS, DERIVED_VALUES, ATTRIBUTES, DEFECTS,
+    BOOK, BOOK_EXTRAS, CORE_STATS, DERIVED_VALUES, ATTRIBUTES, DEFECTS,
     ENHANCEMENTS, LIMITERS, SKILL_GROUPS, POWER_LEVELS,
-    NODE_TYPES, TARGET_NUMBERS, with_source,
+    NODE_TYPES, TARGET_NUMBERS, EXTRAS_RULES, with_source,
 )
 
 # -------- Config --------
@@ -32,6 +34,45 @@ JWT_ALGORITHM = "HS256"
 
 client = AsyncIOMotorClient(MONGO_URL)
 db = client[DB_NAME]
+
+# Resend email client (optional — falls back to console logging)
+RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "").strip()
+SENDER_EMAIL = os.environ.get("SENDER_EMAIL", "onboarding@resend.dev")
+FRONTEND_PUBLIC_URL = os.environ.get("FRONTEND_PUBLIC_URL", "").strip()
+if RESEND_API_KEY:
+    resend.api_key = RESEND_API_KEY
+
+async def send_password_reset_email(to_email: str, reset_link: str, user_name: str):
+    subject = "Table-Gnostic — Reset your password"
+    html = f"""
+    <div style="font-family: Georgia, serif; background:#07060a; color:#e9e3d2; padding:32px; max-width:560px; margin:0 auto;">
+      <div style="font-family: 'Cinzel', serif; letter-spacing:0.3em; color:#c8a34a; font-size:14px;">TABLE·GNOSTIC</div>
+      <h1 style="color:#e9e3d2; font-size:22px; margin:14px 0 6px;">Reset your password</h1>
+      <p style="color:#a9a3b8; line-height:1.55;">Hello {user_name or 'table-gnostic'},</p>
+      <p style="color:#a9a3b8; line-height:1.55;">A password reset was requested for your Table-Gnostic account. If this was you, follow the link below within the next hour.</p>
+      <p style="margin:24px 0;">
+        <a href="{reset_link}" style="background:#c8a34a; color:#07060a; text-decoration:none; padding:12px 20px; letter-spacing:0.12em; font-weight:600; font-family: sans-serif; font-size:13px;">RESET PASSWORD</a>
+      </p>
+      <p style="color:#777; font-size:12px; line-height:1.55;">If you didn't request this, you can ignore this message — your password will stay unchanged.</p>
+      <hr style="border:none; border-top:1px solid #33302a; margin:24px 0;" />
+      <p style="color:#555; font-size:11px; letter-spacing:0.2em; text-transform:uppercase;">Not the system. The table.</p>
+    </div>"""
+    text = (f"Table-Gnostic password reset\n\nHello {user_name or 'table-gnostic'},\n\n"
+            f"Reset your password within 1 hour:\n{reset_link}\n\nIf you didn't request this, ignore this email.\n")
+    if not RESEND_API_KEY:
+        print(f"[email:dev] password reset -> {to_email} | {reset_link}")
+        return {"delivered": False, "reason": "RESEND_API_KEY not configured"}
+    try:
+        result = await asyncio.to_thread(resend.Emails.send, {
+            "from": SENDER_EMAIL, "to": [to_email],
+            "subject": subject, "html": html, "text": text,
+        })
+        return {"delivered": True, "id": result.get("id")}
+    except Exception as e:
+        print(f"[email:error] {e}")
+        return {"delivered": False, "reason": str(e)}
+
+import asyncio  # required for send_password_reset_email
 
 app = FastAPI(title="Table-Gnostic API")
 api = APIRouter(prefix="/api")
@@ -134,6 +175,14 @@ class CampaignIn(BaseModel):
     max_players: int = 6
     visibility: Literal["public", "private"] = "public"
     power_level: str = "Heroic"
+    # Player primer + allow/prohibit lists (empty = all allowed)
+    player_primer: str = ""
+    allowed_attributes: List[str] = []
+    prohibited_attributes: List[str] = []
+    allowed_defects: List[str] = []
+    prohibited_defects: List[str] = []
+    allowed_skill_groups: List[str] = []
+    prohibited_skill_groups: List[str] = []
 
 class CampaignOut(CampaignIn):
     id: str
@@ -196,6 +245,7 @@ class NodeIn(BaseModel):
     visibility: Literal["gm_only", "shared", "revealed"] = "gm_only"
     revealed_to: List[str] = []  # user ids
     links: List[str] = []  # node ids
+    fields: Dict[str, Any] = Field(default_factory=dict)  # structured article data per node type
 
 class EdgeIn(BaseModel):
     campaign_id: str
@@ -328,6 +378,10 @@ async def startup():
     await seed_user("admin@tablegnostic.com", "admin123", "Admin", "admin")
     await seed_user("gm@tablegnostic.com", "gm123456", "Game Master", "user")
     await seed_user("player@tablegnostic.com", "player12345", "Player", "user")
+    # Backfill invite tokens for legacy campaigns
+    async for c in db.campaigns.find({"invite_token": {"$exists": False}}, {"_id": 0, "id": 1}):
+        await db.campaigns.update_one({"id": c["id"]},
+                                      {"$set": {"invite_token": secrets.token_urlsafe(16)}})
 
 async def seed_user(email: str, password: str, name: str, role: str):
     existing = await db.users.find_one({"email": email})
@@ -425,7 +479,11 @@ async def forgot_password(body: ForgotIn):
             "expires_at": datetime.now(timezone.utc) + timedelta(hours=1),
             "used": False,
         })
-        print(f"[Password reset] {email} -> /reset?token={token}")
+        base = FRONTEND_PUBLIC_URL or ""
+        reset_link = f"{base}/reset?token={token}" if base else f"/reset?token={token}"
+        print(f"[Password reset] {email} -> {reset_link}")
+        await send_password_reset_email(email, reset_link, user.get("name", ""))
+    # Always return ok (don't leak whether email exists)
     return {"ok": True}
 
 @api.post("/auth/reset-password")
@@ -454,6 +512,10 @@ async def besm_reference():
         "power_levels": with_source(POWER_LEVELS),
         "node_types": NODE_TYPES,
         "target_numbers": with_source(TARGET_NUMBERS),
+        # BESM Extras (Rule Expansions & Character Options)
+        "extras_book": BOOK_EXTRAS,
+        "extras_rules": [{**r, "source": {"book": BOOK_EXTRAS, "page": r.get("page")}}
+                         for r in EXTRAS_RULES],
     }
 
 # -------- Campaign Genesis (Great GM framework) --------
@@ -587,6 +649,7 @@ async def create_campaign(body: CampaignIn, user: dict = Depends(get_current_use
     doc["gm_id"] = user["id"]
     doc["gm_name"] = user["name"]
     doc["member_ids"] = []
+    doc["invite_token"] = secrets.token_urlsafe(16)
     doc["created_at"] = now_iso()
     await db.campaigns.insert_one(doc)
     return sanitize(doc)
@@ -604,6 +667,71 @@ async def list_campaigns(mine: bool = False, user: dict = Depends(get_current_us
         ]}
     rows = await db.campaigns.find(q, {"_id": 0}).sort("created_at", -1).to_list(200)
     return rows
+
+@api.put("/campaigns/{cid}")
+async def update_campaign(cid: str, body: CampaignIn, user: dict = Depends(get_current_user)):
+    camp = await db.campaigns.find_one({"id": cid}, {"_id": 0})
+    if not camp:
+        raise HTTPException(404, "Not found")
+    if camp["gm_id"] != user["id"] and user.get("role") != "admin":
+        raise HTTPException(403, "Only GM may edit")
+    data = body.model_dump()
+    data["id"] = cid
+    data["gm_id"] = camp["gm_id"]
+    data["gm_name"] = camp["gm_name"]
+    data["member_ids"] = camp.get("member_ids", [])
+    data["invite_token"] = camp.get("invite_token") or secrets.token_urlsafe(16)
+    data["created_at"] = camp.get("created_at", now_iso())
+    data["updated_at"] = now_iso()
+    await db.campaigns.replace_one({"id": cid}, data)
+    return sanitize(data)
+
+@api.post("/campaigns/{cid}/regenerate-invite")
+async def regenerate_invite(cid: str, user: dict = Depends(get_current_user)):
+    camp = await db.campaigns.find_one({"id": cid}, {"_id": 0})
+    if not camp or camp["gm_id"] != user["id"]:
+        raise HTTPException(403, "Only GM")
+    new_token = secrets.token_urlsafe(16)
+    await db.campaigns.update_one({"id": cid}, {"$set": {"invite_token": new_token}})
+    return {"invite_token": new_token}
+
+# Public invite lookup (no auth) — shows a minimal summary for onboarding
+@api.get("/invites/{token}")
+async def get_invite(token: str):
+    camp = await db.campaigns.find_one({"invite_token": token}, {"_id": 0})
+    if not camp:
+        raise HTTPException(404, "Invite not found or revoked")
+    return {
+        "campaign_id": camp["id"],
+        "name": camp["name"],
+        "description": camp.get("description", ""),
+        "system": camp.get("system", "BESM 4E"),
+        "power_level": camp.get("power_level", "Heroic"),
+        "gm_name": camp.get("gm_name", ""),
+        "tags": camp.get("tags", []),
+        "tone": camp.get("tone"),
+        "genre": camp.get("genre"),
+        "schedule": camp.get("schedule"),
+        "experience_level": camp.get("experience_level"),
+        "seated": len(camp.get("member_ids", [])),
+        "max_players": camp.get("max_players", 6),
+        "full": len(camp.get("member_ids", [])) >= camp.get("max_players", 6),
+    }
+
+@api.post("/invites/{token}/accept")
+async def accept_invite(token: str, user: dict = Depends(get_current_user)):
+    camp = await db.campaigns.find_one({"invite_token": token}, {"_id": 0})
+    if not camp:
+        raise HTTPException(404, "Invite not found or revoked")
+    cid = camp["id"]
+    if user["id"] == camp["gm_id"]:
+        return {"ok": True, "campaign_id": cid, "already": "gm"}
+    if user["id"] in camp.get("member_ids", []):
+        return {"ok": True, "campaign_id": cid, "already": True}
+    if len(camp.get("member_ids", [])) >= camp.get("max_players", 6):
+        raise HTTPException(400, "Table full")
+    await db.campaigns.update_one({"id": cid}, {"$addToSet": {"member_ids": user["id"]}})
+    return {"ok": True, "campaign_id": cid}
 
 @api.get("/campaigns/{cid}")
 async def get_campaign(cid: str, user: dict = Depends(get_current_user)):

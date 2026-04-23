@@ -18,21 +18,30 @@ export default function CharacterBuilder() {
   const [ref, setRef] = useState(null);
   const [customs, setCustoms] = useState([]);
   const [ch, setCh] = useState(null);
+  const [campaign, setCampaign] = useState(null);
   const [err, setErr] = useState("");
 
   useEffect(() => {
     (async () => {
       const r = await api.get("/besm/reference").then((x) => x.data);
       setRef(r);
+      let campaignId = campaignIdFromUrl;
       if (charId && window.location.pathname.includes("/edit")) {
         const existing = await api.get(`/characters/${charId}`).then((x) => x.data);
         setCh(existing);
-        const cu = await api.get(`/campaigns/${existing.campaign_id}/custom`).then((x) => x.data).catch(() => []);
-        setCustoms(cu);
+        campaignId = existing.campaign_id;
       } else {
         setCh(emptyChar(campaignIdFromUrl));
-        const cu = await api.get(`/campaigns/${campaignIdFromUrl}/custom`).then((x) => x.data).catch(() => []);
-        setCustoms(cu);
+      }
+      const [cu, camp] = await Promise.all([
+        api.get(`/campaigns/${campaignId}/custom`).then((x) => x.data).catch(() => []),
+        api.get(`/campaigns/${campaignId}`).then((x) => x.data).catch(() => null),
+      ]);
+      setCustoms(cu); setCampaign(camp);
+      // Pre-set power_level + total_points from campaign if new character
+      if (!charId && camp) {
+        const pts = (r.power_levels.find(p => p.name === camp.power_level) || {}).points || 120;
+        setCh((prev) => prev ? ({ ...prev, power_level: camp.power_level, total_points: pts }) : prev);
       }
     })();
   }, [campaignIdFromUrl, charId]);
@@ -117,12 +126,78 @@ export default function CharacterBuilder() {
   const customDefects = customs.filter((c) => c.kind === "defect");
   const customSkills = customs.filter((c) => c.kind === "skill");
 
+  // Campaign filters
+  const allow = (list, name) => !list || list.length === 0 || list.includes(name);
+  const prohib = (list, name) => list && list.includes(name);
+  const filterBy = (items, allowed, prohibited) =>
+    items.filter((it) => allow(allowed, it.name) && !prohib(prohibited, it.name));
+  const filteredAttrOpts = [
+    ...filterBy(ref.attributes, campaign?.allowed_attributes, campaign?.prohibited_attributes).map((a) => ({ ...a, _group: "BESM 4E" })),
+    ...customAttrs.map((c) => ({ ...c, _group: "Custom (GM)" })),
+  ];
+  const filteredDefectOpts = [
+    ...filterBy(ref.defects, campaign?.allowed_defects, campaign?.prohibited_defects).map((d) => ({ ...d, _group: d.category })),
+    ...customDefects.map((c) => ({
+      ...c, _group: "Custom (GM)",
+      points_per_rank: -Math.abs(+c.cost_per_level || 1), category: c.category || "Custom",
+    })),
+  ];
+  const filteredSkillOpts = [
+    ...filterBy(ref.skill_groups, campaign?.allowed_skill_groups, campaign?.prohibited_skill_groups),
+    ...customSkills.map((c) => ({ ...c, _group: "Custom (GM)" })),
+  ];
+
   return (
     <div className="px-8 md:px-12 py-10 max-w-7xl">
       <Link to={`/app/campaigns/${ch.campaign_id}`} className="text-xs font-ui uppercase tracking-widest text-gold/70">
         ← Campaign
       </Link>
-      <div className="mt-3 flex items-start justify-between flex-wrap gap-4">
+
+      {campaign && (
+        <div className="mt-4 card-mystic p-5" data-testid="campaign-briefing">
+          <div className="flex items-start justify-between flex-wrap gap-3">
+            <div>
+              <div className="label-ref">Campaign Briefing · {campaign.name}</div>
+              <div className="mt-2 flex flex-wrap gap-3 text-xs font-ui">
+                <span className="tag">Power Level · {campaign.power_level}</span>
+                <span className="tag">{(ref.power_levels.find(p => p.name === campaign.power_level) || {}).points || 120} Character Points</span>
+                <span className="tag">GM · {campaign.gm_name}</span>
+                {campaign.genre && <span className="tag">{campaign.genre}</span>}
+                {campaign.tone && <span className="tag">{campaign.tone}</span>}
+              </div>
+            </div>
+          </div>
+          {campaign.player_primer && (
+            <>
+              <div className="divider-sigil my-4"/>
+              <div className="label-ref mb-2">Player Primer (from the GM)</div>
+              <div className="text-sm text-parchment/90 font-body whitespace-pre-wrap leading-relaxed italic border-l-2 border-gold/40 pl-4" data-testid="builder-primer">
+                {campaign.player_primer}
+              </div>
+            </>
+          )}
+          {((campaign.allowed_attributes?.length || 0) + (campaign.prohibited_attributes?.length || 0) +
+            (campaign.allowed_defects?.length || 0) + (campaign.prohibited_defects?.length || 0) +
+            (campaign.allowed_skill_groups?.length || 0) + (campaign.prohibited_skill_groups?.length || 0)) > 0 && (
+            <div className="mt-4 grid md:grid-cols-2 gap-2 text-xs">
+              {campaign.allowed_attributes?.length > 0 && (
+                <div><span className="label-ref">Allowed Attributes:</span> <span className="text-gold/80">{campaign.allowed_attributes.join(", ")}</span></div>
+              )}
+              {campaign.prohibited_attributes?.length > 0 && (
+                <div><span className="label-ref">Prohibited:</span> <span className="text-ember/80">{campaign.prohibited_attributes.join(", ")}</span></div>
+              )}
+              {campaign.allowed_defects?.length > 0 && (
+                <div><span className="label-ref">Allowed Defects:</span> <span className="text-gold/80">{campaign.allowed_defects.join(", ")}</span></div>
+              )}
+              {campaign.prohibited_defects?.length > 0 && (
+                <div><span className="label-ref">Prohibited:</span> <span className="text-ember/80">{campaign.prohibited_defects.join(", ")}</span></div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="mt-6 flex items-start justify-between flex-wrap gap-4">
         <div>
           <div className="label-ref mb-1">Character Forge · BESM 4E</div>
           <h1 className="font-display text-4xl text-parchment tracking-wide">
@@ -211,10 +286,7 @@ export default function CharacterBuilder() {
             title="Attributes · p.74–132 BESM 4E"
             testIdPrefix="attributes"
             items={ch.attributes}
-            options={[
-              ...ref.attributes.map((a) => ({ ...a, _group: "Core" })),
-              ...customAttrs.map((c) => ({ ...c, _group: "Custom (GM)" })),
-            ]}
+            options={filteredAttrOpts}
             enhancementOpts={ref.enhancements}
             limiterOpts={ref.limiters}
             onAdd={addAttribute}
@@ -236,13 +308,7 @@ export default function CharacterBuilder() {
             title="Defects · p.154 BESM 4E"
             testIdPrefix="defects"
             items={ch.defects}
-            options={[
-              ...ref.defects.map((d) => ({ ...d, _group: d.category })),
-              ...customDefects.map((c) => ({
-                ...c, _group: "Custom (GM)",
-                points_per_rank: -Math.abs(+c.cost_per_level || 1), category: c.category || "Custom"
-              })),
-            ]}
+            options={filteredDefectOpts}
             onAdd={addDefect}
             renderRow={(d, idx) => (
               <DefectRow key={idx} idx={idx} d={d}
@@ -262,10 +328,7 @@ export default function CharacterBuilder() {
             title="Skill Groups · p.120 BESM 4E"
             testIdPrefix="skills"
             items={ch.skills}
-            options={[
-              ...ref.skill_groups.map((s) => ({ ...s })),
-              ...customSkills.map((c) => ({ ...c, _group: "Custom (GM)" })),
-            ]}
+            options={filteredSkillOpts}
             onAdd={addSkill}
             renderRow={(s, idx) => (
               <SkillRow key={idx} idx={idx} s={s}

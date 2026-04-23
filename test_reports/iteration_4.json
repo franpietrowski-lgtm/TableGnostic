@@ -1,0 +1,34 @@
+{
+  "summary": "Backend-only regression + 17 new tests for Table-Gnostic iteration 4 (player primer + allow/prohibit lists, invite-token sharing, public invite lookup, accept/regenerate, PUT /campaigns, BESM Extras reference, Resend forgot-password stub). 71/72 pytest cases pass (98.6%). All 54 iteration-3 regressions still green. All 17 new iteration-4 tests pass. The single failing test (TestCORS::test_preflight_preview_origin_ok) is a carry-over from iteration 3 with an unchanged root cause (FRONTEND_URL='*' in backend/.env makes Starlette echo '*' instead of the specific origin). Not a new regression.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "CORS middleware (server.py:39-49)", "issue": "Carry-over from iteration 3: when FRONTEND_URL='*' (current .env), allow_origins=['*'] short-circuits the allow_origin_regex, so preflight for preview.emergentagent.com returns '*' instead of the specific origin. No new bug — same RCA as iteration_3.json."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "(carry-over) Either set FRONTEND_URL to the real preview URL, or change server.py so when FRONTEND_URL='*' we pass allow_origins=[] + allow_origin_regex only. Only needed if cookie-based cross-origin is required — Bearer-token flow works fine as-is."
+  ],
+  "critical_code_review_comments": [
+    "server.py is now 1280 lines (was 1151) — still well above the 700-line guideline. Consider splitting: auth.py, campaigns.py, invites.py, characters.py, sessions.py, ws.py, genesis.py.",
+    "accept_invite (server.py:721) correctly guards 'Table full' but uses HTTPException(400) — per REST convention HTTP 409 Conflict would be more semantic (not blocking).",
+    "regenerate_invite (server.py:690) returns 403 when campaign is missing (non-existent cid). Should be 404 for consistency with update_campaign which uses 404→403 order. Minor ordering issue.",
+    "update_campaign (PUT /campaigns/{cid}) accepts CampaignIn which has defaults for most fields; a partial update client that omits fields will accidentally reset them to defaults (e.g., max_players back to 6, visibility back to 'public'). Consider a dedicated CampaignPatchIn with Optional[...] fields or use a PATCH endpoint.",
+    "forgot_password silently catches nothing — if send_password_reset_email raises (Resend API down), it propagates as 500 and leaks existence. Wrap send in try/except and log; spec says 'does not error'."
+  ],
+  "updated_files": [
+    "/app/backend/tests/backend_test.py (added TestBESMExtras 3 tests, TestCampaignPrimer 4 tests, TestInviteFlow 8 tests, TestForgotPassword 2 tests, plus primer_campaign fixture) — 72 tests total, +17 from iteration 3."
+  ],
+  "success_rate": {"backend": "98.6% (71/72 pytest; 17/17 new iteration-4 tests pass)", "frontend": "not tested this iteration"},
+  "test_credentials": "admin@tablegnostic.com/admin123, gm@tablegnostic.com/gm123456, player@tablegnostic.com/player12345 — all confirmed working.",
+  "seed_data_creation": "Tests create TEST_-prefixed campaigns (primer_campaign + 1-seat 'TEST_Full_*' for table-full test + existing fresh_campaign for Genesis + 'TEST_Private_*' for WS 4403) and several disposable users via /auth/register. All campaigns torn down in fixture finalizers.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "pytest file at /app/backend/tests/backend_test.py now has 72 tests across 18 classes. New fixtures: primer_campaign (session-scoped, used by TestCampaignPrimer + TestInviteFlow). New classes: TestBESMExtras, TestCampaignPrimer, TestInviteFlow, TestForgotPassword. Known pre-existing failure: TestCORS::test_preflight_preview_origin_ok — unchanged from iteration 3. Invite flow uses secrets.token_urlsafe(16) → 22-char URL-safe string; test asserts len>=16 for flexibility. Table-full test uses max_players=1 and registers two fresh users. Forgot-password tests assert only {ok:true} (don't depend on Resend delivery since RESEND_API_KEY is empty).",
+  "rca of the issue": "No new issues in iteration 4. Single carry-over CORS issue RCA already documented in iteration_3.json (FRONTEND_URL='*' overrides regex)."
+}

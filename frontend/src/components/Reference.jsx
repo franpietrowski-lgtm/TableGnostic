@@ -11,7 +11,7 @@ export default function Reference() {
   const ql = q.toLowerCase();
   const lists = useMemo(() => {
     if (!ref) return {};
-    const f = (arr) => arr.filter((a) => a.name.toLowerCase().includes(ql));
+    const f = (arr) => arr.filter((a) => (a.name || a.difficulty || "").toLowerCase().includes(ql));
     return {
       attributes: f(ref.attributes),
       defects: f(ref.defects),
@@ -19,7 +19,8 @@ export default function Reference() {
       enhancements: f(ref.enhancements),
       limiters: f(ref.limiters),
       power_levels: f(ref.power_levels),
-      target_numbers: (ref.target_numbers || []).filter((t) => t.difficulty.toLowerCase().includes(ql)),
+      target_numbers: f(ref.target_numbers || []),
+      extras_rules: f(ref.extras_rules || []),
     };
   }, [ref, ql]);
 
@@ -29,6 +30,7 @@ export default function Reference() {
     ["attributes", "Attributes"], ["defects", "Defects"], ["skill_groups", "Skill Groups"],
     ["enhancements", "Enhancements"], ["limiters", "Limiters"],
     ["power_levels", "Power Levels"], ["target_numbers", "Target Numbers"],
+    ["extras_rules", "BESM Extras"],
   ];
 
   return (
@@ -65,7 +67,7 @@ export default function Reference() {
             <div className="flex items-center justify-between">
               <div className="text-sm text-parchment font-ui">{item.name || item.difficulty}</div>
               <div className="text-[10px] font-ui uppercase tracking-widest text-gold/70 flex items-center gap-1">
-                <BookOpen className="w-3 h-3"/> p.{item.page} BESM 4E
+                <BookOpen className="w-3 h-3"/> p.{item.page} {item.source?.book || (tab === "extras_rules" ? "BESM Extras" : "BESM 4E")}
               </div>
             </div>
             <div className="text-[11px] text-mist mt-1 font-ui">
@@ -76,7 +78,11 @@ export default function Reference() {
               {tab === "limiters" && `${item.cost_modifier} to effective level`}
               {tab === "power_levels" && `${item.points} Character Points`}
               {tab === "target_numbers" && `TN ${item.tn}`}
+              {tab === "extras_rules" && `${item.category}${item.summary ? ` — ${item.summary}` : ""}`}
             </div>
+            {tab === "extras_rules" && (
+              <div className="text-[10px] text-gold/60 mt-1 font-ui uppercase tracking-widest">BESM Extras</div>
+            )}
           </div>
         ))}
       </div>
