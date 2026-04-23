@@ -36,10 +36,14 @@ db = client[DB_NAME]
 app = FastAPI(title="Table-Gnostic API")
 api = APIRouter(prefix="/api")
 
+# Lock CORS to known origins (frontend + any explicit FRONTEND_URL). Allow credentials.
+_frontend_url = os.environ.get("FRONTEND_URL", "*")
+_allowed = [_frontend_url] if _frontend_url != "*" else ["*"]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,  # browsers reject "*" with credentials; we use Bearer tokens in frontend
+    allow_origins=_allowed,
+    allow_origin_regex=r"https://.*\.preview\.emergentagent\.com|http://localhost:\d+",
+    allow_credentials=(_frontend_url != "*"),
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -248,6 +252,42 @@ class CustomAttributeIn(BaseModel):
 class NodeRevealIn(BaseModel):
     user_ids: List[str]
 
+class GenesisIn(BaseModel):
+    """Campaign genesis using Guy Sclanders' Great GM framework.
+
+    Credit: This structure is inspired by "The Complete Guide to Creating Epic
+    Campaigns" by Guy Sclanders (How to be a Great GM, 2018). Only the phase
+    naming and prompts are borrowed — all authored content belongs to the user.
+    """
+    campaign_id: str
+    # Phase 1: The Sentence — Someone wants something badly by when, having
+    # difficulty using something because of reasons.
+    sentence_who: str = ""
+    sentence_wants: str = ""
+    sentence_badly_when: str = ""
+    sentence_using: str = ""
+    sentence_reasons: str = ""
+    # Phase 2: Theme
+    theme: str = ""
+    tone_words: List[str] = []
+    # Phase 3: Nemesis
+    nemesis_name: str = ""
+    nemesis_type: str = ""  # villain / henchman / force-of-nature / rival / system
+    nemesis_motive: str = ""
+    nemesis_resources: str = ""
+    nemesis_weakness: str = ""
+    # Phase 4: Plotting — the Master Plot arc
+    master_acts: List[Dict[str, str]] = []  # [{title, beat}]
+    # Phase 5: Adventure outlines (Follow Plotters + Make Plotters + Fly)
+    adventures: List[Dict[str, str]] = []   # [{title, kind, hook, stakes, outcome}]
+    # Phase 6: NPCs to seed
+    seed_npcs: List[Dict[str, str]] = []    # [{name, role, note}]
+    # Phase 7: Beginning + Ending ideas
+    beginning: str = ""
+    ending: str = ""
+    # Progress
+    phase_completed: int = 0  # 0..7
+
 # -------- Helpers --------
 
 def now_iso() -> str:
@@ -415,7 +455,98 @@ async def besm_reference():
         "target_numbers": with_source(TARGET_NUMBERS),
     }
 
-# -------- Custom GM Attributes/Defects/Skills --------
+# -------- Campaign Genesis (Great GM framework) --------
+# Credit: Framework inspired by Guy Sclanders, "The Complete Guide to Creating
+# Epic Campaigns" (How to be a Great GM, 2018). Only section structure and
+# prompts are referenced; all authored content belongs to the user.
+
+@api.get("/campaigns/{cid}/genesis")
+async def get_genesis(cid: str, user: dict = Depends(get_current_user)):
+    camp = await db.campaigns.find_one({"id": cid}, {"_id": 0})
+    if not camp:
+        raise HTTPException(404, "Campaign not found")
+    if camp["gm_id"] != user["id"]:
+        raise HTTPException(403, "Only GM can view genesis")
+    doc = await db.genesis.find_one({"campaign_id": cid}, {"_id": 0})
+    if not doc:
+        doc = GenesisIn(campaign_id=cid).model_dump()
+        doc["id"] = new_id()
+        doc["created_at"] = now_iso()
+        await db.genesis.insert_one(dict(doc))
+        doc.pop("_id", None)
+    return doc
+
+@api.put("/campaigns/{cid}/genesis")
+async def update_genesis(cid: str, body: GenesisIn,
+                         user: dict = Depends(get_current_user)):
+    camp = await db.campaigns.find_one({"id": cid}, {"_id": 0})
+    if not camp:
+        raise HTTPException(404, "Campaign not found")
+    if camp["gm_id"] != user["id"]:
+        raise HTTPException(403, "Only GM can edit genesis")
+    data = body.model_dump()
+    data["campaign_id"] = cid
+    data["updated_at"] = now_iso()
+    existing = await db.genesis.find_one({"campaign_id": cid}, {"_id": 0})
+    if existing:
+        data["id"] = existing["id"]
+        data["created_at"] = existing.get("created_at", now_iso())
+        await db.genesis.replace_one({"campaign_id": cid}, data)
+    else:
+        data["id"] = new_id()
+        data["created_at"] = now_iso()
+        await db.genesis.insert_one(dict(data))
+    data.pop("_id", None)
+    return data
+
+@api.post("/campaigns/{cid}/genesis/seed-nodes")
+async def seed_nodes_from_genesis(cid: str, user: dict = Depends(get_current_user)):
+    """Convert genesis seed_npcs into gm_only knowledge nodes."""
+    camp = await db.campaigns.find_one({"id": cid}, {"_id": 0})
+    if not camp or camp["gm_id"] != user["id"]:
+        raise HTTPException(403, "Only GM can seed")
+    g = await db.genesis.find_one({"campaign_id": cid}, {"_id": 0})
+    if not g:
+        raise HTTPException(404, "No genesis")
+    created = 0
+    # Seed nemesis as NPC
+    if g.get("nemesis_name"):
+        await db.nodes.insert_one({
+            "id": new_id(), "campaign_id": cid, "type": "npc",
+            "title": g["nemesis_name"],
+            "content": f"Nemesis · {g.get('nemesis_type','')}\nMotive: {g.get('nemesis_motive','')}\nResources: {g.get('nemesis_resources','')}\nWeakness: {g.get('nemesis_weakness','')}",
+            "tags": ["nemesis"], "visibility": "gm_only", "revealed_to": [],
+            "links": [], "author_id": user["id"], "author_name": user["name"],
+            "created_at": now_iso(),
+        })
+        created += 1
+    for npc in g.get("seed_npcs", []) or []:
+        if not npc.get("name"): continue
+        await db.nodes.insert_one({
+            "id": new_id(), "campaign_id": cid, "type": "npc",
+            "title": npc["name"],
+            "content": f"{npc.get('role','')}\n\n{npc.get('note','')}",
+            "tags": [npc.get("role","").lower()] if npc.get("role") else [],
+            "visibility": "gm_only", "revealed_to": [], "links": [],
+            "author_id": user["id"], "author_name": user["name"],
+            "created_at": now_iso(),
+        })
+        created += 1
+    for adv in g.get("adventures", []) or []:
+        if not adv.get("title"): continue
+        await db.nodes.insert_one({
+            "id": new_id(), "campaign_id": cid, "type": "quest",
+            "title": adv["title"],
+            "content": f"Hook: {adv.get('hook','')}\nStakes: {adv.get('stakes','')}\nOutcome: {adv.get('outcome','')}",
+            "tags": [adv.get("kind","").lower()] if adv.get("kind") else [],
+            "visibility": "gm_only", "revealed_to": [], "links": [],
+            "author_id": user["id"], "author_name": user["name"],
+            "created_at": now_iso(),
+        })
+        created += 1
+    return {"ok": True, "nodes_created": created}
+
+# -------- Custom GM Attributes / Defects / Skills --------
 
 @api.post("/campaigns/{campaign_id}/custom")
 async def create_custom(campaign_id: str, body: CustomAttributeIn,
@@ -982,11 +1113,31 @@ async def broadcast(sid: str, payload: dict):
     await bus.send(sid, payload)
 
 @app.websocket("/api/ws/session/{sid}")
-async def ws_session(ws: WebSocket, sid: str):
+async def ws_session(ws: WebSocket, sid: str, token: str = None):
+    # Token auth: accept bearer token as query parameter
+    if not token:
+        await ws.close(code=4401)
+        return
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        if payload.get("type") != "access":
+            await ws.close(code=4401); return
+    except jwt.PyJWTError:
+        await ws.close(code=4401); return
+    # Verify session exists
+    s = await db.sessions.find_one({"id": sid}, {"_id": 0})
+    if not s:
+        await ws.close(code=4404); return
+    # Verify user has access to the campaign
+    camp = await db.campaigns.find_one({"id": s["campaign_id"]}, {"_id": 0})
+    uid = payload.get("sub")
+    if not camp or (camp["gm_id"] != uid and uid not in camp.get("member_ids", []) and camp.get("visibility") != "public"):
+        await ws.close(code=4403); return
+
     await bus.join(sid, ws)
     try:
         while True:
-            await ws.receive_text()  # keep-alive / heartbeat
+            await ws.receive_text()
     except WebSocketDisconnect:
         bus.leave(sid, ws)
 

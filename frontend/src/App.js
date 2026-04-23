@@ -11,6 +11,8 @@ import CharacterBuilder from "./components/CharacterBuilder";
 import CharacterSheet from "./components/CharacterSheet";
 import SessionView from "./components/SessionView";
 import Reference from "./components/Reference";
+import CampaignGenesis from "./components/CampaignGenesis";
+import Discover from "./components/Discover";
 
 function Protected({ children }) {
   const { user, loading } = useAuth();
@@ -39,7 +41,9 @@ export default function App() {
           <Route element={<Protected><Shell /></Protected>}>
             <Route path="/app" element={<Dashboard />} />
             <Route path="/app/campaigns" element={<Campaigns />} />
+            <Route path="/app/discover" element={<Discover />} />
             <Route path="/app/campaigns/:id" element={<CampaignDetail />} />
+            <Route path="/app/campaigns/:id/genesis" element={<CampaignGenesis />} />
             <Route path="/app/campaigns/:id/characters/new" element={<CharacterBuilder />} />
             <Route path="/app/characters/:id" element={<CharacterSheet />} />
             <Route path="/app/characters/:id/edit" element={<CharacterBuilder />} />

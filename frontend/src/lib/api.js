@@ -4,7 +4,9 @@ import React, { createContext, useContext, useEffect, useState } from "react";
 const BACKEND = process.env.REACT_APP_BACKEND_URL;
 export const API = `${BACKEND}/api`;
 
-export const api = axios.create({ baseURL: API, withCredentials: true });
+// Bearer-token based auth (more portable than cookies across browsers/incognito).
+// Cookies are still set by backend and will silently work if present; we don't depend on them.
+export const api = axios.create({ baseURL: API, withCredentials: false });
 
 // Attach bearer token fallback (cookie is primary)
 api.interceptors.request.use((cfg) => {
@@ -31,10 +33,14 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     (async () => {
+      // Skip /me call if we have no token at all — avoids noisy 401 in console.
+      const t = localStorage.getItem("tg_token");
+      if (!t) { setUser(false); setLoading(false); return; }
       try {
         const { data } = await api.get("/auth/me");
         setUser(data);
       } catch {
+        localStorage.removeItem("tg_token");
         setUser(false);
       } finally {
         setLoading(false);

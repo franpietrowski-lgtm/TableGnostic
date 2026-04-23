@@ -560,13 +560,20 @@ class TestDamage:
 
 # ---------------- WebSocket ----------------
 
+def _ws_url(sid: str, token: str = None) -> str:
+    base = BASE_URL.replace("https://", "wss://").replace("http://", "ws://")
+    url = f"{base}/api/ws/session/{sid}"
+    if token is not None:
+        url += f"?token={token}"
+    return url
+
+
 class TestWebSocket:
     def test_ws_receives_chat_broadcast(self, gm_token, session):
+        """Valid token + GM (authorized) should receive broadcast."""
         async def _run():
-            ws_url = BASE_URL.replace("https://", "wss://").replace("http://", "ws://")
-            url = f"{ws_url}/api/ws/session/{session['id']}"
+            url = _ws_url(session["id"], gm_token)
             async with websockets.connect(url) as ws:
-                # post chat
                 msg = f"TEST_WS_{uuid.uuid4().hex[:6]}"
                 await asyncio.get_event_loop().run_in_executor(
                     None,
@@ -581,3 +588,279 @@ class TestWebSocket:
                 assert payload["data"]["message"] == msg
 
         asyncio.run(_run())
+
+    def test_ws_no_token_closes_4401(self, session):
+        async def _run():
+            url = _ws_url(session["id"], token=None)
+            try:
+                async with websockets.connect(url) as ws:
+                    await asyncio.wait_for(ws.recv(), timeout=5)
+                    pytest.fail("Expected connection to close")
+            except websockets.exceptions.ConnectionClosed as e:
+                assert e.code == 4401, f"expected 4401 got {e.code}"
+            except websockets.exceptions.InvalidStatusCode as e:
+                # Some stacks surface handshake reject as InvalidStatusCode
+                assert e.status_code in (401, 403), f"unexpected {e.status_code}"
+        asyncio.run(_run())
+
+    def test_ws_invalid_token_closes_4401(self, session):
+        async def _run():
+            url = _ws_url(session["id"], token="not-a-real-token")
+            try:
+                async with websockets.connect(url) as ws:
+                    await asyncio.wait_for(ws.recv(), timeout=5)
+                    pytest.fail("Expected connection to close")
+            except websockets.exceptions.ConnectionClosed as e:
+                assert e.code == 4401, f"expected 4401 got {e.code}"
+            except websockets.exceptions.InvalidStatusCode as e:
+                assert e.status_code in (401, 403)
+        asyncio.run(_run())
+
+    def test_ws_private_campaign_non_member_closes_4403(self, gm_token, player_token):
+        """Create a PRIVATE campaign + session, connect as non-member player → 4403."""
+        # create private campaign (GM is owner, player not a member)
+        pr = requests.post(f"{API}/campaigns",
+                           json={"name": f"TEST_Private_{uuid.uuid4().hex[:6]}",
+                                 "description": "private", "visibility": "private",
+                                 "max_players": 4},
+                           headers=h(gm_token))
+        assert pr.status_code == 200, pr.text
+        priv = pr.json()
+        sr = requests.post(f"{API}/sessions",
+                           json={"campaign_id": priv["id"], "title": "TEST_PrivS"},
+                           headers=h(gm_token))
+        assert sr.status_code == 200, sr.text
+        priv_session = sr.json()
+
+        async def _run():
+            url = _ws_url(priv_session["id"], player_token)
+            try:
+                async with websockets.connect(url) as ws:
+                    await asyncio.wait_for(ws.recv(), timeout=5)
+                    pytest.fail("Expected connection to close with 4403")
+            except websockets.exceptions.ConnectionClosed as e:
+                assert e.code == 4403, f"expected 4403 got {e.code}"
+            except websockets.exceptions.InvalidStatusCode as e:
+                assert e.status_code in (401, 403)
+
+        try:
+            asyncio.run(_run())
+        finally:
+            requests.delete(f"{API}/campaigns/{priv['id']}", headers=h(gm_token))
+
+    def test_ws_public_campaign_any_member_connects(self, player_token, session):
+        """Valid token on PUBLIC campaign (fixture) → player (not explicit member) can connect and broadcast is received."""
+        async def _run():
+            url = _ws_url(session["id"], player_token)
+            async with websockets.connect(url) as ws:
+                msg = f"TEST_PUB_{uuid.uuid4().hex[:6]}"
+                await asyncio.get_event_loop().run_in_executor(
+                    None,
+                    lambda: requests.post(f"{API}/chat",
+                                          json={"session_id": session["id"],
+                                                "message": msg, "kind": "chat"},
+                                          headers=h(player_token)),
+                )
+                frame = await asyncio.wait_for(ws.recv(), timeout=10)
+                data = json.loads(frame)
+                assert data["type"] == "chat"
+                assert data["data"]["message"] == msg
+        asyncio.run(_run())
+
+
+# ---------------- Campaign Genesis (new) ----------------
+
+@pytest.fixture(scope="session")
+def fresh_campaign(gm_token):
+    """Separate public campaign used for genesis tests so it's isolated."""
+    payload = {"name": f"TEST_Genesis_{uuid.uuid4().hex[:6]}",
+               "description": "genesis", "visibility": "public",
+               "max_players": 4, "power_level": "Heroic"}
+    r = requests.post(f"{API}/campaigns", json=payload, headers=h(gm_token))
+    assert r.status_code == 200, r.text
+    camp = r.json()
+    yield camp
+    requests.delete(f"{API}/campaigns/{camp['id']}", headers=h(gm_token))
+
+
+class TestGenesis:
+    def test_get_genesis_auto_creates(self, gm_token, fresh_campaign):
+        r = requests.get(f"{API}/campaigns/{fresh_campaign['id']}/genesis",
+                         headers=h(gm_token))
+        assert r.status_code == 200, r.text
+        d = r.json()
+        assert d["campaign_id"] == fresh_campaign["id"]
+        # defaults
+        assert d.get("phase_completed", 0) == 0
+        assert d.get("tone_words", []) == []
+        assert d.get("master_acts", []) == []
+        assert "id" in d
+        assert "created_at" in d
+
+    def test_get_genesis_idempotent(self, gm_token, fresh_campaign):
+        r1 = requests.get(f"{API}/campaigns/{fresh_campaign['id']}/genesis",
+                          headers=h(gm_token)).json()
+        r2 = requests.get(f"{API}/campaigns/{fresh_campaign['id']}/genesis",
+                          headers=h(gm_token)).json()
+        assert r1["id"] == r2["id"]
+
+    def test_get_genesis_non_gm_403(self, player_token, fresh_campaign):
+        r = requests.get(f"{API}/campaigns/{fresh_campaign['id']}/genesis",
+                         headers=h(player_token))
+        assert r.status_code == 403
+
+    def test_get_genesis_404(self, gm_token):
+        r = requests.get(f"{API}/campaigns/nonexistent-id-xyz/genesis",
+                         headers=h(gm_token))
+        assert r.status_code == 404
+
+    def test_put_genesis_full_payload(self, gm_token, fresh_campaign):
+        body = {
+            "campaign_id": fresh_campaign["id"],
+            "sentence_who": "A fallen star-priest",
+            "sentence_wants": "to restore the Sundered Choir",
+            "sentence_badly_when": "before the Eclipse of Ashes",
+            "sentence_using": "a chorus of heretic singers",
+            "sentence_reasons": "the Archon has silenced their chord",
+            "theme": "Hope rekindled in exile",
+            "tone_words": ["mythic", "brooding", "sacred"],
+            "nemesis_name": "Archon Velvyn",
+            "nemesis_type": "villain",
+            "nemesis_motive": "Impose perfect silence",
+            "nemesis_resources": "Silent Choir, Dream-Wardens",
+            "nemesis_weakness": "True name sung in thirds",
+            "master_acts": [
+                {"title": "Act I: Ember", "beat": "The priest returns"},
+                {"title": "Act II: Storm", "beat": "The Choir hunts"},
+            ],
+            "adventures": [
+                {"title": "The Silver Bell", "kind": "quest",
+                 "hook": "Bell silenced", "stakes": "village silence",
+                 "outcome": "song restored"},
+            ],
+            "seed_npcs": [
+                {"name": "Sister Oru", "role": "ally", "note": "keeps the third"},
+                {"name": "Khev the Still", "role": "rival", "note": "former student"},
+            ],
+            "beginning": "A lone bell in a deaf village",
+            "ending": "The Sundered Choir sings again",
+            "phase_completed": 7,
+        }
+        r = requests.put(f"{API}/campaigns/{fresh_campaign['id']}/genesis",
+                         json=body, headers=h(gm_token))
+        assert r.status_code == 200, r.text
+        d = r.json()
+        assert d["theme"] == "Hope rekindled in exile"
+        assert d["tone_words"] == ["mythic", "brooding", "sacred"]
+        assert len(d["master_acts"]) == 2
+        assert len(d["seed_npcs"]) == 2
+        assert d["phase_completed"] == 7
+        assert "updated_at" in d
+
+        # GET confirms persistence
+        g = requests.get(f"{API}/campaigns/{fresh_campaign['id']}/genesis",
+                         headers=h(gm_token)).json()
+        assert g["nemesis_name"] == "Archon Velvyn"
+        assert len(g["adventures"]) == 1
+
+    def test_put_genesis_is_idempotent_upsert(self, gm_token, fresh_campaign):
+        """Second PUT should update same doc (same id), not create a new one."""
+        before = requests.get(f"{API}/campaigns/{fresh_campaign['id']}/genesis",
+                              headers=h(gm_token)).json()
+        payload = {"campaign_id": fresh_campaign["id"],
+                   "theme": "Twice-revised", "phase_completed": 3}
+        r = requests.put(f"{API}/campaigns/{fresh_campaign['id']}/genesis",
+                         json=payload, headers=h(gm_token))
+        assert r.status_code == 200
+        after = r.json()
+        assert after["id"] == before["id"]
+        assert after["theme"] == "Twice-revised"
+
+    def test_put_genesis_non_gm_403(self, player_token, fresh_campaign):
+        r = requests.put(f"{API}/campaigns/{fresh_campaign['id']}/genesis",
+                         json={"campaign_id": fresh_campaign["id"], "theme": "x"},
+                         headers=h(player_token))
+        assert r.status_code == 403
+
+    def test_seed_nodes_creates_4(self, gm_token, fresh_campaign):
+        # ensure genesis has nemesis + 2 npcs + 1 adv (may already from previous test,
+        # but re-PUT with the exact canonical payload to ensure)
+        canon = {
+            "campaign_id": fresh_campaign["id"],
+            "nemesis_name": "Archon Velvyn",
+            "nemesis_type": "villain",
+            "seed_npcs": [
+                {"name": "Sister Oru", "role": "ally", "note": "a"},
+                {"name": "Khev the Still", "role": "rival", "note": "b"},
+            ],
+            "adventures": [
+                {"title": "The Silver Bell", "kind": "quest",
+                 "hook": "h", "stakes": "s", "outcome": "o"},
+            ],
+        }
+        requests.put(f"{API}/campaigns/{fresh_campaign['id']}/genesis",
+                     json=canon, headers=h(gm_token))
+
+        # count existing nodes before seed
+        before = requests.get(f"{API}/campaigns/{fresh_campaign['id']}/nodes",
+                              headers=h(gm_token)).json()
+        before_ids = {n["id"] for n in before}
+
+        r = requests.post(f"{API}/campaigns/{fresh_campaign['id']}/genesis/seed-nodes",
+                          headers=h(gm_token))
+        assert r.status_code == 200, r.text
+        d = r.json()
+        assert d["ok"] is True
+        assert d["nodes_created"] == 4
+
+        # GM listing should now contain 4 new gm_only nodes: 3 npc + 1 quest
+        after = requests.get(f"{API}/campaigns/{fresh_campaign['id']}/nodes",
+                             headers=h(gm_token)).json()
+        new_nodes = [n for n in after if n["id"] not in before_ids]
+        assert len(new_nodes) == 4
+        types = sorted(n["type"] for n in new_nodes)
+        assert types == ["npc", "npc", "npc", "quest"]
+        assert all(n["visibility"] == "gm_only" for n in new_nodes)
+        # nemesis title present
+        titles = [n["title"] for n in new_nodes]
+        assert "Archon Velvyn" in titles
+        assert "Sister Oru" in titles
+        assert "Khev the Still" in titles
+        assert "The Silver Bell" in titles
+
+    def test_seed_nodes_player_forbidden(self, player_token, fresh_campaign):
+        r = requests.post(f"{API}/campaigns/{fresh_campaign['id']}/genesis/seed-nodes",
+                          headers=h(player_token))
+        assert r.status_code == 403
+
+
+# ---------------- CORS ----------------
+
+class TestCORS:
+    def test_preflight_preview_origin_ok(self):
+        origin = "https://test-preview.preview.emergentagent.com"
+        r = requests.options(
+            f"{API}/campaigns",
+            headers={
+                "Origin": origin,
+                "Access-Control-Request-Method": "GET",
+                "Access-Control-Request-Headers": "authorization,content-type",
+            },
+        )
+        # 200 or 204 both acceptable for preflight
+        assert r.status_code in (200, 204), f"status={r.status_code}"
+        aco = r.headers.get("access-control-allow-origin")
+        assert aco == origin, f"allow-origin={aco}"
+
+    def test_preflight_unknown_origin_no_cors(self):
+        r = requests.options(
+            f"{API}/campaigns",
+            headers={
+                "Origin": "https://evil.example.com",
+                "Access-Control-Request-Method": "GET",
+                "Access-Control-Request-Headers": "authorization",
+            },
+        )
+        aco = r.headers.get("access-control-allow-origin")
+        # Should NOT echo evil.example.com
+        assert aco != "https://evil.example.com", f"unexpected allow-origin={aco}"

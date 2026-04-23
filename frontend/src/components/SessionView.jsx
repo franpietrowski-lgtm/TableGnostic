@@ -34,9 +34,11 @@ export default function SessionView() {
   useEffect(() => { loadAll(); }, [id]);
   useEffect(() => { chatEnd.current?.scrollIntoView({ behavior: "smooth" }); }, [chat]);
 
-  // WebSocket live updates
+  // WebSocket live updates (token-authenticated)
   useEffect(() => {
-    const wsUrl = API.replace(/^http/, "ws") + `/ws/session/${id}`;
+    const token = localStorage.getItem("tg_token");
+    if (!token) return;
+    const wsUrl = API.replace(/^http/, "ws") + `/ws/session/${id}?token=${encodeURIComponent(token)}`;
     let ws;
     try {
       ws = new WebSocket(wsUrl);

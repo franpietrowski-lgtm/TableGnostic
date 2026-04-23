@@ -1,0 +1,34 @@
+{
+  "summary": "Backend-only regression + new features for Table-Gnostic iteration 3 (auth Bearer primary, Campaign Genesis endpoints, WebSocket token auth, tightened CORS). 54/55 pytest cases pass (98.2%). All iteration-1 regressions still green. All 9 new Genesis tests pass (GET auto-create, non-GM 403, non-existent 404, PUT idempotent upsert, seed-nodes creates exactly 4 gm_only nodes of types npc/npc/npc/quest, player forbidden on seed). All 5 new WebSocket auth tests pass (GM+token broadcast, no-token 4401, invalid-token 4401, private-campaign non-member 4403, public-campaign member 200 + broadcast). CORS preflight for unknown origin passes (does not echo evil origin) but CORS preflight for preview.emergentagent.com returns Access-Control-Allow-Origin: '*' instead of the specific origin — the tightening regex is overridden by FRONTEND_URL='*' in backend/.env.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "CORS middleware (server.py:39-49)", "issue": "When FRONTEND_URL='*' (current backend/.env), allow_origins=['*'] is passed to CORSMiddleware which makes Starlette return 'Access-Control-Allow-Origin: *' for ALL origins, short-circuiting the allow_origin_regex for preview.emergentagent.com/localhost. Net effect: allow_credentials is also disabled (False when FRONTEND_URL='*'), so cookie auth stops working cross-origin; only Bearer-token auth works. This matches the stated 'Bearer primary' pivot, but the 'CORS tightened' claim in the spec is NOT achieved with the current env value. To actually tighten, either (a) set FRONTEND_URL to the real preview URL, or (b) change code so when FRONTEND_URL='*', allow_origins=[] and only the regex is used (with allow_credentials=True)."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Decide CORS posture: if the intent is tightened CORS with credentials, update server.py to use allow_origins=[] + allow_origin_regex=... + allow_credentials=True when FRONTEND_URL='*' (or set FRONTEND_URL to the actual preview URL). Current config functionally works for the Bearer flow but the preflight echoes '*' instead of the specific preview origin, so cookie-based cross-origin requests cannot succeed."
+  ],
+  "critical_code_review_comments": [
+    "server.py is 1151 lines — well above the 700-line guideline. Consider splitting into modules: auth.py, campaigns.py, characters.py, sessions.py, ws.py, genesis.py.",
+    "seed_nodes_from_genesis (server.py:502) uses 'camp or camp.gm_id != user.id' in a single HTTPException(403). A missing campaign should return 404, not 403, to match the convention used in get_genesis/update_genesis.",
+    "WebSocket handler server.py:1134 grants access to ANY authenticated user for a 'public' campaign (not just explicit members). This matches the test spec (d) but is worth calling out — public-campaign sessions are effectively discoverable read/broadcast once you log in.",
+    "GenesisIn model allows arbitrary dicts in master_acts/adventures/seed_npcs (List[Dict[str,str]]). No validation of required keys (title/name). seed_nodes_from_genesis protects against missing 'name'/'title' with truthy checks, so OK in practice, but typed sub-models would be cleaner.",
+    "CORSMiddleware config is ambiguous when FRONTEND_URL='*': passing both allow_origins=['*'] and allow_origin_regex makes the wildcard win — the regex is dead code in this env. See minor issue above."
+  ],
+  "updated_files": [
+    "/app/backend/tests/backend_test.py (added TestGenesis 9 tests, TestCORS 2 tests, expanded TestWebSocket from 1 to 5 tests with token auth scenarios; added _ws_url helper and fresh_campaign fixture)"
+  ],
+  "success_rate": {"backend": "98.2% (54/55 pytest)", "frontend": "not tested this iteration"},
+  "test_credentials": "admin@tablegnostic.com/admin123, gm@tablegnostic.com/gm123456, player@tablegnostic.com/player12345 — all three confirmed working via /api/auth/login.",
+  "seed_data_creation": "Tests create TEST_-prefixed campaigns/characters/sessions/nodes and tear down the campaigns via DELETE /api/campaigns/{id}. Two campaigns per run (main + fresh_campaign for genesis + one private for 4403 WS test).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "pytest file is at /app/backend/tests/backend_test.py. Needs REACT_APP_BACKEND_URL exported (or read from /app/frontend/.env). 55 tests covering health, auth, BESM ref, campaigns, custom rules, characters+derived, nodes visibility, edges, sessions, chat, dice (incl stat refs), initiative, round advance+effects, damage, WebSocket (5 auth scenarios including 4401/4403), Genesis (9 tests), CORS (2 tests). Known failure: TestCORS::test_preflight_preview_origin_ok expects the preview origin echoed back but backend returns '*' due to FRONTEND_URL='*' env. If that env is changed or server.py adjusted, this will pass.",
+  "rca of the issue": "CORS issue: server.py lines 40-46 set `_allowed = ['*']` when FRONTEND_URL='*', then still pass `allow_origin_regex=...`. Starlette's CORSMiddleware checks allow_origins first; when '*' is in the list it immediately echoes '*' (for simple requests) or the wildcard (for preflight) without evaluating the regex. Reproduction: curl -X OPTIONS https://<host>/api/campaigns -H 'Origin: https://foo.preview.emergentagent.com' -H 'Access-Control-Request-Method: GET' — response header `access-control-allow-origin: *` instead of the origin. Mitigation: either set FRONTEND_URL to the canonical preview URL (and rely on regex for PR preview domains), or change logic so when FRONTEND_URL is '*' we pass `allow_origins=[]` and `allow_credentials=True`, letting the regex be the sole gate."
+}

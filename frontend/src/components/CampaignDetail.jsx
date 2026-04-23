@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import { api, formatApiErrorDetail } from "../lib/api";
 import * as Tabs from "@radix-ui/react-tabs";
-import { Users, Plus, UserPlus2, ArrowRight, Trash2, Sparkles, Eye, EyeOff, Link as LinkIcon } from "lucide-react";
+import { Users, Plus, UserPlus2, ArrowRight, Trash2, Sparkles, Eye, EyeOff, Link as LinkIcon, Wand2 } from "lucide-react";
 
 export default function CampaignDetail() {
   const { id } = useParams();
@@ -62,6 +62,9 @@ export default function CampaignDetail() {
           </div>
         </div>
         <div className="flex gap-2">
+          {camp.is_gm && <Link to={`/app/campaigns/${id}/genesis`} className="btn" data-testid="genesis-btn">
+            <Wand2 className="w-4 h-4"/> Atelier
+          </Link>}
           {camp.is_gm && <button onClick={startSession} className="btn btn-primary" data-testid="start-session-btn">
             <Sparkles className="w-4 h-4"/> Start session
           </button>}

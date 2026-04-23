@@ -92,7 +92,8 @@ function CreateModal({ onClose, onCreated }) {
       const payload = { ...form, tags: form.tags.split(",").map((s) => s.trim()).filter(Boolean), max_players: +form.max_players };
       const { data } = await api.post("/campaigns", payload);
       onCreated();
-      nav(`/app/campaigns/${data.id}`);
+      // GM goes straight into the Atelier to forge the Master Plot.
+      nav(`/app/campaigns/${data.id}/genesis`);
     } catch (e) {
       setErr(formatApiErrorDetail(e.response?.data?.detail) || e.message);
     } finally { setBusy(false); }

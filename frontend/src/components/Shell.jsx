@@ -1,7 +1,7 @@
 import React from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../lib/api";
-import { Scroll, LayoutGrid, BookOpen, LogOut, UserCircle2 } from "lucide-react";
+import { Scroll, LayoutGrid, BookOpen, LogOut, UserCircle2, Compass } from "lucide-react";
 
 const Sigil = () => (
   <svg viewBox="0 0 120 120" className="w-8 h-8 logo-mark" xmlns="http://www.w3.org/2000/svg">
@@ -46,6 +46,9 @@ export default function Shell() {
           </NavLink>
           <NavLink to="/app/campaigns" className={linkClass} data-testid="nav-campaigns">
             <Scroll className="w-4 h-4" /> Campaigns
+          </NavLink>
+          <NavLink to="/app/discover" className={linkClass} data-testid="nav-discover">
+            <Compass className="w-4 h-4" /> Discover Tables
           </NavLink>
           <NavLink to="/app/reference" className={linkClass} data-testid="nav-reference">
             <BookOpen className="w-4 h-4" /> BESM Reference
