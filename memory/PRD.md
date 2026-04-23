@@ -5,90 +5,74 @@
 
 ## 1. Original Problem Statement
 
-ForgeWeave → rebranded to **Table-Gnostic** at user's request. Build a system-aware tabletop platform that unifies:
-- **World Anvil** — guided campaign creation & publishing
-- **Roll20** — session execution (initiative, dice, chat)
-- **D&D Beyond** — structured, automated character sheets
-- **Obsidian** — graph-based knowledge + discovery webs
-
-…on a **rules execution engine** that supports BESM 4E mechanics but **does not distribute copyrighted text** — only source references (book + page).
+Rebranded from ForgeWeave → **Table-Gnostic**. Build a system-aware tabletop platform unifying World Anvil + Roll20 + D&D Beyond + Obsidian on a rules execution engine that supports BESM 4E mechanics **without reproducing copyrighted text** — only source references (book + page).
 
 ## 2. Architecture
 
-- **Backend:** FastAPI + MongoDB (motor async) + JWT auth + WebSockets for live session bus
-- **Frontend:** React 18 + Tailwind + Radix + Framer Motion + lucide-react, dark cosmic/gold aesthetic (Cinzel/Fraunces/Manrope typography)
-- **Auth:** JWT (bcrypt + PyJWT) with httpOnly cookies AND Bearer fallback, brute-force lockout
-- **Routes:** `/api/*` for backend; `/`, `/auth`, `/app/*` for frontend
-- **Data:** all collections use UUID `id` fields (never expose Mongo ObjectId)
+- **Backend:** FastAPI + MongoDB (motor async) + JWT auth + token-authenticated WebSockets
+- **Frontend:** React 18 + Tailwind + Radix + lucide-react, dark cosmic/gold aesthetic (Cinzel/Fraunces/Manrope)
+- **Auth:** Bearer token primary (localStorage) with httpOnly cookie backup, bcrypt + PyJWT, brute-force lockout
+- **CORS:** locked by regex to `*.preview.emergentagent.com` and `localhost:*` with credentials enabled
+- **Data:** all collections use UUID `id` fields (never Mongo ObjectId in responses)
 
 ## 3. User Personas
 
-- **Game Master (GM)** — authors campaigns, custom rules, knowledge nodes (GM-only by default), runs sessions, reveals info
-- **Player** — seats at campaigns, builds BESM characters, rolls dice in sessions, sees only revealed knowledge
+- **Game Master (GM)** — authors campaigns via Atelier, custom rules, knowledge nodes, runs sessions
+- **Player** — discovers tables in the Seekers' Hall, builds BESM characters, rolls dice live
 - **Admin** — platform operator
 
-## 4. Core Requirements (static)
+## 4. Implemented — V1.1 (as of 2026-04-23)
 
-- Legal compliance: reference BESM 4E by **name + cost + page only**, never reproduce text
-- Role-based visibility on every knowledge node (gm_only / shared / revealed)
-- System-aware character sheet with auto-computed derived values
-- Live multiplayer session with WebSocket broadcast (chat, dice, initiative, effects, rounds)
+### V1 Core (shipped earlier)
+- JWT auth (admin / demo GM / demo Player seeded)
+- BESM 4E reference: 86 attributes, 36 defects, 5 enhancements, 23 limiters, 7 skill groups — all source-cited
+- Campaign CRUD + public/private + join/leave + member caps
+- Full BESM character forge with enhancement/limiter picker + live derived values (CV/ATK/DEF/HP/EP/DM)
+- Per-campaign GM custom Attributes/Defects/Skills
+- Live session (WebSocket): 3-column Initiative / Chat / Dice Altar; stat-aware notation `2d6+body`
+- Knowledge nodes with 3-tier visibility (gm_only / shared / revealed) + reveal system + edges
+- Searchable BESM Reference tome
 
-## 5. What Has Been Implemented (V1 — shipped 2026-04-23)
-
-### Backend (`/app/backend/server.py`, 1000 lines)
-- **Auth:** `/api/auth/{register,login,logout,me,refresh,forgot-password,reset-password}` with bcrypt, JWT cookies + Bearer, brute-force protection
-- **Seeded Users:** admin / demo GM / demo Player (see `/app/memory/test_credentials.md`)
-- **BESM Reference:** `/api/besm/reference` returns 86 attributes, 36 defects, 5 enhancements, 23 limiters, 7 skill groups, 5 power levels, 7 target numbers — every entry carries `{book: "BESM 4E", page: N}`
-- **Campaigns:** CRUD, public/private discovery, join/leave, member caps, GM-only delete
-- **Characters:** BESM sheet model with Body/Mind/Soul + attributes (with enhancements/limiters) + defects + skills; server computes `derived` (CV, Attack, Defence, HP, EP, DM) and `spent` point totals on every save
-- **Knowledge Nodes:** 8 node types (npc, location, item, event, quest, lore, faction, creature), visibility gm_only / shared / revealed, `/nodes/{id}/reveal` GM-only
-- **Edges:** directional links between nodes for the graph
-- **Sessions:** GM-created; `/sessions/{id}/round/advance` ticks effect durations
-- **Chat:** `/api/chat` (kinds: chat / ooc / action / system); damage applications post system messages
-- **Dice:** `/api/dice` with free-form notation (e.g. `2d6+body-3`), resolves stat refs from linked character
-- **Initiative / Effects / Damage**
-- **WebSockets:** `/api/ws/session/{sid}` broadcasts type=chat|dice|initiative|effect|round on every mutation
-- **Custom GM Rules:** per-campaign custom Attributes / Defects / Skills that appear in the character builder picker
-
-### Frontend (`/app/frontend/src/components/`)
-- **Landing** (`Landing.jsx`) — dark cosmic hero with Sigil mark, four pillar cards, table-gnostic creed
-- **Auth** (`Auth.jsx`) — login/register with Demo GM and Demo Player prefill buttons
-- **Shell** (`Shell.jsx`) — sidebar layout with brand mark, nav (Dashboard / Campaigns / BESM Reference), user pill, Leave Table
-- **Dashboard** — hearth-style stat tiles + list of user's campaigns
-- **Campaigns** (`Campaigns.jsx`) — list with public/private filters + "Forge a campaign" modal (all CampaignIn fields)
-- **CampaignDetail** (`CampaignDetail.jsx`) — tabbed: Characters | Knowledge Web | Sessions | Custom Rules (GM). Node reveal, custom rule authoring.
-- **CharacterBuilder** (`CharacterBuilder.jsx`) — full BESM forge: identity, stats, power-level, attributes picker (with per-attribute enhancements/limiters and live point cost), defects picker, skill groups picker, custom GM rules automatically fed into pickers, derived value readout, live points remaining
-- **CharacterSheet** (`CharacterSheet.jsx`) — read-only sheet with quick-roll buttons (Body / Mind / Soul / Attack / Defence / Initiative) wired to an active session
-- **SessionView** (`SessionView.jsx`) — three-column live session: Initiative + Effects + Damage | Chat | Dice Altar; WebSocket live updates; GM round advance
-- **Reference** (`Reference.jsx`) — searchable tome over all BESM 4E reference data with tab switching
+### V1.1 Enhancements (this iteration)
+- **Auth fix** — switched frontend to Bearer-token primary; robust across browsers that block third-party cookies (Safari, Brave, incognito)
+- **Campaign Atelier (`/app/campaigns/:id/genesis`)** — 7-phase GM workflow wizard based on Guy Sclanders' *The Complete Guide to Creating Epic Campaigns* (How to be a Great GM, 2018). Phases: The Sentence · Theme & Tone · Nemesis Design · Master Plot Acts · Adventure Outlines · Supporting Cast · Beginning & Ending. Credits the author in the footer with link to `greatgamemaster.com`.
+- **Genesis → Nodes materialisation** — one-click turns Nemesis + NPCs + Adventures into gm_only knowledge nodes
+- **Tables Seeking Players (`/app/discover`)** — discovery hall filtering public campaigns with open seats, by keyword + experience level; one-click "Take a seat"
+- **WebSocket token auth** — `/api/ws/session/{sid}?token=<jwt>`; 4401 unauth / 4403 forbidden / 4404 not-found
+- **CORS locked** to `*.preview.emergentagent.com` + `localhost:*` regex with credentials enabled; unknown origins are blocked
+- **Campaign create → Atelier redirect** — GMs land directly in the wizard after forging a campaign
 
 ### Testing
-- **Backend:** 40/40 pytest (100%) — `/app/test_reports/iteration_1.json`, `/app/backend/tests/backend_test.py`
-- **Frontend E2E:** ~85% verified via Playwright — all major flows green (iteration_2.json). Missing data-testids on two inline forms were patched post-test.
+- **Backend:** 54/55 pytest (98.2%) — `iteration_3.json`. Added 9 Genesis tests, 5 WebSocket auth tests, 2 CORS tests. All iteration-1 tests still green.
+- **Frontend E2E:** ~85%+ verified previously; new CampaignGenesis + Discover components to be added to test matrix next iteration.
 
-## 6. Prioritised Backlog
+## 5. Prioritised Backlog
 
-### P0 (polish — for user review)
-- Add pagination / infinite scroll to campaigns list once N>50
-- Secure WebSocket with token query-param (noted in review)
-- Wrap `AttributeRow`/`DefectRow`/`SkillRow` in `React.forwardRef` to silence a non-blocking console warning
+### P0 — pending user validation
+- User walks through: register → Atelier (7 phases) → seed knowledge nodes → character forge → start session → roll
+- Add email delivery for password reset (deferred — needs SendGrid or Resend integration + user-provided API key)
 
-### P1 (V2 per original PRD)
-- **Knowledge Graph UI** — node-link canvas (currently list view); drag/drop, auto-layout
-- **Player Discovery Web** — per-player revealed-subgraph visualiser
-- **GM Workflow Wizard** — guided 6-phase campaign genesis (Ideation → Structure → Content → Linking → Session Prep → Run)
-- **Professional Output templates** (session recap / NPC cards / handouts export)
-- **Split server.py** into modules (auth, campaigns, characters, sessions, dice, ws)
+### P1 — V2 per original PRD
+- Knowledge Graph UI canvas (list view → drag/drop node-link diagram)
+- Player Discovery Web (per-player revealed subgraph)
+- Professional output templates (session recap / NPC cards / handouts export)
+- Split server.py into modules (auth, campaigns, characters, sessions, dice, ws, genesis)
+- Forward ref wrappers for CharacterBuilder row components (silence console warning)
 
-### P2 (V3 per original PRD)
+### P2 — V3
 - Battlemap + token system
+- **Device camera/mic Discord-like AV seats** (user-requested)
 - Advanced automation (chained effects, condition triggers)
-- **Device camera/mic Discord-like seamless digital play** (as requested by user) — voice/video seats at the table
-- Table matchmaking search & invitations
+- Table invitation links + matchmaking notifications
+
+## 6. Credits
+
+- **BESM 4E rules** — Mark MacKinnon (Dyskami Publishing, 2020). Platform references names, costs, and page numbers only; consult the official rulebook for text.
+- **Campaign Atelier framework** — Guy Sclanders, *The Complete Guide to Creating Epic Campaigns* (How to be a Great GM, 2018). Phase structure and prompts reference his approach; all GM-authored content belongs to the user.
+- **Table-Gnostic brand** — user-provided logo and positioning.
 
 ## 7. Next Tasks
 
-1. User validates MVP flow end-to-end (Register → Create campaign → Forge character → Start session → Roll)
-2. Choose next feature focus: Knowledge Graph UI vs GM Workflow Wizard vs Discord-like AV seats
-3. If going to production: (a) lock down WebSocket auth, (b) set explicit CORS origins + enable credentials, (c) configure email service for password reset
+1. User validates login + end-to-end flow through the Atelier
+2. Pick next: Knowledge Graph canvas vs Discord-like AV seats vs password-reset email integration
+3. Before production: configure SendGrid/Resend for password reset, set canonical `FRONTEND_URL`, rotate JWT_SECRET

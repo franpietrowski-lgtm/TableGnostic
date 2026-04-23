@@ -36,14 +36,15 @@ db = client[DB_NAME]
 app = FastAPI(title="Table-Gnostic API")
 api = APIRouter(prefix="/api")
 
-# Lock CORS to known origins (frontend + any explicit FRONTEND_URL). Allow credentials.
-_frontend_url = os.environ.get("FRONTEND_URL", "*")
-_allowed = [_frontend_url] if _frontend_url != "*" else ["*"]
+# Lock CORS: always restrict by regex (preview.emergentagent.com + localhost).
+# FRONTEND_URL can explicitly add one more origin if desired.
+_extra_origin = os.environ.get("FRONTEND_URL", "").strip()
+_allow_origins = [_extra_origin] if _extra_origin and _extra_origin != "*" else []
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=_allowed,
-    allow_origin_regex=r"https://.*\.preview\.emergentagent\.com|http://localhost:\d+",
-    allow_credentials=(_frontend_url != "*"),
+    allow_origins=_allow_origins,
+    allow_origin_regex=r"https://.*\.preview\.emergentagent\.com|http://localhost:\d+|http://127\.0\.0\.1:\d+",
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
