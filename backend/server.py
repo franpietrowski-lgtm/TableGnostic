@@ -26,8 +26,22 @@ from besm_data import (
     NODE_TYPES, TARGET_NUMBERS, EXTRAS_RULES, with_source,
     attribute_blurb, defect_blurb, enhancement_blurb, limiter_blurb,
     extras_blurb, power_level_blurb, ENHANCEMENT_BLURB, LIMITER_BLURB,
-    GENERIC_BLURBS, GAME_SYSTEMS, GAME_SYSTEM_IDS, DEFAULT_SYSTEM_ID,
+    GENERIC_BLURBS, GAME_SYSTEMS, GAME_SYSTEM_IDS, GAME_SYSTEMS_BY_ID,
+    DEFAULT_SYSTEM_ID,
 )
+
+
+def _resolve_system_id(data: dict) -> tuple:
+    """Validate `data['system_id']` and sync `data['system']` with the canonical name.
+    Returns (system_id, system_name). Raises HTTPException(400) on unknown id.
+    """
+    sid = data.get("system_id") or DEFAULT_SYSTEM_ID
+    if sid not in GAME_SYSTEMS_BY_ID:
+        raise HTTPException(400, f"Unknown game system '{sid}'.")
+    meta = GAME_SYSTEMS_BY_ID[sid]
+    data["system_id"] = sid
+    data["system"] = meta["name"]
+    return sid, meta["name"]
 
 # -------- Config --------
 MONGO_URL = os.environ["MONGO_URL"]
@@ -580,13 +594,15 @@ async def besm_reference():
 
 
 @api.get("/systems")
-async def list_game_systems():
+async def list_game_systems(response: Response):
     """Public list of game systems advertised by Table-Gnostic.
     BESM 4E is fully supported (mechanics, reference cards, builder).
     Other systems are scaffolded — the campaign UI can pick them, but their
     Reference / Character Forge / Roll Options surfaces show a 'content
     coming soon' placeholder until that system's data is loaded.
     """
+    # Payload is fully static; cache aggressively on the client / CDN.
+    response.headers["Cache-Control"] = "public, max-age=300"
     return {"default": DEFAULT_SYSTEM_ID, "systems": GAME_SYSTEMS}
 
 # -------- Campaign Genesis (Great GM framework) --------
@@ -723,13 +739,7 @@ async def create_campaign(body: CampaignIn, user: dict = Depends(get_current_use
                                  "Update your role to Game Master in your profile to host a table.")
     doc = body.model_dump()
     # Validate game-system selection and sync the display label.
-    sid = doc.get("system_id") or DEFAULT_SYSTEM_ID
-    if sid not in GAME_SYSTEM_IDS:
-        raise HTTPException(400, f"Unknown game system '{sid}'.")
-    sys_meta = next((s for s in GAME_SYSTEMS if s["id"] == sid), None)
-    if sys_meta:
-        doc["system_id"] = sid
-        doc["system"] = sys_meta["name"]
+    _resolve_system_id(doc)
     doc["id"] = new_id()
     doc["gm_id"] = user["id"]
     doc["gm_name"] = user["name"]
@@ -761,13 +771,7 @@ async def update_campaign(cid: str, body: CampaignIn, user: dict = Depends(get_c
     if camp["gm_id"] != user["id"] and user.get("role") != "admin":
         raise HTTPException(403, "Only GM may edit")
     data = body.model_dump()
-    sid = data.get("system_id") or DEFAULT_SYSTEM_ID
-    if sid not in GAME_SYSTEM_IDS:
-        raise HTTPException(400, f"Unknown game system '{sid}'.")
-    sys_meta = next((s for s in GAME_SYSTEMS if s["id"] == sid), None)
-    if sys_meta:
-        data["system_id"] = sid
-        data["system"] = sys_meta["name"]
+    _resolve_system_id(data)
     data["id"] = cid
     data["gm_id"] = camp["gm_id"]
     data["gm_name"] = camp["gm_name"]

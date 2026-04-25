@@ -633,4 +633,5 @@ GAME_SYSTEMS = [
 ]
 
 GAME_SYSTEM_IDS = {s["id"] for s in GAME_SYSTEMS}
+GAME_SYSTEMS_BY_ID = {s["id"]: s for s in GAME_SYSTEMS}
 DEFAULT_SYSTEM_ID = "besm-4e"
