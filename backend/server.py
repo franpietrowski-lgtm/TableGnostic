@@ -1234,6 +1234,7 @@ async def apply_damage(body: DamageIn, user: dict = Depends(get_current_user)):
 
 # -------- Session Recap (LLM-powered) --------
 EMERGENT_LLM_KEY = os.environ.get("EMERGENT_LLM_KEY", "").strip()
+_recap_cooldown: Dict[str, datetime] = {}  # in-memory cooldown tracker
 
 class RecapIn(BaseModel):
     style: Literal["narrative", "bullet", "in-character"] = "narrative"
@@ -1246,11 +1247,15 @@ async def generate_recap(sid: str, body: RecapIn, user: dict = Depends(get_curre
     camp = await db.campaigns.find_one({"id": s["campaign_id"]}, {"_id": 0})
     if not camp:
         raise HTTPException(404, "Campaign not found")
-    # Only GM or seated members can request recaps
     if user["id"] != camp["gm_id"] and user["id"] not in camp.get("member_ids", []):
         raise HTTPException(403, "Not seated at this table")
     if not EMERGENT_LLM_KEY:
         raise HTTPException(503, "LLM key not configured")
+    # Rate-limit: 30s per (user, session)
+    cooldown_key = f"{user['id']}:{sid}"
+    last = _recap_cooldown.get(cooldown_key)
+    if last and (datetime.now(timezone.utc) - last).total_seconds() < 30:
+        raise HTTPException(429, "Recap cooldown — try again in a few seconds.")
 
     chat = await db.chat_logs.find({"session_id": sid}, {"_id": 0}).sort("created_at", 1).to_list(500)
     dice = await db.dice_rolls.find({"session_id": sid}, {"_id": 0}).sort("created_at", 1).to_list(300)
@@ -1304,7 +1309,11 @@ async def generate_recap(sid: str, body: RecapIn, user: dict = Depends(get_curre
         ).with_model("anthropic", "claude-sonnet-4-5-20250929")
         recap_text = await chat_client.send_message(UserMessage(text=user_prompt))
     except Exception as e:
-        raise HTTPException(502, f"Recap generation failed: {e}")
+        print(f"[recap:error] session={sid} -> {e}")
+        raise HTTPException(502, "Recap generation failed — try again in a moment.")
+
+    # Update cooldown after successful generation
+    _recap_cooldown[f"{user['id']}:{sid}"] = datetime.now(timezone.utc)
 
     doc = {
         "id": new_id(), "session_id": sid, "campaign_id": s["campaign_id"],

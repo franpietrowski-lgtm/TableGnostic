@@ -87,6 +87,18 @@ export default function Auth() {
                     data-testid="auth-toggle-mode">
               {mode === "login" ? "New here? Take a seat" : "Already seated? Sign in"}
             </button>
+            {mode === "login" && (
+              <button type="button" onClick={async () => {
+                const email = window.prompt("Email for the reset link?", form.email);
+                if (!email) return;
+                try {
+                  await (await import("../lib/api")).api.post("/auth/forgot-password", { email });
+                  alert("If that email is on file, a reset link has been sent.");
+                } catch { alert("Could not send reset email."); }
+              }} className="text-mist/70 hover:text-gold-bright font-ui tracking-wider uppercase" data-testid="forgot-pw-btn">
+                Forgot?
+              </button>
+            )}
           </div>
 
           <div className="mt-6">
