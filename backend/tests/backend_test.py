@@ -570,7 +570,9 @@ def _ws_url(sid: str, token: str = None) -> str:
 
 class TestWebSocket:
     def test_ws_receives_chat_broadcast(self, gm_token, session):
-        """Valid token + GM (authorized) should receive broadcast."""
+        """Valid token + GM (authorized) should receive broadcast.
+        After presence rewrite, the joiner first receives presence:room — drain
+        any presence:* frames before asserting chat broadcast."""
         async def _run():
             url = _ws_url(session["id"], gm_token)
             async with websockets.connect(url) as ws:
@@ -582,9 +584,14 @@ class TestWebSocket:
                                                 "message": msg, "kind": "chat"},
                                           headers=h(gm_token)),
                 )
-                frame = await asyncio.wait_for(ws.recv(), timeout=10)
-                payload = json.loads(frame)
-                assert payload["type"] == "chat"
+                # drain non-chat frames (presence:room/join etc) up to 5 frames
+                payload = None
+                for _ in range(5):
+                    frame = await asyncio.wait_for(ws.recv(), timeout=10)
+                    payload = json.loads(frame)
+                    if payload.get("type") == "chat":
+                        break
+                assert payload is not None and payload["type"] == "chat"
                 assert payload["data"]["message"] == msg
 
         asyncio.run(_run())
@@ -668,10 +675,235 @@ class TestWebSocket:
                                                 "message": msg, "kind": "chat"},
                                           headers=h(player_token)),
                 )
-                frame = await asyncio.wait_for(ws.recv(), timeout=10)
-                data = json.loads(frame)
-                assert data["type"] == "chat"
+                # drain non-chat frames (presence:room/join etc)
+                data = None
+                for _ in range(5):
+                    frame = await asyncio.wait_for(ws.recv(), timeout=10)
+                    data = json.loads(frame)
+                    if data.get("type") == "chat":
+                        break
+                assert data is not None and data["type"] == "chat"
                 assert data["data"]["message"] == msg
+        asyncio.run(_run())
+
+
+# ---------------- WebSocket presence + WebRTC signaling (V3 AV seats) ----------------
+
+async def _drain_until(ws, predicate, timeout_total=6.0, max_frames=20):
+    """Receive frames until predicate(payload) is True or timeout. Returns payload or None."""
+    deadline = asyncio.get_event_loop().time() + timeout_total
+    for _ in range(max_frames):
+        remaining = deadline - asyncio.get_event_loop().time()
+        if remaining <= 0:
+            return None
+        try:
+            frame = await asyncio.wait_for(ws.recv(), timeout=remaining)
+        except asyncio.TimeoutError:
+            return None
+        payload = json.loads(frame)
+        if predicate(payload):
+            return payload
+    return None
+
+
+class TestWebSocketPresence:
+    """V3 AV seats — presence:room/join/leave/av-state and webrtc:offer/answer/ice relay."""
+
+    def test_presence_room_then_join_propagates_two_clients(self, gm_token, player_token, session):
+        async def _run():
+            url_gm = _ws_url(session["id"], gm_token)
+            url_pl = _ws_url(session["id"], player_token)
+
+            async with websockets.connect(url_gm) as ws_gm:
+                # GM connects first → first frame should be presence:room with empty peers
+                first = json.loads(await asyncio.wait_for(ws_gm.recv(), timeout=5))
+                assert first["type"] == "presence:room", f"got {first}"
+                assert isinstance(first["data"]["peers"], list)
+                assert first["data"]["peers"] == []  # alone
+                gm_conn_id = first["data"]["you"]["conn_id"]
+                assert isinstance(gm_conn_id, str) and len(gm_conn_id) > 0
+
+                # Player joins → GM should receive presence:join for player
+                async with websockets.connect(url_pl) as ws_pl:
+                    pl_room = json.loads(await asyncio.wait_for(ws_pl.recv(), timeout=5))
+                    assert pl_room["type"] == "presence:room"
+                    # Player should now see GM in peers list
+                    assert len(pl_room["data"]["peers"]) == 1
+                    assert pl_room["data"]["peers"][0]["conn_id"] == gm_conn_id
+
+                    join_evt = await _drain_until(
+                        ws_gm, lambda p: p.get("type") == "presence:join", timeout_total=5
+                    )
+                    assert join_evt is not None, "GM did not receive presence:join"
+                    assert join_evt["data"]["uid"] == pl_room["data"]["you"]["uid"]
+                    assert "name" in join_evt["data"]
+                    pl_conn_id = join_evt["data"]["conn_id"]
+                    assert pl_conn_id == pl_room["data"]["you"]["conn_id"]
+
+        asyncio.run(_run())
+
+    def test_presence_leave_propagates(self, gm_token, player_token, session):
+        async def _run():
+            url_gm = _ws_url(session["id"], gm_token)
+            url_pl = _ws_url(session["id"], player_token)
+            async with websockets.connect(url_gm) as ws_gm:
+                # drain GM's own presence:room
+                await asyncio.wait_for(ws_gm.recv(), timeout=5)
+                async with websockets.connect(url_pl) as ws_pl:
+                    await asyncio.wait_for(ws_pl.recv(), timeout=5)
+                    # drain GM's presence:join for player
+                    await _drain_until(ws_gm, lambda p: p.get("type") == "presence:join",
+                                       timeout_total=5)
+                # ws_pl closed → GM should get presence:leave
+                leave_evt = await _drain_until(
+                    ws_gm, lambda p: p.get("type") == "presence:leave", timeout_total=5
+                )
+                assert leave_evt is not None, "GM did not receive presence:leave"
+                assert "conn_id" in leave_evt["data"]
+
+        asyncio.run(_run())
+
+    def test_webrtc_offer_targeted_only_to_recipient(self, gm_token, player_token, session):
+        """webrtc:offer with a `to` field must be delivered ONLY to the targeted conn_id."""
+        async def _run():
+            url_gm = _ws_url(session["id"], gm_token)
+            url_pl = _ws_url(session["id"], player_token)
+            async with websockets.connect(url_gm) as ws_gm:
+                gm_room = json.loads(await asyncio.wait_for(ws_gm.recv(), timeout=5))
+                gm_conn_id = gm_room["data"]["you"]["conn_id"]
+
+                async with websockets.connect(url_pl) as ws_pl:
+                    pl_room = json.loads(await asyncio.wait_for(ws_pl.recv(), timeout=5))
+                    pl_conn_id = pl_room["data"]["you"]["conn_id"]
+                    # GM drains presence:join for player
+                    await _drain_until(ws_gm, lambda p: p.get("type") == "presence:join",
+                                       timeout_total=5)
+
+                    # GM sends targeted offer to player
+                    sdp_blob = "v=0\r\no=- TEST 1 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\n"
+                    await ws_gm.send(json.dumps({
+                        "type": "webrtc:offer",
+                        "to": pl_conn_id,
+                        "data": {"sdp": sdp_blob, "type": "offer"},
+                    }))
+                    # Player should receive it
+                    offer = await _drain_until(
+                        ws_pl, lambda p: p.get("type") == "webrtc:offer", timeout_total=5
+                    )
+                    assert offer is not None, "Player did not receive targeted offer"
+                    assert offer["data"]["sdp"] == sdp_blob
+                    assert offer["data"]["from"] == gm_conn_id
+                    assert "from_name" in offer["data"]
+
+                    # GM should NOT receive its own offer back (no broadcast)
+                    try:
+                        echo = await asyncio.wait_for(ws_gm.recv(), timeout=1.5)
+                        echo_p = json.loads(echo)
+                        assert echo_p.get("type") != "webrtc:offer", \
+                            f"GM unexpectedly got own offer back: {echo_p}"
+                    except asyncio.TimeoutError:
+                        pass  # expected — no echo
+
+        asyncio.run(_run())
+
+    def test_webrtc_offer_no_to_field_is_dropped(self, gm_token, player_token, session):
+        """webrtc:offer without `to` must NOT be relayed (security: no broadcast of SDP)."""
+        async def _run():
+            url_gm = _ws_url(session["id"], gm_token)
+            url_pl = _ws_url(session["id"], player_token)
+            async with websockets.connect(url_gm) as ws_gm:
+                await asyncio.wait_for(ws_gm.recv(), timeout=5)
+                async with websockets.connect(url_pl) as ws_pl:
+                    await asyncio.wait_for(ws_pl.recv(), timeout=5)
+                    await _drain_until(ws_gm, lambda p: p.get("type") == "presence:join",
+                                       timeout_total=5)
+                    # GM sends an offer with NO `to` — should be silently dropped
+                    await ws_gm.send(json.dumps({
+                        "type": "webrtc:offer",
+                        "data": {"sdp": "garbage", "type": "offer"},
+                    }))
+                    # Player must NOT receive any webrtc:offer
+                    leak = await _drain_until(
+                        ws_pl, lambda p: p.get("type") == "webrtc:offer", timeout_total=2
+                    )
+                    assert leak is None, f"webrtc:offer leaked without `to`: {leak}"
+
+        asyncio.run(_run())
+
+    def test_webrtc_answer_and_ice_targeted(self, gm_token, player_token, session):
+        async def _run():
+            url_gm = _ws_url(session["id"], gm_token)
+            url_pl = _ws_url(session["id"], player_token)
+            async with websockets.connect(url_gm) as ws_gm:
+                gm_room = json.loads(await asyncio.wait_for(ws_gm.recv(), timeout=5))
+                gm_conn_id = gm_room["data"]["you"]["conn_id"]
+                async with websockets.connect(url_pl) as ws_pl:
+                    await asyncio.wait_for(ws_pl.recv(), timeout=5)
+                    await _drain_until(ws_gm, lambda p: p.get("type") == "presence:join",
+                                       timeout_total=5)
+
+                    # Player sends answer to GM
+                    await ws_pl.send(json.dumps({
+                        "type": "webrtc:answer",
+                        "to": gm_conn_id,
+                        "data": {"sdp": "ANSWER_SDP", "type": "answer"},
+                    }))
+                    ans = await _drain_until(
+                        ws_gm, lambda p: p.get("type") == "webrtc:answer", timeout_total=5
+                    )
+                    assert ans is not None
+                    assert ans["data"]["sdp"] == "ANSWER_SDP"
+
+                    # Player sends ICE to GM
+                    await ws_pl.send(json.dumps({
+                        "type": "webrtc:ice",
+                        "to": gm_conn_id,
+                        "data": {"candidate": "candidate:foo 1 udp 1 1.1.1.1 1 typ host"},
+                    }))
+                    ice = await _drain_until(
+                        ws_gm, lambda p: p.get("type") == "webrtc:ice", timeout_total=5
+                    )
+                    assert ice is not None
+                    assert "candidate" in ice["data"]
+
+        asyncio.run(_run())
+
+    def test_av_state_broadcast_to_others_not_self(self, gm_token, player_token, session):
+        """presence:av-state {mic,cam,in_call} must broadcast to OTHERS only."""
+        async def _run():
+            url_gm = _ws_url(session["id"], gm_token)
+            url_pl = _ws_url(session["id"], player_token)
+            async with websockets.connect(url_gm) as ws_gm:
+                gm_room = json.loads(await asyncio.wait_for(ws_gm.recv(), timeout=5))
+                gm_conn_id = gm_room["data"]["you"]["conn_id"]
+                async with websockets.connect(url_pl) as ws_pl:
+                    await asyncio.wait_for(ws_pl.recv(), timeout=5)
+                    await _drain_until(ws_gm, lambda p: p.get("type") == "presence:join",
+                                       timeout_total=5)
+
+                    # GM publishes av-state
+                    await ws_gm.send(json.dumps({
+                        "type": "presence:av-state",
+                        "data": {"mic": True, "cam": False, "in_call": True},
+                    }))
+                    evt = await _drain_until(
+                        ws_pl, lambda p: p.get("type") == "presence:av-state", timeout_total=5
+                    )
+                    assert evt is not None, "Player did not receive presence:av-state"
+                    assert evt["data"]["mic"] is True
+                    assert evt["data"]["cam"] is False
+                    assert evt["data"]["in_call"] is True
+                    assert evt["data"]["conn_id"] == gm_conn_id
+
+                    # GM (sender) must NOT receive its own av-state
+                    try:
+                        echo = await asyncio.wait_for(ws_gm.recv(), timeout=1.5)
+                        echo_p = json.loads(echo)
+                        assert echo_p.get("type") != "presence:av-state", \
+                            f"av-state echoed to sender: {echo_p}"
+                    except asyncio.TimeoutError:
+                        pass  # expected
+
         asyncio.run(_run())
 
 

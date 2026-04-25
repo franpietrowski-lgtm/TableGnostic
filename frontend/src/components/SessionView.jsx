@@ -1,7 +1,8 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useCallback } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api, API } from "../lib/api";
 import { Dice6, Send, Plus, X, Swords, Heart, Zap, Skull, Shield, ChevronRight, Sparkles, ScrollText, Users, MessageSquare } from "lucide-react";
+import AVSeats from "./AVSeats";
 
 export default function SessionView() {
   const { id } = useParams();
@@ -21,6 +22,21 @@ export default function SessionView() {
   const [recapStyle, setRecapStyle] = useState("narrative");
   const [mobilePane, setMobilePane] = useState("chat"); // chat | init | dice (mobile only)
   const chatEnd = useRef(null);
+  const wsRef = useRef(null);
+  const subsRef = useRef([]); // AVSeats subscribers
+
+  const wsSubscribe = useCallback((handler) => {
+    subsRef.current.push(handler);
+    return () => {
+      subsRef.current = subsRef.current.filter((h) => h !== handler);
+    };
+  }, []);
+  const wsSend = useCallback((obj) => {
+    const ws = wsRef.current;
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify(obj));
+    }
+  }, []);
 
   const loadAll = async () => {
     const s = await api.get(`/sessions/${id}`).then((r) => r.data);
@@ -46,21 +62,27 @@ export default function SessionView() {
     let ws;
     try {
       ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
       ws.onmessage = (e) => {
-        try {
-          const { type, data } = JSON.parse(e.data);
-          if (type === "chat") setChat((p) => [...p, data]);
-          if (type === "dice") setDice((p) => [data, ...p]);
-          if (type === "initiative") setInit((p) => [...p, data].sort((a,b)=>b.roll-a.roll));
-          if (type === "initiative_remove") setInit((p) => p.filter(x => x.id !== data.id));
-          if (type === "effect") setEffects((p) => [...p, data]);
-          if (type === "effect_remove") setEffects((p) => p.filter(x => x.id !== data.id));
-          if (type === "round") setSession((s) => ({ ...s, round: data.round }));
-        } catch {}
+        let evt;
+        try { evt = JSON.parse(e.data); } catch { return; }
+        const { type, data } = evt;
+        if (type === "chat") setChat((p) => [...p, data]);
+        if (type === "dice") setDice((p) => [data, ...p]);
+        if (type === "initiative") setInit((p) => [...p, data].sort((a,b)=>b.roll-a.roll));
+        if (type === "initiative_remove") setInit((p) => p.filter(x => x.id !== data.id));
+        if (type === "effect") setEffects((p) => [...p, data]);
+        if (type === "effect_remove") setEffects((p) => p.filter(x => x.id !== data.id));
+        if (type === "round") setSession((s) => ({ ...s, round: data.round }));
+        // Fan out to AVSeats subscribers (presence + WebRTC signaling)
+        subsRef.current.forEach((h) => { try { h(evt); } catch {} });
       };
       ws.onerror = () => {};
     } catch {}
-    return () => { try { ws && ws.close(); } catch {} };
+    return () => {
+      try { ws && ws.close(); } catch {}
+      wsRef.current = null;
+    };
   }, [id]);
 
   if (!session) return <div className="p-10 text-mist">Opening the table…</div>;
@@ -124,7 +146,17 @@ export default function SessionView() {
   };
 
   return (
-    <div className="px-4 md:px-10 py-4 md:py-6 md:h-screen md:overflow-hidden md:grid md:grid-cols-[280px_1fr_320px] gap-4 md:gap-6">
+    <div className="px-4 md:px-10 py-4 md:py-6 md:h-screen md:flex md:flex-col md:overflow-hidden">
+      {/* AV Seats — voice/video strip above session panes */}
+      <div className="mb-3 md:mb-4">
+        <AVSeats
+          subscribe={wsSubscribe}
+          send={wsSend}
+          sessionTitle={session.title}
+        />
+      </div>
+
+      <div className="md:flex-1 md:min-h-0 md:grid md:grid-cols-[280px_1fr_320px] gap-4 md:gap-6">
       {/* Mobile pane switcher */}
       <div className="md:hidden flex border-b border-gold/10 mb-3 sticky top-[52px] bg-void/90 backdrop-blur z-20" data-testid="session-mobile-tabs">
         {[
@@ -342,6 +374,7 @@ export default function SessionView() {
             </div>
           ))}
         </div>
+      </div>
       </div>
     </div>
   );

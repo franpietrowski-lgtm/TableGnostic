@@ -1347,26 +1347,63 @@ async def list_recaps(sid: str, user: dict = Depends(get_current_user)):
     rows = await db.recaps.find({"session_id": sid}, {"_id": 0}).sort("created_at", -1).to_list(20)
     return rows
 
-# -------- WebSocket session bus --------
+# -------- WebSocket session bus (chat + WebRTC signaling) --------
+import json as _json
+
+class Peer:
+    __slots__ = ("ws", "uid", "name", "conn_id")
+    def __init__(self, ws, uid, name, conn_id):
+        self.ws = ws; self.uid = uid; self.name = name; self.conn_id = conn_id
+
 class Bus:
     def __init__(self):
-        self.rooms: Dict[str, List[WebSocket]] = {}
-    async def join(self, sid: str, ws: WebSocket):
+        self.rooms: Dict[str, List[Peer]] = {}
+
+    async def join(self, sid: str, ws: WebSocket, uid: str, name: str) -> Peer:
         await ws.accept()
-        self.rooms.setdefault(sid, []).append(ws)
-    def leave(self, sid: str, ws: WebSocket):
-        if sid in self.rooms and ws in self.rooms[sid]:
-            self.rooms[sid].remove(ws)
-    async def send(self, sid: str, payload: dict):
-        import json
+        peer = Peer(ws=ws, uid=uid, name=name, conn_id=secrets.token_urlsafe(8))
+        self.rooms.setdefault(sid, []).append(peer)
+        return peer
+
+    def leave(self, sid: str, ws: WebSocket) -> Optional[Peer]:
+        if sid not in self.rooms:
+            return None
+        gone = None
+        kept = []
+        for p in self.rooms[sid]:
+            if p.ws is ws and gone is None:
+                gone = p
+            else:
+                kept.append(p)
+        self.rooms[sid] = kept
+        return gone
+
+    def peers(self, sid: str) -> List[Peer]:
+        return list(self.rooms.get(sid, []))
+
+    async def _safe_send(self, peer: Peer, payload: dict):
+        try:
+            await peer.ws.send_text(_json.dumps(payload, default=str))
+            return True
+        except Exception:
+            return False
+
+    async def send(self, sid: str, payload: dict, exclude_ws: Optional[WebSocket] = None):
         dead = []
-        for ws in self.rooms.get(sid, []):
-            try:
-                await ws.send_text(json.dumps(payload, default=str))
-            except Exception:
-                dead.append(ws)
-        for ws in dead:
-            self.leave(sid, ws)
+        for p in list(self.rooms.get(sid, [])):
+            if exclude_ws is not None and p.ws is exclude_ws:
+                continue
+            ok = await self._safe_send(p, payload)
+            if not ok:
+                dead.append(p)
+        for p in dead:
+            self.leave(sid, p.ws)
+
+    async def send_to(self, sid: str, conn_id: str, payload: dict):
+        for p in list(self.rooms.get(sid, [])):
+            if p.conn_id == conn_id:
+                await self._safe_send(p, payload)
+                return
 
 bus = Bus()
 
@@ -1395,12 +1432,61 @@ async def ws_session(ws: WebSocket, sid: str, token: str = None):
     if not camp or (camp["gm_id"] != uid and uid not in camp.get("member_ids", []) and camp.get("visibility") != "public"):
         await ws.close(code=4403); return
 
-    await bus.join(sid, ws)
+    user = await db.users.find_one({"id": uid}, {"_id": 0}) or {}
+    name = user.get("name") or user.get("email") or "Adventurer"
+    is_gm = (camp.get("gm_id") == uid)
+
+    me = await bus.join(sid, ws, uid, name)
+
+    # 1. Tell the joiner who's already in the room
+    others = [
+        {"conn_id": p.conn_id, "uid": p.uid, "name": p.name}
+        for p in bus.peers(sid) if p.conn_id != me.conn_id
+    ]
+    await bus._safe_send(me, {
+        "type": "presence:room",
+        "data": {
+            "you": {"conn_id": me.conn_id, "uid": me.uid, "name": me.name, "is_gm": is_gm},
+            "peers": others,
+        },
+    })
+    # 2. Tell everyone else a new peer arrived
+    await bus.send(sid, {
+        "type": "presence:join",
+        "data": {"conn_id": me.conn_id, "uid": me.uid, "name": me.name, "is_gm": is_gm},
+    }, exclude_ws=ws)
+
     try:
         while True:
-            await ws.receive_text()
+            raw = await ws.receive_text()
+            try:
+                msg = _json.loads(raw)
+            except Exception:
+                continue
+            t = msg.get("type")
+            if t in ("webrtc:offer", "webrtc:answer", "webrtc:ice"):
+                target = msg.get("to")
+                data = msg.get("data") or {}
+                if not target:
+                    continue
+                await bus.send_to(sid, target, {
+                    "type": t,
+                    "data": {**data, "from": me.conn_id, "from_name": me.name},
+                })
+            elif t == "presence:av-state":
+                data = msg.get("data") or {}
+                await bus.send(sid, {
+                    "type": "presence:av-state",
+                    "data": {"conn_id": me.conn_id, **data},
+                }, exclude_ws=ws)
+            # any other inbound types are ignored — REST endpoints handle chat/dice/init
     except WebSocketDisconnect:
-        bus.leave(sid, ws)
+        gone = bus.leave(sid, ws)
+        if gone:
+            await bus.send(sid, {
+                "type": "presence:leave",
+                "data": {"conn_id": gone.conn_id, "uid": gone.uid, "name": gone.name},
+            })
 
 # -------- Health --------
 

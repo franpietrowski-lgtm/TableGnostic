@@ -1,0 +1,51 @@
+{
+  "summary": "Iteration 6 — V3 AV Seats (Discord-like camera/mic strip) tested end-to-end. Backend WebSocket bus rewrite (Peer class + targeted send_to + presence relay) verified with 6 NEW pytest cases under TestWebSocketPresence covering: presence:room initial peer list, presence:join propagation, presence:leave propagation, webrtc:offer targeted-only delivery, webrtc:offer dropped without `to` (no SDP leak), webrtc:answer + webrtc:ice targeted, presence:av-state broadcast-not-self. The 2 pre-existing TestWebSocket regression tests were updated to drain presence:room frames before asserting chat — both pass. Total backend: 85/87 (97.7%); the only 2 failures are pre-existing carry-overs (CORS preflight wildcard & TestRecap::test_recap_bullet_style returning 429 from LLM provider rate-limit, unrelated to this iteration). Frontend Playwright covered desktop + mobile (390x844) + GM/Player two-context presence: AV strip renders above 3-col grid, av-empty shows when alone, av-join-btn visible, mobile pane tabs (Chat/Init/Dice) all switch correctly, GM sees Player tile populated with name + IDLE badge after Player connects, and tile is removed after Player disconnects. Regressions verified green: chat send + WS broadcast (TEST_AV_REG_CHAT visible across mobile + 2nd-client view), dice roll (2d6 → '7 [3,4]' rendered in dice-log), advance-round-btn + recap-btn visible. No console errors.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "WebSocket /api/ws/session/{sid}", "issue": "ws_session relay loop has no rate-limiting per-conn — a malicious peer can flood webrtc:offer/ice frames at the bus. Consider per-connection token bucket (e.g., 50 msgs/sec) before bus.send_to(); current code will dispatch every frame."},
+      {"endpoint": "WebSocket /api/ws/session/{sid}", "issue": "presence:av-state payload is forwarded as-is without schema validation (only conn_id is overwritten server-side). A client could send {mic: 'yes', cam: <huge string>} and it would be broadcast verbatim. Add Pydantic-style validation: bool|None for mic/cam/in_call only."},
+      {"endpoint": "WebSocket bus.send_to", "issue": "On send_to failure (peer ws closed mid-relay) the dead peer is NOT pruned — only bus.send() handles dead-peer cleanup. Inline same try/except + leave() in send_to to avoid stale Peer entries."},
+      {"endpoint": "POST /api/sessions/{sid}/recap (carry-over from iter_5)", "issue": "test_recap_bullet_style returned 429 (LLM provider rate-limit). Not new this iteration; pre-existing transient under load."},
+      {"endpoint": "CORS preflight (server.py:39-49, carry-over)", "issue": "FRONTEND_URL empty → allow_origins=['*'] short-circuits regex; same RCA as iters 3/4/5."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "(Optional, security) WS bus: add Pydantic validation for presence:av-state and webrtc:* payloads before broadcast — currently any JSON shape is forwarded verbatim except conn_id overwrite.",
+    "(Optional, security) Add per-connection rate limit on the ws_session relay loop (e.g., 50 frames/sec) to prevent signaling-channel flooding.",
+    "(Optional, robustness) bus.send_to should prune dead peers on send failure (today only bus.send does this).",
+    "(Carry-over) Fix CORS preflight with empty FRONTEND_URL by passing allow_origins=[] when wildcard is desired so allow_origin_regex applies.",
+    "(Carry-over) Sanitize 502 body in generate_recap; consider a per-(session,user) cooldown so LLM 429s don't bubble up as test failures."
+  ],
+  "critical_code_review_comments": [
+    "AVSeats.jsx is a single 400+ line component handling: WS subscription, mesh peer-connection lifecycle, getUserMedia, mic/cam/leave controls, presence:av-state pub/sub, AND tile rendering. Strongly recommend splitting into useMeshWebRTC() hook + <AVTile/> presentational component for testability and to avoid re-renders churning RTCPeerConnections.",
+    "ws_session relay (server.py:1467-1482) has no schema validation: webrtc:offer/answer/ice payloads' `data` is pass-through (only `from`/`from_name` injected). A malicious peer can include arbitrary fields that the receiver code may trust. Validate with a small Pydantic model before forwarding.",
+    "Bus.leave is O(N) per disconnect because it rebuilds the peer list. Fine for small rooms but becomes hot under churn — consider dict-by-conn_id storage if rooms grow > 50.",
+    "server.py is now 1498 lines — split urgency now higher: ws.py module for Peer/Bus/ws_session would isolate the new mesh signaling code from REST handlers.",
+    "presence:room/join include uid (raw user id) — if the campaign is public, this leaks user identifiers to anonymous-ish peers. Consider opaque conn-scoped ids only and resolve uid → display-name server-side.",
+    "No upper bound on rooms[sid] size — a long-running session with reconnects could accumulate stale Peer entries if WS close events are missed (e.g., container crash). Add a periodic ping/pong keepalive or last-seen timestamp.",
+    "Frontend WS reconnect: SessionView.jsx subsRef bridge wasn't checked for backoff/reconnect on transient ws drops; if the kube ingress idles the socket, AV signaling silently dies. Add exponential-backoff reconnect and a presence:room re-sync on reopen."
+  ],
+  "updated_files": [
+    "/app/backend/tests/backend_test.py — added TestWebSocketPresence class (6 new tests) + helper _drain_until(); updated test_ws_receives_chat_broadcast and test_ws_public_campaign_any_member_connects to drain presence frames before asserting chat (regression-safe after Bus rewrite). Total: 87 tests across 21 classes."
+  ],
+  "success_rate": {
+    "backend": "97.7% (85/87 pytest; 6/6 new presence tests pass; 5/5 prior WS tests pass; 2 carry-over failures unrelated to this iteration)",
+    "frontend": "100% on tested flows (av-seats render, empty-state, join-btn visibility, desktop+mobile placement, mobile tab switching, two-client peer upsert/remove on join/leave, chat/dice/advance-round/recap regressions all green)"
+  },
+  "test_credentials": "admin@tablegnostic.com/admin123, gm@tablegnostic.com/gm123456, player@tablegnostic.com/player12345 — confirmed working.",
+  "seed_data_creation": "No new persistent seed data. Tests reuse existing TEST campaign 8dcab411-212f-48f8-8170-7b4a2583f0ac and session 6e63d81b-f2ee-4870-a1c8-da296c6e504e. Frontend tests left a single 'TEST_AV_REG_CHAT' chat row in that session (visible in screenshots) — no API to delete chat individually; harmless leak.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "WebRTC mesh signaling fully validated at the WS layer — testing actual getUserMedia / SRTP requires Chromium fake-device flags (--use-fake-ui-for-media-stream, --use-fake-device-for-media-stream) which the current automation harness does not pass. If main agent wants media-level e2e (audio/video frame negotiation success) it must add those flags to the Playwright launcher. AVSeats.jsx tile testid pattern is `av-tile-{conn_id}` for peers and `av-tile-self` for the local user — useful for any future mesh-state tests. Bus rewrite is rock-solid for chat/dice/init/effect/round/damage broadcasts (TestWebSocket suite all green after the presence-frame drain fix).",
+  "rca of the issue": "No new bugs in iteration 6. Two carry-over failures are documented in iter_3/4/5: (a) TestCORS::test_preflight_preview_origin_ok — server.py:39 builds allow_origins=['*'] when FRONTEND_URL is empty/missing, which Starlette short-circuits over allow_origin_regex; fix: pass allow_origins=[] in that branch. (b) TestRecap::test_recap_bullet_style — 429 from LLM provider is a transient rate-limit, not a code bug; the same test passed in iter_5 within the ≤4-call budget. RCA on the WS regression risk avoided by my drain-presence patch: the new ws_session sends presence:room to the joiner BEFORE any subsequent broadcast, so existing tests doing recv() once and asserting type=='chat' would have hit presence:room first; updated tests now loop until they see the chat frame."
+}
