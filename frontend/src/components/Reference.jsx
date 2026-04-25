@@ -63,7 +63,7 @@ export default function Reference() {
 
       <div className="grid md:grid-cols-2 gap-3">
         {(lists[tab] || []).map((item, i) => (
-          <div key={i} className="card-mystic p-4">
+          <div key={i} className="card-mystic p-4" data-testid={`ref-card-${tab}-${i}`}>
             <div className="flex items-center justify-between">
               <div className="text-sm text-parchment font-ui">{item.name || item.difficulty}</div>
               <div className="text-[10px] font-ui uppercase tracking-widest text-gold/70 flex items-center gap-1">
@@ -80,12 +80,33 @@ export default function Reference() {
               {tab === "target_numbers" && `TN ${item.tn}`}
               {tab === "extras_rules" && `${item.category}${item.summary ? ` — ${item.summary}` : ""}`}
             </div>
+            {item.blurb && (
+              <div className="text-[12px] text-parchment/85 font-body leading-snug mt-2 pt-2 border-t border-gold/10"
+                   data-testid={`ref-blurb-${tab}-${i}`}>
+                {item.blurb}
+              </div>
+            )}
             {tab === "extras_rules" && (
               <div className="text-[10px] text-gold/60 mt-1 font-ui uppercase tracking-widest">BESM Extras</div>
             )}
           </div>
         ))}
       </div>
+
+      {/* Generic mechanic primers — only on the Attributes tab as the most relevant home */}
+      {tab === "attributes" && ref.generic_blurbs && ref.generic_blurbs.length > 0 && (
+        <div className="mt-8" data-testid="ref-generic-blurbs">
+          <div className="label-ref mb-3">How the costing equation works</div>
+          <div className="grid md:grid-cols-3 gap-3">
+            {ref.generic_blurbs.map((g, i) => (
+              <div key={i} className="card-mystic p-4">
+                <div className="text-sm text-parchment font-ui">{g.name}</div>
+                <div className="text-[12px] text-mist font-body leading-snug mt-2">{g.blurb}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

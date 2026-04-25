@@ -1,0 +1,47 @@
+{
+  "summary": "Iteration 7 — V3 P0 batch (role gate, Start-Session modal, primer caps, BESM blurbs, node revealed-to filter, Tri-Stat credit, Permissions-Policy header, Reference cards). Added 21 new pytest cases under TestIter7Roles (7), TestIter7PrimerCaps (3), TestIter7BesmBlurbs (7), TestIter7NodeVisibility (2), TestIter7PermissionsPolicy (2) — all 21 PASS. Full backend suite: 106/108 stable (98.1%); 2 failures are pre-existing carry-overs (TestCORS::test_preflight_preview_origin_ok empty-FRONTEND_URL wildcard short-circuit; TestRecap::test_recap_bullet_style LLM 429 rate-limit). The 3 WS failures in the first full run all PASS on rerun (transient network flakiness, not regressions). Frontend Playwright covered: (a) /auth?mode=register shows auth-role-picker with auth-role-player (default-selected, gold border) + auth-role-gm, helper text 'Players can switch to GM later from their profile'. (b) Player @ /app/campaigns: new-campaign-btn is HTML-disabled with text ' GMs only'. (c) Reference page (/app/reference): 20 ref-blurb-* cards rendered, ref-generic-blurbs section present, Attack Mastery shows 'Adds its Level to your Attack Combat Value...' blurb. (d) GM @ /app/campaigns/{cid}: tri-stat-credit visible with full Tri-Stat Emporium © notice referencing Mark MacKinnon & Dyskami. (e) start-session-btn opens start-session-modal (NOT browser prompt) with start-session-title input + start-session-confirm; clicking confirm creates session and navigates to /app/sessions/{newId}. (f) Player Primer tab: primer-caps section visible with primer-cap-min, primer-cap-max, primer-cap-attr-rank, primer-save-btn (and helper labels '0 = no floor', '0 = use Power Level default', '0 = no per-Attribute cap'). (g) Knowledge Web → Weave node opens NodeEditor; node-visibility selector has all 3 options ['gm_only — secret', 'shared — All players', 'revealed — Specific players']; selecting revealed reveals reveal-picker with member buttons (Fran, Player). All UI flows green; no console errors during testing.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "TestCORS::test_preflight_preview_origin_ok", "issue": "(carry-over) FRONTEND_URL empty → allow_origins=['*'] short-circuits Starlette regex matcher; preflight reflects no origin. Fix in iter_3+; pass allow_origins=[] when wildcard desired so allow_origin_regex applies."},
+      {"endpoint": "TestRecap::test_recap_bullet_style", "issue": "(carry-over) Returns 429/transient when LLM provider rate-limits; not a code bug."},
+      {"endpoint": "WS presence/webrtc tests", "issue": "Flaky on first run under load (3/108 transient timeouts on test_ws_public_campaign_any_member_connects, test_presence_room_then_join_propagates_two_clients, test_webrtc_offer_no_to_field_is_dropped); all 3 PASS on rerun. Consider raising _drain_until timeouts from 5s→8s and retrying once."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "(Optional, carry-over) Fix CORS preflight when FRONTEND_URL is empty by passing allow_origins=[] so allow_origin_regex applies.",
+    "(Optional, carry-over) Add per-(session,user) cooldown / 502-body sanitisation in generate_recap so LLM 429s don't bubble up as opaque 5xx in the integration test.",
+    "(Optional) Stabilise WS-presence pytest cases by raising _drain_until budget or adding a 1-shot retry decorator — currently 3 of them flake under cluster load."
+  ],
+  "critical_code_review_comments": [
+    "server.py is now ~1543 lines — the role-gate (line 704), Permissions-Policy middleware (line 102), startup migration (line 411), and BESM enrichment (lines 548-572) are scattered. Strongly recommend splitting into auth.py / besm.py / middleware.py modules; the file has crossed 1500-line threshold flagged in iter_6 critical review.",
+    "RegisterIn.role uses Literal['player','gm'] — admin role can only be promoted via DB or seed; consider an explicit /api/admin/users/{id}/role endpoint guarded by admin so GM↔player role changes don't require DB surgery.",
+    "create_campaign role-gate (server.py:704) only checks role=='player' → returns 403. If a future role like 'observer' is added, it would bypass the gate. Safer pattern: if user.get('role') not in ('gm','admin'): raise 403.",
+    "/api/besm/reference is a hot endpoint (called on every Reference / CharacterBuilder mount) and now does 5 list comprehensions with dict spread. Cache the response in-process (functools.lru_cache or module-level dict) — payload is fully static.",
+    "GENERIC_BLURBS is a dict but downstream needs ordering ('How costing works' first); Python 3.7+ preserves insertion order so this is fine, but worth a code comment so a future contributor doesn't switch to a sorted/json-serialised store and break the UI ordering.",
+    "Frontend CharacterBuilder cap-clamp (per spec) clamps level on submit — also enforce on input change to give immediate UX feedback (the 'attr-overcap-N' message exists; the input itself should set max={effectiveMaxRank}).",
+    "AVSeats iframe-detection runs window.top !== window.self once at mount; if the app is later embedded dynamically (e.g., a popup wrapper) the banner won't appear. Move detection into a useEffect that re-checks on visibilitychange — minor."
+  ],
+  "updated_files": [
+    "/app/backend/tests/backend_test.py — added 5 new test classes (TestIter7Roles, TestIter7PrimerCaps, TestIter7BesmBlurbs, TestIter7NodeVisibility, TestIter7PermissionsPolicy) totaling 21 new test functions covering role-aware register/login, role-gated campaign create, primer caps create+update+default, BESM blurb enrichment for attributes/defects/enhancements/limiters/extras/power_levels/generic_blurbs, revealed_to node visibility filter, and Permissions-Policy camera/microphone header on health + auth endpoints. Total backend suite: 108 tests across 26 classes."
+  ],
+  "success_rate": {
+    "backend": "98.1% (106/108 stable; all 21 new V3 P0 tests pass; 2 pre-existing carry-over failures unrelated to this iteration; 3 transient WS flakes pass on rerun)",
+    "frontend": "100% on tested flows (auth role picker default=player, GM register, player new-campaign-btn disabled+'GMs only', GM tri-stat-credit footer, start-session-modal opens + creates session + navigates, primer-caps section with 4 testids, knowledge-web NodeEditor 3-option visibility selector + reveal-picker, reference 20 ref-blurb cards + ref-generic-blurbs)"
+  },
+  "test_credentials": "admin@tablegnostic.com/admin123 (admin), gm@tablegnostic.com/gm123456 (gm), player@tablegnostic.com/player12345 (player) — all confirmed working with role field present.",
+  "seed_data_creation": "Tests register transient TEST_role_def_*/TEST_role_pl_*/TEST_role_gm_*/TEST_uigm_* accounts (cleanup not implemented — could accumulate; recommend a periodic cleanup script for emails matching ^TEST_.*@(t\\.com|tablegnostic\\.com)$). Frontend Start-Session test created session 40d73ce4-bd9d-4dd3-9060-d4cc46ac1b16 in TEST Campaign E2E; harmless.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All V3 P0 testids confirmed in DOM: auth-role-picker, auth-role-player (default-selected, class includes 'border-gold/70 bg-gold/5'), auth-role-gm, new-campaign-btn (HTML-disabled when role=player with text ' GMs only'), tri-stat-credit, start-session-btn, start-session-modal, start-session-title, start-session-confirm, primer-caps, primer-cap-min, primer-cap-max, primer-cap-attr-rank, primer-save-btn, tab-primer, tab-knowledge, node-visibility (with values 'gm_only'/'shared'/'revealed'), reveal-picker, ref-blurb-{tab}-{i} (20 found on Attributes tab), ref-generic-blurbs. The AV iframe banner (av-iframe-banner / av-open-newtab) was NOT exercised because Playwright runs in a non-iframe context and forcing window.top inequality via addInitScript is environment-fragile; that surface is best validated manually or with a real iframe wrapper. WS presence relay is rock-solid on rerun — no functional regression vs iter_6 baseline.",
+  "rca of the issue": "No new bugs in this iteration. All V3 P0 features land cleanly. Carry-over failures (CORS preflight wildcard, Recap 429) have RCAs documented in iters 3-6. The 3 transient WS test failures in the first full run all pass on isolated rerun → flake under parallel load, not a regression."
+}

@@ -290,3 +290,99 @@ def with_source(items):
     for it in items:
         enriched.append({**it, "source": {"book": BOOK, "page": it.get("page")}})
     return enriched
+
+
+# -------- Mechanic-only explanatory blurbs --------
+# These are GENERIC mechanic descriptions written in original wording.
+# They describe HOW a thing works inside the cost equation
+#   final_cost = base_cost × level × (1 + Σ enhancements − Σ limiters)
+# without reproducing the rulebook's prose, lore, or examples.
+# Look up by exact `name` (or category for ENHANCEMENT_BLURB / LIMITER_BLURB).
+ATTRIBUTE_BLURBS = {
+    "Attack Mastery": "Adds its Level to your Attack Combat Value, improving every attack roll by that amount.",
+    "Defence Mastery": "Adds its Level to your Defence Combat Value, improving every defence roll by that amount.",
+    "Combat Technique": "Each Level lets you pick one combat manoeuvre (e.g. Two Weapons, Lightning Reflexes). Stacks with weapons.",
+    "Massive Damage": "Each Level adds +5 damage to a chosen damage source — typically a Weapon or unarmed strike.",
+    "Tough": "Each Level adds +5 Hit Points. Mechanically the cheapest way to soak more damage before falling.",
+    "Energised": "Each Level adds +5 Energy Points — the resource pool for stamina powers, casting, etc.",
+    "Skill Group": "Buys a tier-priced bundle of related skills. Cost rises with the tier (Lesser/Greater/Major).",
+    "Heightened Senses": "Each Level grants one keener sense or sense-class. Stacks with mundane perception checks.",
+    "Heightened Awareness": "Each Level adds a generic perception bonus across the board, regardless of sense.",
+    "Item": "Half-price Attribute (0.5 pts/Level) representing an external object that can be lost, stolen or broken.",
+    "Weapon": "A persistent damage-dealing object. Reshape with Enhancements (Penetrating, Reach, etc.) and Limiters (Charges, Activation).",
+    "Gear": "A lump of mundane equipment your character carries. 1 pt/Level scales with quality and quantity.",
+    "Wealth": "Mundane economic class. Higher Levels unlock larger purchases without spending Character Points.",
+    "Companion": "A persistent allied character built with a fraction of your own points. They act on their own initiative.",
+    "Connected": "A network of contacts and favours. Higher Levels = wider, deeper, or more important contacts.",
+    "Mind Shield": "Each Level grants resistance against mental Attributes (e.g. Mind Control, Telepathy).",
+    "Flight": "Aerial movement Attribute. Cost scales with Level; combine with Enhancements for stunts.",
+    "Extra Actions": "Each Level grants one additional action per round. The most expensive Level-1 Attribute (4 pts).",
+    "Mind Control": "Mental compulsion Attribute. Highly restricted in most campaigns — confirm with the GM.",
+    "Dynamic Powers": "Open-ended power swap (10 pts/Level). Almost always restricted by GM Primer at lower power levels.",
+}
+
+# Defect families share the same mechanic shape, so we describe them by category.
+DEFECT_CATEGORY_BLURBS = {
+    "Lesser":  "Lesser Defect: returns +1 Character Point per Rank. Light narrative friction; little mechanical drag.",
+    "Greater": "Greater Defect: returns +2 Character Points per Rank. Real mechanical or narrative cost in play.",
+    "Serious": "Serious Defect: returns +3 Character Points per Rank. Defining flaw — expect frequent in-play impact.",
+}
+
+ENHANCEMENT_BLURB = (
+    "An Enhancement raises an Attribute's effective Level for cost purposes. "
+    "Stacking N enhancements multiplies the per-Level cost: cost × Level × (1 + N − Limiters)."
+)
+LIMITER_BLURB = (
+    "A Limiter lowers an Attribute's cost in exchange for narrative or situational restrictions. "
+    "Stacking N limiters reduces the cost: cost × Level × (1 + Enhancements − N). Net cost cannot fall below 1 per Level."
+)
+
+EXTRAS_BLURBS = {
+    "Power Packs": "A themed bundle of Attributes priced as a unit (e.g. a Wizardry pack). Cheaper than buying parts separately, but the bundle moves as one Attribute.",
+    "Power Bundles": "A custom mix-and-match Attribute package the GM authorises. Use to wrap a 'class' or 'kit' into one purchase.",
+    "Shock Value": "Optional gritty damage track — minor wounds reduce performance before HP runs out. Toggle on for grim/horror.",
+    "Sanity Points": "Optional mental HP track. Triggers on cosmic / horror exposure. Toggle on for Lovecraftian or psychological play.",
+    "Mass Combat": "Abstract resolution for engagements involving many combatants. Replaces per-figure rounds with unit-scale rolls.",
+    "Critical Hits": "Optional rule: matching dice or beating TN by ≥5 inflicts extra damage / a complication.",
+    "Critical Failures": "Optional rule: rolling 2 on 2d6 (or matching low) triggers a fumble / mishap.",
+    "Skill Specialisations": "Narrow-focus subskills that grant a bonus inside their niche.",
+    "Skill Ranks": "Rank-based skill progression (Rank 1–5). Replaces flat Levels with tiered competency.",
+    "Threat Scores": "GM-facing threat budget for sessions / encounters. Spend to escalate stakes.",
+}
+
+POWER_LEVEL_BLURBS = {
+    "Mundane":     "Real-world humans. No supernatural Attributes. Stat caps low, point pool small.",
+    "Adventurous": "Pulp / action hero range. Capable specialists; very limited or no powers.",
+    "Heroic":      "Standard fantasy/anime/superhero starting tier. Distinctive powers expected.",
+    "Epic":        "World-shaping adventurers. Multiple high-Level Attributes; faction-tier influence.",
+    "Mythic":      "Reality-altering tier. Avoid unless your campaign is built for it.",
+}
+
+GENERIC_BLURBS = {
+    "How costing works": (
+        "Every Attribute costs (base cost per Level) × (Level) × (1 + Enhancements − Limiters). "
+        "Defects refund a flat amount per Rank. Total Spent = Stats + Attributes + Skills − Defect refunds, "
+        "and must stay within the campaign's Character Point budget."
+    ),
+    "Items vs Mundane": (
+        "An Item is an Attribute purchased at half price (0.5/Level) representing something external to your body. "
+        "A 'mundane' object is anything in your inventory that isn't a purchased Attribute — narrative, not mechanical."
+    ),
+    "Weapon vs Gear vs Item": (
+        "Weapon is a damage-dealing Attribute (2/Level) reshaped by Enhancements/Limiters. "
+        "Gear is a lump of equipment quality (1/Level). Item is the half-price wrapper for ANY external Attribute (0.5×)."
+    ),
+}
+
+
+def attribute_blurb(name: str) -> str:
+    return ATTRIBUTE_BLURBS.get(name, "")
+
+def defect_blurb(category: str) -> str:
+    return DEFECT_CATEGORY_BLURBS.get(category, "")
+
+def extras_blurb(name: str) -> str:
+    return EXTRAS_BLURBS.get(name, "")
+
+def power_level_blurb(name: str) -> str:
+    return POWER_LEVEL_BLURBS.get(name, "")

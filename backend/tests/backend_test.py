@@ -1553,3 +1553,282 @@ class TestRecap:
                           json={"email": f"nope_{uuid.uuid4().hex[:6]}@nowhere.xyz"})
         assert r.status_code == 200
         assert r.json() == {"ok": True}
+
+
+# ---------------- Iteration 7: V3 P0 — role gate, primer caps, blurbs, headers ----------------
+
+class TestIter7Roles:
+    """Auth role + Campaign create role-gate."""
+
+    def test_register_default_role_player(self):
+        email = f"TEST_role_def_{uuid.uuid4().hex[:6]}@t.com"
+        r = requests.post(f"{API}/auth/register",
+                          json={"email": email, "password": "password123",
+                                "name": "Defaulty"})
+        assert r.status_code == 200, r.text
+        d = r.json()
+        assert d.get("role") == "player", f"expected default role=player, got {d.get('role')}"
+
+    def test_register_explicit_player(self):
+        email = f"TEST_role_pl_{uuid.uuid4().hex[:6]}@t.com"
+        r = requests.post(f"{API}/auth/register",
+                          json={"email": email, "password": "password123",
+                                "name": "P", "role": "player"})
+        assert r.status_code == 200, r.text
+        assert r.json()["role"] == "player"
+
+    def test_register_explicit_gm(self):
+        email = f"TEST_role_gm_{uuid.uuid4().hex[:6]}@t.com"
+        r = requests.post(f"{API}/auth/register",
+                          json={"email": email, "password": "password123",
+                                "name": "G", "role": "gm"})
+        assert r.status_code == 200, r.text
+        d = r.json()
+        assert d["role"] == "gm"
+        # That account can create a campaign
+        tok = d["access_token"]
+        cr = requests.post(f"{API}/campaigns",
+                           json={"name": f"TEST_GMSignup_{uuid.uuid4().hex[:6]}",
+                                 "description": "x", "visibility": "public",
+                                 "max_players": 4},
+                           headers=h(tok))
+        assert cr.status_code == 200, cr.text
+        # cleanup
+        requests.delete(f"{API}/campaigns/{cr.json()['id']}", headers=h(tok))
+
+    def test_login_response_includes_role(self, gm_token):
+        r = requests.get(f"{API}/auth/me", headers=h(gm_token))
+        assert r.status_code == 200
+        assert r.json().get("role") in ("gm", "admin")
+        # Player too
+        lr = requests.post(f"{API}/auth/login",
+                          json={"email": PLAYER_EMAIL, "password": PLAYER_PASS})
+        assert lr.status_code == 200
+        body = lr.json()
+        # role should be available on login or via /me
+        if "role" in body:
+            assert body["role"] == "player"
+        me = requests.get(f"{API}/auth/me",
+                          headers=h(body["access_token"])).json()
+        assert me["role"] == "player"
+
+    def test_player_cannot_create_campaign_403(self, player_token):
+        r = requests.post(f"{API}/campaigns",
+                          json={"name": f"TEST_PlayerNo_{uuid.uuid4().hex[:6]}",
+                                "description": "should fail",
+                                "visibility": "public", "max_players": 4},
+                          headers=h(player_token))
+        assert r.status_code == 403, r.text
+        body = r.text.lower()
+        assert "player" in body or "gm" in body or "game master" in body, \
+            f"403 message should be helpful: {r.text}"
+
+    def test_gm_can_create_campaign(self, gm_token):
+        r = requests.post(f"{API}/campaigns",
+                          json={"name": f"TEST_GMOK_{uuid.uuid4().hex[:6]}",
+                                "description": "ok", "visibility": "public",
+                                "max_players": 4},
+                          headers=h(gm_token))
+        assert r.status_code == 200, r.text
+        requests.delete(f"{API}/campaigns/{r.json()['id']}", headers=h(gm_token))
+
+    def test_admin_can_create_campaign(self, admin_token):
+        r = requests.post(f"{API}/campaigns",
+                          json={"name": f"TEST_AdminOK_{uuid.uuid4().hex[:6]}",
+                                "description": "ok", "visibility": "public",
+                                "max_players": 4},
+                          headers=h(admin_token))
+        assert r.status_code == 200, r.text
+        requests.delete(f"{API}/campaigns/{r.json()['id']}", headers=h(admin_token))
+
+
+class TestIter7PrimerCaps:
+    """character_point_min/max + max_per_attribute_rank persistence."""
+
+    def test_create_persists_caps(self, gm_token):
+        payload = {"name": f"TEST_Caps_{uuid.uuid4().hex[:6]}",
+                   "description": "caps", "visibility": "public",
+                   "max_players": 4,
+                   "character_point_min": 50,
+                   "character_point_max": 90,
+                   "max_per_attribute_rank": 4}
+        r = requests.post(f"{API}/campaigns", json=payload, headers=h(gm_token))
+        assert r.status_code == 200, r.text
+        d = r.json()
+        assert d["character_point_min"] == 50
+        assert d["character_point_max"] == 90
+        assert d["max_per_attribute_rank"] == 4
+        # GET round-trip
+        g = requests.get(f"{API}/campaigns/{d['id']}", headers=h(gm_token)).json()
+        assert g["character_point_min"] == 50
+        assert g["character_point_max"] == 90
+        assert g["max_per_attribute_rank"] == 4
+        requests.delete(f"{API}/campaigns/{d['id']}", headers=h(gm_token))
+
+    def test_default_caps_are_zero(self, gm_token):
+        r = requests.post(f"{API}/campaigns",
+                          json={"name": f"TEST_NoCaps_{uuid.uuid4().hex[:6]}",
+                                "description": "x", "visibility": "public",
+                                "max_players": 4},
+                          headers=h(gm_token))
+        d = r.json()
+        assert d.get("character_point_min", 0) == 0
+        assert d.get("character_point_max", 0) == 0
+        assert d.get("max_per_attribute_rank", 0) == 0
+        requests.delete(f"{API}/campaigns/{d['id']}", headers=h(gm_token))
+
+    def test_put_updates_caps(self, gm_token):
+        r = requests.post(f"{API}/campaigns",
+                          json={"name": f"TEST_PutCaps_{uuid.uuid4().hex[:6]}",
+                                "description": "x", "visibility": "public",
+                                "max_players": 4},
+                          headers=h(gm_token))
+        cid = r.json()["id"]
+        try:
+            payload = {"name": "renamed", "description": "x", "visibility": "public",
+                       "max_players": 4, "character_point_min": 30,
+                       "character_point_max": 120, "max_per_attribute_rank": 6}
+            u = requests.put(f"{API}/campaigns/{cid}", json=payload, headers=h(gm_token))
+            assert u.status_code == 200, u.text
+            d = u.json()
+            assert d["character_point_min"] == 30
+            assert d["character_point_max"] == 120
+            assert d["max_per_attribute_rank"] == 6
+            g = requests.get(f"{API}/campaigns/{cid}", headers=h(gm_token)).json()
+            assert g["character_point_max"] == 120
+        finally:
+            requests.delete(f"{API}/campaigns/{cid}", headers=h(gm_token))
+
+
+class TestIter7BesmBlurbs:
+    """BESM reference enrichment: per-section blurbs + generic_blurbs."""
+
+    @pytest.fixture(scope="class")
+    def ref(self):
+        return requests.get(f"{API}/besm/reference").json()
+
+    def test_attribute_blurbs_present(self, ref):
+        attrs = ref["attributes"]
+        # Every attribute has a `blurb` key (string, may be empty if no entry)
+        assert all("blurb" in a for a in attrs)
+        # Spot-check known one
+        atk = next((a for a in attrs if a["name"] == "Attack Mastery"), None)
+        assert atk is not None, "Attack Mastery missing"
+        assert isinstance(atk["blurb"], str) and len(atk["blurb"]) > 0
+
+    def test_defect_category_blurbs(self, ref):
+        defs_ = ref["defects"]
+        # All defects with category Lesser/Greater/Serious have non-empty blurb
+        for d in defs_:
+            cat = d.get("category", "")
+            if cat in ("Lesser", "Greater", "Serious"):
+                assert d.get("blurb"), f"defect {d['name']} ({cat}) has no blurb"
+
+    def test_enhancement_blurb_shared(self, ref):
+        enhs = ref["enhancements"]
+        assert len(enhs) > 0
+        blurbs = {e.get("blurb", "") for e in enhs}
+        assert len(blurbs) == 1, "all enhancements should share ENHANCEMENT_BLURB"
+        assert next(iter(blurbs)) != ""
+
+    def test_limiter_blurb_shared(self, ref):
+        lims = ref["limiters"]
+        assert len(lims) > 0
+        blurbs = {l.get("blurb", "") for l in lims}
+        assert len(blurbs) == 1
+        assert next(iter(blurbs)) != ""
+
+    def test_extras_rules_blurb(self, ref):
+        extras = ref["extras_rules"]
+        # Each item has `blurb` (may be empty if no mapping) — Power Packs known
+        pp = next((x for x in extras if x["name"] == "Power Packs"), None)
+        assert pp is not None
+        assert pp.get("blurb"), "Power Packs blurb expected"
+
+    def test_power_level_blurb(self, ref):
+        pls = ref["power_levels"]
+        heroic = next((p for p in pls if p["name"] == "Heroic"), None)
+        assert heroic is not None
+        assert heroic.get("blurb"), "Heroic power-level blurb expected"
+
+    def test_generic_blurbs_present_3_items(self, ref):
+        gb = ref.get("generic_blurbs")
+        assert isinstance(gb, list)
+        assert len(gb) == 3, f"expected 3 generic_blurbs, got {len(gb)}"
+        names = [g["name"] for g in gb]
+        # Per spec: How costing works / Items vs Mundane / Weapon vs Gear vs Item
+        assert any("cost" in n.lower() for n in names), f"missing costing blurb: {names}"
+        assert any("item" in n.lower() and "mundane" in n.lower() for n in names), names
+        assert any("weapon" in n.lower() and "gear" in n.lower() for n in names), names
+        for g in gb:
+            assert g["blurb"], f"empty blurb for {g['name']}"
+
+
+class TestIter7NodeVisibility:
+    """visibility=revealed + revealed_to filter."""
+
+    def test_revealed_visibility_filtered_by_user(self, gm_token, player_token,
+                                                   gm_user, player_user, campaign):
+        # ensure player joined fixture campaign
+        requests.post(f"{API}/campaigns/{campaign['id']}/join", json={},
+                      headers=h(player_token))
+        # Create a "revealed" node revealed only to GM (NOT player)
+        r = requests.post(f"{API}/nodes",
+                          json={"campaign_id": campaign["id"], "type": "Lore",
+                                "title": f"TEST_RevSecret_{uuid.uuid4().hex[:5]}",
+                                "content": "secret",
+                                "visibility": "revealed",
+                                "revealed_to": [gm_user["id"]]},
+                          headers=h(gm_token))
+        assert r.status_code == 200, r.text
+        node = r.json()
+        nid = node["id"]
+        assert node["visibility"] == "revealed"
+        # GM (not in revealed_to either, since he's owner) should see GM-owned anyway
+        lg = requests.get(f"{API}/campaigns/{campaign['id']}/nodes",
+                          headers=h(gm_token)).json()
+        assert any(n["id"] == nid for n in lg), "GM should always see"
+        # Player NOT in revealed_to → must NOT see
+        lp = requests.get(f"{API}/campaigns/{campaign['id']}/nodes",
+                          headers=h(player_token)).json()
+        assert all(n["id"] != nid for n in lp), \
+            "Player not in revealed_to must not see revealed node"
+
+        # Update node to add player to revealed_to
+        upd = {"campaign_id": campaign["id"], "type": "Lore",
+               "title": node["title"], "content": "secret",
+               "visibility": "revealed",
+               "revealed_to": [gm_user["id"], player_user["id"]]}
+        u = requests.put(f"{API}/nodes/{nid}", json=upd, headers=h(gm_token))
+        assert u.status_code == 200, u.text
+        lp2 = requests.get(f"{API}/campaigns/{campaign['id']}/nodes",
+                           headers=h(player_token)).json()
+        assert any(n["id"] == nid for n in lp2), \
+            "Player added to revealed_to must now see node"
+
+    def test_shared_node_visible_to_player(self, gm_token, player_token, campaign):
+        r = requests.post(f"{API}/nodes",
+                          json={"campaign_id": campaign["id"], "type": "Lore",
+                                "title": f"TEST_Shared_{uuid.uuid4().hex[:5]}",
+                                "visibility": "shared"},
+                          headers=h(gm_token))
+        assert r.status_code == 200
+        nid = r.json()["id"]
+        lp = requests.get(f"{API}/campaigns/{campaign['id']}/nodes",
+                          headers=h(player_token)).json()
+        assert any(n["id"] == nid for n in lp)
+
+
+class TestIter7PermissionsPolicy:
+    def test_permissions_policy_header_present(self):
+        r = requests.get(f"{API}/health")
+        pp = r.headers.get("permissions-policy") or r.headers.get("Permissions-Policy")
+        assert pp, f"missing Permissions-Policy header (headers: {dict(r.headers)})"
+        assert "camera=(self)" in pp, f"camera missing: {pp}"
+        assert "microphone=(self)" in pp, f"microphone missing: {pp}"
+
+    def test_permissions_policy_on_authenticated_endpoint(self, gm_token):
+        r = requests.get(f"{API}/auth/me", headers=h(gm_token))
+        pp = r.headers.get("permissions-policy") or r.headers.get("Permissions-Policy")
+        assert pp and "camera=(self)" in pp and "microphone=(self)" in pp
+

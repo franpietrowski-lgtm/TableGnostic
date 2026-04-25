@@ -8,7 +8,7 @@ export default function Auth() {
   const nav = useNavigate();
   const [sp] = useSearchParams();
   const [mode, setMode] = useState(sp.get("mode") || "login");
-  const [form, setForm] = useState({ email: "", password: "", name: "" });
+  const [form, setForm] = useState({ email: "", password: "", name: "", role: "player" });
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -19,7 +19,7 @@ export default function Auth() {
     setErr(""); setBusy(true);
     try {
       if (mode === "login") await login(form.email, form.password);
-      else await register(form.email, form.password, form.name);
+      else await register(form.email, form.password, form.name, form.role);
       nav(sp.get("redirect") || "/app");
     } catch (e) {
       setErr(formatApiErrorDetail(e.response?.data?.detail) || e.message);
@@ -49,12 +49,33 @@ export default function Auth() {
 
           <form onSubmit={onSubmit} className="space-y-4">
             {mode === "register" && (
-              <div>
-                <label className="label-ref block mb-1">Name</label>
-                <input className="input" value={form.name} required
-                       onChange={(e) => setForm({ ...form, name: e.target.value })}
-                       data-testid="auth-name-input" />
-              </div>
+              <>
+                <div>
+                  <label className="label-ref block mb-1">Name</label>
+                  <input className="input" value={form.name} required
+                         onChange={(e) => setForm({ ...form, name: e.target.value })}
+                         data-testid="auth-name-input" />
+                </div>
+                <div>
+                  <label className="label-ref block mb-2">I'm here to…</label>
+                  <div className="grid grid-cols-2 gap-2" data-testid="auth-role-picker">
+                    {[
+                      ["player", "Take a seat", "Play in campaigns hosted by GMs."],
+                      ["gm", "Run the table", "Host campaigns; build worlds; run sessions."],
+                    ].map(([v, t, sub]) => (
+                      <button key={v} type="button" onClick={() => setForm({ ...form, role: v })}
+                              data-testid={`auth-role-${v}`}
+                              className={`p-3 text-left rounded-sm border transition ${form.role === v ? "border-gold/70 bg-gold/5" : "border-gold/15 hover:border-gold/40"}`}>
+                        <div className="font-ui text-xs uppercase tracking-widest text-gold-bright">{t}</div>
+                        <div className="text-[11px] text-mist mt-1 font-body leading-snug">{sub}</div>
+                      </button>
+                    ))}
+                  </div>
+                  <div className="text-[10px] text-mist/70 italic mt-1.5">
+                    Players can switch to GM later from their profile.
+                  </div>
+                </div>
+              </>
             )}
             <div>
               <label className="label-ref block mb-1">Email</label>

@@ -53,8 +53,25 @@ export default function CharacterBuilder() {
   }, [campaignIdFromUrl, charId]);
 
   const pointsForPowerLevel = (pl) => (ref?.power_levels.find((p) => p.name === pl)?.points || 120);
-  useEffect(() => { if (ch && ref) setCh((c) => ({ ...c, total_points: pointsForPowerLevel(c.power_level) })); // eslint-disable-next-line
-  }, [ch?.power_level, ref]);
+  // Effective Character Point budget — GM Primer's character_point_max overrides
+  // the Power Level default when > 0.
+  const effectiveCap = useMemo(() => {
+    if (!ch || !ref) return 120;
+    const plDefault = pointsForPowerLevel(ch.power_level);
+    if (campaign && campaign.character_point_max && campaign.character_point_max > 0) {
+      return campaign.character_point_max;
+    }
+    return plDefault;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ch?.power_level, ref, campaign]);
+  const capIsOverride = !!(campaign && campaign.character_point_max && campaign.character_point_max > 0);
+  const minBudget = (campaign && campaign.character_point_min) || 0;
+  const maxAttrRank = (campaign && campaign.max_per_attribute_rank) || 0;
+
+  useEffect(() => {
+    if (ch && ref) setCh((c) => ({ ...c, total_points: effectiveCap }));
+  // eslint-disable-next-line
+  }, [effectiveCap]);
 
   const spent = useMemo(() => {
     if (!ch) return { stat_cost: 0, attribute_cost: 0, skill_cost: 0, defect_points: 0, total_spent: 0 };
@@ -118,6 +135,12 @@ export default function CharacterBuilder() {
     setErr("");
     try {
       const payload = { ...ch };
+      // Clamp per-Attribute Level to the GM's primer cap, if any.
+      if (maxAttrRank > 0) {
+        payload.attributes = payload.attributes.map((a) => ({
+          ...a, level: Math.min(maxAttrRank, Math.max(1, a.level || 1)),
+        }));
+      }
       if (charId && window.location.pathname.includes("/edit")) {
         const { data } = await api.put(`/characters/${charId}`, payload);
         nav(`/app/characters/${data.id}`);
@@ -212,10 +235,27 @@ export default function CharacterBuilder() {
         </div>
         <div className="card-mystic px-5 py-3 text-right">
           <div className="label-ref">Points</div>
-          <div className="font-display text-2xl text-gold">{remaining} / {ch.total_points}</div>
+          <div className="font-display text-2xl text-gold" data-testid="points-remaining">
+            {remaining} / {ch.total_points}
+          </div>
           <div className="text-[10px] font-ui tracking-widest uppercase text-mist">
             stats {spent.stat_cost} · attrs {spent.attribute_cost} · skills {spent.skill_cost} · defects {spent.defect_points}
           </div>
+          {capIsOverride && (
+            <div className="text-[10px] font-ui tracking-widest uppercase text-gold-bright mt-1" data-testid="gm-cap-note">
+              GM cap · {ch.power_level} ({pointsForPowerLevel(ch.power_level)} default)
+            </div>
+          )}
+          {minBudget > 0 && spent.total_spent < minBudget && (
+            <div className="text-[10px] font-ui tracking-widest uppercase text-ember mt-1" data-testid="below-floor-note">
+              Below GM floor · spend {minBudget - spent.total_spent} more
+            </div>
+          )}
+          {maxAttrRank > 0 && (
+            <div className="text-[10px] font-ui tracking-widest uppercase text-mist/80 mt-1">
+              Max Attribute Level · {maxAttrRank}
+            </div>
+          )}
         </div>
       </div>
 
@@ -297,7 +337,7 @@ export default function CharacterBuilder() {
             limiterOpts={ref.limiters}
             onAdd={addAttribute}
             renderRow={(a, idx) => (
-              <AttributeRow key={idx} idx={idx} a={a} ref={ref}
+              <AttributeRow key={idx} idx={idx} a={a} ref={ref} maxRank={maxAttrRank}
                 onUpdate={(next) => {
                   const arr = [...ch.attributes]; arr[idx] = next;
                   setCh({ ...ch, attributes: arr });
@@ -572,6 +612,12 @@ function ListSection({ title, items, options, onAdd, renderRow, kind, testIdPref
                   <BookOpen className="w-3 h-3"/> {o.page ? `p.${o.page} BESM 4E` : (o.page_ref || "—")}
                   {o._group && <span className="ml-2 tag">{o._group}</span>}
                 </div>
+                {o.blurb && (
+                  <div className="text-[11px] text-parchment/80 font-body leading-snug mt-1.5"
+                       data-testid={`opt-blurb-${testIdPrefix}-${o.name.replace(/\s+/g,'-')}`}>
+                    {o.blurb}
+                  </div>
+                )}
               </button>
             ))}
           </div>
@@ -581,15 +627,22 @@ function ListSection({ title, items, options, onAdd, renderRow, kind, testIdPref
   );
 }
 
-function AttributeRow({ idx, a, ref, onUpdate, onRemove }) {
+function AttributeRow({ idx, a, ref, onUpdate, onRemove, maxRank = 0 }) {
   const [openCust, setOpenCust] = useState(false);
   const toggle = (kind, name) => {
     const list = a[kind].includes(name) ? a[kind].filter((x) => x !== name) : [...a[kind], name];
     onUpdate({ ...a, [kind]: list });
   };
   const cost = (a.cost_per_level * a.level) + (a.enhancements.length - a.limiters.length) * a.level;
+  const cap = maxRank > 0 ? maxRank : 10;
+  const overCap = maxRank > 0 && a.level > maxRank;
+  const onLevelChange = (v) => {
+    const n = +v;
+    if (Number.isNaN(n)) return;
+    onUpdate({ ...a, level: Math.max(1, Math.min(cap, n)) });
+  };
   return (
-    <div className="border border-gold/15 rounded-sm p-3" data-testid={`attr-row-${idx}`}>
+    <div className={`border ${overCap ? "border-ember/60" : "border-gold/15"} rounded-sm p-3`} data-testid={`attr-row-${idx}`}>
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
           <div className="text-sm text-parchment font-ui">{a.name}</div>
@@ -600,13 +653,18 @@ function AttributeRow({ idx, a, ref, onUpdate, onRemove }) {
         </div>
         <div className="flex items-center gap-2">
           <label className="label-ref">LVL</label>
-          <input type="number" min={1} max={10} className="input w-20 text-center"
-                 value={a.level} onChange={(e) => onUpdate({ ...a, level: +e.target.value })}
+          <input type="number" min={1} max={cap} className="input w-20 text-center"
+                 value={a.level} onChange={(e) => onLevelChange(e.target.value)}
                  data-testid={`attr-level-${idx}`}/>
           <span className="text-gold font-display">{cost} pts</span>
           <button onClick={onRemove} className="text-ember/70 hover:text-ember" data-testid={`attr-remove-${idx}`}><X className="w-4 h-4"/></button>
         </div>
       </div>
+      {overCap && (
+        <div className="text-[10px] text-ember mt-1 font-ui" data-testid={`attr-overcap-${idx}`}>
+          GM cap is Level {maxRank} per Attribute — clamped on save.
+        </div>
+      )}
       <div className="mt-2 flex gap-2 text-[10px]">
         <button className="btn btn-ghost text-[10px] py-1" onClick={() => setOpenCust(!openCust)}
                 data-testid={`attr-cust-${idx}`}>

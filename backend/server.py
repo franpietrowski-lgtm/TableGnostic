@@ -24,6 +24,8 @@ from besm_data import (
     BOOK, BOOK_EXTRAS, CORE_STATS, DERIVED_VALUES, ATTRIBUTES, DEFECTS,
     ENHANCEMENTS, LIMITERS, SKILL_GROUPS, POWER_LEVELS,
     NODE_TYPES, TARGET_NUMBERS, EXTRAS_RULES, with_source,
+    attribute_blurb, defect_blurb, extras_blurb, power_level_blurb,
+    ENHANCEMENT_BLURB, LIMITER_BLURB, GENERIC_BLURBS,
 )
 
 # -------- Config --------
@@ -90,6 +92,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Permissions-Policy: explicitly allow camera + microphone for the AV Seats
+# feature. Without this header, modern browsers reject getUserMedia() inside
+# embedded iframes (preview / kiosks). The frontend additionally detects iframe
+# embedding and surfaces an "Open in new tab" banner when needed.
+@app.middleware("http")
+async def permissions_policy_header(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["Permissions-Policy"] = "camera=(self), microphone=(self), display-capture=(self)"
+    response.headers["Feature-Policy"] = "camera 'self'; microphone 'self'"
+    return response
+
 # -------- Auth helpers --------
 
 def hash_password(p: str) -> str:
@@ -145,6 +158,7 @@ class RegisterIn(BaseModel):
     email: EmailStr
     password: str = Field(min_length=6)
     name: str = Field(min_length=1, max_length=80)
+    role: Literal["player", "gm"] = "player"
 
 class LoginIn(BaseModel):
     email: EmailStr
@@ -183,6 +197,12 @@ class CampaignIn(BaseModel):
     prohibited_defects: List[str] = []
     allowed_skill_groups: List[str] = []
     prohibited_skill_groups: List[str] = []
+    # GM Primer caps — override the Power Level point budget for this table.
+    # 0 means "no override" and the Power Level's default point budget applies.
+    character_point_min: int = 0
+    character_point_max: int = 0
+    # Hard cap on the Level of any single Attribute (0 = no cap)
+    max_per_attribute_rank: int = 0
 
 class CampaignOut(CampaignIn):
     id: str
@@ -385,10 +405,14 @@ async def startup():
     await db.custom_attributes.create_index("campaign_id")
     await db.password_reset_tokens.create_index("expires_at", expireAfterSeconds=0)
 
-    # Seed admin + demo users
+    # Backfill: legacy "user" role accounts get promoted to "gm" so existing
+    # campaigns and creators keep working seamlessly. Runs BEFORE seed_user so
+    # that the seed step can authoritatively pin specific demo roles afterward.
+    await db.users.update_many({"role": "user"}, {"$set": {"role": "gm"}})
+    # Seed admin + demo users — gm@ is a Game Master, player@ is a Player
     await seed_user("admin@tablegnostic.com", "admin123", "Admin", "admin")
-    await seed_user("gm@tablegnostic.com", "gm123456", "Game Master", "user")
-    await seed_user("player@tablegnostic.com", "player12345", "Player", "user")
+    await seed_user("gm@tablegnostic.com", "gm123456", "Game Master", "gm")
+    await seed_user("player@tablegnostic.com", "player12345", "Player", "player")
     # Backfill invite tokens for legacy campaigns
     async for c in db.campaigns.find({"invite_token": {"$exists": False}}, {"_id": 0, "id": 1}):
         await db.campaigns.update_one({"id": c["id"]},
@@ -401,8 +425,12 @@ async def seed_user(email: str, password: str, name: str, role: str):
             "id": new_id(), "email": email, "password_hash": hash_password(password),
             "name": name, "role": role, "created_at": now_iso(),
         })
-    elif not verify_password(password, existing.get("password_hash", "")):
-        await db.users.update_one({"email": email}, {"$set": {"password_hash": hash_password(password)}})
+        return
+    # Make seed accounts authoritative — keep password and role in sync each boot.
+    update = {"role": role, "name": name}
+    if not verify_password(password, existing.get("password_hash", "")):
+        update["password_hash"] = hash_password(password)
+    await db.users.update_one({"email": email}, {"$set": update})
 
 # -------- Auth Routes --------
 
@@ -414,13 +442,13 @@ async def register(body: RegisterIn, response: Response):
     user_id = new_id()
     user = {
         "id": user_id, "email": email, "password_hash": hash_password(body.password),
-        "name": body.name, "role": "user", "created_at": now_iso(),
+        "name": body.name, "role": body.role, "created_at": now_iso(),
     }
     await db.users.insert_one(user)
     access = create_access_token(user_id, email)
     refresh = create_refresh_token(user_id)
     set_auth_cookies(response, access, refresh)
-    return {"id": user_id, "email": email, "name": body.name, "role": "user",
+    return {"id": user_id, "email": email, "name": body.name, "role": body.role,
             "access_token": access}
 
 @api.post("/auth/login")
@@ -517,22 +545,31 @@ async def reset_password(body: ResetIn):
 
 @api.get("/besm/reference")
 async def besm_reference():
+    def enrich_attr(a):
+        return {**a, "blurb": attribute_blurb(a["name"])}
+    def enrich_def(d):
+        return {**d, "blurb": defect_blurb(d.get("category", ""))}
+    def enrich_pl(p):
+        return {**p, "blurb": power_level_blurb(p["name"])}
     return {
         "book": BOOK,
         "core_stats": with_source(CORE_STATS),
         "derived_values": with_source(DERIVED_VALUES),
-        "attributes": with_source(ATTRIBUTES),
-        "defects": with_source(DEFECTS),
-        "enhancements": with_source(ENHANCEMENTS),
-        "limiters": with_source(LIMITERS),
+        "attributes": [enrich_attr(a) for a in with_source(ATTRIBUTES)],
+        "defects": [enrich_def(d) for d in with_source(DEFECTS)],
+        "enhancements": [{**e, "blurb": ENHANCEMENT_BLURB} for e in with_source(ENHANCEMENTS)],
+        "limiters": [{**lim, "blurb": LIMITER_BLURB} for lim in with_source(LIMITERS)],
         "skill_groups": with_source(SKILL_GROUPS),
-        "power_levels": with_source(POWER_LEVELS),
+        "power_levels": [enrich_pl(p) for p in with_source(POWER_LEVELS)],
         "node_types": NODE_TYPES,
         "target_numbers": with_source(TARGET_NUMBERS),
         # BESM Extras (Rule Expansions & Character Options)
         "extras_book": BOOK_EXTRAS,
-        "extras_rules": [{**r, "source": {"book": BOOK_EXTRAS, "page": r.get("page")}}
+        "extras_rules": [{**r, "blurb": extras_blurb(r["name"]),
+                          "source": {"book": BOOK_EXTRAS, "page": r.get("page")}}
                          for r in EXTRAS_RULES],
+        # Generic mechanic primers (about the costing equation, items vs gear, etc.)
+        "generic_blurbs": [{"name": k, "blurb": v} for k, v in GENERIC_BLURBS.items()],
     }
 
 # -------- Campaign Genesis (Great GM framework) --------
@@ -661,6 +698,12 @@ async def delete_custom(campaign_id: str, cid: str, user: dict = Depends(get_cur
 
 @api.post("/campaigns")
 async def create_campaign(body: CampaignIn, user: dict = Depends(get_current_user)):
+    # Player-role accounts are seat-only — they take seats at tables, they
+    # don't run them. GMs and admins can create campaigns. Legacy "user" role
+    # is auto-migrated to "gm" on startup.
+    if user.get("role") == "player":
+        raise HTTPException(403, "Player accounts cannot create campaigns. "
+                                 "Update your role to Game Master in your profile to host a table.")
     doc = body.model_dump()
     doc["id"] = new_id()
     doc["gm_id"] = user["id"]

@@ -1,12 +1,14 @@
 import React, { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { api, formatApiErrorDetail } from "../lib/api";
+import { api, formatApiErrorDetail, useAuth } from "../lib/api";
 import { Plus, Scroll, X, Users, Lock, Globe2 } from "lucide-react";
 
 export default function Campaigns() {
+  const { user } = useAuth();
+  const isPlayerOnly = user && user.role === "player";
   const [rows, setRows] = useState([]);
   const [sp] = useSearchParams();
-  const [showCreate, setShowCreate] = useState(sp.get("create") === "1");
+  const [showCreate, setShowCreate] = useState(sp.get("create") === "1" && !isPlayerOnly);
   const [filter, setFilter] = useState("all");
 
   const load = async () => {
@@ -25,8 +27,11 @@ export default function Campaigns() {
           <h1 className="font-display text-4xl tracking-wide text-parchment">Campaigns</h1>
           <p className="text-mist mt-2 font-body">Browse public tables or host your own.</p>
         </div>
-        <button onClick={() => setShowCreate(true)} className="btn btn-primary" data-testid="new-campaign-btn">
-          <Plus className="w-4 h-4" /> Forge a campaign
+        <button onClick={() => setShowCreate(true)} className="btn btn-primary"
+                disabled={isPlayerOnly}
+                title={isPlayerOnly ? "Player accounts can't host campaigns. Switch your role to GM in your profile to host a table." : undefined}
+                data-testid="new-campaign-btn">
+          <Plus className="w-4 h-4" /> {isPlayerOnly ? "GMs only" : "Forge a campaign"}
         </button>
       </div>
 

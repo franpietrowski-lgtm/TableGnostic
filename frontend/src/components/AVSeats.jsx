@@ -31,6 +31,14 @@ export default function AVSeats({ subscribe, send, sessionTitle }) {
   const [camOn, setCamOn] = useState(true);
   const [error, setError] = useState("");
   const [enlarged, setEnlarged] = useState(null); // conn_id of expanded tile
+  // Detect iframe embedding — most preview shells (including Emergent's) wrap
+  // the app in an <iframe> without `allow="camera; microphone"`, which makes
+  // getUserMedia reject with NotAllowedError before the OS prompt appears.
+  // Surfacing this lets the user click "Open in new tab" instead of debugging.
+  const isInsideIframe = (() => {
+    try { return window.self !== window.top; } catch { return true; }
+  })();
+  const popoutHref = typeof window !== "undefined" ? window.location.href : "#";
 
   const localStreamRef = useRef(null);
   const localVideoRef = useRef(null);
@@ -213,11 +221,20 @@ export default function AVSeats({ subscribe, send, sessionTitle }) {
       setCamOn(true);
     } catch (e) {
       console.warn("getUserMedia failed", e);
-      setError(
-        e?.name === "NotAllowedError"
-          ? "Microphone/camera permission denied."
-          : "Could not start your camera or microphone."
-      );
+      const inIframe = (() => { try { return window.self !== window.top; } catch { return true; } })();
+      let msg;
+      if (e?.name === "NotAllowedError") {
+        msg = inIframe
+          ? "Your browser blocked camera/mic because this preview is inside an iframe. Open the app in a new tab and try again."
+          : "Microphone/camera permission denied — check your browser's site permissions.";
+      } else if (e?.name === "NotFoundError") {
+        msg = "No camera or microphone was found on this device.";
+      } else if (e?.name === "NotReadableError") {
+        msg = "Your camera or microphone is in use by another app.";
+      } else {
+        msg = "Could not start your camera or microphone.";
+      }
+      setError(msg);
     }
   };
 
@@ -332,6 +349,21 @@ export default function AVSeats({ subscribe, send, sessionTitle }) {
       {error && (
         <div className="text-[11px] font-ui text-ember mb-2" data-testid="av-error">
           {error}
+        </div>
+      )}
+
+      {isInsideIframe && !joined && (
+        <div className="mb-2 px-2.5 py-2 rounded-sm border border-arcane/40 bg-arcane/5 flex items-center justify-between gap-3 text-[11px] font-ui"
+             data-testid="av-iframe-banner">
+          <span className="text-mist leading-snug">
+            Camera & mic are blocked inside the preview frame. For the AV seats,
+            open the app in a new browser tab.
+          </span>
+          <a href={popoutHref} target="_blank" rel="noreferrer"
+             className="btn btn-ghost text-[10px] uppercase tracking-widest shrink-0"
+             data-testid="av-open-newtab">
+            Open in new tab ↗
+          </a>
         </div>
       )}
 

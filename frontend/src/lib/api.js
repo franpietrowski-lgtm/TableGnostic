@@ -54,8 +54,8 @@ export function AuthProvider({ children }) {
     setUser(data);
     return data;
   };
-  const register = async (email, password, name) => {
-    const { data } = await api.post("/auth/register", { email, password, name });
+  const register = async (email, password, name, role = "player") => {
+    const { data } = await api.post("/auth/register", { email, password, name, role });
     if (data.access_token) localStorage.setItem("tg_token", data.access_token);
     setUser(data);
     return data;

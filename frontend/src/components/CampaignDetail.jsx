@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import { api, formatApiErrorDetail } from "../lib/api";
 import * as Tabs from "@radix-ui/react-tabs";
-import { Users, Plus, UserPlus2, ArrowRight, Trash2, Sparkles, Eye, EyeOff, Link as LinkIcon, Wand2, Shield, Copy, RefreshCw, Check, Save, Network, ListTree, Lightbulb, X } from "lucide-react";
+import { Users, Plus, UserPlus2, ArrowRight, Trash2, Sparkles, Eye, EyeOff, Link as LinkIcon, Wand2, Shield, Copy, RefreshCw, Check, Save, Network, ListTree, Lightbulb, X, BookOpen } from "lucide-react";
 import KnowledgeGraph from "./KnowledgeGraph";
 import { NODE_TYPES, NODE_TEMPLATES, colorForType, labelForType } from "../lib/nodeTemplates";
 
@@ -15,6 +15,7 @@ export default function CampaignDetail() {
   const [customs, setCustoms] = useState([]);
   const [edges, setEdges] = useState([]);
   const [err, setErr] = useState("");
+  const [showStart, setShowStart] = useState(false);
   const nav = useNavigate();
 
   const load = async () => {
@@ -42,10 +43,10 @@ export default function CampaignDetail() {
     if (!window.confirm("Dissolve this campaign? All threads will be lost.")) return;
     await api.delete(`/campaigns/${id}`); nav("/app/campaigns");
   };
-  const startSession = async () => {
-    const title = prompt("Session title?", `Session ${sessions.length + 1}`);
-    if (!title) return;
-    const { data } = await api.post("/sessions", { campaign_id: id, title });
+  const startSession = async (title) => {
+    if (!title || !title.trim()) return;
+    const { data } = await api.post("/sessions", { campaign_id: id, title: title.trim() });
+    setShowStart(false);
     nav(`/app/sessions/${data.id}`);
   };
 
@@ -69,7 +70,7 @@ export default function CampaignDetail() {
           {camp.is_gm && <Link to={`/app/campaigns/${id}/genesis`} className="btn" data-testid="genesis-btn">
             <Wand2 className="w-4 h-4"/> Atelier
           </Link>}
-          {camp.is_gm && <button onClick={startSession} className="btn btn-primary" data-testid="start-session-btn">
+          {camp.is_gm && <button onClick={() => setShowStart(true)} className="btn btn-primary" data-testid="start-session-btn">
             <Sparkles className="w-4 h-4"/> Start session
           </button>}
           {!camp.is_gm && !(camp.member_ids || []).includes(camp.current_user_id) && (
@@ -107,7 +108,7 @@ export default function CampaignDetail() {
           <KnowledgeTab camp={camp} nodes={nodes} edges={edges} onRefresh={load} />
         </Tabs.Content>
         <Tabs.Content value="sessions" className="pt-6">
-          <SessionsTab camp={camp} sessions={sessions} onStart={startSession} />
+          <SessionsTab camp={camp} sessions={sessions} onStart={() => setShowStart(true)} />
         </Tabs.Content>
         <Tabs.Content value="primer" className="pt-6">
           <PrimerTab camp={camp} onRefresh={load} />
@@ -123,6 +124,77 @@ export default function CampaignDetail() {
           </Tabs.Content>
         )}
       </Tabs.Root>
+
+      {/* Tri-Stat Emporium credit on BESM 4E campaigns */}
+      {(camp.system || "").toUpperCase().includes("BESM") && (
+        <div className="mt-10 pt-6 border-t border-gold/10 text-center" data-testid="tri-stat-credit">
+          <div className="font-display tracking-[0.3em] text-gold/70 text-xs uppercase">Tri-Stat Emporium</div>
+          <div className="text-[10px] text-mist/70 font-ui mt-1.5 max-w-2xl mx-auto leading-relaxed">
+            BESM (Big Eyes, Small Mouth) 4th Edition is © Mark MacKinnon &amp; Dyskami Publishing.
+            Table-Gnostic references rules, costs, and page numbers — it does not reproduce
+            the rulebook prose, lore, or examples. Bring your physical book to the table.
+          </div>
+        </div>
+      )}
+
+      {/* Start Session modal */}
+      {showStart && camp.is_gm && (
+        <StartSessionModal
+          defaultTitle={`Session ${sessions.length + 1}`}
+          campName={camp.name}
+          onClose={() => setShowStart(false)}
+          onStart={startSession}
+        />
+      )}
+    </div>
+  );
+}
+
+function StartSessionModal({ defaultTitle, campName, onClose, onStart }) {
+  const [title, setTitle] = useState(defaultTitle);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  const submit = async (e) => {
+    e.preventDefault();
+    if (!title.trim() || busy) return;
+    setBusy(true);
+    try { await onStart(title); } finally { setBusy(false); }
+  };
+  return (
+    <div className="fixed inset-0 z-50 bg-void/80 backdrop-blur-sm flex items-start justify-center p-6 overflow-auto"
+         data-testid="start-session-modal" role="dialog" aria-modal="true">
+      <div className="card-mystic sigil-ring w-full max-w-md p-7 my-20">
+        <div className="flex items-start justify-between mb-3">
+          <div>
+            <div className="label-ref flex items-center gap-2"><Sparkles className="w-3 h-3"/> Light the hearth</div>
+            <h2 className="font-display text-2xl text-parchment tracking-wide mt-1">Start a session</h2>
+            <div className="text-[11px] font-ui uppercase tracking-widest text-mist/70 mt-1">{campName}</div>
+          </div>
+          <button onClick={onClose} className="btn btn-ghost p-2"><X className="w-4 h-4"/></button>
+        </div>
+        <div className="divider-sigil mb-4"/>
+        <form onSubmit={submit} className="space-y-4">
+          <div>
+            <label className="label-ref block mb-1">Session title</label>
+            <input className="input" value={title} required autoFocus
+                   onChange={(e) => setTitle(e.target.value)}
+                   data-testid="start-session-title" placeholder="The Spire's First Bell" />
+            <div className="text-[10px] text-mist italic mt-1">
+              Players who have taken a seat will be able to join when you open the room.
+            </div>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <button type="button" onClick={onClose} className="btn btn-ghost">Cancel</button>
+            <button type="submit" disabled={busy} className="btn btn-primary" data-testid="start-session-confirm">
+              <Sparkles className="w-4 h-4"/> {busy ? "Lighting…" : "Begin"}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }
@@ -344,8 +416,13 @@ function NodeEditor({ camp, onClose, onSaved }) {
   const [content, setContent] = useState("");
   const [tags, setTags] = useState("");
   const [visibility, setVisibility] = useState("gm_only");
+  const [revealedTo, setRevealedTo] = useState([]); // user_ids when visibility=='revealed'
   const [fields, setFields] = useState({});
   const tmpl = NODE_TEMPLATES[type];
+
+  const toggleRevealed = (uid) => {
+    setRevealedTo((prev) => prev.includes(uid) ? prev.filter((x) => x !== uid) : [...prev, uid]);
+  };
 
   const save = async (e) => {
     e?.preventDefault();
@@ -353,7 +430,9 @@ function NodeEditor({ camp, onClose, onSaved }) {
     await api.post("/nodes", {
       campaign_id: camp.id, type, title, content,
       tags: tags.split(",").map((s) => s.trim()).filter(Boolean),
-      visibility, fields,
+      visibility,
+      revealed_to: visibility === "revealed" ? revealedTo : [],
+      fields,
     });
     onSaved();
   };
@@ -392,12 +471,42 @@ function NodeEditor({ camp, onClose, onSaved }) {
             <input className="input" placeholder="Title (the name your table will say)" value={title} required
                    onChange={(e) => setTitle(e.target.value)} data-testid="node-title-input"/>
             {camp.is_gm && (
-              <select className="select" value={visibility} onChange={(e) => setVisibility(e.target.value)}>
-                <option value="gm_only">GM only</option>
-                <option value="shared">Shared with table</option>
+              <select className="select" value={visibility}
+                      onChange={(e) => setVisibility(e.target.value)}
+                      data-testid="node-visibility">
+                <option value="gm_only">GM only — secret</option>
+                <option value="shared">All players — visible to the table</option>
+                <option value="revealed">Specific players — pick below</option>
               </select>
             )}
           </div>
+          {camp.is_gm && visibility === "revealed" && (
+            <div className="border border-gold/15 rounded-sm p-3 bg-gold/5" data-testid="reveal-picker">
+              <div className="label-ref mb-2">Visible to which players?</div>
+              {(camp.members || []).length === 0 ? (
+                <div className="text-[11px] text-mist italic">No players seated yet.</div>
+              ) : (
+                <div className="flex flex-wrap gap-1.5">
+                  {(camp.members || []).map((m) => {
+                    const on = revealedTo.includes(m.id);
+                    return (
+                      <button type="button" key={m.id} onClick={() => toggleRevealed(m.id)}
+                              data-testid={`reveal-pick-${m.id}`}
+                              className={`text-[11px] px-2 py-1 rounded-sm border transition ${on ? "border-gold/70 bg-gold/10 text-gold-bright" : "border-gold/15 text-mist/80 hover:border-gold/40"}`}>
+                        {on ? <Check className="w-3 h-3 inline mr-1"/> : null}
+                        {m.name || m.email}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+              {revealedTo.length === 0 && (
+                <div className="text-[10px] text-ember/80 italic mt-2">
+                  Select at least one player, or this node will be hidden from everyone.
+                </div>
+              )}
+            </div>
+          )}
           <textarea className="input" placeholder="Description / opening prose"
                     value={content} onChange={(e) => setContent(e.target.value)}/>
           <input className="input" placeholder="tags, comma-separated" value={tags}
@@ -543,6 +652,9 @@ function PrimerTab({ camp, onRefresh }) {
   const [prohibD, setProhibD] = useState((camp.prohibited_defects || []).join(", "));
   const [allowedS, setAllowedS] = useState((camp.allowed_skill_groups || []).join(", "));
   const [prohibS, setProhibS] = useState((camp.prohibited_skill_groups || []).join(", "));
+  const [pointMin, setPointMin] = useState(camp.character_point_min || 0);
+  const [pointMax, setPointMax] = useState(camp.character_point_max || 0);
+  const [maxAttrRank, setMaxAttrRank] = useState(camp.max_per_attribute_rank || 0);
   const [saved, setSaved] = useState(false);
   const [err, setErr] = useState("");
   const parse = (s) => s.split(",").map((x) => x.trim()).filter(Boolean);
@@ -558,6 +670,9 @@ function PrimerTab({ camp, onRefresh }) {
         prohibited_defects: parse(prohibD),
         allowed_skill_groups: parse(allowedS),
         prohibited_skill_groups: parse(prohibS),
+        character_point_min: parseInt(pointMin) || 0,
+        character_point_max: parseInt(pointMax) || 0,
+        max_per_attribute_rank: parseInt(maxAttrRank) || 0,
       };
       delete payload.is_gm; delete payload.members; delete payload.id;
       delete payload.gm_id; delete payload.gm_name; delete payload.member_ids;
@@ -598,6 +713,37 @@ function PrimerTab({ camp, onRefresh }) {
 
       {camp.is_gm && (
         <>
+          <div className="divider-sigil my-6"/>
+          <div className="label-ref mb-2 flex items-center gap-2">Character-Point Caps <Shield className="w-3 h-3"/></div>
+          <p className="text-xs text-mist font-body mb-4 italic">
+            Override the Power Level's default budget for this table. Useful for session-0 starts
+            ("Heroic, but begin at 90") or floor enforcement ("nobody under 70"). Set to <b>0</b> to
+            inherit the Power Level's default.
+          </p>
+          <div className="grid md:grid-cols-3 gap-3" data-testid="primer-caps">
+            <div>
+              <label className="label-ref block mb-1">Min Character Points</label>
+              <input className="input" type="number" min={0} value={pointMin}
+                     onChange={(e) => setPointMin(e.target.value)}
+                     data-testid="primer-cap-min"/>
+              <div className="text-[10px] text-mist/70 italic mt-1">0 = no floor</div>
+            </div>
+            <div>
+              <label className="label-ref block mb-1">Max Character Points</label>
+              <input className="input" type="number" min={0} value={pointMax}
+                     onChange={(e) => setPointMax(e.target.value)}
+                     data-testid="primer-cap-max"/>
+              <div className="text-[10px] text-mist/70 italic mt-1">0 = use Power Level default</div>
+            </div>
+            <div>
+              <label className="label-ref block mb-1">Max Level per Attribute</label>
+              <input className="input" type="number" min={0} value={maxAttrRank}
+                     onChange={(e) => setMaxAttrRank(e.target.value)}
+                     data-testid="primer-cap-attr-rank"/>
+              <div className="text-[10px] text-mist/70 italic mt-1">0 = no per-Attribute cap</div>
+            </div>
+          </div>
+
           <div className="divider-sigil my-6"/>
           <div className="label-ref mb-2 flex items-center gap-2">Allow / Prohibit Lists <Shield className="w-3 h-3"/></div>
           <p className="text-xs text-mist font-body mb-4 italic">
