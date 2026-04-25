@@ -235,8 +235,7 @@ class DamageIn(BaseModel):
 
 
 class RecapIn(BaseModel):
-    style: Literal["narrative", "bullet"] = "narrative"
-    include_chat: bool = True
+    style: Literal["narrative", "bullet", "in-character"] = "narrative"
 
 
 # -------- Custom rules + Genesis --------
