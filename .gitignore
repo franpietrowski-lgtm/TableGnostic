@@ -1,8 +1,5 @@
 -e 
-# Environment and credential files
-.env
-.env.*
-*.env
+# Credential files (env files are tracked for Emergent deployment)
 credentials.json
 *.pem
 *.key
