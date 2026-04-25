@@ -1,4 +1,3 @@
--e 
 # Credential files (env files are tracked for Emergent deployment)
 credentials.json
 *.pem
