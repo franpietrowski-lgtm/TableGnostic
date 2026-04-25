@@ -723,10 +723,10 @@ function PrimerTab({ camp, onRefresh }) {
   const [pointMin, setPointMin] = useState(camp.character_point_min || 0);
   const [pointMax, setPointMax] = useState(camp.character_point_max || 0);
   const [maxAttrRank, setMaxAttrRank] = useState(camp.max_per_attribute_rank || 0);
-  // V3.5 — Campaign Benchmarks
+  // V3.5/V3.6 — Campaign Benchmarks
   const [genre, setGenre] = useState(camp.genre || "");
   const [timePeriod, setTimePeriod] = useState(camp.time_period || "");
-  const [sizeScale, setSizeScale] = useState(camp.size_scale || "Personal");
+  const [defaultSize, setDefaultSize] = useState(camp.default_character_size || "Medium");
   const [damageRating, setDamageRating] = useState(camp.damage_rating_baseline || 5);
   const [saved, setSaved] = useState(false);
   const [err, setErr] = useState("");
@@ -746,7 +746,8 @@ function PrimerTab({ camp, onRefresh }) {
         character_point_min: parseInt(pointMin) || 0,
         character_point_max: parseInt(pointMax) || 0,
         max_per_attribute_rank: parseInt(maxAttrRank) || 0,
-        genre, time_period: timePeriod, size_scale: sizeScale,
+        genre, time_period: timePeriod,
+        default_character_size: defaultSize,
         damage_rating_baseline: parseInt(damageRating) || 5,
       };
       delete payload.is_gm; delete payload.members; delete payload.id;
@@ -816,16 +817,21 @@ function PrimerTab({ camp, onRefresh }) {
               </select>
             </div>
             <div>
-              <label className="label-ref block mb-1">Size Scale</label>
-              <select className="select" value={sizeScale}
-                      onChange={(e) => setSizeScale(e.target.value)}
+              <label className="label-ref block mb-1">Default Character Size</label>
+              <select className="select" value={defaultSize}
+                      onChange={(e) => setDefaultSize(e.target.value)}
                       data-testid="primer-size">
-                {[["Personal","Personal — single combatants"],
-                  ["Squad","Squad — small unit"],
-                  ["Vehicle","Vehicle — cars / mecha"],
-                  ["Capital","Capital — ships / fortresses"],
-                  ["Cosmic","Cosmic — planet+ scale"]].map(([v,l]) => <option key={v} value={v}>{l}</option>)}
+                {[["Diminutive","Diminutive — sprite / fairy / pixie"],
+                  ["Small","Small — halfling / goblin / housecat"],
+                  ["Medium","Medium — standard humanoid (default)"],
+                  ["Large","Large — ogre / horse / war-bear"],
+                  ["Huge","Huge — giant / wagon / small mecha"],
+                  ["Gargantuan","Gargantuan — dragon / mecha / siege engine"],
+                  ["Massive","Massive — kaiju / capital ship / fortress"]].map(([v,l]) => <option key={v} value={v}>{l}</option>)}
               </select>
+              <div className="text-[10px] text-mist/70 italic mt-1">
+                Per-entity template; players can override on their sheet.
+              </div>
             </div>
             <div>
               <label className="label-ref block mb-1">Damage Rating</label>

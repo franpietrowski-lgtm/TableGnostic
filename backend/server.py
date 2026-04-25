@@ -29,6 +29,7 @@ from besm_data import (
     ENHANCEMENT_BLURB, LIMITER_BLURB,
     GENERIC_BLURBS, GAME_SYSTEMS, GAME_SYSTEM_IDS, GAME_SYSTEMS_BY_ID,
     DEFAULT_SYSTEM_ID,
+    SIZE_TEMPLATES, SIZE_BY_NAME, DEFAULT_SIZE,
 )
 
 
@@ -229,13 +230,12 @@ class CampaignIn(BaseModel):
     # Surfaced on the Character Builder + Reference views as a context badge.
     genre: str = ""
     # Time-period anchors weapons / gear / item availability.
-    # Suggested values: "Stone Age", "Bronze Age", "Iron Age", "Medieval",
-    # "Renaissance", "Industrial", "Modern", "Near Future", "Far Future",
-    # "Post-Apocalyptic", "Mixed".
     time_period: str = ""
-    # Campaign-scale governs map token sizing and damage benchmarks.
-    # "Personal" (default), "Squad", "Vehicle", "Capital", "Cosmic".
-    size_scale: str = "Personal"
+    # Default Size template applied to brand-new characters in this campaign.
+    # Size in BESM 4E is a per-entity TEMPLATE (Diminutive ↔ Massive), NOT a
+    # campaign-wide world-scale enum. A GM can pin "Medium" (humans) or shift
+    # to e.g. "Small" for a halfling-only table.
+    default_character_size: str = "Medium"
     # Damage Rating baseline — replaces the engine's hard-coded 5 in the
     # damage_multiplier formula. Higher = grittier / more lethal table.
     damage_rating_baseline: int = 5
@@ -275,6 +275,10 @@ class CharacterAttribute(BaseModel):
     # Item / Weapon-class Attributes may carry their own Defects (e.g. a sword
     # that breaks easily). Refunds reduce the parent Attribute's net cost.
     defects: List[CharacterDefect] = []
+    # Optional Size template applied to this Item/Weapon/Companion (BESM 4E
+    # Size templates: Diminutive / Small / Medium / Large / Huge / Gargantuan
+    # / Massive). "" = inherit the character's size; non-empty overrides.
+    size: str = ""
 
 class CharacterSkillComponent(BaseModel):
     name: str
@@ -307,6 +311,9 @@ class CharacterIn(BaseModel):
     concept: str = ""
     power_level: str = "Heroic"
     total_points: int = 120
+    # BESM 4E Size template applied to the character (Diminutive ↔ Massive).
+    # Modifies damage output, defence, movement, weight. Default Medium.
+    size: str = "Medium"
     stats: CharacterStats = CharacterStats()
     attributes: List[CharacterAttribute] = []
     defects: List[CharacterDefect] = []
@@ -633,6 +640,8 @@ async def besm_reference():
                          for r in EXTRAS_RULES],
         # Generic mechanic primers (about the costing equation, items vs gear, etc.)
         "generic_blurbs": [{"name": k, "blurb": v} for k, v in GENERIC_BLURBS.items()],
+        # Size templates (BESM 4E p.181 — applied per-character / per-item).
+        "size_templates": SIZE_TEMPLATES,
     }
 
 

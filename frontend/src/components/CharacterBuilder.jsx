@@ -203,7 +203,7 @@ export default function CharacterBuilder() {
                 <span className="tag">GM · {campaign.gm_name}</span>
                 {campaign.genre && <span className="tag" data-testid="bench-genre">{campaign.genre}</span>}
                 {campaign.time_period && <span className="tag" data-testid="bench-period">{campaign.time_period}</span>}
-                {campaign.size_scale && campaign.size_scale !== "Personal" && <span className="tag" data-testid="bench-size">Scale · {campaign.size_scale}</span>}
+                {campaign.default_character_size && campaign.default_character_size !== "Medium" && <span className="tag" data-testid="bench-size">Default Size · {campaign.default_character_size}</span>}
                 {campaign.damage_rating_baseline && campaign.damage_rating_baseline !== 5 && <span className="tag" data-testid="bench-dr">DR baseline · {campaign.damage_rating_baseline}</span>}
                 {campaign.tone && <span className="tag">{campaign.tone}</span>}
               </div>
@@ -412,15 +412,19 @@ export default function CharacterBuilder() {
 
 function FolioPanel({ ch, setCh }) {
   const f = ch.folio || {};
+  // Folio collections must always be arrays — but legacy / seeded data
+  // sometimes stored these as plain strings. Coerce defensively so a
+  // misshaped record doesn't crash the editor (ref: iter_10 P0 bug report).
+  const arr = (v) => (Array.isArray(v) ? v : []);
   const setF = (patch) => setCh({ ...ch, folio: { ...f, ...patch } });
-  const addItem = (key, item) => setF({ [key]: [...(f[key] || []), item] });
+  const addItem = (key, item) => setF({ [key]: [...arr(f[key]), item] });
   const updateItem = (key, idx, patch) => {
-    const arr = [...(f[key] || [])]; arr[idx] = { ...arr[idx], ...patch };
-    setF({ [key]: arr });
+    const a = [...arr(f[key])]; a[idx] = { ...a[idx], ...patch };
+    setF({ [key]: a });
   };
   const removeItem = (key, idx) => {
-    const arr = [...(f[key] || [])]; arr.splice(idx, 1);
-    setF({ [key]: arr });
+    const a = [...arr(f[key])]; a.splice(idx, 1);
+    setF({ [key]: a });
   };
 
   return (
@@ -457,10 +461,10 @@ function FolioPanel({ ch, setCh }) {
       </div>
 
       <ChipList label="Edges" hint="Situational +1 bonuses (BESM Folio Edges)"
-                items={f.edges || []} setItems={(arr) => setF({ edges: arr })}
+                items={arr(f.edges)} setItems={(a) => setF({ edges: a })}
                 placeholder="e.g. familiar with the docks; knows the priest" testid="folio-edges"/>
       <ChipList label="Obstacles" hint="Recurring −1 burdens"
-                items={f.obstacles || []} setItems={(arr) => setF({ obstacles: arr })}
+                items={arr(f.obstacles)} setItems={(a) => setF({ obstacles: a })}
                 placeholder="e.g. afraid of fire; owes a favour" testid="folio-obstacles"/>
 
       <div>
@@ -472,7 +476,7 @@ function FolioPanel({ ch, setCh }) {
           <button onClick={() => addItem("goals", { title: "", kind: "short", note: "" })}
                   className="btn btn-ghost text-xs" data-testid="folio-add-goal"><Plus className="w-3 h-3"/> Goal</button>
         </div>
-        {(f.goals || []).map((g, i) => (
+        {arr(f.goals).map((g, i) => (
           <div key={i} className="border border-gold/15 rounded-sm p-2 mb-2 grid md:grid-cols-[1fr_120px_auto] gap-2 items-center">
             <input className="input" placeholder="Goal" value={g.title || ""}
                    onChange={(e) => updateItem("goals", i, { title: e.target.value })}/>
@@ -495,7 +499,7 @@ function FolioPanel({ ch, setCh }) {
           <button onClick={() => addItem("family", { name: "", relation: "", note: "" })}
                   className="btn btn-ghost text-xs" data-testid="folio-add-family"><Plus className="w-3 h-3"/> Person</button>
         </div>
-        {(f.family || []).map((p, i) => (
+        {arr(f.family).map((p, i) => (
           <div key={i} className="border border-gold/15 rounded-sm p-2 mb-2 grid md:grid-cols-[1fr_1fr_auto] gap-2">
             <input className="input" placeholder="Name" value={p.name || ""}
                    onChange={(e) => updateItem("family", i, { name: e.target.value })}/>
@@ -514,7 +518,7 @@ function FolioPanel({ ch, setCh }) {
           <button onClick={() => addItem("history_events", { date: "", title: "", note: "" })}
                   className="btn btn-ghost text-xs" data-testid="folio-add-history"><Plus className="w-3 h-3"/> Event</button>
         </div>
-        {(f.history_events || []).map((h, i) => (
+        {arr(f.history_events).map((h, i) => (
           <div key={i} className="border border-gold/15 rounded-sm p-2 mb-2 grid md:grid-cols-[120px_1fr_auto] gap-2">
             <input className="input" placeholder="Date / age" value={h.date || ""}
                    onChange={(e) => updateItem("history_events", i, { date: e.target.value })}/>
@@ -531,7 +535,7 @@ function FolioPanel({ ch, setCh }) {
           <button onClick={() => addItem("journal", { date: new Date().toISOString().slice(0, 10), entry: "" })}
                   className="btn btn-ghost text-xs" data-testid="folio-add-journal"><Plus className="w-3 h-3"/> Entry</button>
         </div>
-        {(f.journal || []).map((j, i) => (
+        {arr(f.journal).map((j, i) => (
           <div key={i} className="border border-gold/15 rounded-sm p-2 mb-2">
             <div className="flex items-center gap-2 mb-1">
               <input className="input w-40" placeholder="Date" value={j.date || ""}

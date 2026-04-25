@@ -525,6 +525,49 @@ GENERIC_BLURBS = {
 }
 
 
+# -------- Size templates --------
+# Size in BESM 4E is a TEMPLATE applied to a character / creature / item /
+# weapon (and occasionally a location's structural defence). It modifies
+# damage output, defence, movement pace, weight, and storage capacity. It
+# is NOT a campaign-wide world-scale enum.
+# The ladder below combines BESM 4E's Diminutive ↔ Massive scale with the
+# more familiar Tiny ↔ Colossal d20 vocabulary so GMs can apply whichever
+# vocabulary their table prefers.
+SIZE_TEMPLATES = [
+    {"name": "Diminutive", "alias": "Tiny",      "rank": -3,
+     "damage_mod": -10, "defence_mod": +6, "speed_mult": 0.50,
+     "weight_mult": 0.10,
+     "blurb": "Sprite / fairy / pixie scale. Low damage, hard to hit, slow afoot but small enough to pass through anything."},
+    {"name": "Small",      "alias": "Small",     "rank": -2,
+     "damage_mod": -5,  "defence_mod": +3, "speed_mult": 0.75,
+     "weight_mult": 0.50,
+     "blurb": "Halfling / goblin / housecat scale. Modest damage, harder to hit than Medium."},
+    {"name": "Medium",     "alias": "Medium",    "rank":  0,
+     "damage_mod":  0,  "defence_mod":  0, "speed_mult": 1.0,
+     "weight_mult": 1.0,
+     "blurb": "Standard humanoid scale (default for PCs)."},
+    {"name": "Large",      "alias": "Large",     "rank": +1,
+     "damage_mod": +5,  "defence_mod": -2, "speed_mult": 1.25,
+     "weight_mult": 4.0,
+     "blurb": "Ogre / horse / war-bear scale. Hits harder, easier to hit."},
+    {"name": "Huge",       "alias": "Huge",      "rank": +2,
+     "damage_mod": +10, "defence_mod": -4, "speed_mult": 1.5,
+     "weight_mult": 12.0,
+     "blurb": "Giant / wagon / small mecha scale."},
+    {"name": "Gargantuan", "alias": "Gargantuan","rank": +3,
+     "damage_mod": +20, "defence_mod": -6, "speed_mult": 2.0,
+     "weight_mult": 40.0,
+     "blurb": "Dragon / siege engine / mecha scale."},
+    {"name": "Massive",    "alias": "Colossal",  "rank": +4,
+     "damage_mod": +40, "defence_mod": -8, "speed_mult": 2.5,
+     "weight_mult": 200.0,
+     "blurb": "Kaiju / capital ship / fortress scale. Damage measured in structures."},
+]
+
+SIZE_BY_NAME = {s["name"]: s for s in SIZE_TEMPLATES}
+DEFAULT_SIZE = "Medium"
+
+
 # -------- Per-Attribute mod whitelists (BESM 4E) --------
 # Most Attributes accept all 5 Enhancements + all 23 Limiters. A handful have
 # rule-side restrictions or strong conventions. `None` = all mods allowed.
@@ -627,6 +670,24 @@ GAME_SYSTEMS = [
         "blurb": "Tri-Stat point-buy: Body / Mind / Soul plus Attributes, Defects, Skill Groups. Native to Table-Gnostic.",
     },
     {
+        # Anime 5E is Dyskami's d20 / 5E-compatible system, distributed under
+        # the OGL via the Tri-Stat Emporium community programme.
+        "id": "anime-5e", "name": "Anime 5E", "publisher": "Dyskami Publishing",
+        "edition": "v1.3.6", "year": 2024,
+        "copyright": (
+            "Anime 5E written by Mark MacKinnon. "
+            "Anime 5E published by Dyskami Publishing Company with Japanime Games. "
+            "Tri-Stat Emporium, Tri-Stat System, and Anime 5E are trademarks of "
+            "Dyskami Publishing Company. Anime 5E text © {YEAR} Dyskami Publishing Company. "
+            "All rights reserved under international law."
+        ),
+        "links": ["http://Anime5E.com"],
+        # Anime 5E uses the Tri-Stat Emporium combined-logo cover requirement.
+        "logo_url": "https://customer-assets.emergentagent.com/job_rules-forge/artifacts/yhzl2ww7_Tri-Stat%20Emporium%20BESM%20Logo%20300dpi.png",
+        "supported": True,  # System is data-scaffolded V3.6; full Reference / Builder lands V3.7
+        "blurb": "Open-licensed (OGL) d20 5E-compatible system tuned for anime / pulp action. Classes, races, and feats. Mechanics scaffolded — full reference & builder coming next batch.",
+    },
+    {
         "id": "dnd-5e", "name": "Dungeons & Dragons 5E", "publisher": "Wizards of the Coast",
         "edition": "5th Edition", "year": 2014,
         "copyright": "Dungeons & Dragons and D&D 5E are © Wizards of the Coast. SRD content available under OGL/CC.",
@@ -660,6 +721,26 @@ GAME_SYSTEMS = [
         "copyright": "FATE Core is © Evil Hat Productions, available under the OGL and CC-BY.",
         "supported": False,
         "blurb": "4dF (Fate dice) + skill ladder; Aspects & Compels drive narrative leverage.",
+    },
+    {
+        "id": "cypher-system", "name": "Cypher System", "publisher": "Monte Cook Games",
+        "edition": "Cypher System Rulebook", "year": 2015,
+        # Required text per Monte Cook Games' Cypher System Creator programme.
+        "copyright": (
+            "This product was created under license. CYPHER SYSTEM and its logo, and "
+            "CYPHER SYSTEM CREATOR and its logo, are trademarks of Monte Cook Games, LLC "
+            "in the U.S.A. and other countries. All Monte Cook Games characters and "
+            "character names, and the distinctive likenesses thereof, are trademarks of "
+            "Monte Cook Games, LLC. www.montecookgames.com. "
+            "This work contains material that is © Monte Cook Games, LLC and/or other "
+            "authors, used with permission under the Community Content Agreement for "
+            "Cypher System Creator. All other original material in this work is © {YEAR} "
+            "by Table-Gnostic and published under the Community Content Agreement for "
+            "Cypher System Creator."
+        ),
+        "links": ["https://www.montecookgames.com"],
+        "supported": False,
+        "blurb": "Player-tier d20 + modifier with effort/edge/intrusions; tier-based progression. The Cypher System Creator programme allows tool integrations like this one.",
     },
     {
         "id": "cyberpunk-red", "name": "Cyberpunk RED", "publisher": "R. Talsorian Games",
