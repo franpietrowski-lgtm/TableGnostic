@@ -525,6 +525,62 @@ GENERIC_BLURBS = {
 }
 
 
+# -------- Per-Attribute mod whitelists (BESM 4E) --------
+# Most Attributes accept all 5 Enhancements + all 23 Limiters. A handful have
+# rule-side restrictions or strong conventions. `None` = all mods allowed.
+# A list = only the named mods make sense for that Attribute.
+# These are advisory, surfaced as warnings in the Customise picker — not hard
+# blocks (the GM Primer can override anything via custom rules).
+ALL_ENHANCEMENTS = [e["name"] for e in ENHANCEMENTS]
+ALL_LIMITERS = [l["name"] for l in LIMITERS]
+
+ATTRIBUTE_MOD_WHITELIST = {
+    # Wealth, Connected, Gear, Item, Companion, Minions are "narrative-shape"
+    # Attributes — Range / Targets enhancements rarely apply.
+    "Wealth":     {"enhancements": [], "limiters": ["Charges", "Activation", "Detectable", "Permanent", "Unique"]},
+    "Connected":  {"enhancements": ["Range"], "limiters": ["Activation", "Detectable", "Localised", "Unique"]},
+    "Gear":       {"enhancements": [], "limiters": ["Charges", "Consumable", "Equipment", "Object", "Unique"]},
+    "Item":       {"enhancements": ALL_ENHANCEMENTS, "limiters": ALL_LIMITERS},  # half-price wrapper, anything goes
+    "Companion":  {"enhancements": ["Range", "Duration"], "limiters": ["Activation", "Equipment", "Object", "Unique"]},
+    "Minions":    {"enhancements": ["Range", "Duration", "Targets"], "limiters": ["Activation", "Equipment", "Unique"]},
+    # Mastery / Combat-Technique are flat numerical bonuses; modifiers don't really apply.
+    "Attack Mastery":   {"enhancements": [], "limiters": ["Object", "Activation", "Environmental"]},
+    "Defence Mastery":  {"enhancements": [], "limiters": ["Object", "Activation", "Environmental"]},
+    "Combat Technique": {"enhancements": [], "limiters": ["Object", "Activation", "Environmental"]},
+    "Massive Damage":   {"enhancements": ["Potent"], "limiters": ["Object", "Activation", "Charges", "Environmental"]},
+    "Tough":            {"enhancements": [], "limiters": ["Activation", "Environmental", "Detectable"]},
+    "Energised":        {"enhancements": [], "limiters": ["Activation", "Environmental", "Detectable"]},
+    # Heightened Awareness / Senses — narrow but accept several mods.
+    "Heightened Awareness": {"enhancements": ["Range"], "limiters": ["Activation", "Detectable", "Environmental", "Concentration"]},
+    "Heightened Senses":    {"enhancements": ["Range"], "limiters": ["Activation", "Detectable", "Environmental"]},
+    # Movement modes — Range / Duration meaningful, Targets / Area not.
+    "Flight":     {"enhancements": ["Range", "Duration"], "limiters": ALL_LIMITERS},
+    "Teleport":   {"enhancements": ["Range", "Targets"],  "limiters": ALL_LIMITERS},
+    "Tunnelling": {"enhancements": ["Range", "Duration"], "limiters": ALL_LIMITERS},
+    "Ground Speed":     {"enhancements": ["Duration"], "limiters": ALL_LIMITERS},
+    "Water Speed":      {"enhancements": ["Duration"], "limiters": ALL_LIMITERS},
+    "Spaceflight":      {"enhancements": ["Duration"], "limiters": ALL_LIMITERS},
+    "Special Movement": {"enhancements": ["Duration"], "limiters": ALL_LIMITERS},
+    "Superspeed":       {"enhancements": ["Duration"], "limiters": ALL_LIMITERS},
+    # Mind-affecting — restricted at most tables.
+    "Mind Control":  {"enhancements": ALL_ENHANCEMENTS, "limiters": ALL_LIMITERS},
+    "Telepathy":     {"enhancements": ["Range", "Targets", "Duration"], "limiters": ALL_LIMITERS},
+    "Mind Shield":   {"enhancements": ["Targets", "Duration"], "limiters": ["Activation", "Environmental", "Charges"]},
+    # Open-ended power slots — almost anything makes sense.
+    "Dynamic Powers": {"enhancements": ALL_ENHANCEMENTS, "limiters": ALL_LIMITERS},
+    "Power Flux":     {"enhancements": ALL_ENHANCEMENTS, "limiters": ALL_LIMITERS},
+    "Power Variation":{"enhancements": ALL_ENHANCEMENTS, "limiters": ALL_LIMITERS},
+}
+
+def attribute_whitelist(name: str) -> dict:
+    """Return {'enhancements': [...], 'limiters': [...]} for an Attribute name.
+    Empty list = none allowed (rule advisory). Missing entry = all allowed.
+    """
+    rec = ATTRIBUTE_MOD_WHITELIST.get(name)
+    if rec is None:
+        return {"enhancements": ALL_ENHANCEMENTS, "limiters": ALL_LIMITERS, "open": True}
+    return {"enhancements": rec.get("enhancements", []), "limiters": rec.get("limiters", []), "open": False}
+
 def attribute_blurb(name: str) -> str:
     return ATTRIBUTE_BLURBS.get(name, "")
 

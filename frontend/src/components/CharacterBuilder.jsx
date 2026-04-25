@@ -76,16 +76,22 @@ export default function CharacterBuilder() {
   const spent = useMemo(() => {
     if (!ch) return { stat_cost: 0, attribute_cost: 0, skill_cost: 0, defect_points: 0, total_spent: 0 };
     const stat_cost = ch.stats.body + ch.stats.mind + ch.stats.soul;
+    // Mirror the backend cost engine: per_level = max(1, cost_per_level + mods),
+    // subtotal = per_level × level, then subtract any nested Item/Weapon defect
+    // refunds floored at 0.
     const attribute_cost = ch.attributes.reduce((s, a) => {
-      const base = (a.cost_per_level || 0) * (a.level || 0);
-      const mods = (a.enhancements.length - a.limiters.length) * (a.level || 0);
-      return s + base + mods;
+      const lvl = Math.max(1, a.level || 1);
+      const perLvl = Math.max(1, (a.cost_per_level || 0) + (a.enhancements.length - a.limiters.length));
+      const subtotal = perLvl * lvl;
+      const itemDefRefund = (a.defects || []).reduce((x, d) => x + (d.points_per_rank || 0) * (d.rank || 0), 0);
+      return s + Math.max(0, subtotal - itemDefRefund);
     }, 0);
     const skill_cost = ch.skills.reduce((s, k) => s + (k.cost_per_level || 0) * (k.level || 0), 0);
     const defect_points = ch.defects.reduce((s, d) => s + (d.points_per_rank || 0) * (d.rank || 0), 0);
     return {
       stat_cost, attribute_cost, skill_cost, defect_points,
-      total_spent: stat_cost + attribute_cost + skill_cost + defect_points,
+      // Defects REFUND points (subtract from total spent).
+      total_spent: stat_cost + attribute_cost + skill_cost - defect_points,
     };
   }, [ch]);
 
@@ -191,7 +197,10 @@ export default function CharacterBuilder() {
                 <span className="tag">Power Level · {campaign.power_level}</span>
                 <span className="tag">{(ref.power_levels.find(p => p.name === campaign.power_level) || {}).points || 120} Character Points</span>
                 <span className="tag">GM · {campaign.gm_name}</span>
-                {campaign.genre && <span className="tag">{campaign.genre}</span>}
+                {campaign.genre && <span className="tag" data-testid="bench-genre">{campaign.genre}</span>}
+                {campaign.time_period && <span className="tag" data-testid="bench-period">{campaign.time_period}</span>}
+                {campaign.size_scale && campaign.size_scale !== "Personal" && <span className="tag" data-testid="bench-size">Scale · {campaign.size_scale}</span>}
+                {campaign.damage_rating_baseline && campaign.damage_rating_baseline !== 5 && <span className="tag" data-testid="bench-dr">DR baseline · {campaign.damage_rating_baseline}</span>}
                 {campaign.tone && <span className="tag">{campaign.tone}</span>}
               </div>
             </div>
@@ -239,7 +248,7 @@ export default function CharacterBuilder() {
             {remaining} / {ch.total_points}
           </div>
           <div className="text-[10px] font-ui tracking-widest uppercase text-mist">
-            stats {spent.stat_cost} · attrs {spent.attribute_cost} · skills {spent.skill_cost} · defects {spent.defect_points}
+            stats {spent.stat_cost} · attrs {spent.attribute_cost} · skills {spent.skill_cost} · defects −{spent.defect_points}
           </div>
           {capIsOverride && (
             <div className="text-[10px] font-ui tracking-widest uppercase text-gold-bright mt-1" data-testid="gm-cap-note">
@@ -627,14 +636,44 @@ function ListSection({ title, items, options, onAdd, renderRow, kind, testIdPref
   );
 }
 
+// Attributes that can sensibly carry their own nested Defects per BESM 4E
+// (Items / Weapons / Companions / Minions are wrappers around an external
+// object or set of beings, so a "the sword breaks easily" Defect makes sense).
+const ITEM_LIKE_ATTRS = new Set([
+  "Item", "Weapon", "Gear", "Companion", "Minions", "Wealth", "Connected",
+  "Vehicle",
+]);
+
 function AttributeRow({ idx, a, reference, onUpdate, onRemove, maxRank = 0 }) {
   const ref = reference;
   const [openCust, setOpenCust] = useState(false);
+  // Item-defect helpers (closure over `a`, `onUpdate`, `ref`)
+  const addItemDefect = () => {
+    const first = (ref?.defects || [])[0];
+    if (!first) return;
+    const next = { name: first.name, rank: 1,
+                   points_per_rank: first.points_per_rank,
+                   category: first.category, page: first.page, note: "" };
+    onUpdate({ ...a, defects: [...(a.defects || []), next] });
+  };
+  const updateItemDefect = (j, patched) => {
+    const arr = [...(a.defects || [])];
+    arr[j] = patched;
+    onUpdate({ ...a, defects: arr });
+  };
+  const removeItemDefect = (j) => {
+    const arr = [...(a.defects || [])];
+    arr.splice(j, 1);
+    onUpdate({ ...a, defects: arr });
+  };
   const toggle = (kind, name) => {
     const list = a[kind].includes(name) ? a[kind].filter((x) => x !== name) : [...a[kind], name];
     onUpdate({ ...a, [kind]: list });
   };
-  const cost = (a.cost_per_level * a.level) + (a.enhancements.length - a.limiters.length) * a.level;
+  const perLevel = Math.max(1, a.cost_per_level + (a.enhancements.length - a.limiters.length));
+  const subtotal = perLevel * a.level;
+  const itemDefectRefund = (a.defects || []).reduce((s, d) => s + (d.points_per_rank || 0) * (d.rank || 0), 0);
+  const cost = Math.max(0, subtotal - itemDefectRefund);
   const cap = maxRank > 0 ? maxRank : 10;
   const overCap = maxRank > 0 && a.level > maxRank;
   const onLevelChange = (v) => {
@@ -673,29 +712,90 @@ function AttributeRow({ idx, a, reference, onUpdate, onRemove, maxRank = 0 }) {
         </button>
       </div>
       {openCust && (
-        <div className="mt-2 grid md:grid-cols-2 gap-3">
-          <div>
-            <div className="label-ref mb-1">Enhancements (+1/lvl each) · p.145</div>
-            <div className="flex flex-wrap gap-1">
-              {ref.enhancements.map((e) => (
-                <button key={e.name} onClick={() => toggle("enhancements", e.name)}
-                        className={`tag ${a.enhancements.includes(e.name) ? "border-gold text-gold-bright bg-gold/15" : ""}`}>
-                  {e.name}
-                </button>
-              ))}
+        <div className="mt-2 space-y-3">
+          <div className="grid md:grid-cols-2 gap-3">
+            <div>
+              <div className="label-ref mb-1">Enhancements (+1/lvl each) · p.145</div>
+              <div className="flex flex-wrap gap-1">
+                {ref.enhancements.map((e) => {
+                  // Whitelist comes from the Attribute reference, NOT from `e` itself.
+                  // `attrRef` is the matching reference entry for THIS Attribute.
+                  const attrRef = ref.attributes.find((x) => x.name === a.name);
+                  const allowed = attrRef && !attrRef.open_mods
+                    ? (attrRef.allowed_enhancements || []).includes(e.name)
+                    : true;
+                  const selected = a.enhancements.includes(e.name);
+                  return (
+                    <button key={e.name} type="button"
+                            onClick={() => toggle("enhancements", e.name)}
+                            disabled={!allowed && !selected}
+                            title={!allowed ? `Not typically allowed on ${a.name} (rule advisory)` : e.name}
+                            className={`tag ${selected ? "border-gold text-gold-bright bg-gold/15" : ""} ${!allowed && !selected ? "opacity-30 cursor-not-allowed" : ""}`}>
+                      {e.name}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div>
+              <div className="label-ref mb-1">Limiters (-1/lvl each) · p.148</div>
+              <div className="flex flex-wrap gap-1">
+                {ref.limiters.map((lim) => {
+                  const attrRef = ref.attributes.find((x) => x.name === a.name);
+                  const allowed = attrRef && !attrRef.open_mods
+                    ? (attrRef.allowed_limiters || []).includes(lim.name)
+                    : true;
+                  const selected = a.limiters.includes(lim.name);
+                  return (
+                    <button key={lim.name} type="button"
+                            onClick={() => toggle("limiters", lim.name)}
+                            disabled={!allowed && !selected}
+                            title={!allowed ? `Not typically allowed on ${a.name} (rule advisory)` : lim.name}
+                            className={`tag ${selected ? "border-ember text-ember bg-ember/15" : ""} ${!allowed && !selected ? "opacity-30 cursor-not-allowed" : ""}`}>
+                      {lim.name}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
-          <div>
-            <div className="label-ref mb-1">Limiters (-1/lvl each) · p.148</div>
-            <div className="flex flex-wrap gap-1">
-              {ref.limiters.map((l) => (
-                <button key={l.name} onClick={() => toggle("limiters", l.name)}
-                        className={`tag ${a.limiters.includes(l.name) ? "border-ember text-ember bg-ember/15" : ""}`}>
-                  {l.name}
+
+          {/* Defects on Items / Weapons / objectifiable Attributes */}
+          {ITEM_LIKE_ATTRS.has(a.name) && (
+            <div className="border-t border-gold/10 pt-3" data-testid={`attr-item-defects-${idx}`}>
+              <div className="flex items-center justify-between mb-1">
+                <div className="label-ref">Defects on this {a.name}</div>
+                <button type="button" onClick={() => addItemDefect()}
+                        className="btn btn-ghost text-[10px]"
+                        data-testid={`attr-add-defect-${idx}`}>
+                  + Defect
                 </button>
+              </div>
+              <div className="text-[10px] text-mist/70 italic mb-2 font-ui">
+                Items, Weapons, and similar objectifiable Attributes can carry their own
+                Defects. Refunds reduce this Attribute's net cost (engine floors it at 0 pts).
+              </div>
+              {(a.defects || []).length === 0 && (
+                <div className="text-[11px] text-mist italic">— none</div>
+              )}
+              {(a.defects || []).map((d, j) => (
+                <div key={j} className="flex items-center gap-2 py-1 flex-wrap" data-testid={`attr-defect-${idx}-${j}`}>
+                  <select className="select select-sm flex-1 min-w-[140px]"
+                          value={d.name}
+                          onChange={(ev) => updateItemDefect(j, { ...d, name: ev.target.value, points_per_rank: ref.defects.find((x) => x.name === ev.target.value)?.points_per_rank || 1, category: ref.defects.find((x) => x.name === ev.target.value)?.category || "Lesser", page: ref.defects.find((x) => x.name === ev.target.value)?.page })}>
+                    {ref.defects.map((dx) => <option key={dx.name} value={dx.name}>{dx.name} · {dx.category}</option>)}
+                  </select>
+                  <input type="number" min={1} max={3} className="input w-16 text-center"
+                         value={d.rank} onChange={(ev) => updateItemDefect(j, { ...d, rank: +ev.target.value })}
+                         title="Rank"/>
+                  <span className="text-ember text-[11px] font-display">−{(d.points_per_rank || 1) * (d.rank || 1)}</span>
+                  <button type="button" onClick={() => removeItemDefect(j)}
+                          className="text-ember/70 hover:text-ember"
+                          data-testid={`attr-defect-remove-${idx}-${j}`}><X className="w-3 h-3"/></button>
+                </div>
               ))}
             </div>
-          </div>
+          )}
         </div>
       )}
     </div>

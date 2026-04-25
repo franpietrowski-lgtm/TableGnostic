@@ -25,7 +25,8 @@ from besm_data import (
     ENHANCEMENTS, LIMITERS, SKILL_GROUPS, POWER_LEVELS,
     NODE_TYPES, TARGET_NUMBERS, EXTRAS_RULES, with_source,
     attribute_blurb, defect_blurb, enhancement_blurb, limiter_blurb,
-    extras_blurb, power_level_blurb, ENHANCEMENT_BLURB, LIMITER_BLURB,
+    extras_blurb, power_level_blurb, attribute_whitelist,
+    ENHANCEMENT_BLURB, LIMITER_BLURB,
     GENERIC_BLURBS, GAME_SYSTEMS, GAME_SYSTEM_IDS, GAME_SYSTEMS_BY_ID,
     DEFAULT_SYSTEM_ID,
 )
@@ -223,6 +224,21 @@ class CampaignIn(BaseModel):
     character_point_max: int = 0
     # Hard cap on the Level of any single Attribute (0 = no cap)
     max_per_attribute_rank: int = 0
+    # ---------- V3.5 — Campaign Benchmarks ----------
+    # Free-form genre flavour ("High Fantasy", "Cyberpunk", "Cosmic Horror", etc.).
+    # Surfaced on the Character Builder + Reference views as a context badge.
+    genre: str = ""
+    # Time-period anchors weapons / gear / item availability.
+    # Suggested values: "Stone Age", "Bronze Age", "Iron Age", "Medieval",
+    # "Renaissance", "Industrial", "Modern", "Near Future", "Far Future",
+    # "Post-Apocalyptic", "Mixed".
+    time_period: str = ""
+    # Campaign-scale governs map token sizing and damage benchmarks.
+    # "Personal" (default), "Squad", "Vehicle", "Capital", "Cosmic".
+    size_scale: str = "Personal"
+    # Damage Rating baseline — replaces the engine's hard-coded 5 in the
+    # damage_multiplier formula. Higher = grittier / more lethal table.
+    damage_rating_baseline: int = 5
 
 class CampaignOut(CampaignIn):
     id: str
@@ -239,6 +255,14 @@ class CharacterStats(BaseModel):
     mind: int = 4
     soul: int = 4
 
+class CharacterDefect(BaseModel):
+    name: str
+    rank: int = 1
+    points_per_rank: int
+    category: str
+    page: Optional[int] = None
+    note: Optional[str] = ""
+
 class CharacterAttribute(BaseModel):
     name: str
     level: int = 1
@@ -248,14 +272,9 @@ class CharacterAttribute(BaseModel):
     custom_attribute_id: Optional[str] = None  # GM custom
     page: Optional[int] = None
     note: Optional[str] = ""
-
-class CharacterDefect(BaseModel):
-    name: str
-    rank: int = 1
-    points_per_rank: int
-    category: str
-    page: Optional[int] = None
-    note: Optional[str] = ""
+    # Item / Weapon-class Attributes may carry their own Defects (e.g. a sword
+    # that breaks easily). Refunds reduce the parent Attribute's net cost.
+    defects: List[CharacterDefect] = []
 
 class CharacterSkillComponent(BaseModel):
     name: str
@@ -586,7 +605,11 @@ async def reset_password(body: ResetIn):
 @api.get("/besm/reference")
 async def besm_reference():
     def enrich_attr(a):
-        return {**a, "blurb": attribute_blurb(a["name"])}
+        wl = attribute_whitelist(a["name"])
+        return {**a, "blurb": attribute_blurb(a["name"]),
+                "allowed_enhancements": wl["enhancements"],
+                "allowed_limiters": wl["limiters"],
+                "open_mods": wl["open"]}
     def enrich_def(d):
         return {**d, "blurb": defect_blurb(d.get("category", ""), d.get("name", ""))}
     def enrich_pl(p):
@@ -900,13 +923,40 @@ async def delete_campaign(cid: str, user: dict = Depends(get_current_user)):
 
 # -------- Characters --------
 
-def attribute_cost(a: CharacterAttribute) -> float:
-    base = a.cost_per_level * a.level
-    modifiers = len(a.enhancements) - len(a.limiters)
-    # Each Enhancement raises cost by 1/level; each Limiter reduces by 1/level
-    return base + modifiers * a.level
+def attribute_cost(a) -> float:
+    """Compute the BESM 4E net cost of an Attribute entry.
 
-def calc_derived(ch: dict) -> dict:
+    Per-Level cost equation (BESM 4E):
+        per_level = max(1, cost_per_level + (#Enhancements - #Limiters))
+    Subtotal = per_level × Level.
+
+    The `max(1, …)` clamp enforces the BESM 4E rule that an Attribute's
+    net cost-per-Level cannot fall below 1, no matter how many Limiters
+    are stacked on top.
+
+    Item / Weapon-class Attributes may carry their own nested Defects
+    (e.g. a sword that breaks easily). Those refunds reduce the parent
+    Attribute's cost; the result is floored at 0 (an Attribute never
+    refunds more than it costs).
+    """
+    if hasattr(a, "model_dump"):
+        a = a.model_dump()
+    level = max(1, int(a.get("level", 1)))
+    base_per_level = float(a.get("cost_per_level", 0))
+    mod_count = len(a.get("enhancements", [])) - len(a.get("limiters", []))
+    per_level = max(1.0, base_per_level + mod_count)
+    subtotal = per_level * level
+
+    # Nested Defects on Items / Weapons refund into the parent Attribute.
+    nested_defect_refund = 0
+    for d in a.get("defects", []) or []:
+        if hasattr(d, "model_dump"):
+            d = d.model_dump()
+        nested_defect_refund += int(d.get("points_per_rank", 0)) * int(d.get("rank", 0))
+
+    return max(0.0, subtotal - nested_defect_refund)
+
+def calc_derived(ch: dict, campaign: Optional[dict] = None) -> dict:
     s = ch.get("stats", {})
     body, mind, soul = s.get("body", 0), s.get("mind", 0), s.get("soul", 0)
     attr_map = {a["name"]: a for a in ch.get("attributes", [])}
@@ -917,36 +967,40 @@ def calc_derived(ch: dict) -> dict:
     energised = attr_map.get("Energised", {}).get("level", 0)
     massive_damage = attr_map.get("Massive Damage", {}).get("level", 0)
 
+    # Damage Rating baseline can be overridden per campaign (V3.5 benchmark).
+    dm_base = 5
+    if campaign and isinstance(campaign.get("damage_rating_baseline"), int) and campaign["damage_rating_baseline"] > 0:
+        dm_base = campaign["damage_rating_baseline"]
+
     cv = (body + mind + soul) // 3
     atk = cv + attack_mastery
     dfn = cv - 2 + defence_mastery
     hp = (body + soul) * 5 + tough * 5
     ep = (mind + soul) * 5 + energised * 5
-    dm = 5 + massive_damage * 5
+    dm = dm_base + massive_damage * 5
     return {
         "combat_value": cv, "attack_value": atk, "defence_value": dfn,
         "health_points": hp, "energy_points": ep, "damage_multiplier": dm,
+        "damage_rating_baseline": dm_base,
     }
 
 def calc_spent_points(ch: dict) -> Dict[str, float]:
     s = ch.get("stats", {})
     stat_cost = s.get("body", 0) + s.get("mind", 0) + s.get("soul", 0)
-    attr_cost = 0.0
-    for a in ch.get("attributes", []):
-        base = float(a.get("cost_per_level", 0)) * int(a.get("level", 0))
-        mod_count = len(a.get("enhancements", [])) - len(a.get("limiters", []))
-        attr_cost += base + mod_count * int(a.get("level", 0))
+    # Use attribute_cost() so the BESM ≥1/Level clamp + nested Item/Weapon
+    # Defects are reflected in totals (single source of truth).
+    attr_cost = sum(attribute_cost(a) for a in ch.get("attributes", []))
     skill_cost = sum(int(sk.get("cost_per_level", 0)) * int(sk.get("level", 0))
                      for sk in ch.get("skills", []))
     defect_points = sum(int(d.get("points_per_rank", 0)) * int(d.get("rank", 0))
                         for d in ch.get("defects", []))
-    # defect points_per_rank is negative in data, so this is a negative number (points returned)
-    total = stat_cost + attr_cost + skill_cost + defect_points
+    # Defect refunds are SUBTRACTED from total (returned to player).
+    total = stat_cost + attr_cost + skill_cost - defect_points
     return {
         "stat_cost": stat_cost,
         "attribute_cost": attr_cost,
         "skill_cost": skill_cost,
-        "defect_points": defect_points,  # negative = refunded
+        "defect_points": defect_points,  # always positive: total points refunded
         "total_spent": total,
     }
 
@@ -962,7 +1016,7 @@ async def create_character(body: CharacterIn, user: dict = Depends(get_current_u
     doc["owner_id"] = user["id"]
     doc["owner_name"] = user["name"]
     doc["created_at"] = now_iso()
-    doc["derived"] = calc_derived(doc)
+    doc["derived"] = calc_derived(doc, camp)
     doc["spent"] = calc_spent_points(doc)
     await db.characters.insert_one(doc)
     return sanitize(doc)
@@ -1006,7 +1060,7 @@ async def seed_evereantha_pcs(cid: str, user: dict = Depends(get_current_user)):
             "published": True,
             "folio": pc.get("folio", {}),
         }
-        doc["derived"] = calc_derived(doc)
+        doc["derived"] = calc_derived(doc, camp)
         doc["spent"] = calc_spent_points(doc)
         await db.characters.insert_one(doc)
         created.append(sanitize(doc))
@@ -1037,7 +1091,7 @@ async def update_character(ch_id: str, body: CharacterIn, user: dict = Depends(g
     update["owner_id"] = ch["owner_id"]
     update["owner_name"] = ch["owner_name"]
     update["created_at"] = ch["created_at"]
-    update["derived"] = calc_derived(update)
+    update["derived"] = calc_derived(update, camp)
     update["spent"] = calc_spent_points(update)
     update["updated_at"] = now_iso()
     await db.characters.replace_one({"id": ch_id}, update)

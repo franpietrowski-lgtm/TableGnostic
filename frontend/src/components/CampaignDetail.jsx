@@ -723,6 +723,11 @@ function PrimerTab({ camp, onRefresh }) {
   const [pointMin, setPointMin] = useState(camp.character_point_min || 0);
   const [pointMax, setPointMax] = useState(camp.character_point_max || 0);
   const [maxAttrRank, setMaxAttrRank] = useState(camp.max_per_attribute_rank || 0);
+  // V3.5 — Campaign Benchmarks
+  const [genre, setGenre] = useState(camp.genre || "");
+  const [timePeriod, setTimePeriod] = useState(camp.time_period || "");
+  const [sizeScale, setSizeScale] = useState(camp.size_scale || "Personal");
+  const [damageRating, setDamageRating] = useState(camp.damage_rating_baseline || 5);
   const [saved, setSaved] = useState(false);
   const [err, setErr] = useState("");
   const parse = (s) => s.split(",").map((x) => x.trim()).filter(Boolean);
@@ -741,6 +746,8 @@ function PrimerTab({ camp, onRefresh }) {
         character_point_min: parseInt(pointMin) || 0,
         character_point_max: parseInt(pointMax) || 0,
         max_per_attribute_rank: parseInt(maxAttrRank) || 0,
+        genre, time_period: timePeriod, size_scale: sizeScale,
+        damage_rating_baseline: parseInt(damageRating) || 5,
       };
       delete payload.is_gm; delete payload.members; delete payload.id;
       delete payload.gm_id; delete payload.gm_name; delete payload.member_ids;
@@ -781,6 +788,57 @@ function PrimerTab({ camp, onRefresh }) {
 
       {camp.is_gm && (
         <>
+          <div className="divider-sigil my-6"/>
+          <div className="label-ref mb-2 flex items-center gap-2">Campaign Benchmarks <Shield className="w-3 h-3"/></div>
+          <p className="text-xs text-mist font-body mb-4 italic">
+            Set the table's tone, era, and scale. These flow into the Character Builder
+            (display badges + later: filtering), the Live Session (token sizing),
+            and the Damage Rating engine (Damage Multiplier baseline).
+          </p>
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-3" data-testid="primer-benchmarks">
+            <div>
+              <label className="label-ref block mb-1">Genre</label>
+              <input className="input" list="dl-genres" value={genre}
+                     onChange={(e) => setGenre(e.target.value)}
+                     placeholder="High Fantasy"
+                     data-testid="primer-genre"/>
+              <datalist id="dl-genres">
+                {["High Fantasy","Low Fantasy","Sword & Sorcery","Cosmic Horror","Modern Horror","Cyberpunk","Steampunk","Space Opera","Hard Sci-Fi","Post-Apocalyptic","Mecha","Mythic Fantasy","Pulp Adventure","Noir","Anime","Slice of Life"].map((g) => <option key={g} value={g}/>)}
+              </datalist>
+            </div>
+            <div>
+              <label className="label-ref block mb-1">Time Period</label>
+              <select className="select" value={timePeriod}
+                      onChange={(e) => setTimePeriod(e.target.value)}
+                      data-testid="primer-period">
+                <option value="">— unset —</option>
+                {["Stone Age","Bronze Age","Iron Age","Classical","Medieval","Renaissance","Industrial","Victorian","Modern","Near Future","Far Future","Post-Apocalyptic","Mixed / Anachronistic"].map((p) => <option key={p} value={p}>{p}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="label-ref block mb-1">Size Scale</label>
+              <select className="select" value={sizeScale}
+                      onChange={(e) => setSizeScale(e.target.value)}
+                      data-testid="primer-size">
+                {[["Personal","Personal — single combatants"],
+                  ["Squad","Squad — small unit"],
+                  ["Vehicle","Vehicle — cars / mecha"],
+                  ["Capital","Capital — ships / fortresses"],
+                  ["Cosmic","Cosmic — planet+ scale"]].map(([v,l]) => <option key={v} value={v}>{l}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="label-ref block mb-1">Damage Rating</label>
+              <input className="input" type="number" min={1} max={20}
+                     value={damageRating}
+                     onChange={(e) => setDamageRating(e.target.value)}
+                     data-testid="primer-dr"/>
+              <div className="text-[10px] text-mist/70 italic mt-1">
+                Baseline 5 (BESM default) · grittier = lower · cinematic = higher
+              </div>
+            </div>
+          </div>
+
           <div className="divider-sigil my-6"/>
           <div className="label-ref mb-2 flex items-center gap-2">Character-Point Caps <Shield className="w-3 h-3"/></div>
           <p className="text-xs text-mist font-body mb-4 italic">

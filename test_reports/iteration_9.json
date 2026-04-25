@@ -1,0 +1,45 @@
+{
+  "summary": "V3.5 review — Cost-engine corrections (BESM ≥1/Level clamp, defects-on-items, defect-refund SUBTRACTION) + per-Attribute Enh/Lim whitelist + campaign benchmarks (genre/time_period/size_scale/damage_rating_baseline). Created /app/backend/tests/test_iter9_v35.py with 13 focused tests; ALL 13 PASS. Whitelist via /api/besm/reference verified for all 6 spot-checks: Tough(no enh, open=false), Item(open kit 5 enh + 23 lim, open=false), Wealth(no enh), Mind Control(all 5 enh), Heightened Senses(only Range). Cost engine: Tunnelling lvl=2 cpl=2 with 2 limiters → attr_cost=2 (clamp floors per_level at 1); extreme over-limit cpl=1 with 5 limiters → still 1*level. Item lvl=6 cpl=1 + Achilles Heel rank=1 ppr=2 → 4 net (subtotal 6 - refund 2). Item lvl=1 cpl=1 + defect refund 5 → floors at 0. Stats 12 + Marked rank=1 ppr=1 → total_spent=11 (CONFIRMED defect refunds SUBTRACTED, not added). Campaign benchmarks: PUT/GET round-trip works for genre='Cosmic Horror', time_period='Modern', size_scale='Personal', damage_rating_baseline=7; character created in that campaign returns derived.damage_rating_baseline=7 and damage_multiplier=7 (no Massive Damage) / 17 (with Massive Damage lvl=2). Frontend Playwright smoke: /app/campaigns/{cid} → Primer tab — primer-benchmarks card present with all 5 testids (primer-genre, primer-period, primer-size, primer-dr, primer-save-btn); typed High Fantasy / Medieval / DR=7, saved, reloaded → values persist. Character Builder /app/campaigns/{cid}/characters/new — campaign-briefing card present with bench-genre='High Fantasy', bench-period='Medieval', bench-dr='DR baseline · 7'; bench-size correctly hidden when default 'Personal' (per code line 202: only renders when size_scale !== 'Personal'). The whitelist-disabled Enh chips and Defects-on-Item UI flow could not be exercised end-to-end because the Picker's Add button uses dynamic testid `add-${testIdPrefix}-btn` and the inline attribute selector is gated behind clicking that picker — the source confirms attr-item-defects-{idx}, attr-add-defect-{idx}, attr-defect-{idx}-{j} all exist (CharacterBuilder.jsx lines 765, 770, 782) but the script could not stably select 'Tough' inside the picker dropdown within budget. Static code review confirms whitelist enforcement: AttributeRow Customise panel reads campaign.allowed_enhancements/limiters and applies disabled+opacity-30+cursor-not-allowed classes per the whitelist returned by /api/besm/reference. No console errors in any tested surface. NOTE: in-builder live derived DM display showed 5 instead of 7 for an unsaved character even though backend returns 7 — minor frontend-local calc may not consume campaign.damage_rating_baseline (cosmetic only; persisted character is correct).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "CharacterBuilder local derived calc", "issue": "Live (unsaved) derived DM in the builder shows 5 instead of campaign.damage_rating_baseline (7). Backend returns correct 7 on save/GET. Frontend useMemo at ~lines 76-100 likely missing campaign.damage_rating_baseline override.", "selector": "derived DM tile (visible '5' in screenshot when DR baseline=7)", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter9_v35.py",
+    "/app/test_reports/pytest/iter9_v35.xml"
+  ],
+  "action_items": [
+    "(MEDIUM) CharacterBuilder live-derived DM should mirror calc_derived's V3.5 baseline override: const dmBase = campaign?.damage_rating_baseline > 0 ? campaign.damage_rating_baseline : 5; dm = dmBase + (massiveDamage*5). Currently appears to use static 5.",
+    "(LOW) Add a stable data-testid='add-attribute-btn' to the Picker trigger when used for the Attributes section (currently dynamic add-${prefix}-btn) so future Playwright tests can reliably exercise the whitelist + Defects-on-Item flow without prefix guessing.",
+    "(LOW) Optional: add data-testid on each Enhancement/Limiter chip in the Customise panel (e.g. attr-${idx}-enh-${name}) so the disabled state can be asserted in Playwright."
+  ],
+  "critical_code_review_comments": [
+    "server.py attribute_cost() correctly enforces max(1, base+mods) per-level clamp AND max(0, subtotal - nested_refund) — single source of truth used by both calc_spent_points and any caller. Good.",
+    "calc_spent_points now SUBTRACTS defect_points (line 998: total = stat_cost + attr_cost + skill_cost - defect_points) — matches BESM 4E p.154 spec; previous +defect_points behaviour double-counted.",
+    "calc_derived(ch, campaign) takes the campaign as 2nd arg and reads damage_rating_baseline only when it's a positive int — defensive against missing/None. Good.",
+    "Frontend bench-dr badge uses condition `damage_rating_baseline && damage_rating_baseline !== 5` — would HIDE the badge if a GM explicitly sets the baseline to 5 (the system default). Consider showing it always when explicitly set, or use a separate 'is_overridden' flag.",
+    "Frontend bench-size hides on 'Personal' — matches spec but means future renames of the default scale need both backend and frontend kept in sync. Centralise the default constant.",
+    "Whitelist data ATTRIBUTE_MOD_WHITELIST in besm_data.py is 30+ rows long — consider moving to JSON or a CSV-loader so non-engineers can edit; currently any tweak requires a code review.",
+    "/api/besm/reference now serialises 86 attrs × {allowed_enhancements, allowed_limiters, open_mods} on every call (carry-over comment from iter_8 about caching still applies — payload is fully static)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter9_v35.py — NEW: 13 V3.5 test cases (TestWhitelist x6, TestCostEngineClamp x5, TestCampaignBenchmarks x2)"
+  ],
+  "success_rate": {
+    "backend": "100% on V3.5 surfaces (13/13 new tests pass: whitelist 6/6, cost-engine clamp 5/5, campaign benchmarks 2/2). No regressions exercised — recommend running full suite once.",
+    "frontend": "~90% on V3.5 surfaces — Primer benchmarks UI 100% (all 5 testids present, save+reload persist), Builder briefing badges 100% (bench-genre/period/dr correct, bench-size correctly hidden for Personal). Live derived DM in unsaved builder shows stale baseline (cosmetic). Whitelist disabled-chips + Item-defects UI not directly Playwright-asserted due to dynamic Picker testid; static code-review confirms structure exists per spec."
+  },
+  "test_credentials": "gm@tablegnostic.com/gm123456 (used). admin/player also available per /app/memory/test_credentials.md.",
+  "seed_data_creation": "TestCostEngineClamp creates+deletes TEST_CE_* + TEST_DEF_* + TEST_DM_* characters in a TEST_V35_* campaign which is also torn down. Frontend Playwright wrote High Fantasy / Medieval / DR=7 to the seeded test campaign 8dcab411-... Primer — that change is persistent and will be visible to next testing iteration.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "V3.5 backend cost engine + benchmarks fully validated by /app/backend/tests/test_iter9_v35.py. Re-running it after any future cost-engine touch is the fastest regression check. Frontend testid map: primer-benchmarks, primer-genre/period/size/dr/save-btn (all confirmed in DOM), campaign-briefing, bench-genre/period/dr present (bench-size hidden when scale='Personal' — by design at CharacterBuilder.jsx:202). For the whitelist UI: the Picker's Add button uses dynamic testid `add-${testIdPrefix}-btn` (CharacterBuilder.jsx:598) — pass the testIdPrefix used by the caller to construct the right selector, or click the visible '+ Add' button next to the ATTRIBUTES card heading. Item-defects testids confirmed in source: attr-item-defects-{idx}, attr-add-defect-{idx}, attr-defect-{idx}-{j}, attr-defect-remove-{idx}-{j} (lines 765, 770, 782, 794). The Primer write committed to seed campaign 8dcab411- left genre='High Fantasy', period='Medieval', dr=7 — note for any test depending on default values.",
+  "rca of the issue": "Live (unsaved) derived stats in the Character Builder appear to use a hard-coded DR=5 baseline instead of campaign.damage_rating_baseline. Backend on save/GET returns the correct value (verified by test_character_uses_campaign_dm_baseline). RCA: frontend useMemo for derived stats at CharacterBuilder.jsx ~lines 76-100 needs to mirror calc_derived's V3.5 override. Fix: read campaign?.damage_rating_baseline (default 5) and use it in DM = base + massiveDamage*5. Cosmetic only — persisted character is correct."
+}
