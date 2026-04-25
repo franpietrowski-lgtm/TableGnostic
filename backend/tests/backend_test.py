@@ -601,6 +601,9 @@ class TestWebSocket:
             except websockets.exceptions.InvalidStatusCode as e:
                 # Some stacks surface handshake reject as InvalidStatusCode
                 assert e.status_code in (401, 403), f"unexpected {e.status_code}"
+            except websockets.exceptions.InvalidStatus as e:
+                # newer websockets lib: ingress/backend rejected at handshake
+                assert e.response.status_code in (401, 403), f"unexpected {e.response.status_code}"
         asyncio.run(_run())
 
     def test_ws_invalid_token_closes_4401(self, session):
@@ -614,6 +617,8 @@ class TestWebSocket:
                 assert e.code == 4401, f"expected 4401 got {e.code}"
             except websockets.exceptions.InvalidStatusCode as e:
                 assert e.status_code in (401, 403)
+            except websockets.exceptions.InvalidStatus as e:
+                assert e.response.status_code in (401, 403)
         asyncio.run(_run())
 
     def test_ws_private_campaign_non_member_closes_4403(self, gm_token, player_token):
@@ -642,6 +647,8 @@ class TestWebSocket:
                 assert e.code == 4403, f"expected 4403 got {e.code}"
             except websockets.exceptions.InvalidStatusCode as e:
                 assert e.status_code in (401, 403)
+            except websockets.exceptions.InvalidStatus as e:
+                assert e.response.status_code in (401, 403)
 
         try:
             asyncio.run(_run())
@@ -1080,6 +1087,233 @@ class TestForgotPassword:
                           json={"email": GM_EMAIL})
         assert r.status_code == 200, r.text
         assert r.json() == {"ok": True}
+
+
+
+# ---------------- Iteration 5: Character Folio (round-trip) ----------------
+
+class TestCharacterFolio:
+    """V2: CharacterIn accepts arbitrary `folio` dict with goals/family/edges/
+    obstacles/journal — must persist + round-trip on POST/PUT/GET."""
+
+    @pytest.fixture(autouse=True)
+    def _ensure_joined(self, player_token, campaign):
+        # ensure player is seated before character creation
+        requests.post(f"{API}/campaigns/{campaign['id']}/join", json={},
+                      headers=h(player_token))
+
+    def _payload(self, campaign_id, folio):
+        return {
+            "campaign_id": campaign_id,
+            "name": f"TEST_Folio_{uuid.uuid4().hex[:5]}",
+            "stats": {"body": 4, "mind": 4, "soul": 4},
+            "attributes": [], "defects": [], "skills": [],
+            "folio": folio,
+        }
+
+    def test_create_with_full_folio(self, player_token, campaign):
+        folio = {
+            "aliases": "The Wanderer",
+            "occupation": "Cartographer",
+            "goals": [
+                {"title": "Find the lost map", "kind": "long", "note": "burned in the fire"},
+                {"title": "Pay off debt", "kind": "short", "note": ""},
+            ],
+            "family": [
+                {"name": "Mira", "relation": "sister", "note": "missing 5 years"},
+            ],
+            "edges": ["Sharp eyes", "Multilingual"],
+            "obstacles": ["Hunted by guild", "Trick knee"],
+            "journal": [
+                {"date": "2026-01-10", "entry": "Met a strange old man at the inn."},
+            ],
+        }
+        r = requests.post(f"{API}/characters",
+                          json=self._payload(campaign["id"], folio),
+                          headers=h(player_token))
+        assert r.status_code == 200, r.text
+        ch = r.json()
+        # Folio round-trip in create response
+        assert ch.get("folio", {}) == folio
+        cid = ch["id"]
+
+        # GET round-trip
+        g = requests.get(f"{API}/characters/{cid}", headers=h(player_token))
+        assert g.status_code == 200
+        assert g.json().get("folio") == folio
+
+        # cleanup
+        requests.delete(f"{API}/characters/{cid}", headers=h(player_token))
+
+    def test_update_folio_preserves_keys(self, player_token, campaign):
+        # create minimal
+        c = requests.post(f"{API}/characters",
+                         json=self._payload(campaign["id"], {"edges": ["base"]}),
+                         headers=h(player_token)).json()
+        cid = c["id"]
+        try:
+            new_folio = {
+                "edges": ["Updated edge"],
+                "obstacles": ["New obstacle"],
+                "goals": [{"title": "G1", "kind": "secret", "note": "hidden"}],
+                "family": [],
+                "journal": [{"date": "2026-01-12", "entry": "E1"},
+                            {"date": "2026-01-13", "entry": "E2"}],
+            }
+            payload = {
+                "campaign_id": campaign["id"],
+                "name": c["name"],
+                "stats": {"body": 4, "mind": 4, "soul": 4},
+                "attributes": [], "defects": [], "skills": [],
+                "folio": new_folio,
+            }
+            u = requests.put(f"{API}/characters/{cid}", json=payload,
+                             headers=h(player_token))
+            assert u.status_code == 200, u.text
+            assert u.json().get("folio") == new_folio
+
+            # GET round-trip
+            g = requests.get(f"{API}/characters/{cid}", headers=h(player_token)).json()
+            assert g["folio"] == new_folio
+            assert len(g["folio"]["journal"]) == 2
+        finally:
+            requests.delete(f"{API}/characters/{cid}", headers=h(player_token))
+
+    def test_create_without_folio_defaults_to_empty_dict(self, player_token, campaign):
+        payload = {
+            "campaign_id": campaign["id"],
+            "name": f"TEST_NoFolio_{uuid.uuid4().hex[:5]}",
+            "stats": {"body": 3, "mind": 3, "soul": 3},
+            "attributes": [], "defects": [], "skills": [],
+        }
+        r = requests.post(f"{API}/characters", json=payload, headers=h(player_token))
+        assert r.status_code == 200
+        ch = r.json()
+        assert ch.get("folio") in ({}, None) or isinstance(ch.get("folio"), dict)
+        requests.delete(f"{API}/characters/{ch['id']}", headers=h(player_token))
+
+
+# ---------------- Iteration 5: Session Recap (LLM) ----------------
+
+@pytest.fixture(scope="module")
+def recap_session(gm_token, player_token):
+    """Dedicated campaign + session with chat seeded for recap tests.
+    Module-scoped so the LLM is invoked at most twice (narrative + bullet).
+    """
+    cp = requests.post(f"{API}/campaigns",
+                       json={"name": f"TEST_Recap_{uuid.uuid4().hex[:6]}",
+                             "description": "recap test", "visibility": "public",
+                             "max_players": 4, "system": "BESM 4E",
+                             "power_level": "Heroic", "tone": "epic",
+                             "genre": "fantasy"},
+                       headers=h(gm_token))
+    assert cp.status_code == 200, cp.text
+    camp = cp.json()
+    # player joins so they're seated
+    requests.post(f"{API}/campaigns/{camp['id']}/join", json={},
+                  headers=h(player_token))
+
+    sr = requests.post(f"{API}/sessions",
+                       json={"campaign_id": camp["id"], "title": "TEST_Recap_S1"},
+                       headers=h(gm_token))
+    assert sr.status_code == 200, sr.text
+    sess = sr.json()
+
+    seed = [
+        "The party arrives at the haunted abbey at dusk.",
+        "Lyra picks the rusted lock; the door creaks open.",
+        "A spectral figure appears and demands the relic.",
+        "Borrin charges with his warhammer and rolls a critical hit.",
+        "After the fight, the party finds a journal hinting at a deeper conspiracy.",
+    ]
+    for m in seed:
+        requests.post(f"{API}/chat",
+                      json={"session_id": sess["id"], "message": m, "kind": "chat"},
+                      headers=h(gm_token))
+
+    yield {"campaign": camp, "session": sess}
+
+    requests.delete(f"{API}/campaigns/{camp['id']}", headers=h(gm_token))
+
+
+class TestRecap:
+    def test_recap_404_for_unknown_session(self, gm_token):
+        r = requests.post(f"{API}/sessions/does-not-exist/recap",
+                          json={"style": "narrative"}, headers=h(gm_token))
+        assert r.status_code == 404, r.text
+
+    def test_recap_403_for_non_seated(self, recap_session):
+        # register fresh user, not member of this campaign
+        em = f"TEST_{uuid.uuid4().hex[:6]}@t.com"
+        reg = requests.post(f"{API}/auth/register",
+                            json={"email": em, "password": "password123",
+                                  "name": "Outsider"}).json()
+        tok = reg["access_token"]
+        sid = recap_session["session"]["id"]
+        r = requests.post(f"{API}/sessions/{sid}/recap",
+                          json={"style": "narrative"}, headers=h(tok))
+        assert r.status_code == 403, r.text
+
+    def test_recap_400_when_no_chat(self, gm_token, campaign):
+        """Fresh session with zero chat messages → 400."""
+        sr = requests.post(f"{API}/sessions",
+                           json={"campaign_id": campaign["id"],
+                                 "title": "TEST_NoChat"},
+                           headers=h(gm_token))
+        sid = sr.json()["id"]
+        r = requests.post(f"{API}/sessions/{sid}/recap",
+                          json={"style": "narrative"}, headers=h(gm_token))
+        assert r.status_code == 400, r.text
+
+    def test_recap_narrative_happy_path(self, gm_token, gm_user, recap_session):
+        """End-to-end: GM generates a narrative recap for seeded session."""
+        sid = recap_session["session"]["id"]
+        r = requests.post(f"{API}/sessions/{sid}/recap",
+                          json={"style": "narrative"},
+                          headers=h(gm_token), timeout=60)
+        assert r.status_code == 200, r.text
+        body = r.json()
+        # required fields
+        for k in ("id", "session_id", "style", "text", "by_user_name",
+                  "by_user_id", "created_at"):
+            assert k in body, f"missing {k} in {body}"
+        assert body["session_id"] == sid
+        assert body["style"] == "narrative"
+        assert isinstance(body["text"], str)
+        assert len(body["text"]) >= 80, f"text too short: {body['text']!r}"
+        assert body["by_user_name"] == gm_user["name"]
+
+        # GET /recaps lists it
+        lst = requests.get(f"{API}/sessions/{sid}/recaps", headers=h(gm_token))
+        assert lst.status_code == 200
+        rows = lst.json()
+        assert isinstance(rows, list) and len(rows) >= 1
+        ids = [r2["id"] for r2 in rows]
+        assert body["id"] in ids
+        # _id (mongo) must NOT leak
+        for r2 in rows:
+            assert "_id" not in r2
+
+    def test_recap_bullet_style(self, gm_token, recap_session):
+        sid = recap_session["session"]["id"]
+        r = requests.post(f"{API}/sessions/{sid}/recap",
+                          json={"style": "bullet"},
+                          headers=h(gm_token), timeout=60)
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["style"] == "bullet"
+        assert len(body["text"]) >= 60
+
+    def test_recaps_listed_desc_order(self, gm_token, recap_session):
+        """After ≥2 generated recaps, list must be DESC by created_at."""
+        sid = recap_session["session"]["id"]
+        lst = requests.get(f"{API}/sessions/{sid}/recaps", headers=h(gm_token))
+        assert lst.status_code == 200
+        rows = lst.json()
+        if len(rows) >= 2:
+            times = [row["created_at"] for row in rows]
+            assert times == sorted(times, reverse=True), \
+                f"recaps not DESC: {times}"
 
     def test_forgot_password_unknown_email_returns_ok(self):
         """Does not leak whether email exists."""

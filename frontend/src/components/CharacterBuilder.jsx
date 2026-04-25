@@ -7,6 +7,12 @@ const emptyChar = (campaign_id) => ({
   campaign_id, name: "", concept: "", power_level: "Heroic", total_points: 120,
   stats: { body: 4, mind: 4, soul: 4 },
   attributes: [], defects: [], skills: [], notes: "", published: false,
+  folio: {
+    aliases: "", gender_species_age: "", occupation: "",
+    physical_description: "", personality: "", motivations: "", fears: "",
+    edges: [], obstacles: [], goals: [], family: [], rivals: [],
+    history_events: [], group_dynamics: "", advancement_log: [], journal: [],
+  },
 });
 
 export default function CharacterBuilder() {
@@ -343,7 +349,190 @@ export default function CharacterBuilder() {
             )}
             kind="skill"
           />
+
+          <FolioPanel ch={ch} setCh={setCh}/>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function FolioPanel({ ch, setCh }) {
+  const f = ch.folio || {};
+  const setF = (patch) => setCh({ ...ch, folio: { ...f, ...patch } });
+  const addItem = (key, item) => setF({ [key]: [...(f[key] || []), item] });
+  const updateItem = (key, idx, patch) => {
+    const arr = [...(f[key] || [])]; arr[idx] = { ...arr[idx], ...patch };
+    setF({ [key]: arr });
+  };
+  const removeItem = (key, idx) => {
+    const arr = [...(f[key] || [])]; arr.splice(idx, 1);
+    setF({ [key]: arr });
+  };
+
+  return (
+    <div className="card-mystic p-5 space-y-5" data-testid="folio-panel">
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="label-ref">Character Folio · BESM Folio v1.01</div>
+          <h3 className="h-arcane text-sm mt-1">Personality, goals, history, journal</h3>
+        </div>
+        <span className="text-[10px] text-mist/70 italic">expand the parts that matter</span>
+      </div>
+
+      <div className="grid md:grid-cols-2 gap-3">
+        <FolioInput label="Aliases" value={f.aliases} onChange={(v) => setF({ aliases: v })} testid="folio-aliases"/>
+        <FolioInput label="Gender · Species · Age" value={f.gender_species_age}
+                    onChange={(v) => setF({ gender_species_age: v })} testid="folio-gsa"/>
+        <FolioInput label="Occupation" value={f.occupation} onChange={(v) => setF({ occupation: v })} testid="folio-occupation"/>
+        <FolioInput label="Group dynamics" value={f.group_dynamics}
+                    onChange={(v) => setF({ group_dynamics: v })} testid="folio-group"/>
+      </div>
+
+      <div className="grid md:grid-cols-2 gap-3">
+        <FolioTextarea label="Physical description" value={f.physical_description}
+                       onChange={(v) => setF({ physical_description: v })} prompt="What does the table notice first?"
+                       testid="folio-physical"/>
+        <FolioTextarea label="Personality" value={f.personality}
+                       onChange={(v) => setF({ personality: v })} prompt="One mannerism, one belief, one wound."
+                       testid="folio-personality"/>
+        <FolioTextarea label="Motivations / Goals" value={f.motivations}
+                       onChange={(v) => setF({ motivations: v })} prompt="What do they want before this campaign ends?"
+                       testid="folio-motivations"/>
+        <FolioTextarea label="Fears / Weaknesses" value={f.fears}
+                       onChange={(v) => setF({ fears: v })} testid="folio-fears"/>
+      </div>
+
+      <ChipList label="Edges" hint="Situational +1 bonuses (BESM Folio Edges)"
+                items={f.edges || []} setItems={(arr) => setF({ edges: arr })}
+                placeholder="e.g. familiar with the docks; knows the priest" testid="folio-edges"/>
+      <ChipList label="Obstacles" hint="Recurring −1 burdens"
+                items={f.obstacles || []} setItems={(arr) => setF({ obstacles: arr })}
+                placeholder="e.g. afraid of fire; owes a favour" testid="folio-obstacles"/>
+
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <div>
+            <div className="label-ref">Goals</div>
+            <div className="text-[10px] text-mist/70 italic">Short-term, long-term, and secret. Three of each is plenty.</div>
+          </div>
+          <button onClick={() => addItem("goals", { title: "", kind: "short", note: "" })}
+                  className="btn btn-ghost text-xs" data-testid="folio-add-goal"><Plus className="w-3 h-3"/> Goal</button>
+        </div>
+        {(f.goals || []).map((g, i) => (
+          <div key={i} className="border border-gold/15 rounded-sm p-2 mb-2 grid md:grid-cols-[1fr_120px_auto] gap-2 items-center">
+            <input className="input" placeholder="Goal" value={g.title || ""}
+                   onChange={(e) => updateItem("goals", i, { title: e.target.value })}/>
+            <select className="select" value={g.kind || "short"}
+                    onChange={(e) => updateItem("goals", i, { kind: e.target.value })}>
+              <option value="short">Short-term</option>
+              <option value="long">Long-term</option>
+              <option value="secret">Secret</option>
+            </select>
+            <button onClick={() => removeItem("goals", i)} className="text-ember/70"><X className="w-4 h-4"/></button>
+            <textarea className="input md:col-span-3" placeholder="Note (why? at what cost?)" value={g.note || ""}
+                      onChange={(e) => updateItem("goals", i, { note: e.target.value })}/>
+          </div>
+        ))}
+      </div>
+
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <div className="label-ref">Family & Bonds</div>
+          <button onClick={() => addItem("family", { name: "", relation: "", note: "" })}
+                  className="btn btn-ghost text-xs" data-testid="folio-add-family"><Plus className="w-3 h-3"/> Person</button>
+        </div>
+        {(f.family || []).map((p, i) => (
+          <div key={i} className="border border-gold/15 rounded-sm p-2 mb-2 grid md:grid-cols-[1fr_1fr_auto] gap-2">
+            <input className="input" placeholder="Name" value={p.name || ""}
+                   onChange={(e) => updateItem("family", i, { name: e.target.value })}/>
+            <input className="input" placeholder="Relation" value={p.relation || ""}
+                   onChange={(e) => updateItem("family", i, { relation: e.target.value })}/>
+            <button onClick={() => removeItem("family", i)} className="text-ember/70"><X className="w-4 h-4"/></button>
+            <input className="input md:col-span-3" placeholder="Note (alive? estranged? what do they think of the PC?)"
+                   value={p.note || ""} onChange={(e) => updateItem("family", i, { note: e.target.value })}/>
+          </div>
+        ))}
+      </div>
+
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <div className="label-ref">History of Events</div>
+          <button onClick={() => addItem("history_events", { date: "", title: "", note: "" })}
+                  className="btn btn-ghost text-xs" data-testid="folio-add-history"><Plus className="w-3 h-3"/> Event</button>
+        </div>
+        {(f.history_events || []).map((h, i) => (
+          <div key={i} className="border border-gold/15 rounded-sm p-2 mb-2 grid md:grid-cols-[120px_1fr_auto] gap-2">
+            <input className="input" placeholder="Date / age" value={h.date || ""}
+                   onChange={(e) => updateItem("history_events", i, { date: e.target.value })}/>
+            <input className="input" placeholder="What happened" value={h.title || ""}
+                   onChange={(e) => updateItem("history_events", i, { title: e.target.value })}/>
+            <button onClick={() => removeItem("history_events", i)} className="text-ember/70"><X className="w-4 h-4"/></button>
+          </div>
+        ))}
+      </div>
+
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <div className="label-ref">Journal</div>
+          <button onClick={() => addItem("journal", { date: new Date().toISOString().slice(0, 10), entry: "" })}
+                  className="btn btn-ghost text-xs" data-testid="folio-add-journal"><Plus className="w-3 h-3"/> Entry</button>
+        </div>
+        {(f.journal || []).map((j, i) => (
+          <div key={i} className="border border-gold/15 rounded-sm p-2 mb-2">
+            <div className="flex items-center gap-2 mb-1">
+              <input className="input w-40" placeholder="Date" value={j.date || ""}
+                     onChange={(e) => updateItem("journal", i, { date: e.target.value })}/>
+              <button onClick={() => removeItem("journal", i)} className="text-ember/70 ml-auto"><X className="w-4 h-4"/></button>
+            </div>
+            <textarea className="input" placeholder="Today the table…"
+                      value={j.entry || ""} onChange={(e) => updateItem("journal", i, { entry: e.target.value })}/>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function FolioInput({ label, value, onChange, testid }) {
+  return (
+    <div>
+      <label className="label-ref block mb-1">{label}</label>
+      <input className="input" value={value || ""} onChange={(e) => onChange(e.target.value)} data-testid={testid}/>
+    </div>
+  );
+}
+function FolioTextarea({ label, value, onChange, prompt, testid }) {
+  return (
+    <div>
+      <label className="label-ref block mb-1">{label}</label>
+      <textarea className="input" value={value || ""} onChange={(e) => onChange(e.target.value)} data-testid={testid}/>
+      {prompt && <div className="text-[10px] text-mist/70 italic mt-1">{prompt}</div>}
+    </div>
+  );
+}
+function ChipList({ label, hint, items, setItems, placeholder, testid }) {
+  const [v, setV] = useState("");
+  const add = () => { const t = v.trim(); if (!t) return; setItems([...(items || []), t]); setV(""); };
+  return (
+    <div>
+      <div className="label-ref mb-1">{label}</div>
+      {hint && <div className="text-[10px] text-mist/70 italic mb-1">{hint}</div>}
+      <div className="flex flex-wrap gap-1 mb-2">
+        {(items || []).map((it, i) => (
+          <span key={i} className="tag">{it}
+            <button className="ml-1" onClick={() => setItems(items.filter((_, j) => j !== i))}>
+              <X className="w-3 h-3 inline"/>
+            </button>
+          </span>
+        ))}
+      </div>
+      <div className="flex gap-2">
+        <input className="input" placeholder={placeholder} value={v}
+               onChange={(e) => setV(e.target.value)}
+               onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); add(); } }}
+               data-testid={testid}/>
+        <button onClick={add} type="button" className="btn btn-ghost"><Plus className="w-3 h-3"/></button>
       </div>
     </div>
   );

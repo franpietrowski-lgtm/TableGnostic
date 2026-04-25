@@ -2,7 +2,9 @@ import React, { useEffect, useState } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import { api, formatApiErrorDetail } from "../lib/api";
 import * as Tabs from "@radix-ui/react-tabs";
-import { Users, Plus, UserPlus2, ArrowRight, Trash2, Sparkles, Eye, EyeOff, Link as LinkIcon, Wand2, Shield, Copy, RefreshCw, Check, Save } from "lucide-react";
+import { Users, Plus, UserPlus2, ArrowRight, Trash2, Sparkles, Eye, EyeOff, Link as LinkIcon, Wand2, Shield, Copy, RefreshCw, Check, Save, Network, ListTree, Lightbulb, X } from "lucide-react";
+import KnowledgeGraph from "./KnowledgeGraph";
+import { NODE_TYPES, NODE_TEMPLATES, colorForType, labelForType } from "../lib/nodeTemplates";
 
 export default function CampaignDetail() {
   const { id } = useParams();
@@ -11,6 +13,7 @@ export default function CampaignDetail() {
   const [nodes, setNodes] = useState([]);
   const [sessions, setSessions] = useState([]);
   const [customs, setCustoms] = useState([]);
+  const [edges, setEdges] = useState([]);
   const [err, setErr] = useState("");
   const nav = useNavigate();
 
@@ -18,13 +21,14 @@ export default function CampaignDetail() {
     try {
       const c = await api.get(`/campaigns/${id}`).then((r) => r.data);
       setCamp(c);
-      const [ch, nd, se, cu] = await Promise.all([
+      const [ch, nd, se, cu, ed] = await Promise.all([
         api.get(`/campaigns/${id}/characters`).then(r => r.data),
         api.get(`/campaigns/${id}/nodes`).then(r => r.data),
         api.get(`/campaigns/${id}/sessions`).then(r => r.data),
         c.is_gm ? api.get(`/campaigns/${id}/custom`).then(r => r.data) : [],
+        api.get(`/campaigns/${id}/edges`).then(r => r.data).catch(() => []),
       ]);
-      setCharacters(ch); setNodes(nd); setSessions(se); setCustoms(cu);
+      setCharacters(ch); setNodes(nd); setSessions(se); setCustoms(cu); setEdges(ed);
     } catch (e) { setErr(formatApiErrorDetail(e.response?.data?.detail) || e.message); }
   };
   useEffect(() => { load(); }, [id]);
@@ -100,7 +104,7 @@ export default function CampaignDetail() {
           <CharactersTab camp={camp} characters={characters} onRefresh={load} />
         </Tabs.Content>
         <Tabs.Content value="knowledge" className="pt-6">
-          <KnowledgeTab camp={camp} nodes={nodes} onRefresh={load} />
+          <KnowledgeTab camp={camp} nodes={nodes} edges={edges} onRefresh={load} />
         </Tabs.Content>
         <Tabs.Content value="sessions" className="pt-6">
           <SessionsTab camp={camp} sessions={sessions} onStart={startSession} />
@@ -161,20 +165,14 @@ function CharactersTab({ camp, characters, onRefresh }) {
   );
 }
 
-function KnowledgeTab({ camp, nodes, onRefresh }) {
+function KnowledgeTab({ camp, nodes, edges, onRefresh }) {
+  const [view, setView] = useState("list"); // list | graph
   const [showNew, setShowNew] = useState(false);
-  const [form, setForm] = useState({ type: "npc", title: "", content: "", tags: "", visibility: "gm_only" });
-  const create = async (e) => {
-    e.preventDefault();
-    await api.post("/nodes", {
-      campaign_id: camp.id, type: form.type, title: form.title, content: form.content,
-      tags: form.tags.split(",").map(s => s.trim()).filter(Boolean),
-      visibility: form.visibility,
-    });
-    setShowNew(false);
-    setForm({ type: "npc", title: "", content: "", tags: "", visibility: "gm_only" });
-    onRefresh();
-  };
+  const [filterType, setFilterType] = useState("all");
+  const [selectedNode, setSelectedNode] = useState(null);
+
+  const filtered = filterType === "all" ? nodes : nodes.filter((n) => n.type === filterType);
+
   const reveal = async (n) => {
     if (!window.confirm(`Reveal "${n.title}" to all seated players?`)) return;
     await api.post(`/nodes/${n.id}/reveal`, { user_ids: camp.member_ids });
@@ -185,75 +183,257 @@ function KnowledgeTab({ camp, nodes, onRefresh }) {
     await api.delete(`/nodes/${n.id}`);
     onRefresh();
   };
+  const linkNodes = async () => {
+    const a = window.prompt("From node title (substring):");
+    const b = window.prompt("To node title (substring):");
+    const label = window.prompt("Relation label?", "related");
+    if (!a || !b) return;
+    const fromN = nodes.find((n) => n.title.toLowerCase().includes(a.toLowerCase()));
+    const toN = nodes.find((n) => n.title.toLowerCase().includes(b.toLowerCase()));
+    if (!fromN || !toN) { alert("Node not found."); return; }
+    await api.post("/edges", { campaign_id: camp.id, from_node: fromN.id, to_node: toN.id, label: label || "related" });
+    onRefresh();
+  };
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="h-arcane text-sm">Knowledge Web</h3>
-        <button onClick={() => setShowNew(true)} className="btn btn-primary text-xs" data-testid="new-node-btn">
-          <Plus className="w-3 h-3"/> Weave a node
-        </button>
-      </div>
-      {showNew && (
-        <form onSubmit={create} className="card-mystic p-5 mb-4 grid md:grid-cols-2 gap-3" data-testid="new-node-form">
-          <select className="select" value={form.type} data-testid="node-type"
-                  onChange={(e) => setForm({ ...form, type: e.target.value })}>
-            {["npc","location","item","event","quest","lore","faction","creature"].map((t) => <option key={t}>{t}</option>)}
-          </select>
-          <input className="input" placeholder="Title" value={form.title} required data-testid="node-title"
-                 onChange={(e) => setForm({ ...form, title: e.target.value })}/>
-          <textarea className="input md:col-span-2" placeholder="Content (your own prose, lore, secrets…)"
-                    value={form.content} data-testid="node-content"
-                    onChange={(e) => setForm({ ...form, content: e.target.value })}/>
-          <input className="input" placeholder="tags, comma-separated" value={form.tags} data-testid="node-tags"
-                 onChange={(e) => setForm({ ...form, tags: e.target.value })}/>
-          {camp.is_gm && (
-            <select className="select" value={form.visibility} data-testid="node-visibility"
-                    onChange={(e) => setForm({ ...form, visibility: e.target.value })}>
-              <option value="gm_only">GM only</option>
-              <option value="shared">Shared with table</option>
-            </select>
-          )}
-          <div className="md:col-span-2 flex justify-end gap-2">
-            <button type="button" onClick={() => setShowNew(false)} className="btn btn-ghost">Cancel</button>
-            <button type="submit" className="btn btn-primary" data-testid="node-submit">Weave</button>
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+        <div>
+          <h3 className="h-arcane text-sm">World Codex</h3>
+          <div className="text-[11px] text-mist font-body italic mt-1">
+            Article-driven worldbuilding · NPCs, places, factions, items, lore — all interlinked.
           </div>
-        </form>
-      )}
-      {nodes.length === 0 ? (
-        <div className="text-mist italic font-body text-sm">No threads woven yet.</div>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button onClick={() => setView(view === "list" ? "graph" : "list")}
+                  className="btn btn-ghost text-xs" data-testid="toggle-view-btn">
+            {view === "list" ? <><Network className="w-3 h-3"/> Graph view</> : <><ListTree className="w-3 h-3"/> List view</>}
+          </button>
+          <button onClick={linkNodes} className="btn btn-ghost text-xs" data-testid="link-nodes-btn">
+            <LinkIcon className="w-3 h-3"/> Link
+          </button>
+          <button onClick={() => setShowNew(true)} className="btn btn-primary text-xs" data-testid="new-node-btn">
+            <Plus className="w-3 h-3"/> Weave node
+          </button>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-1 mb-4">
+        <button onClick={() => setFilterType("all")}
+                className={`text-[10px] uppercase tracking-widest px-2 py-1 rounded-sm border ${filterType === "all" ? "border-gold/60 text-gold-bright" : "border-gold/15 text-mist/70 hover:text-parchment"}`}>
+          All ({nodes.length})
+        </button>
+        {NODE_TYPES.map((t) => {
+          const c = nodes.filter((n) => n.type === t.key).length;
+          return (
+            <button key={t.key} onClick={() => setFilterType(t.key)}
+                    className={`text-[10px] uppercase tracking-widest px-2 py-1 rounded-sm border ${filterType === t.key ? "border-gold/60 text-gold-bright" : "border-gold/15 text-mist/70 hover:text-parchment"}`}
+                    data-testid={`type-filter-${t.key}`}>
+              {t.label} ({c})
+            </button>
+          );
+        })}
+      </div>
+
+      {showNew && <NodeEditor camp={camp} onClose={() => setShowNew(false)} onSaved={() => { setShowNew(false); onRefresh(); }}/>}
+
+      {view === "graph" ? (
+        <div>
+          <KnowledgeGraph nodes={filtered} edges={edges}
+                          selectedId={selectedNode?.id}
+                          onSelect={(n) => setSelectedNode(n)}/>
+          {selectedNode && (
+            <NodeDetail node={selectedNode} camp={camp}
+                        onClose={() => setSelectedNode(null)}
+                        onReveal={() => reveal(selectedNode)}
+                        onRemove={() => { remove(selectedNode); setSelectedNode(null); }}/>
+          )}
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="text-mist italic font-body text-sm">No nodes of this kind yet.</div>
       ) : (
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {nodes.map((n) => (
-            <div key={n.id} className="card-mystic p-4" data-testid={`node-${n.id}`}>
-              <div className="flex items-center justify-between">
-                <span className="tag uppercase">{n.type}</span>
-                <span className="text-[10px] text-gold/60 font-ui uppercase tracking-widest flex items-center gap-1">
-                  {n.visibility === "gm_only" ? <EyeOff className="w-3 h-3"/> : <Eye className="w-3 h-3"/>}
-                  {n.visibility}
-                </span>
-              </div>
-              <div className="font-display text-base text-parchment mt-2">{n.title}</div>
-              <div className="text-xs text-mist mt-1 line-clamp-3 whitespace-pre-wrap font-body">{n.content || "—"}</div>
-              <div className="flex flex-wrap gap-1 mt-2">
-                {(n.tags || []).map((t, i) => <span key={i} className="tag">{t}</span>)}
-              </div>
-              {camp.is_gm && (
-                <div className="mt-3 flex gap-2">
-                  {n.visibility !== "revealed" && (
-                    <button onClick={() => reveal(n)} className="btn btn-ghost text-[11px]" data-testid={`reveal-${n.id}`}>
-                      <Eye className="w-3 h-3"/> Reveal
-                    </button>
-                  )}
-                  <button onClick={() => remove(n)} className="btn btn-danger text-[11px]">
-                    <Trash2 className="w-3 h-3"/>
-                  </button>
-                </div>
-              )}
+          {filtered.map((n) => <NodeCard key={n.id} n={n} camp={camp}
+                                          onReveal={() => reveal(n)} onRemove={() => remove(n)}
+                                          onClick={() => setSelectedNode(n)}/>)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function NodeCard({ n, camp, onReveal, onRemove, onClick }) {
+  return (
+    <div className="card-mystic p-4" data-testid={`node-${n.id}`}>
+      <div className="flex items-center justify-between">
+        <span className="tag uppercase" style={{ borderColor: colorForType(n.type) + "55", color: colorForType(n.type) }}>
+          {labelForType(n.type)}
+        </span>
+        <span className="text-[10px] text-gold/60 font-ui uppercase tracking-widest flex items-center gap-1">
+          {n.visibility === "gm_only" ? <EyeOff className="w-3 h-3"/> : <Eye className="w-3 h-3"/>}
+          {n.visibility}
+        </span>
+      </div>
+      <button onClick={onClick} className="text-left w-full mt-2">
+        <div className="font-display text-base text-parchment hover:text-gold-bright transition">{n.title}</div>
+        {n.content && <div className="text-xs text-mist mt-1 line-clamp-2 whitespace-pre-wrap font-body">{n.content}</div>}
+      </button>
+      {Object.keys(n.fields || {}).length > 0 && (
+        <div className="mt-2 text-[10px] text-mist/70 font-ui italic">
+          {Object.keys(n.fields).length} structured field{Object.keys(n.fields).length === 1 ? "" : "s"}
+        </div>
+      )}
+      <div className="flex flex-wrap gap-1 mt-2">
+        {(n.tags || []).map((t, i) => <span key={i} className="tag">{t}</span>)}
+      </div>
+      {camp.is_gm && (
+        <div className="mt-3 flex gap-2">
+          {n.visibility !== "revealed" && (
+            <button onClick={onReveal} className="btn btn-ghost text-[11px]" data-testid={`reveal-${n.id}`}>
+              <Eye className="w-3 h-3"/> Reveal
+            </button>
+          )}
+          <button onClick={onRemove} className="btn btn-danger text-[11px]">
+            <Trash2 className="w-3 h-3"/>
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function NodeDetail({ node, camp, onClose, onReveal, onRemove }) {
+  const tmpl = NODE_TEMPLATES[node.type];
+  return (
+    <div className="card-mystic p-5 mt-4" data-testid="node-detail">
+      <div className="flex items-start justify-between">
+        <div>
+          <span className="tag uppercase" style={{ borderColor: colorForType(node.type) + "55", color: colorForType(node.type) }}>
+            {labelForType(node.type)}
+          </span>
+          <div className="font-display text-2xl text-parchment mt-2">{node.title}</div>
+        </div>
+        <button onClick={onClose} className="btn btn-ghost p-2"><X className="w-4 h-4"/></button>
+      </div>
+      {node.content && <div className="text-sm text-mist mt-3 whitespace-pre-wrap font-body leading-relaxed">{node.content}</div>}
+      {tmpl && Object.keys(node.fields || {}).length > 0 && (
+        <div className="mt-4 grid md:grid-cols-2 gap-3">
+          {tmpl.fields.filter((f) => node.fields[f.key]).map((f) => (
+            <div key={f.key}>
+              <div className="label-ref">{f.label}</div>
+              <div className="text-sm text-parchment/90 font-body whitespace-pre-wrap mt-1">{node.fields[f.key]}</div>
             </div>
           ))}
         </div>
       )}
+      {camp.is_gm && (
+        <div className="mt-4 flex gap-2">
+          {node.visibility !== "revealed" && (
+            <button onClick={onReveal} className="btn btn-ghost text-xs"><Eye className="w-3 h-3"/> Reveal to players</button>
+          )}
+          <button onClick={onRemove} className="btn btn-danger text-xs"><Trash2 className="w-3 h-3"/> Forget</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function NodeEditor({ camp, onClose, onSaved }) {
+  const [type, setType] = useState("npc");
+  const [title, setTitle] = useState("");
+  const [content, setContent] = useState("");
+  const [tags, setTags] = useState("");
+  const [visibility, setVisibility] = useState("gm_only");
+  const [fields, setFields] = useState({});
+  const tmpl = NODE_TEMPLATES[type];
+
+  const save = async (e) => {
+    e?.preventDefault();
+    if (!title.trim()) return;
+    await api.post("/nodes", {
+      campaign_id: camp.id, type, title, content,
+      tags: tags.split(",").map((s) => s.trim()).filter(Boolean),
+      visibility, fields,
+    });
+    onSaved();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-void/80 backdrop-blur-sm flex items-start justify-center p-6 overflow-auto" data-testid="node-editor">
+      <div className="card-mystic sigil-ring w-full max-w-3xl p-7 my-10">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <div className="label-ref">Weave</div>
+            <h2 className="font-display text-2xl text-parchment tracking-wide">A new article</h2>
+          </div>
+          <button onClick={onClose} className="btn btn-ghost p-2"><X className="w-4 h-4"/></button>
+        </div>
+
+        <div className="grid md:grid-cols-3 gap-2 mb-4">
+          {NODE_TYPES.map((t) => (
+            <button key={t.key} onClick={() => { setType(t.key); setFields({}); }}
+                    className={`text-left p-3 rounded-sm border transition ${type === t.key ? "border-gold/70 bg-gold/5" : "border-gold/15 hover:border-gold/40"}`}
+                    data-testid={`pick-type-${t.key}`}>
+              <div className="font-ui text-sm text-parchment">{t.label}</div>
+              <div className="text-[10px] uppercase tracking-widest text-gold/60 mt-0.5">{t.key}</div>
+            </button>
+          ))}
+        </div>
+
+        {tmpl && (
+          <div className="border-l-2 border-gold/40 pl-3 mb-4 text-xs text-mist italic font-body flex items-start gap-2">
+            <Lightbulb className="w-3 h-3 text-gold/60 mt-0.5 shrink-0"/>
+            {tmpl.intro}
+          </div>
+        )}
+
+        <form onSubmit={save} className="space-y-3">
+          <div className="grid md:grid-cols-2 gap-3">
+            <input className="input" placeholder="Title (the name your table will say)" value={title} required
+                   onChange={(e) => setTitle(e.target.value)} data-testid="node-title-input"/>
+            {camp.is_gm && (
+              <select className="select" value={visibility} onChange={(e) => setVisibility(e.target.value)}>
+                <option value="gm_only">GM only</option>
+                <option value="shared">Shared with table</option>
+              </select>
+            )}
+          </div>
+          <textarea className="input" placeholder="Description / opening prose"
+                    value={content} onChange={(e) => setContent(e.target.value)}/>
+          <input className="input" placeholder="tags, comma-separated" value={tags}
+                 onChange={(e) => setTags(e.target.value)}/>
+
+          {tmpl && (
+            <div className="border-t border-gold/10 pt-4">
+              <div className="label-ref mb-3 flex items-center gap-2">Structured fields <Sparkles className="w-3 h-3"/></div>
+              <div className="grid md:grid-cols-2 gap-3">
+                {tmpl.fields.map((f) => (
+                  <div key={f.key} className={f.textarea ? "md:col-span-2" : ""}>
+                    <label className="label-ref block mb-1">{f.label}</label>
+                    {f.textarea
+                      ? <textarea className="input" placeholder={f.placeholder}
+                                  value={fields[f.key] || ""}
+                                  onChange={(e) => setFields({ ...fields, [f.key]: e.target.value })}
+                                  data-testid={`field-${f.key}`}/>
+                      : <input className="input" placeholder={f.placeholder}
+                               value={fields[f.key] || ""}
+                               onChange={(e) => setFields({ ...fields, [f.key]: e.target.value })}
+                               data-testid={`field-${f.key}`}/>}
+                    {f.prompt && <div className="text-[10px] text-mist/70 italic mt-1">{f.prompt}</div>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="flex justify-end gap-2 pt-2">
+            <button type="button" onClick={onClose} className="btn btn-ghost">Cancel</button>
+            <button type="submit" className="btn btn-primary" data-testid="node-submit-btn">
+              <Save className="w-4 h-4"/> Weave
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }
