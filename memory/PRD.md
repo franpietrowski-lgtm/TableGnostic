@@ -50,10 +50,85 @@ Auth · BESM 4E reference (full data) · Campaigns · Character Forge · Live Se
 - Active-self render path verified by source review per the iter_10 fallback note (would need a 2nd browser session + AV join + initiative manipulation for full Playwright e2e).
 - Post-test cleanup: re-seeded Evereantha PCs (3 fresh) so Cyma's folio.journal is back to clean state.
 
+### V3.9 — Backend modularisation + OpenAPI tag pass (this iteration — 2026-04-25)
+
+**Refactor — `server.py` 1772 → 65 lines (well under the 700-line guideline)**
+
+Old monolithic `server.py` split into focused modules with 1:1 functional preservation:
+
+```
+core/
+  config.py        env vars · JWT_SECRET · CORS regex · EMERGENT_LLM_KEY · Resend
+  db.py            Mongo client (MONGO_URL/DB_NAME) · now_iso · new_id · sanitize
+  security.py      hash/verify password · JWT mint/verify · set_auth_cookies · get_current_user
+  email.py         Resend transport with console fallback
+  models.py        all Pydantic In/Out (RegisterIn, LoginIn, CampaignIn, CharacterIn,
+                   JournalEntryIn, NodeIn, EdgeIn, SessionIn, ChatIn, DiceIn,
+                   InitiativeEntryIn, EffectIn, DamageIn, RecapIn (+in-character),
+                   CustomAttributeIn, GenesisIn, NodeRevealIn)
+  cost_engine.py   attribute_cost (BESM ≥1/Level clamp + nested Item/Weapon defects),
+                   calc_derived (campaign DR-baseline aware), calc_spent_points,
+                   resolve_system_id
+  bus.py           Bus class (mesh WebRTC presence + relay) · module-level broadcast()
+  startup.py       ensure_indexes · seed_user (admin/gm/player auth) · invite-token backfill
+
+routes/
+  auth.py          tags=['auth']           7 routes  (register/login/logout/me/refresh/forgot/reset)
+  besm.py          tags=['reference']      2 routes  (besm/reference + systems)
+  campaigns.py     tags=['campaigns']     16 routes  (CRUD + invites + custom rules + genesis)
+  characters.py    tags=['characters']     6 routes  (CRUD + journal)
+  nodes.py         tags=['knowledge-web']  7 routes  (nodes + edges + reveal + visible_to)
+  sessions.py      tags=['sessions']      16 routes  (sessions + chat + dice + initiative
+                                                      + effects + damage + health + WS)
+  recap.py         tags=['recap']          2 routes  (Loremaster LLM)
+  seed.py          tags=['seed']           1 route   (Evereantha PCs)
+```
+
+`server.py` keeps only: `load_dotenv()`, FastAPI app, CORS middleware, Permissions-Policy
+middleware (camera/microphone for AV Seats), `@on_event("startup") → run_startup()`, and 9
+`include_router` calls (the 8 domain routers + the WebSocket `ws_router`).
+
+**OpenAPI tag pass (export-ready Swagger UI for VIP DriveThruRPG pipeline)**
+- 8 distinct tags · 57 operations across 49 paths.
+- Each route file declares `APIRouter(tags=["..."])` so endpoints group cleanly.
+- Verified: `curl http://localhost:8001/openapi.json | jq` lists all 8 groups.
+
+**Future LiveKit-readiness**
+- `core/bus.py` is engineered as a thin relay so the AV layer can swap to an SFU
+  (LiveKit / Daily / Agora) later without touching session-state routes.
+- The `webrtc:offer/answer/ice` targeted relay + `presence:av-state` broadcast
+  in `routes/sessions.py.ws_session` are the only call sites that would change.
+
+### V3.9 — Tested (iter_11)
+- Backend: **46/46 tests PASS** — 36 new (`test_refactor_iter11.py`) + 10 carry-over
+  (`test_iter10_v38.py`). Coverage: auth (incl. brute-force semantics), reference,
+  campaigns + invites + custom + genesis, characters + access gates, seed, knowledge
+  web, sessions + chat + dice + initiative + effects + damage + round, recap, health,
+  OpenAPI shape, WebSocket auth + presence:room handshake.
+- WebSocket: invalid-token close verified; valid-token connect emits `presence:room`
+  as the first frame ✓. Targeted `to: conn_id` relay code path matches spec but
+  was not exercised end-to-end (would need 2 concurrent ws clients).
+- Behavioural 1:1 preservation **CONFIRMED** — no regressions vs the monolithic
+  server.py.
+
+### V3.9 — Pre-existing findings surfaced by iter_11 (NOT refactor regressions)
+- **(MEDIUM, security)** Brute-force lock in `routes/auth.py:42-66` keys attempts on
+  `f"{request.client.host}:{email}"`. Behind the Kubernetes ingress, `request.client.host`
+  is the immediate upstream pod IP and **rotates per-request** — verified in mongo:
+  `10.79.131.85:email` count=4 AND `10.79.131.86:email` count=4 simultaneously for
+  the same email burst. Threshold `>=5` therefore never trips reliably. Fix:
+  trust `X-Forwarded-For` first hop OR drop IP from the key and rate-limit
+  email-only with a tighter window. Off-by-one note: `count >= 5` actually locks
+  on the 6th attempt (re-read the spec wording).
+- **(LOW)** `https://<host>/openapi.json` returns the SPA's `index.html` (frontend
+  catch-all), only `http://localhost:8001/openapi.json` serves the real schema.
+  Cosmetic — programmatic API consumers using the public hostname get HTML.
+
 ## 3. Backlog (in user's stated order)
 
 ### P1 — Architecture
-- **Backend refactor** — `server.py` (~1771 lines, exceeds the 700-line guideline) → `/app/backend/routes/{auth,campaigns,characters,sessions,ws,besm,systems,seed,recap,journal}.py`. Iter_10 critical-comments flagged this again.
+- **Backend refactor — DONE in V3.9** (`server.py` 1772 → 65 lines; 8-router split with OpenAPI tags). See V3.9 section above.
+- **Brute-force lock IP-key fix** (security MEDIUM, pre-existing — surfaced by iter_11). Read `X-Forwarded-For` first hop or drop IP from the key.
 
 ### P1 — V3 majors
 - **Discord-style channels + threads PBP** per campaign.
@@ -101,11 +176,11 @@ Auth · BESM 4E reference (full data) · Campaigns · Character Forge · Live Se
 
 ## 5. Next Tasks
 
-1. **Backend refactor** → `/app/backend/routes/`
-2. **Discord PBP** + **Battlemap + tokens** (V3 majors)
-3. **System theming layer** (Dyskami / D&D / Cypher palettes)
-4. **Anime 5E full content**
-5. **Cypher full content**
-6. **Knowledge Web file ingestion**
-7. **Primer change-request alerts** + GM live-edit
+1. **Discord PBP** + **Battlemap + tokens** (V3 majors)
+2. **System theming layer** (Dyskami / D&D / Cypher palettes)
+3. **Anime 5E full content**
+4. **Cypher full content**
+5. **Knowledge Web file ingestion**
+6. **Primer change-request alerts** + GM live-edit
+7. **Brute-force lock IP-key fix** (pre-existing security finding from iter_11)
 8. **Later VIP**: DriveThruRPG export + 8-session Evereantha demo
