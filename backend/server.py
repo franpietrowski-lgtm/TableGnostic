@@ -314,6 +314,9 @@ class CharacterIn(BaseModel):
     # BESM 4E Size template applied to the character (Diminutive ↔ Massive).
     # Modifies damage output, defence, movement, weight. Default Medium.
     size: str = "Medium"
+    # Player-chosen signature colour for AV tile pulse + future map tokens.
+    # Empty = AVSeats falls back to gold. Stored as #RRGGBB.
+    token_color: str = ""
     stats: CharacterStats = CharacterStats()
     attributes: List[CharacterAttribute] = []
     defects: List[CharacterDefect] = []
@@ -1060,6 +1063,8 @@ async def seed_evereantha_pcs(cid: str, user: dict = Depends(get_current_user)):
             "concept": pc["concept"],
             "power_level": pc["power_level"],
             "total_points": pc["total_points"],
+            "token_color": pc.get("token_color", ""),
+            "size": pc.get("size", "Medium"),
             "stats": pc["stats"],
             "attributes": pc["attributes"],
             "defects": pc["defects"],

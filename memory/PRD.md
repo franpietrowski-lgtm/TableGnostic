@@ -1,105 +1,102 @@
 # Table-Gnostic — Product Requirements Document
 
 > **Tagline:** "Not the system. The table."
-> A multi-system tabletop platform unifying worldbuilding, session play, character automation, knowledge graphs, and live voice/video — BESM 4E + Anime 5E native (Tri-Stat Emporium), scaffolded for 9 more systems including Cypher.
+> A multi-system tabletop platform unifying worldbuilding, session play, character automation, knowledge graphs, and live voice/video — BESM 4E + Anime 5E native (Tri-Stat Emporium), Cypher community-content compatible, scaffolded for 8 more systems.
 
 ## 1. Architecture
 
 - **Backend:** FastAPI + MongoDB (motor) + JWT + token-authed WebSockets + Resend email + Claude Sonnet 4.5 via emergentintegrations + WebRTC mesh signaling + Permissions-Policy
-- **Frontend:** React 18 + Tailwind + Radix + lucide-react + custom SVG force-graph + native WebRTC; iframe-aware AV; portaled BesmTerm popovers; system-aware footer credit + logo
+- **Frontend:** React 18 + Tailwind + Radix + lucide-react + custom SVG force-graph + native WebRTC; iframe-aware AV; portaled BesmTerm popovers; **AV Spotlight surface** (initiative ordering + active-actor ring + per-character voice-presence pulse + Loremaster's hush)
 - **Roles:** `player` / `gm` / `admin`. Legacy `user` accounts auto-migrate to `gm`.
-- **Game Systems:** **12** — BESM 4E + Anime 5E fully supported; Cypher legally welcomed (community-content compatible); 9 others scaffolded.
+- **Game Systems:** **12** — BESM 4E + Anime 5E fully supported; Cypher legally welcomed; 9 others scaffolded.
 
 ## 2. Implemented (cumulative)
 
-### V1.0–V3.5
-Auth · BESM 4E reference (full data) · Campaigns · Character Forge · Live Sessions · Knowledge Web · Atelier · Player Primer + caps + benchmarks · Resend · World Codex · Knowledge Graph · Character Folio · Session Recap · Auto-pinned recaps · Mobile/desktop · BESM term click-to-reference (portaled) · Mesh WebRTC AV seats · Role separation · Tri-Stat Emporium logo + Dyskami legal text · 3 Evereantha sample PCs · Setting-flavor primary descriptions · Skill components · Power Pack section · Cost-engine clamp + per-Attribute mod whitelists · Defects on Items/Weapons.
+### V1.0–V3.6
+Auth · BESM 4E reference (full data) · Campaigns · Character Forge · Live Sessions · Knowledge Web · Atelier · Player Primer + caps + benchmarks · Resend · World Codex · Knowledge Graph · Character Folio · Session Recap · Auto-pinned recaps · Mobile/desktop · BESM term click-to-reference (portaled) · Mesh WebRTC AV seats · Role separation · Tri-Stat Emporium logo + Dyskami legal text · 3 Evereantha sample PCs · Setting-flavor primary descriptions · Skill components · Power Pack section · Cost-engine clamp + per-Attribute mod whitelists · Defects on Items/Weapons · 7-template Size system · Anime 5E + Cypher entries.
 
-### V3.6 — Folio crash · Size template · Anime 5E · Cypher legal (this iteration — 2026-04-25)
+### V3.7 — AV Spotlight visual layer (this iteration — 2026-04-25)
 
-**🔴 P0 — `FolioPanel` editor crash fixed**
-- Root cause: seeded Evereantha PCs stored `folio.goals / family / edges / obstacles` as STRINGS (single-line free text). FolioPanel expected ARRAYS and called `.map()` directly, producing `(f.goals || []).map is not a function`.
-- Two-part fix:
-  1. **Defensive coercion** in FolioPanel — added `arr(v) = Array.isArray(v) ? v : []` and applied it to all 5 collection fields (`edges`, `obstacles`, `goals`, `family`, `history_events`, `journal`). A misshapen record can no longer crash the editor.
-  2. **Seed-data correction** — re-shaped the 3 Evereantha PCs to use proper arrays. Each PC now ships with 3 long/short/secret goals, 1-2 family entries (with relation + note), 2 edges, 2 obstacles. Re-seed verified via API.
+**Token Color Picker — character signature colours**
+- New `CharacterIn.token_color: str = ""` (stored as `#RRGGBB`).
+- New `<TokenColorPicker>` component in CharacterBuilder with 8 curated jewel-tone presets (Gold / Apothecary / Forge ember / Slate / Amaranth / Tide / Garnet / Iris) + native `<input type="color">` for custom hex + clear-to-default button. Selection feedback: parchment border, +10% scale, glow shadow at picked colour.
+- Picker testids: `token-color-picker`, `token-color-{hex}`, `token-color-custom`, `token-color-clear`.
+- Sheet display: token-color appears as a glowing chip beside the character name (`data-testid="sheet-token-color"`).
+- Seeded Evereantha PCs assigned thematic colours (Cyma `#5fa37a`, Tarsis `#c47a3d`, Vela `#6b7a99`).
 
-**Conceptual correction — Size is a per-entity TEMPLATE, not a campaign world-scale enum**
-- Removed the wrong `size_scale: "Personal" / "Squad" / "Vehicle" / "Capital" / "Cosmic"` field on Campaign.
-- Added proper `SIZE_TEMPLATES` registry to `besm_data.py` (BESM 4E p.181) — 7 entries on the Diminutive ↔ Massive ladder (Tiny/Small/Medium/Large/Huge/Gargantuan/Colossal aliases for d20 vocabulary). Each carries `damage_mod`, `defence_mod`, `speed_mult`, `weight_mult`, blurb, and a numeric `rank`.
-- Replaced campaign field with `default_character_size: str = "Medium"` — the GM's recommended template for new PCs in this campaign. Players can still override per-character / per-Item.
-- Added `CharacterIn.size: str = "Medium"` (whole-character template) and `CharacterAttribute.size: str = ""` (optional override for Item / Weapon / Companion entries).
-- `/api/besm/reference` now returns `size_templates` so the frontend can render Size pickers consistently.
-- PrimerTab `[data-testid="primer-size"]` selector replaced — shows the 7 templates with "per-entity, players can override" hint. CharacterBuilder briefing badge `bench-size` reflects the new default.
+**Initiative-driven AV tile reordering + active-player spotlight**
+- `<AVSeats>` now accepts `characters` and `initiative` props (passed from `<SessionView>` which already tracks both).
+- Builds a `{uid → character}` map (preferring published characters), then ranks tiles by initiative descending; ties fall back to alphabetical.
+- Top-of-init player gets the spotlight: `av-tile--active` class adds 2px gold ring + 28px gold halo + 2px translateY lift; small pulsing gold dot in the top-right corner (`data-testid="av-tile-active-mark"`).
+- Tile name now shows the character's name instead of the player's name (player name shown as a small grey suffix when both are known).
 
-**Anime 5E added as a fully-supported system**
-- New `GAME_SYSTEMS` entry: `id="anime-5e"`, publisher Dyskami, Dyskami's exact required notice for Anime 5E products (Mark MacKinnon credit, Japanime Games co-pub, OGL distribution, Anime5E.com link), shares the Tri-Stat Emporium combined-logo cover requirement.
-- `supported=true` flag advertises that mechanics are about to land. Full Reference / Character Builder for Anime 5E is queued for V3.7 (it's a d20 5E-compat system, not Tri-Stat — needs its own sheet template, classes, races, feats).
-- Total system count is now 12 (BESM 4E + Anime 5E supported; Cypher + 9 others scaffolded).
+**Voice-presence pulse in token color**
+- When a peer is in-call AND mic-on AND has a token_color, the tile renders an inline `box-shadow: 0 0 0 2px {color}88, 0 0 18px {color}66` ring.
+- CSS `av-speaking-pulse` keyframe (1.6s ease-in-out infinite) modulates brightness + saturation by ±8% so the tile breathes while speaking — subtle, doesn't compete with the active-actor gold ring.
+- The mic icon in the tile footer also tints to the token color while live.
 
-**Cypher System legal text — Monte Cook Games' exact required notice**
-- Replaced the placeholder Cypher copyright with the full Cypher System Creator programme text (CYPHER SYSTEM trademarks, Monte Cook Games, LLC attribution, link to montecookgames.com, community-content acknowledgement).
-- Confirmed the Cypher System Creator policy ALLOWS tool-integration scenarios like ours (we reference rules without reproducing prose, exactly the same posture as our BESM 4E integration). Any commercial export pipeline (the Later VIP) will need to display the Cypher System Creator logo on covers and the required notices in the legal page.
+**Loremaster's hush**
+- `<AVSeats>` exposes `data-gm-speaking="true"|"false"` on the root and adds `av-stage--hush` class when any GM peer (or self if GM) is mic-active.
+- CSS dims every non-GM tile to opacity 0.55 + saturation 0.7; the GM tile is left undimmed and gets the gold spotlight ring; an `av-tile__hush-sigil` overlay rotates a layered conic-gradient gold sigil across the tile borders (`av-hush-rotate` 6s linear infinite).
+- Effect is gentle by design — players can still see who's at the table; the focus comes from contrast + the rotating sigil.
 
-### V3.6 — Tested
-- Backend curl: `/api/systems` returns 12 entries; Anime 5E supported=true; Cypher carries the new legal text. `/api/besm/reference` returns 7 size_templates with all expected fields. Re-seed confirms PCs ship with goals=3, family=1, edges=2, obstacles=2 each.
-- Frontend Playwright: Cyma's character sheet **Edit** loads cleanly (was the crash before); 15 folio sub-panels render; PrimerTab Size selector shows all 7 templates ("Medium — standard h…" selected). Benchmark badges still render correctly (HIGH FANTASY · MEDIEVAL · DR BASELINE · 7).
+**Backend support**
+- Seed flow updated to include `token_color` and `size`.
+- `CharacterAttribute.size: str = ""` already in place from V3.6 (per-Item override) — no schema change needed for V3.7.
+
+### V3.7 — Verified
+- Visual Playwright run: Token picker shows 8 preset swatches + custom + clear; selecting Amaranth highlights it with parchment ring + scale + glow. Sheet header chip renders Cyma's apothecary-green dot beside her name. AV strip shows `data-gm-speaking="false"` initially. Re-seed confirms all 3 Evereantha PCs persist `token_color` + `size` correctly.
 
 ## 3. Backlog (in user's stated order)
 
-### P1 — Next major builds
-- **Initiative-driven AV spotlight + Journal↔Sheet bond + Roll-options popup + Loremaster's hush** — paired build (shares the active-player surface). Roll-options auto-built from current-system mechanics + GM Primer ("everything not explicitly prohibited"). Loremaster's hush gold-sigil pulse when GM speaks.
+### P1 — Roll-options popup + Journal↔Sheet bond (next batch)
+- **Roll-options popup** — system-aware roll-options auto-built from the campaign's mechanics + GM Primer (everything-not-explicitly-prohibited). On the active player's surface during their turn. BESM 4E layer first (2d6 vs TN with stat/attribute/skill modifiers); Anime 5E + Cypher when their content lands.
+- **Journal ↔ Sheet bond** — the Character Folio journal becomes the source-of-truth for per-turn entries on the active-player surface. Entries feed session / campaign-to-date / end-campaign summaries via the existing recap LLM pipeline.
+
+### P1 — Other major builds
 - **Primer change-request alerts** + GM live-edit mid-campaign.
-- **Backend refactor** — `server.py` (~1700 lines) → `/app/backend/routes/{auth,campaigns,characters,sessions,ws,besm,systems,seed}.py`.
+- **Backend refactor** — `server.py` (~1715 lines) → `/app/backend/routes/{auth,campaigns,characters,sessions,ws,besm,systems,seed}.py`.
 - **Discord-style channels + threads PBP** + **Battlemap + tokens** (V3 majors).
-
-### P1 — Anime 5E content
-- Full Reference + Character Builder for Anime 5E (d20 / 5E-compat: classes, races, ability scores, proficiency bonus, feats, spell slots) — major build, ~1 dedicated session.
-- The 5 PDFs the user uploaded (RPG core v1.3.6, character sheet v1.02, Adventuring Accessories v1.01, Bonus Character Options v1.02, Mounts & Monsters v1.02) have everything needed to populate; reading flow likely:
-  1. Extract class/race/ability data from RPG core
-  2. Extract sheet layout from character_sheet PDF (mirror Dyskami's typography)
-  3. Extras (Mounts, Accessories, Bonus Options) feed Reference sub-tabs
-
-### P1 — System theming layer
-- Dyskami palette/accents on BESM 4E + Anime 5E (shared house style)
-- D&D house style on D&D campaigns
-- Cypher voice on Cypher campaigns
-- Scoped to inner-window surfaces via CSS variables + `data-system="..."` attribute
-
-### P1 — Knowledge Web file ingestion
-- GM uploads PDF / MD / TXT → Claude Sonnet 4.5 (via emergentintegrations) parses → suggests / creates nodes (NPCs, locations, factions, events). Diff-review before commit.
+- **System theming layer** — CSS variables + `data-system="..."` (Dyskami palette on BESM/Anime 5E; D&D house style on D&D; Cypher voice on Cypher).
+- **Anime 5E full content** — Reference + Character Builder using the 5 uploaded PDFs.
+- **Cypher full content** — using the 2 uploaded PDFs (Cypher System Rulebook Revised + Expanded Worlds), with the Cypher System Creator legal posture (cite rules, never reproduce prose).
+- **Knowledge Web file ingestion** — GM uploads → Claude Sonnet 4.5 → suggests / creates nodes via diff-review.
 
 ### P2
-- Display Effective Level alongside Purchased Level on Attribute rows (`5 → effective 6`)
-- Per-character + per-Item Size picker UI in Character Builder (data is already wired backend-side)
-- AV hardening (rate-limit, validation, reconnect/backoff, TURN)
-- `/api/besm/reference` `lru_cache`
-- `<BesmTerm>` extended to Skills / Enhancements / Limiters / Atelier
-- Recap export to PDF
-- Verify a Resend domain
-- React context for `/api/systems`
-- `<optgroup>` in CreateModal system selector
-- CORS empty-FRONTEND_URL fix
-- LLM 429 cooldown
+- Display Effective Level alongside Purchased Level on Attribute rows.
+- Per-character + per-Item Size picker UI in Character Builder (data is wired backend-side; UI is pending).
+- AV hardening — rate-limit, payload validation, reconnect/backoff, TURN.
+- Animate the active-player ring transition when initiative advances (hand-off feel).
+- Cross-fade the Loremaster's hush sigil so toggling GM mic on/off doesn't snap.
+- `prefers-reduced-motion` media query: disable the speaking pulse and hush rotation for accessibility.
+- `/api/besm/reference` `lru_cache`.
+- Recap export to PDF.
+- Verify a Resend domain.
+- React context for `/api/systems`.
+- `<optgroup>` in CreateModal system selector.
+- CORS empty-FRONTEND_URL fix.
+- LLM 429 cooldown.
 
 ### Later VIP
-- DriveThruRPG-ready PDF export pipeline with system-appropriate trade dress (Tri-Stat Emporium combined-logo cover for BESM/Anime 5E products; Cypher System Creator logo for Cypher; D&D 5E Compatible logo for D&D)
-- 8-session Evereantha demo with auto-summarised sessions, per-player engagement tooltips, character-relationship summaries
+- DriveThruRPG-ready PDF export pipeline with system-appropriate trade dress (Tri-Stat Emporium combined-logo cover for BESM/Anime 5E products; Cypher System Creator logo for Cypher; D&D 5E Compatible logo for D&D).
+- 8-session Evereantha demo with auto-summarised sessions, per-player engagement tooltips, character-relationship summaries.
 
 ## 4. Credits
 
 - BESM 4E — Mark MacKinnon, Dyskami Publishing, 2020 (referenced, not reproduced)
 - Anime 5E — Mark MacKinnon, Dyskami Publishing, OGL-distributed
-- Cypher System — Monte Cook Games, LLC; integrated via the Cypher System Creator programme
+- Cypher System — Monte Cook Games, LLC; integrated via the Cypher System Creator programme (Cypher System Rulebook Revised + Expanded Worlds PDFs received from user, queued for content build)
 - All 9 scaffolded systems credited to their respective publishers
 - Evereantha setting (user-provided)
 
 ## 5. Next Tasks
 
-1. **Initiative-driven AV spotlight + Journal↔Sheet bond + Roll-options popup + Loremaster's hush** (paired build)
+1. **Roll-options popup + Journal↔Sheet bond** (paired build — both surface on the active player's tile during their turn)
 2. **Primer change-request alerts** + GM live-edit
 3. **Backend refactor** → routers
 4. **Discord PBP** · **Battlemap**
 5. **System theming layer**
-6. **Knowledge Web file ingestion**
-7. **Anime 5E full content** (Reference + Character Builder)
-8. **Later VIP**: DriveThruRPG export + 8-session Evereantha demo
+6. **Anime 5E full content** (Reference + Character Builder)
+7. **Cypher full content** (Reference + Character Builder)
+8. **Knowledge Web file ingestion**
+9. **Later VIP**: DriveThruRPG export + 8-session Evereantha demo

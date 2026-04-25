@@ -26,6 +26,7 @@ EVEREANTHA_PCS = [
         "concept": "Apocophea (Herbalist–Alchemist) of the Taurid Tor villages",
         "power_level": "Adventurous",
         "total_points": 80,
+        "token_color": "#5fa37a",  # apothecary green
         "stats": {"body": 4, "mind": 7, "soul": 6},  # 17 pts
         "attributes": [
             {"name": "Healing", "level": 4, "cost_per_level": 4,
@@ -114,6 +115,7 @@ EVEREANTHA_PCS = [
         "concept": "Ferralith (Metal Whisperer Monk-Smith) of Oriun's Reach",
         "power_level": "Adventurous",
         "total_points": 80,
+        "token_color": "#c47a3d",  # forge ember
         "stats": {"body": 8, "mind": 4, "soul": 6},  # 18 pts
         "attributes": [
             {"name": "Tough", "level": 4, "cost_per_level": 2,
@@ -205,6 +207,7 @@ EVEREANTHA_PCS = [
         "concept": "Lithomorph (Geomantic Sculptor) of Continenta Aurea",
         "power_level": "Adventurous",
         "total_points": 80,
+        "token_color": "#6b7a99",  # slate blue
         "stats": {"body": 5, "mind": 6, "soul": 7},  # 18 pts
         "attributes": [
             {"name": "Control Environment", "level": 3, "cost_per_level": 2,

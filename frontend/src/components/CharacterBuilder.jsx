@@ -5,8 +5,9 @@ import { Plus, X, Save, Trash2, BookOpen } from "lucide-react";
 
 const emptyChar = (campaign_id) => ({
   campaign_id, name: "", concept: "", power_level: "Heroic", total_points: 120,
+  size: "Medium", token_color: "",
   stats: { body: 4, mind: 4, soul: 4 },
-  attributes: [], defects: [], skills: [], notes: "", published: false,
+  attributes: [], defects: [], skills: [], power_packs: [], notes: "", published: false,
   folio: {
     aliases: "", gender_species_age: "", occupation: "",
     physical_description: "", personality: "", motivations: "", fears: "",
@@ -297,6 +298,29 @@ export default function CharacterBuilder() {
               <label className="label-ref block mb-1">Total Points</label>
               <input type="number" className="input" value={ch.total_points}
                      onChange={(e) => setCh({ ...ch, total_points: +e.target.value })} data-testid="char-total"/>
+            </div>
+          </div>
+
+          <div className="divider-sigil" />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label className="label-ref block mb-1">Size Template · p.181 BESM 4E</label>
+              <select className="select" value={ch.size || "Medium"}
+                      onChange={(e) => setCh({ ...ch, size: e.target.value })}
+                      data-testid="char-size">
+                {(ref.size_templates || []).map((s) => (
+                  <option key={s.name} value={s.name}>
+                    {s.name}{s.alias && s.alias !== s.name ? ` · ${s.alias}` : ""} · {s.blurb.split(".")[0]}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="label-ref block mb-1">Token Colour <span className="text-mist/60">· AV tile pulse + map token</span></label>
+              <TokenColorPicker
+                value={ch.token_color || ""}
+                onChange={(hex) => setCh({ ...ch, token_color: hex })}
+              />
             </div>
           </div>
 
@@ -651,6 +675,60 @@ const ITEM_LIKE_ATTRS = new Set([
   "Item", "Weapon", "Gear", "Companion", "Minions", "Wealth", "Connected",
   "Vehicle",
 ]);
+
+// 8 curated jewel-tones picked to read well on the dark/cosmic Table-Gnostic
+// theme — tested for legibility on the AV tile-strip background.
+const TOKEN_COLOR_PRESETS = [
+  { hex: "#d4af37", label: "Gold" },        // matches the app gold accent
+  { hex: "#5fa37a", label: "Apothecary" },  // Cyma's seed colour
+  { hex: "#c47a3d", label: "Forge ember" }, // Tarsis' seed colour
+  { hex: "#6b7a99", label: "Slate" },       // Vela's seed colour
+  { hex: "#a85a8a", label: "Amaranth" },
+  { hex: "#3d8eba", label: "Tide" },
+  { hex: "#8b3a3a", label: "Garnet" },
+  { hex: "#7a6b9b", label: "Iris" },
+];
+
+function TokenColorPicker({ value, onChange }) {
+  const current = value || "";
+  return (
+    <div className="space-y-1.5" data-testid="token-color-picker">
+      <div className="flex flex-wrap gap-1.5">
+        {TOKEN_COLOR_PRESETS.map((p) => {
+          const selected = current.toLowerCase() === p.hex.toLowerCase();
+          return (
+            <button key={p.hex} type="button"
+                    onClick={() => onChange(p.hex)}
+                    title={p.label}
+                    aria-label={`${p.label} (${p.hex})`}
+                    aria-pressed={selected}
+                    data-testid={`token-color-${p.hex}`}
+                    className={`w-7 h-7 rounded-full border-2 transition-transform ${selected ? "border-parchment scale-110" : "border-gold/30 hover:border-gold/70"}`}
+                    style={{ backgroundColor: p.hex,
+                             boxShadow: selected ? `0 0 12px ${p.hex}99` : undefined }}/>
+          );
+        })}
+        <input type="color"
+               value={current || "#d4af37"}
+               onChange={(e) => onChange(e.target.value)}
+               aria-label="Custom token colour"
+               data-testid="token-color-custom"
+               className="w-7 h-7 rounded-full border-2 border-gold/30 cursor-pointer bg-transparent"
+               style={{ padding: 0 }}/>
+        {current && (
+          <button type="button" onClick={() => onChange("")}
+                  className="text-[10px] text-mist hover:text-ember underline ml-1 self-center"
+                  data-testid="token-color-clear">
+            clear
+          </button>
+        )}
+      </div>
+      <div className="text-[10px] text-mist/70 italic">
+        Pulses on your AV tile when your mic is live. Used as your map-token colour later.
+      </div>
+    </div>
+  );
+}
 
 function AttributeRow({ idx, a, reference, onUpdate, onRemove, maxRank = 0 }) {
   const ref = reference;

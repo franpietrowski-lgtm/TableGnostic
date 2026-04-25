@@ -119,4 +119,58 @@
     opacity: 0.035; mix-blend-mode: overlay;
     background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' seed='3'/><feColorMatrix values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 1 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>");
   }
+
+  /* ---------- AV Spotlight surface (V3.7) ---------- */
+
+  /* Active actor — top of initiative — gets a gold spotlight ring + slight
+     scale to draw the eye without taking the player out of the flex strip. */
+  .av-tile--active {
+    box-shadow: 0 0 0 2px rgba(212,175,55,0.85), 0 0 28px rgba(212,175,55,0.45);
+    transform: translateY(-2px);
+  }
+
+  /* Voice presence: the box-shadow color is set inline by the React tile
+     to the player's chosen token_color — this animation just modulates the
+     intensity so the tile breathes while the mic is open. */
+  @keyframes av-speaking-pulse {
+    0%, 100% { filter: brightness(1) saturate(1); }
+    50%      { filter: brightness(1.08) saturate(1.18); }
+  }
+  .av-tile--speaking { animation: av-speaking-pulse 1.6s ease-in-out infinite; }
+
+  /* Loremaster's hush — when the GM is mic-active, every NON-GM tile dims
+     and a gold sigil sweeps across the table border. The dim is kept gentle
+     (0.55) so players can still see who's at the table; the focus comes
+     from the GM tile NOT being dimmed plus the sigil pulse. */
+  .av-stage--hush .av-tile:not(.av-tile--gm) {
+    opacity: 0.55;
+    filter: saturate(0.7);
+  }
+  .av-stage--hush .av-tile--gm {
+    box-shadow: 0 0 0 2px rgba(212,175,55,0.95), 0 0 32px rgba(212,175,55,0.55);
+  }
+  /* Per-tile sigil overlay: idle hidden, hush state animates a gold
+     border-rune across each tile. Uses two layered conic gradients to
+     suggest a rotating sigil without imagery. */
+  .av-tile__hush-sigil {
+    opacity: 0;
+    transition: opacity 0.45s ease-out;
+    background:
+      conic-gradient(from 0deg, transparent 0deg, transparent 80deg, rgba(212,175,55,0.6) 90deg, transparent 100deg, transparent 360deg),
+      conic-gradient(from 180deg, transparent 0deg, transparent 80deg, rgba(212,175,55,0.4) 90deg, transparent 100deg, transparent 360deg);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+            mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+            mask-composite: exclude;
+    padding: 2px;
+    border-radius: 2px;
+  }
+  .av-stage--hush .av-tile__hush-sigil {
+    opacity: 1;
+    animation: av-hush-rotate 6s linear infinite;
+  }
+  @keyframes av-hush-rotate {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+  }
 }

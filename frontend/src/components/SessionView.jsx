@@ -153,6 +153,8 @@ export default function SessionView() {
           subscribe={wsSubscribe}
           send={wsSend}
           sessionTitle={session.title}
+          characters={characters}
+          initiative={init}
         />
       </div>
 

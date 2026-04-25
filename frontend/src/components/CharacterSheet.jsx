@@ -65,10 +65,20 @@ export default function CharacterSheet() {
       <div className="mt-3 flex items-start justify-between flex-wrap gap-4">
         <div>
           <div className="label-ref mb-1">BESM 4E · {ch.power_level} · {ch.total_points} pts</div>
-          <h1 className="font-display text-4xl tracking-wide text-parchment">{ch.name}</h1>
+          <h1 className="font-display text-4xl tracking-wide text-parchment flex items-center gap-3">
+            {ch.token_color && (
+              <span aria-label="Token colour"
+                    data-testid="sheet-token-color"
+                    className="inline-block w-5 h-5 rounded-full border border-gold/40"
+                    style={{ backgroundColor: ch.token_color,
+                             boxShadow: `0 0 10px ${ch.token_color}99` }}/>
+            )}
+            {ch.name}
+          </h1>
           <div className="text-mist font-body italic mt-1">{ch.concept}</div>
           <div className="text-[10px] font-ui uppercase tracking-widest text-gold/60 mt-2">
             by {ch.owner_name} · spent {ch.spent?.total_spent ?? 0} / {ch.total_points} pts
+            {ch.size && ch.size !== "Medium" ? ` · ${ch.size}` : ""}
           </div>
         </div>
         <div className="flex gap-2">
