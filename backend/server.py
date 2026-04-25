@@ -699,9 +699,9 @@ async def delete_custom(campaign_id: str, cid: str, user: dict = Depends(get_cur
 @api.post("/campaigns")
 async def create_campaign(body: CampaignIn, user: dict = Depends(get_current_user)):
     # Player-role accounts are seat-only — they take seats at tables, they
-    # don't run them. GMs and admins can create campaigns. Legacy "user" role
-    # is auto-migrated to "gm" on startup.
-    if user.get("role") == "player":
+    # don't run them. Allowlist (gm, admin) so any future role added later
+    # has to be explicitly granted campaign-create.
+    if user.get("role") not in ("gm", "admin"):
         raise HTTPException(403, "Player accounts cannot create campaigns. "
                                  "Update your role to Game Master in your profile to host a table.")
     doc = body.model_dump()

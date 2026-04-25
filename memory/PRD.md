@@ -1,71 +1,101 @@
 # Table-Gnostic — Product Requirements Document
 
 > **Tagline:** "Not the system. The table."
-> A BESM 4E-aware tabletop platform unifying worldbuilding, session play, character automation, knowledge graphs, and now live voice/video.
+> A BESM 4E-aware tabletop platform unifying worldbuilding, session play, character automation, knowledge graphs, and live voice/video.
 
 ## 1. Architecture
 
-- **Backend:** FastAPI + MongoDB (motor) + JWT auth + token-authed WebSockets + Resend email + Claude Sonnet 4.5 via emergentintegrations + WebRTC mesh signaling over the existing session WS
-- **Frontend:** React 18 + Tailwind + Radix + lucide-react + custom SVG force-graph + native WebRTC (RTCPeerConnection); dark cosmic/gold aesthetic
+- **Backend:** FastAPI + MongoDB (motor) + JWT auth + token-authed WebSockets + Resend email + Claude Sonnet 4.5 via emergentintegrations + WebRTC mesh signaling over the existing session WS + Permissions-Policy header for camera/mic
+- **Frontend:** React 18 + Tailwind + Radix + lucide-react + custom SVG force-graph + native WebRTC (RTCPeerConnection); dark cosmic/gold aesthetic; iframe-aware AV
+- **Roles:** `player` (seat-only), `gm` (can host campaigns), `admin` (everything). Legacy `user` accounts auto-migrate to `gm` on startup. Role chosen at registration.
 - **Responsive:** mobile-first breakpoints (<768px) with bottom-nav + drawer pattern; desktop ≥768px keeps sidebar + multi-column
 
 ## 2. Implemented (cumulative)
 
-### V1.0–V2.1
-Auth · BESM 4E reference (86 attrs / 36 defects / 23 limiters / 21 Extras) · Campaigns · Character Forge · Live Sessions (WebSocket) · Knowledge Web · Atelier wizard (Sclanders framework, credited) · Player Primer + allow/prohibit lists · Invite links · Resend email · World Codex (8 article types) · Knowledge Graph canvas (force-directed SVG) · Character Folio (Edges/Obstacles/Goals/Family/Journal) · Session Recap generator (Claude Sonnet 4.5) · Auto-pinned recaps · Mobile/desktop responsive UI · BESM term click-to-reference popovers.
+### V1.0–V3.0
+Auth · BESM 4E reference (86 attrs / 36 defects / 23 limiters / 21 Extras) · Campaigns · Character Forge · Live Sessions (WebSocket) · Knowledge Web · Atelier wizard · Player Primer + allow/prohibit lists · Invite links · Resend email · World Codex (8 article types) · Knowledge Graph canvas (force-directed SVG) · Character Folio · Session Recap generator · Auto-pinned recaps · Mobile/desktop responsive UI · BESM term click-to-reference popovers · **Mesh WebRTC AV seats (audio + video, mobile-first, presence-aware tiles)**.
 
-### V3.0 — AV Seats (this iteration — 2026-04-25)
+### V3.1 — P0 unblock batch (this iteration — 2026-04-25)
 
-**Camera/Mic Discord-like seats around the live session**
-- Backend `Bus` rewritten from `List[WebSocket]` → `List[Peer]` (uid + name + opaque conn_id) — see `server.py` lines ~1350-1495
-- WebSocket relay extended with `presence:room` (initial seed for joiner), `presence:join`, `presence:leave`, `presence:av-state` (mic/cam toggles), and targeted `webrtc:offer` / `webrtc:answer` / `webrtc:ice` (forwarded to a single peer via `to:` field, never broadcast)
-- Mesh peer-to-peer architecture: every participant maintains an RTCPeerConnection per other participant, via Google STUN servers; no SFU, no TURN
-- Glare avoidance: deterministic offerer rule (lexicographically smaller `conn_id` initiates the offer)
-- Frontend `<AVSeats>` component (`/app/frontend/src/components/AVSeats.jsx`):
-  - Sticky strip above the 3-col session grid on desktop, full-width on mobile
-  - Tile per participant (self + remotes) with avatar fallback, GM crown, mic/cam status
-  - Mic toggle, camera toggle, leave-call controls
-  - Tap-to-enlarge tile (mobile-friendly)
-  - Empty state when alone at the table
-- Signaling channel: shares the existing session WebSocket via a (subscribe / send) bridge in `SessionView.jsx`, so no second connection needed
-- Mobile-first: horizontal scroll strip on phones, wrap-grid on desktop
-- Audio + video both supported from launch (per user spec)
+**Role separation (player vs gm vs admin)**
+- Registration UI surfaces a role picker (Take a seat / Run the table); default = player
+- Players cannot create campaigns (HTTP 403 with helpful upgrade message); the "Forge a campaign" CTA on /app/campaigns is rendered disabled with "GMs only" label for player-role users
+- `seed_user` is now authoritative on each boot — keeps demo gm@/player@/admin@ roles in sync
+- Role-gate is allowlist-based: `if user.role not in ('gm','admin'): 403` (defense-in-depth)
 
-### V3.0 — Tested
-- Backend: 85/87 pytest (97.7%); 6/6 new TestWebSocketPresence cases pass; 5/5 prior WS regression tests still green after Bus rewrite. Two carry-over failures (CORS preflight wildcard, LLM 429) pre-date this iteration
-- Frontend Playwright: AV strip renders, empty state visible, join button visible, mobile (390×844) pane tabs still switch, two-context test (GM + Player) confirms peer tile upsert on `presence:join` and removal on `presence:leave`
-- Regressions verified green: chat send, dice roll, advance round, recap
+**Start Session (no more browser prompt)**
+- Replaced `window.prompt()` with a styled `<StartSessionModal>` (Escape-to-close, default title `Session N+1`, helper hint about seat-prereq)
+- Both top-bar and Sessions tab use the same modal
+
+**AV permission UX**
+- `Permissions-Policy: camera=(self), microphone=(self), display-capture=(self)` middleware on every response
+- Frontend detects iframe embedding (`window.self !== window.top`) and shows an "Open in new tab" banner above the AV strip when the user is inside the preview frame
+- `getUserMedia` errors now distinguish iframe-block vs OS-deny vs no-device vs in-use
+
+**Per-node visibility (role-based)**
+- Backend already supported `gm_only / shared / revealed (+ revealed_to: List[user_id])` and the GET `/campaigns/{cid}/nodes` filter — surfaced as a 3-option selector in the GM `<NodeEditor>` with a member-toggle picker for the `revealed` case
+- Player-side Knowledge Web only shows nodes they're authorised on
+
+**GM Primer caps**
+- New campaign fields: `character_point_min`, `character_point_max`, `max_per_attribute_rank` (each 0 = inherit Power Level default)
+- Character Builder shows live "Spent X / Y (GM cap, Heroic)" with a `gm-cap-note` indicator when the override is active, "Below GM floor — spend N more" when under min, and per-Attribute over-cap warnings
+- `save()` clamps any over-cap Attribute Level to the GM cap on submit
+
+**Reference cards: legal mechanic-only blurbs**
+- Wrote ORIGINAL mechanic-only blurbs (no rulebook prose / lore / examples) for: 21 named Attributes, all 3 Defect categories (Lesser/Greater/Serious), generic Enhancement & Limiter explanations, 10 Extras Rules, all 5 Power Levels, plus a `generic_blurbs` set ("How costing works", "Items vs Mundane", "Weapon vs Gear vs Item")
+- Reference page renders the blurb under each card; CharacterBuilder picker also shows the blurb on hover/expand
+- All cards keep the page-ref + book-source citation per Tri-Stat compliance
+
+**Tri-Stat Emporium credit**
+- Footer credit on every BESM-system campaign with the © Mark MacKinnon / Dyskami line + the standing "references rules — does not reproduce them" disclaimer
+
+### V3.1 — Tested
+- Backend: 106/108 pytest stable (98.1%); 21/21 new tests pass across 5 new classes (TestIter7Roles · PrimerCaps · BesmBlurbs · NodeVisibility · PermissionsPolicy)
+- Frontend Playwright: every named testid found and exercised (auth-role-picker, new-campaign-btn disabled, tri-stat-credit, start-session-modal, primer-caps, node-visibility 3-way + reveal-picker, ref-blurb cards + ref-generic-blurbs)
+- 2 carry-over failures (CORS empty-FRONTEND_URL, LLM 429) pre-date V3.1; documented in iters 3-7
 
 ## 3. Backlog
 
-### P1 — V3+ candidates
-- **Battlemap + tokens** (canvas with grid, fog-of-war, drag tokens, line-of-sight)
-- **Backend refactor** of `server.py` (now 1500 lines) into modular routers (`/app/backend/routes/{auth,campaigns,characters,sessions,ws}.py`)
+### P1 — Next major builds
+- **Game-system selector** + 10 popular systems as data scaffold (D&D 5E, Pathfinder 2e, Call of Cthulhu, Savage Worlds, FATE Core, Cyberpunk RED, Vampire 5e, Blades in the Dark, Mothership, Shadowrun 6e). UI flow stays system-agnostic; mechanics stay BESM-only until system-specific data is added.
+- **Discord-style channels & threads (PBP)** per campaign — #general / #ic / #ooc / custom; threading; live unread; mentions; via existing WS bus. **DEFERRED — needs its own dedicated session.**
+- **Initiative-driven AV layout + spotlight** — GM grid orders tiles by initiative; chat slides under the active player's tile; the active player's view swaps from grid to a character-sheet+roll-options popup
+- **Auto-generated roll-options list** from BESM mechanics + GM Primer (everything-not-explicitly-prohibited)
+- **Player → GM live "Primer change request"** popup alerts; GM Primer live-edit mid-campaign
 
-### P2 — AV Seats hardening
-- Per-connection rate limit on the WS relay loop (50 msgs/sec) to prevent signaling-channel flooding
-- Pydantic validation for `presence:av-state` and `webrtc:*` payloads (currently pass-through)
-- Frontend WS reconnect with exponential backoff + presence:room re-sync (kube ingress idle drops)
-- Split `AVSeats.jsx` into `useMeshWebRTC()` hook + `<AVTile>` presentational component
-- TURN credentials for symmetric-NAT participants (today STUN-only)
+### P1 — V3 candidates
+- **Battlemap + tokens** (canvas with grid, fog-of-war, drag tokens, line-of-sight)
+- **Backend refactor** — `server.py` (now ~1545 lines) → `/app/backend/routes/{auth,campaigns,characters,sessions,ws,besm}.py`
+
+### P2 — AV hardening
+- Per-connection rate limit on the WS relay loop (50 msgs/sec)
+- Pydantic validation for `presence:av-state` + `webrtc:*` payloads
+- WS reconnect with exponential backoff + presence:room re-sync on kube-ingress idle drops
+- TURN credentials for symmetric-NAT users
 
 ### P2 — Polish
+- Cache `/api/besm/reference` (functools.lru_cache) — fully static payload
+- Per-attribute level `<input max>` reflecting `max_per_attribute_rank` for immediate browser-level enforcement
 - Extend `<BesmTerm>` to Skills, Enhancements, Limiters, and the Atelier
-- Map view with location pins
-- Timeline auto-renderer for `event` nodes
-- Family-tree / diplomatic-web specialised graph layouts
+- Map view with location pins; timeline auto-renderer for `event` nodes; family-tree graph layouts
 - Recap export to PDF / handout
-- Verify Resend domain to enable arbitrary recipient emails
+- Verify a Resend domain so password-reset emails can go to arbitrary recipients
+- WS presence test stabiliser (raise `_drain_until` budget to 8s + 1-shot retry decorator)
+
+### P2 — Carry-overs (pre-V3.1)
+- CORS preflight wildcard fix when FRONTEND_URL is empty (pass `allow_origins=[]` so regex applies)
+- 502 sanitisation in generate_recap; per-(session,user) cooldown so LLM 429 stops bubbling
 
 ## 4. Credits
 
-- BESM 4E (Mark MacKinnon, Dyskami Publishing, 2020)
+- BESM 4E (Mark MacKinnon, Dyskami Publishing, 2020) — referenced, not reproduced
 - BESM Extras / Character Folio (Dyskami)
 - Campaign Atelier framework (Guy Sclanders, *How to be a Great GM*, 2018)
 - World Codex inspiration (World Anvil article-typed worldbuilding pattern)
 
 ## 5. Next Tasks
 
-1. **Battlemap + tokens** (next major V3 build) OR backend refactor first
-2. AV seats hardening (rate-limit, validation, reconnect)
-3. Verify a Resend domain (or stay test-mode)
+1. **Game-system selector + 10 systems scaffold** OR **Discord-style channels & threads** — user's pick for next batch
+2. **Initiative-driven AV layout + spotlight** + auto-generated roll-options list (large UX build)
+3. **Battlemap + tokens** (V3 major) — recommend after the backend split
+4. **Backend refactor** — split `server.py` into routers
