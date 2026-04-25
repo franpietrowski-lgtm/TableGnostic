@@ -5,95 +5,97 @@
 
 ## 1. Architecture
 
-- **Backend:** FastAPI + MongoDB (motor) + JWT + token-authed WebSockets + Resend email + Claude Sonnet 4.5 via emergentintegrations + WebRTC mesh signaling + Permissions-Policy header
-- **Frontend:** React 18 + Tailwind + Radix + lucide-react + custom SVG force-graph + native WebRTC; iframe-aware AV; **portaled BesmTerm popovers**; system-aware footer credit + logo
+- **Backend:** FastAPI + MongoDB (motor) + JWT + token-authed WebSockets + Resend email + Claude Sonnet 4.5 via emergentintegrations + WebRTC mesh signaling + Permissions-Policy
+- **Frontend:** React 18 + Tailwind + Radix + lucide-react + custom SVG force-graph + native WebRTC; iframe-aware AV; portaled BesmTerm popovers; system-aware footer credit + logo
 - **Roles:** `player` / `gm` / `admin`. Legacy `user` accounts auto-migrate to `gm`.
 - **Game Systems:** 11 — BESM 4E fully supported; 10 scaffolded.
 
 ## 2. Implemented (cumulative)
 
-### V1.0–V3.3
-Auth · BESM 4E reference (full mechanic data) · Campaigns · Character Forge · Live Sessions · Knowledge Web · Atelier · Player Primer + caps · Invite links · Resend · World Codex · Knowledge Graph · Character Folio · Session Recap · Auto-pinned recaps · Mobile/desktop responsive · BESM term click-to-reference · Mesh WebRTC AV seats · Role separation · Game-system selector + 10-system scaffold · Tri-Stat Emporium logo + Dyskami legal text · 3 Evereantha sample PCs.
+### V1.0–V3.4
+Auth · BESM 4E reference · Campaigns · Character Forge · Live Sessions · Knowledge Web · Atelier · Player Primer + caps · Resend · World Codex · Knowledge Graph · Character Folio · Session Recap · Auto-pinned recaps · Mobile/desktop · BESM term click-to-reference (portaled) · Mesh WebRTC AV seats · Role separation · Tri-Stat Emporium logo + Dyskami legal text · 3 Evereantha sample PCs · Setting-flavor as primary description on sheet · Skill components · Power Pack section.
 
-### V3.4 — Tooltip portal + Sheet flavor + Skill components + Power Packs (this iteration — 2026-04-25)
+### V3.5 — Cost engine + Campaign Benchmarks (this iteration — 2026-04-25)
 
-**Tooltip z-index bug fixed (P0)**
-- Root cause: BesmTerm used `position: absolute` inside cards with their own stacking context (`z-index`, `transform`, `overflow:hidden`), causing the popover to be clipped or rendered behind sibling cards.
-- Fix: rewrote `<BesmTerm>` to render its popover via `createPortal(document.body)` with `position: fixed` viewport-relative coordinates calculated from `getBoundingClientRect()`. Reflows on scroll/resize. Auto-flips above the trigger when bottom-room is tight. `data-testid="besm-term-popover"` for testing.
+**BESM 4E cost-engine clamp**
+- `attribute_cost(a)` rewritten: `per_level = max(1, cost_per_level + (#Enh − #Lim))`, `subtotal = per_level × level`, then `max(0, subtotal − nested_defect_refund)`.
+- Single source of truth — `calc_spent_points()` calls `attribute_cost()` per Attribute (no more parallel implementation).
+- **Defect refund direction fix**: previous `calc_spent_points()` ADDED `defect_points` to `total_spent` (over-counted refunds). Corrected to SUBTRACT — matches BESM 4E p.154 spec. *Heads up*: existing characters' totals may shift after recalc; this is a correctness fix.
+- Frontend `<CharacterBuilder>` `spent` useMemo + `derived` calculator both mirror the new clamp + nested-defect math (single calculation pattern across client and server).
 
-**Setting-flavor as primary description on character sheet**
-- Surfaces each Attribute / Defect / Skill's `note` field (the in-setting flavor) as an italic primary description directly under the term name on the Character Sheet — e.g. **"Cryptosha · Serenitas calmative tincture, distilled in glass and warmed before pour"** under Healing, instead of the generic mechanic blurb.
-- Generic blurbs remain available behind the click-to-reveal BesmTerm popover for players who want the rules-side reminder.
+**Defects on Items / Weapons (and other objectifiable Attributes)**
+- New `CharacterAttribute.defects: List[CharacterDefect] = []` model field.
+- New `ITEM_LIKE_ATTRS` set on the frontend (Item, Weapon, Gear, Companion, Minions, Wealth, Connected, Vehicle).
+- Customise picker on those Attributes shows a **Defects on this {Attribute}** section with per-defect select + rank input + remove button. Refunds visible in the row's total cost.
+- Engine math floors at 0 (an Attribute never refunds more than it costs).
 
-**Skill Groups properly populated (and moved off Attributes)**
-- Removed the misplaced `Skill Group` Attribute entries from all 3 Evereantha PCs. They now live in the dedicated `skills` array with `components` breakdowns, so a player sees exactly what the group does at the table.
-- Added `CharacterSkillComponent` Pydantic model (`name`, `level`, `note`) and `components: List[CharacterSkillComponent]` on `CharacterSkill`.
-- Character Sheet now renders the component list as a 2-column responsive grid under the Skill Group header, each component with its own setting-flavored note.
-- Example — Cyma's **Apocophea Kit (Lesser, ×2)**:
-  - Survivalist ×1 — Foraging, weather-reading, camp-craft.
-  - Apocophea Training ×1 — Autobag handling, staff-and-vial discipline.
-  - Flora Library ×1 — Recall and identify a region's flora and toxins.
-  - Encumbrance ×1 — GM-approved · carry the bandolier full without penalty.
+**Per-Attribute Enhancement / Limiter whitelist**
+- `besm_data.py`: new `ATTRIBUTE_MOD_WHITELIST` covering 30+ Attributes with rule-side restrictions (Tough → no Enh; Wealth → no Enh; Heightened Senses → only Range; Movement modes → Duration/Range only; Combat Mastery → no Enh, narrow Lim; etc.).
+- New `attribute_whitelist(name)` helper; `/api/besm/reference` now returns `allowed_enhancements`, `allowed_limiters`, `open_mods` per Attribute.
+- Customise picker dims/disables non-whitelisted chips with explanatory tooltip ("Not typically allowed on {Attribute} — rule advisory"). GM Primer can still override via custom mods.
 
-**Power Pack / Source-of-Power section**
-- New `CharacterPowerPack` Pydantic model with `name`, `description`, `references[]` (label-list pointing at Attributes / Defects / Skills already on the sheet), `cost` (defaults to 0 = free narrative grouping; GM may set positive).
-- New `power_packs: List[CharacterPowerPack]` on `CharacterIn`.
-- Character Sheet renders a dedicated Power Pack card per entry — each with name, optional cost or "Narrative · no cost" tag, italic description, reference tag-chips, and the BESM Extras citation.
-- All 3 Evereantha PCs now ship with one Power Pack each:
-  - Cyma — **Cryptosha · Serenitas** (refs: Healing, Cognition, Vial Bandolier)
-  - Tarsis — **The Ferralith Circle** (refs: Resonant war-hammer, Combat Discipline, Connected)
-  - Vela — **Aurae · Confluo · Vallum** (refs: Control Environment, Armour, Tunnelling)
+**Campaign Benchmarks**
+- New fields on `CampaignIn`: `genre: str`, `time_period: str`, `size_scale: str` (default "Personal"), `damage_rating_baseline: int` (default 5).
+- `calc_derived(ch, campaign)` reads `damage_rating_baseline` and uses it in the Damage Multiplier formula (`dm_base + massive_damage * 5`); 3 call sites updated to pass campaign.
+- New PrimerTab section **Campaign Benchmarks** with 4 inputs (Genre — datalist of 16 suggestions; Time Period — 13-option select; Size Scale — 5-option select; Damage Rating — numeric).
+- Character Builder's campaign-briefing card surfaces the benchmarks as testable badges (`bench-genre`, `bench-period`, `bench-size`, `bench-dr`).
+- `damage_rating_baseline=5` and `size_scale="Personal"` hide their badges (sensible default UX).
 
-### V3.4 — Verified
-- Visual Playwright run confirms: `attr-note-0` carries the setting flavor; `skill-components-0` lists 4 named sub-skills with notes; `power-packs` + `power-pack-0` testids present; `besm-term-popover` opens at fixed coordinates (686, 316) — z-index 1000 — on top of every sibling card, no clipping.
-- Adventurous-tier point spend per PC after restructure: Cyma 50/80 (attrs 25 + skills 4 + stats 17 − defects 4 = 42 net spending headroom), Tarsis 56/80, Vela 41/80. Headroom intentional — leaves room for advancement.
+### V3.5 — Tested (iter_9)
+- Backend: 13/13 new pytest cases pass (`test_iter9_v35.py`): TestWhitelist 6/6, TestCostEngineClamp 5/5, TestCampaignBenchmarks 2/2.
+- Frontend Playwright: Primer benchmarks UI all 5 testids present + save→reload persistence; Builder briefing badges correct (HIGH FANTASY · MEDIEVAL · DR baseline · 7); bench-size correctly hidden for default Personal.
+- Manual verification: Tough's Enhancement chips (Area/Duration/Range/Targets/Potent) all rendered disabled with cursor-not-allowed; Item's chips all active; Defects-on-Item flow adds → updates → removes correctly.
+- Post-test fix: live-derived DM in unsaved builder now reads `campaign.damage_rating_baseline` instead of hard-coded 5 (cosmetic — persisted character was already correct).
 
 ## 3. Backlog (in user's stated order)
 
-### P1 — Cost engine + benchmarks (next batch)
-- **Cost engine clamp** — net cost-per-Level must be ≥ 1 (BESM 4E rule); current engine allows 0 / negative when Limiters > Enhancements + 1. Affects Vela's Tunnelling and any heavily-limited build.
-- **Per-Attribute Enhancement / Limiter whitelists** — BESM core lists which mods may apply to which Attributes; enforce in builder picker.
-- **Defects on Items / Weapons** — extend the model to allow Item / Weapon entries to carry their own Defect lists with refunds applied to the parent Attribute's cost.
-- **Genre / Time-Period / Size / Damage-Rating benchmarks** at campaign level → flow into Character Builder caps + Map tokens + Reference filtering. Stored on Campaign Primer.
-- **System theming** — Dyskami palette/accents only on BESM 4E (and Anime 5E when added per OGL); D&D house style on D&D campaigns; Cypher voice on Cypher campaigns; etc. Applied to inner-window surfaces only.
+### P1 — Next major builds
+- **System theming layer** — Dyskami palette/accents only on BESM 4E (and Anime 5E when OGL content lands); D&D house style on D&D campaigns; Cypher voice on Cypher; scoped to inner-window surfaces. CSS variables + `data-system="..."` attribute on the page wrapper.
+- **Knowledge Web file ingestion** — GM uploads PDF / MD / TXT → Claude Sonnet 4.5 (via emergentintegrations) parses → suggests / creates nodes (NPCs, locations, factions, events). Diff-review before commit.
+- **Initiative-driven AV spotlight + Journal↔Sheet bond + Roll-options popup + Loremaster's hush** — paired build (shares the active-player surface). Roll-options auto-built from current-system mechanics + GM Primer ("everything not explicitly prohibited"). Loremaster's hush gold-sigil pulse when GM speaks.
+- **Player → GM live "Primer change request"** popup alerts; GM Primer live-edit mid-campaign.
 
-### P1 — Knowledge Web file ingestion
-- GM uploads PDF / MD / TXT → Claude Sonnet 4.5 (via emergentintegrations) parses → suggests / creates nodes (NPCs, locations, factions, events). Diff-review before commit. P0 path: parse → propose; P1: auto-link nodes.
+### P1 — Architecture / V3 majors
+- **Backend refactor** — `server.py` (~1700 lines) → `/app/backend/routes/{auth,campaigns,characters,sessions,ws,besm,systems,seed}.py`.
+- **Discord-style channels + threads PBP** per campaign.
+- **Battlemap + tokens** (canvas grid, fog-of-war, drag tokens, line-of-sight).
 
-### P1 — Initiative-driven AV spotlight + Journal↔Sheet bond + Roll-options popup
-- Active player tile enlarges; chat slides under it; the active player's surface swaps to char-sheet + auto-generated roll-options popup; roll-options built from current-system mechanics + GM Primer ("everything not explicitly prohibited"). Loremaster's hush gold-sigil pulse when GM speaks. Character Journal lives on the sheet; journal entries feed session/campaign/end-campaign summaries.
+### P2 — V3.5 polish (from iter_9 hints)
+- `/api/besm/reference` cached via `lru_cache` (fully static payload now ~2x larger after whitelist+blurbs).
+- Stable `data-testid` on the Picker `+ Add` button (currently `add-${prefix}-btn` is dynamic).
+- Per-chip `data-testid` (`attr-${idx}-enh-${name}`) so Playwright can assert disabled state.
+- Move `ATTRIBUTE_MOD_WHITELIST` to a JSON file editable by non-engineers.
+- Centralise the "Personal" default constant on the size-scale (currently duplicated in both backend default and frontend hide-rule).
+- `bench-dr` badge: optional separate `is_overridden` flag rather than the current "≠ 5" heuristic — would let a GM pin DR=5 and still see the badge.
+- AV hardening (rate-limit, validation, reconnect/backoff, TURN).
 
-### P1 — Other
-- Player → GM live "Primer change request" popup alerts; GM Primer live-edit mid-campaign.
-- Backend refactor — `server.py` (~1635 lines) → `/app/backend/routes/`.
-
-### P2
-- Discord-style channels + threads PBP per campaign.
-- Battlemap + tokens (canvas grid, fog-of-war, drag tokens, line-of-sight).
-- AV hardening (rate-limit, payload validation, reconnect/backoff, TURN).
-- `/api/besm/reference` `lru_cache`.
-- Per-attribute `<input max>` bound to `max_per_attribute_rank`.
-- React context for `/api/systems` so SystemCredit doesn't refetch.
-- `<optgroup>` in CreateModal system selector.
+### P2 — Other carry-overs
+- CORS preflight wildcard fix when `FRONTEND_URL` is empty.
+- 502 sanitisation in generate_recap; per-(session, user) cooldown so LLM 429 stops bubbling.
+- Per-attribute `<input max>` bound to `max_per_attribute_rank` for browser-level enforcement.
+- Extend `<BesmTerm>` to Skills / Enhancements / Limiters / Atelier surfaces.
+- Map view with location pins; timeline auto-renderer for `event` nodes; family-tree graph layouts.
+- Recap export to PDF / handout.
+- Verify a Resend domain so password-reset emails can go to arbitrary recipients.
 
 ### Later VIP
-- DriveThruRPG-ready PDF export pipeline (digital-release-ready, properly flowed; system-appropriate trade dress per publisher).
+- DriveThruRPG-ready PDF export pipeline (digital-release-ready, properly flowed; system-appropriate trade dress per publisher; Tri-Stat Emporium combined-logo cover on BESM products).
 - 8-session Evereantha demo with auto-summarised sessions, per-player engagement tooltips (mic/cam/chat/roll time), character-relationship summaries.
 
 ## 4. Credits
 
-- BESM 4E (Mark MacKinnon, Dyskami Publishing, 2020) — referenced, not reproduced; Tri-Stat Emporium attribution + logo on every BESM campaign
-- Campaign Atelier framework (Guy Sclanders, *How to be a Great GM*, 2018)
-- World Codex inspiration (World Anvil)
-- All 10 scaffolded systems credited to their respective publishers in `GAME_SYSTEMS`
-- Evereantha setting (user-provided)
+- BESM 4E (Mark MacKinnon, Dyskami Publishing, 2020) — referenced, not reproduced; full Tri-Stat Emporium attribution in footer.
+- Campaign Atelier framework (Guy Sclanders, *How to be a Great GM*, 2018).
+- World Codex inspiration (World Anvil).
+- All 10 scaffolded systems credited to their respective publishers in `GAME_SYSTEMS`.
+- Evereantha setting (user-provided).
 
 ## 5. Next Tasks
 
-1. **Cost-engine corrections + benchmarks** (Genre / Time-Period / Size / Damage-Rating + clamp ≥1 + per-Attribute mod whitelists + Defects-on-Items)
-2. **Knowledge Web file-ingestion** (GM uploads → LLM-suggested nodes)
-3. **Initiative-driven AV spotlight + Journal↔Sheet bond + Roll-options popup + Loremaster's hush** (paired build)
-4. **System theming** layer (palette/typography accent per system, scoped to inner surfaces)
-5. **Primer change-request alerts** + GM live-edit
-6. **Backend refactor** → routers
-7. **Discord PBP channels** · **Battlemap**
+1. **System theming layer** (palette + typography accent per system, scoped to inner surfaces).
+2. **Knowledge Web file ingestion** (GM uploads → Claude → suggested nodes).
+3. **Initiative-driven AV spotlight + Journal↔Sheet bond + Roll-options popup + Loremaster's hush** (paired build).
+4. **Primer change-request alerts** + GM live-edit.
+5. **Backend refactor** → routers.
+6. **Discord PBP** · **Battlemap**.
+7. **Later VIP**: DriveThruRPG export + 8-session Evereantha demo.

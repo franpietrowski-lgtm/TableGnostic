@@ -104,11 +104,15 @@ export default function CharacterBuilder() {
     const lv = (n) => attrMap[n]?.level || 0;
     const { body, mind, soul } = ch.stats;
     const cv = Math.floor((body + mind + soul) / 3);
+    // Mirror calc_derived's V3.5 baseline override: campaign.damage_rating_baseline
+    // shifts the Damage Multiplier floor; default 5 (BESM stock).
+    const dmBase = (campaign && campaign.damage_rating_baseline > 0)
+      ? campaign.damage_rating_baseline : 5;
     return {
       cv, atk: cv + lv("Attack Mastery"), dfn: cv - 2 + lv("Defence Mastery"),
       hp: (body + soul) * 5 + lv("Tough") * 5,
       ep: (mind + soul) * 5 + lv("Energised") * 5,
-      dm: 5 + lv("Massive Damage") * 5,
+      dm: dmBase + lv("Massive Damage") * 5,
     };
   })();
 
