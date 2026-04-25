@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import { api, formatApiErrorDetail } from "../lib/api";
 import { Dice6, Edit3, BookOpen, Trash2 } from "lucide-react";
+import BesmTerm from "./ui/BesmTerm";
 
 export default function CharacterSheet() {
   const { id } = useParams();
@@ -121,7 +122,12 @@ export default function CharacterSheet() {
               {ch.attributes.map((a, i) => (
                 <div key={i} className="border border-gold/10 rounded-sm p-3 flex items-center justify-between flex-wrap gap-2">
                   <div>
-                    <div className="text-sm text-parchment font-ui">{a.name} <span className="text-gold">×{a.level}</span></div>
+                    <div className="text-sm font-ui">
+                      <BesmTerm name={a.name} cost={`${a.cost_per_level} pts/level`}
+                                page={a.page} note={a.note}
+                                book={a.page ? "BESM 4E" : "Custom"}/>
+                      <span className="text-gold ml-2">×{a.level}</span>
+                    </div>
                     <div className="text-[10px] text-mist font-ui uppercase tracking-widest flex items-center gap-1">
                       <BookOpen className="w-3 h-3"/> {a.page ? `p.${a.page} BESM 4E` : "Custom"}
                     </div>
@@ -148,7 +154,12 @@ export default function CharacterSheet() {
               {ch.defects.map((d, i) => (
                 <div key={i} className="border border-gold/10 rounded-sm p-3 flex items-center justify-between flex-wrap gap-2">
                   <div>
-                    <div className="text-sm text-parchment font-ui">{d.name} <span className="text-ember">×{d.rank}</span></div>
+                    <div className="text-sm font-ui">
+                      <BesmTerm name={d.name} cost={`${d.points_per_rank} pts/rank`}
+                                page={d.page} note={d.note} category={d.category}
+                                book={d.page ? "BESM 4E" : "Custom"}/>
+                      <span className="text-ember ml-2">×{d.rank}</span>
+                    </div>
                     <div className="text-[10px] text-mist font-ui uppercase tracking-widest flex items-center gap-1">
                       <BookOpen className="w-3 h-3"/> {d.page ? `p.${d.page} BESM 4E` : "Custom"} · {d.category}
                     </div>

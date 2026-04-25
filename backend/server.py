@@ -1023,6 +1023,25 @@ async def create_session(body: SessionIn, user: dict = Depends(get_current_user)
     doc["status"] = "open"
     doc["round"] = 0
     await db.sessions.insert_one(doc)
+    # Auto-pin: post the most recent recap from any previous session of this
+    # campaign as a system chat message — "What happened last time…"
+    try:
+        prev_recap = await db.recaps.find_one(
+            {"campaign_id": body.campaign_id},
+            {"_id": 0}, sort=[("created_at", -1)],
+        )
+        if prev_recap and prev_recap.get("text"):
+            pinned = {
+                "id": new_id(), "session_id": doc["id"],
+                "message": f"📜 What happened last time…\n\n{prev_recap['text']}",
+                "kind": "system", "user_id": "system",
+                "user_name": "LOREMASTER",
+                "pinned": True,
+                "created_at": now_iso(),
+            }
+            await db.chat_logs.insert_one(pinned)
+    except Exception as e:
+        print(f"[auto-pin recap] {e}")
     return sanitize(doc)
 
 @api.get("/campaigns/{cid}/sessions")

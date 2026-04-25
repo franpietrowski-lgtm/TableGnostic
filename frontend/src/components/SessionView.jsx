@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api, API } from "../lib/api";
-import { Dice6, Send, Plus, X, Swords, Heart, Zap, Skull, Shield, ChevronRight, Sparkles, ScrollText } from "lucide-react";
+import { Dice6, Send, Plus, X, Swords, Heart, Zap, Skull, Shield, ChevronRight, Sparkles, ScrollText, Users, MessageSquare } from "lucide-react";
 
 export default function SessionView() {
   const { id } = useParams();
@@ -19,6 +19,7 @@ export default function SessionView() {
   const [recap, setRecap] = useState(null);
   const [recapBusy, setRecapBusy] = useState(false);
   const [recapStyle, setRecapStyle] = useState("narrative");
+  const [mobilePane, setMobilePane] = useState("chat"); // chat | init | dice (mobile only)
   const chatEnd = useRef(null);
 
   const loadAll = async () => {
@@ -123,9 +124,26 @@ export default function SessionView() {
   };
 
   return (
-    <div className="px-6 md:px-10 py-6 h-screen overflow-hidden grid grid-cols-[280px_1fr_320px] gap-6">
+    <div className="px-4 md:px-10 py-4 md:py-6 md:h-screen md:overflow-hidden md:grid md:grid-cols-[280px_1fr_320px] gap-4 md:gap-6">
+      {/* Mobile pane switcher */}
+      <div className="md:hidden flex border-b border-gold/10 mb-3 sticky top-[52px] bg-void/90 backdrop-blur z-20" data-testid="session-mobile-tabs">
+        {[
+          ["chat", "Chat", MessageSquare],
+          ["init", "Init", Users],
+          ["dice", "Dice", Dice6],
+        ].map(([k, l, I]) => (
+          <button key={k} onClick={() => setMobilePane(k)}
+                  className={`flex-1 flex items-center justify-center gap-2 py-3 text-xs font-ui tracking-widest uppercase
+                    ${mobilePane === k ? "text-gold-bright border-b-2 border-gold" : "text-mist/70"}`}
+                  data-testid={`mobile-pane-${k}`}>
+            <I className="w-4 h-4"/> {l}
+          </button>
+        ))}
+      </div>
+
       {/* LEFT: Initiative + Effects */}
-      <div className="card-mystic p-4 overflow-y-auto scroll-stylish">
+      <div className={`card-mystic p-4 md:overflow-y-auto md:scroll-stylish ${mobilePane === "init" ? "block" : "hidden md:block"}`}
+           data-testid="initiative-panel">
         <Link to={`/app/campaigns/${session.campaign_id}`}
               className="text-[10px] font-ui uppercase tracking-widest text-gold/70">← Campaign</Link>
         <div className="label-ref mt-2">Round</div>
@@ -202,7 +220,8 @@ export default function SessionView() {
       </div>
 
       {/* CENTER: Chat */}
-      <div className="card-mystic p-5 flex flex-col min-h-0">
+      <div className={`card-mystic p-4 md:p-5 flex flex-col min-h-[60vh] md:min-h-0 ${mobilePane === "chat" ? "flex" : "hidden md:flex"}`}
+           data-testid="chat-panel">
         <div className="flex items-center justify-between mb-3">
           <div>
             <div className="label-ref">Live Session</div>
@@ -225,13 +244,26 @@ export default function SessionView() {
         <div className="divider-sigil"/>
         <div className="flex-1 overflow-y-auto scroll-stylish py-3 space-y-2">
           {chat.map((m) => (
-            <div key={m.id} className={`px-3 py-2 rounded-sm border ${m.kind === "system" ? "border-arcane/40 bg-arcane/5" : "border-gold/5"}`}
-                 data-testid={`chat-${m.id}`}>
-              <div className="text-[10px] font-ui uppercase tracking-widest text-gold/60">
-                {m.user_name} · {m.kind}
+            m.pinned ? (
+              <div key={m.id} className="px-4 py-3 rounded-sm border-2 border-gold/40 bg-gold/5 sticky top-0 z-10"
+                   data-testid={`pinned-recap-${m.id}`}>
+                <div className="flex items-center gap-2 mb-2">
+                  <ScrollText className="w-3 h-3 text-gold"/>
+                  <span className="text-[10px] font-ui uppercase tracking-[0.25em] text-gold-bright">
+                    Pinned · Last time at the table
+                  </span>
+                </div>
+                <div className="text-sm text-parchment/95 font-body whitespace-pre-wrap leading-relaxed">{m.message}</div>
               </div>
-              <div className="text-sm text-parchment font-body whitespace-pre-wrap">{m.message}</div>
-            </div>
+            ) : (
+              <div key={m.id} className={`px-3 py-2 rounded-sm border ${m.kind === "system" ? "border-arcane/40 bg-arcane/5" : "border-gold/5"}`}
+                   data-testid={`chat-${m.id}`}>
+                <div className="text-[10px] font-ui uppercase tracking-widest text-gold/60">
+                  {m.user_name} · {m.kind}
+                </div>
+                <div className="text-sm text-parchment font-body whitespace-pre-wrap">{m.message}</div>
+              </div>
+            )
           ))}
           <div ref={chatEnd}/>
         </div>
@@ -268,7 +300,8 @@ export default function SessionView() {
       )}
 
       {/* RIGHT: Dice log + roller */}
-      <div className="card-mystic p-4 flex flex-col min-h-0">
+      <div className={`card-mystic p-4 flex-col min-h-[60vh] md:min-h-0 ${mobilePane === "dice" ? "flex" : "hidden md:flex"}`}
+           data-testid="dice-panel">
         <div className="label-ref mb-2 flex items-center justify-between">
           <span>Dice Altar</span>
           <Dice6 className="w-4 h-4 text-gold"/>

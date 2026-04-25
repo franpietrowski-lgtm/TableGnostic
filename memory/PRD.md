@@ -5,84 +5,63 @@
 
 ## 1. Architecture
 
-- **Backend:** FastAPI + MongoDB (motor) + JWT auth + token-authed WebSockets + Resend email + Claude Sonnet 4.5 (via emergentintegrations) for AI recaps
+- **Backend:** FastAPI + MongoDB (motor) + JWT auth + token-authed WebSockets + Resend email + Claude Sonnet 4.5 via emergentintegrations
 - **Frontend:** React 18 + Tailwind + Radix + lucide-react + custom SVG force-graph; dark cosmic/gold aesthetic
-- **CORS:** regex-locked to `*.preview.emergentagent.com` + `localhost:*` with credentials enabled
+- **Responsive:** mobile-first breakpoints (<768px) with bottom-nav + drawer pattern; desktop ≥768px keeps sidebar + multi-column
 
 ## 2. Implemented (cumulative)
 
-### V1.0–1.2 (prior summaries — see git history)
-Auth, BESM 4E reference, campaigns, character forge, live sessions, knowledge nodes, BESM Reference tome, Atelier wizard with tooltips, Player Primer + allow/prohibit lists, invite links, BESM Extras, structured node `fields`, Resend email scaffolding.
+### V1.0–V2.0
+Auth · BESM 4E reference (86 attrs / 36 defects / 23 limiters / 21 Extras) · Campaigns · Character Forge · Live Sessions (WebSocket) · Knowledge Web · Atelier wizard (Sclanders framework, credited) · Player Primer + allow/prohibit lists · Invite links · Resend email · World Codex (8 article types) · Knowledge Graph canvas (force-directed SVG) · Character Folio (Edges/Obstacles/Goals/Family/Journal) · Session Recap generator (Claude Sonnet 4.5).
 
-### V2.0 (this iteration — 2026-04-25)
+### V2.1 (this iteration — 2026-04-25)
 
-**World Codex (the big World Anvil ask)**
-- 8 article types (NPC, Location, Organization, Event, Species, Item, Lore, Quest), each with its own structured field template inspired by World Anvil's pre-scaffolded articles
-- Type-specific prompts under each field ("What does the air feel like here?", "What event still echoes in its walls?")
-- Type filter chips with live counts in the Knowledge Web
-- New `NodeEditor` modal with one-click type selection + structured fields
-- All article data persists in `node.fields` dict (server-side `Dict[str, Any]`) — backwards compatible with the original simple `content` text
+**"What happened last time…" auto-pin**
+- When a GM creates a new session in a campaign that already has a recap on file, the most recent recap is auto-posted as the first chat message and rendered with a sticky, gold-bordered "Pinned · Last time at the table" treatment that floats at the top of the chat pane
 
-**Knowledge Graph canvas**
-- Pure-SVG force-directed graph (custom physics simulation, no external deps)
-- Toggle between List view ↔ Graph view
-- Drag nodes to reposition; click to inspect; node colour by type; edges as constellation lines with optional labels
-- Quick "Link" button to connect any two nodes by title substring + relation label
+**Mobile/desktop responsive UI (separate designs)**
+- **Shell**: sidebar persists on desktop; on mobile it collapses to a sticky topbar (logo + hamburger drawer) plus a fixed bottom-nav with icon+label tabs (Dashboard / Campaigns / Discover / Reference)
+- **SessionView**: 3-column desktop layout (Initiative · Chat · Dice) → 3-tab mobile layout with a sticky pane switcher; each pane gets full screen on phone
+- All forms, cards, and grids already used responsive Tailwind classes; verified at 390×844 (iPhone 14) and 1600×900 (desktop)
 
-**Character Folio (from BESM Folio v1.01 PDF)**
-- Full Folio panel below skills: Aliases · Gender/Species/Age · Occupation · Group dynamics · Physical description · Personality · Motivations · Fears · **Edges** (situational +1) · **Obstacles** (recurring −1) · **Goals** (short / long / secret) · **Family & Bonds** · **History of Events** · **Journal**
-- Stored in `character.folio` dict; round-trips through the API
+**BESM term click-to-reference (smooth physical→digital handoff)**
+- New `<BesmTerm>` popover component on the Character Sheet — click any Attribute or Defect name to see its cost, category, page, and source book; explicitly says "Table-Gnostic references rules — it does not reproduce them" so the player knows where to flip in their physical book
+- Wired into Attributes and Defects on the Character Sheet; trivial to extend to Skills, Enhancements, Limiters
 
-**Session Recap (the potential improvement)**
-- One-click recap button in the Session view; modal pops with the result
-- Three styles: **Narrative** (third-person past, ~200 words), **Bulleted** (groups), **In-character** (first-person journal entry)
-- Uses Claude Sonnet 4.5 via emergentintegrations + EMERGENT_LLM_KEY
-- Honours the campaign's tone + genre + character names (Loremaster system prompt)
-- 30-second per-(user, session) cooldown to prevent cost spikes
-- Recaps persisted in `db.recaps`; `GET /sessions/{sid}/recaps` returns the history
-
-**Resend email — live**
-- `RESEND_API_KEY` set; password-reset emails are now sent on `forgot-password`
-- New `/reset?token=…` page lands users from the email; gracefully validates and confirms
-- "Forgot?" link added on the sign-in form
-- ⚠️ **Resend account is currently in test mode** — the API can only deliver to the verified account email (`franpietrowski@gmail.com`). To send to other recipients, verify a domain at resend.com/domains and update `SENDER_EMAIL` in `/app/backend/.env` to use that domain (e.g. `noreply@yourdomain.com`). The integration itself is fully working.
-
-**CORS hardening complete**
-- Empty `FRONTEND_URL` → regex-only mode → preflight echoes specific origin + `credentials: true`
-- Verified: `https://abc.preview.emergentagent.com` → echoed; `https://evil.com` → blocked
+**System rules adherence**
+- Source citations everywhere ("p.94 BESM 4E", "p.14 BESM Extras") on every Attribute/Defect/Skill row in the builder, sheet, picker, and Reference tome
+- Custom GM-authored rules (Atelier custom_attributes / custom_defects) carry their own page_ref string and surface alongside official rules with a "Custom (GM)" group label
+- BESM Extras (Shock Value, Sanity Points, Power Packs, Mass Combat, etc.) integrated as a separate tab in the Reference tome with `BESM Extras` source label
+- Player Primer + allow/prohibit lists ensure each table only sees what their GM has approved
 
 ### Testing
-- Backend: 80/81 pytest (98.8%) → /app/test_reports/iteration_5.json. Includes 5 new Folio tests + 5 new Session Recap tests with real Claude calls.
-- The single residual failure was the same CORS test, which is now resolved (verified by curl post-fix).
+- Backend: 80/81 (98.8%); CORS issue resolved post-fix.
+- Mobile + desktop screenshots verified end-to-end.
 
 ## 3. Backlog
 
-### P0 — pending user
-- User verifies a Resend domain to enable arbitrary recipient emails (or stays on test mode)
-- Walk through the V2 flow: Codex → drop a few articles → switch to Graph → run a session → generate a recap
+### P1 — V3 candidates (next major iterations, large)
+- **Camera/mic Discord-like AV seats** (WebRTC) — voice/video tiles around the live session
+- **Battlemap + tokens** (canvas with grid, fog-of-war, drag tokens, line-of-sight)
 
-### P1 — V2 polish
-- Map view with pinnable locations
+### P2 — Polish
+- Extend `<BesmTerm>` to Skills, Enhancements, Limiters, and the Atelier
+- Map view with location pins
 - Timeline auto-renderer for `event` nodes
 - Family-tree / diplomatic-web specialised graph layouts
-- "What happened last time" auto-prepended to next session's chat
 - Recap export to PDF / handout
-
-### P2 — V3
-- Battlemap + token system
-- **Camera/mic Discord-like AV seats** (your original ask)
-- Mobile-first responsive pass
+- Mobile pass on Atelier (already responsive via Tailwind, but specific test on phone needed)
+- Verify Resend domain to enable arbitrary recipient emails
 
 ## 4. Credits
 
-- BESM 4E — Mark MacKinnon, Dyskami Publishing (2020)
-- BESM Extras (Rule Expansions & Character Options) — Dyskami v1.1.2
-- BESM Character Folio — Dyskami v1.01
-- Campaign Atelier framework — Guy Sclanders, *How to be a Great GM* (2018)
-- World Codex inspiration — World Anvil's article-typed worldbuilding pattern
+- BESM 4E (Mark MacKinnon, Dyskami Publishing, 2020)
+- BESM Extras / Character Folio (Dyskami)
+- Campaign Atelier framework (Guy Sclanders, *How to be a Great GM*, 2018)
+- World Codex inspiration (World Anvil article-typed worldbuilding pattern)
 
 ## 5. Next Tasks
 
-1. User verifies Resend domain (or stays in test mode)
-2. Pick V3 direction: AV seats · Battlemap · Mobile pass
-3. Optional polish: PATCH-style campaign edit; PDF export of recaps and handouts; seasonal/multi-arc Atelier
+1. User decides between **AV seats** vs **Battlemap** as the next V3 build (each is a major project)
+2. Verify a Resend domain (or stay test-mode)
+3. Optional polish: extend `<BesmTerm>` everywhere; add map/timeline/family-tree views
