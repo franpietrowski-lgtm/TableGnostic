@@ -1724,19 +1724,22 @@ class TestIter7BesmBlurbs:
             if cat in ("Lesser", "Greater", "Serious"):
                 assert d.get("blurb"), f"defect {d['name']} ({cat}) has no blurb"
 
-    def test_enhancement_blurb_shared(self, ref):
+    def test_enhancement_blurb_per_name(self, ref):
+        # V3.2: per-name blurbs (Area/Duration/Range/Targets/Potent each unique)
         enhs = ref["enhancements"]
         assert len(enhs) > 0
         blurbs = {e.get("blurb", "") for e in enhs}
-        assert len(blurbs) == 1, "all enhancements should share ENHANCEMENT_BLURB"
-        assert next(iter(blurbs)) != ""
+        assert "" not in blurbs
+        assert len(blurbs) == len(enhs), "expected per-name distinct blurbs"
 
-    def test_limiter_blurb_shared(self, ref):
+    def test_limiter_blurb_per_name(self, ref):
+        # V3.2: per-name blurbs (23 distinct)
         lims = ref["limiters"]
         assert len(lims) > 0
-        blurbs = {l.get("blurb", "") for l in lims}
-        assert len(blurbs) == 1
-        assert next(iter(blurbs)) != ""
+        blurbs = [l.get("blurb", "") for l in lims]
+        assert all(b for b in blurbs)
+        # Most should be distinct (allow occasional duplication, but >80% unique)
+        assert len(set(blurbs)) >= int(0.8 * len(blurbs))
 
     def test_extras_rules_blurb(self, ref):
         extras = ref["extras_rules"]
@@ -1832,3 +1835,186 @@ class TestIter7PermissionsPolicy:
         pp = r.headers.get("permissions-policy") or r.headers.get("Permissions-Policy")
         assert pp and "camera=(self)" in pp and "microphone=(self)" in pp
 
+
+
+# ---------------- Iteration 8: V3.2 Game Systems & Full BESM Blurbs ----------------
+
+EXPECTED_SYSTEM_IDS = {
+    "besm-4e", "dnd-5e", "pf2e", "coc-7e", "savage-worlds",
+    "fate-core", "cyberpunk-red", "vampire-5e", "blades-in-the-dark",
+    "mothership", "shadowrun-6e",
+}
+
+
+class TestIter8GameSystems:
+    """GET /api/systems is public, returns 11 entries with required fields."""
+
+    def test_systems_endpoint_public_no_auth(self):
+        r = requests.get(f"{API}/systems")
+        assert r.status_code == 200, r.text
+        d = r.json()
+        assert d["default"] == "besm-4e"
+        assert isinstance(d["systems"], list)
+        assert len(d["systems"]) == 11
+
+    def test_systems_have_all_expected_ids(self):
+        d = requests.get(f"{API}/systems").json()
+        ids = {s["id"] for s in d["systems"]}
+        assert ids == EXPECTED_SYSTEM_IDS, f"missing/extra: {ids ^ EXPECTED_SYSTEM_IDS}"
+
+    def test_systems_required_fields_per_entry(self):
+        d = requests.get(f"{API}/systems").json()
+        for s in d["systems"]:
+            for k in ("id", "name", "publisher", "edition", "year",
+                      "copyright", "supported", "blurb"):
+                assert k in s, f"{s.get('id')} missing {k}"
+            assert isinstance(s["supported"], bool)
+            assert isinstance(s["blurb"], str) and len(s["blurb"]) > 0
+
+    def test_only_besm_supported(self):
+        d = requests.get(f"{API}/systems").json()
+        supported = [s for s in d["systems"] if s["supported"]]
+        assert len(supported) == 1
+        assert supported[0]["id"] == "besm-4e"
+
+
+class TestIter8BesmBlurbCoverage:
+    """All entries in /api/besm/reference now carry a `blurb`."""
+
+    def test_all_attributes_have_blurb(self):
+        d = requests.get(f"{API}/besm/reference").json()
+        assert len(d["attributes"]) == 86
+        missing = [a["name"] for a in d["attributes"] if not a.get("blurb")]
+        assert not missing, f"attrs missing blurb: {missing[:5]} ({len(missing)} total)"
+
+    def test_all_defects_have_blurb(self):
+        d = requests.get(f"{API}/besm/reference").json()
+        assert len(d["defects"]) == 36
+        missing = [a["name"] for a in d["defects"] if not a.get("blurb")]
+        assert not missing, f"defects missing blurb: {missing[:5]}"
+
+    def test_all_limiters_have_blurb_and_distinct(self):
+        d = requests.get(f"{API}/besm/reference").json()
+        assert len(d["limiters"]) == 23
+        missing = [a["name"] for a in d["limiters"] if not a.get("blurb")]
+        assert not missing
+        # spot-check Activation vs Charges differ
+        by_name = {a["name"]: a["blurb"] for a in d["limiters"]}
+        assert "Activation" in by_name and "Charges" in by_name
+        assert by_name["Activation"] != by_name["Charges"]
+
+    def test_all_enhancements_have_distinct_blurbs(self):
+        d = requests.get(f"{API}/besm/reference").json()
+        assert len(d["enhancements"]) == 5
+        names = {a["name"] for a in d["enhancements"]}
+        assert names == {"Area", "Duration", "Range", "Targets", "Potent"}
+        blurbs = [a["blurb"] for a in d["enhancements"]]
+        assert all(blurbs) and len(set(blurbs)) == 5  # all unique
+
+    def test_all_extras_rules_have_blurb(self):
+        d = requests.get(f"{API}/besm/reference").json()
+        assert len(d["extras_rules"]) == 21
+        missing = [a["name"] for a in d["extras_rules"] if not a.get("blurb")]
+        assert not missing
+
+    def test_spot_check_specific_blurbs(self):
+        d = requests.get(f"{API}/besm/reference").json()
+        # Marked defect
+        marked = next((x for x in d["defects"] if x["name"] == "Marked"), None)
+        assert marked and marked.get("blurb") and len(marked["blurb"]) > 5
+        # Activation limiter
+        activation = next((x for x in d["limiters"] if x["name"] == "Activation"), None)
+        assert activation and activation.get("blurb")
+        # Power Packs extras
+        pp = next((x for x in d["extras_rules"] if x["name"] == "Power Packs"), None)
+        assert pp and pp.get("blurb")
+        # Wealth attribute
+        wealth = next((x for x in d["attributes"] if x["name"] == "Wealth"), None)
+        assert wealth and wealth.get("blurb")
+
+
+class TestIter8CampaignSystemId:
+    """system_id validation and system_id ↔ system auto-sync."""
+
+    def test_create_campaign_with_dnd_system_id(self, gm_token):
+        payload = {"name": f"TEST_S_dnd_{uuid.uuid4().hex[:6]}",
+                   "description": "x", "visibility": "public",
+                   "max_players": 4, "system_id": "dnd-5e"}
+        r = requests.post(f"{API}/campaigns", json=payload, headers=h(gm_token))
+        assert r.status_code == 200, r.text
+        c = r.json()
+        try:
+            assert c["system_id"] == "dnd-5e"
+            assert c["system"] == "Dungeons & Dragons 5E"
+            # GET re-confirms
+            g = requests.get(f"{API}/campaigns/{c['id']}", headers=h(gm_token)).json()
+            assert g["system_id"] == "dnd-5e"
+            assert g["system"] == "Dungeons & Dragons 5E"
+        finally:
+            requests.delete(f"{API}/campaigns/{c['id']}", headers=h(gm_token))
+
+    def test_create_campaign_unknown_system_id_400(self, gm_token):
+        payload = {"name": f"TEST_S_bad_{uuid.uuid4().hex[:6]}",
+                   "description": "x", "visibility": "public",
+                   "max_players": 4, "system_id": "unknown-xyz"}
+        r = requests.post(f"{API}/campaigns", json=payload, headers=h(gm_token))
+        assert r.status_code == 400, f"got {r.status_code}: {r.text}"
+
+    def test_create_campaign_default_system_id_is_besm(self, gm_token):
+        payload = {"name": f"TEST_S_def_{uuid.uuid4().hex[:6]}",
+                   "description": "x", "visibility": "public", "max_players": 4}
+        r = requests.post(f"{API}/campaigns", json=payload, headers=h(gm_token))
+        assert r.status_code == 200, r.text
+        c = r.json()
+        try:
+            assert c["system_id"] == "besm-4e"
+        finally:
+            requests.delete(f"{API}/campaigns/{c['id']}", headers=h(gm_token))
+
+    def test_update_campaign_system_id_syncs(self, gm_token):
+        # create besm
+        cr = requests.post(f"{API}/campaigns",
+                           json={"name": f"TEST_S_upd_{uuid.uuid4().hex[:6]}",
+                                 "description": "x", "visibility": "public",
+                                 "max_players": 4},
+                           headers=h(gm_token))
+        c = cr.json()
+        cid = c["id"]
+        try:
+            payload = {"name": c["name"], "description": "x",
+                       "visibility": "public", "max_players": 4,
+                       "system_id": "pf2e"}
+            r = requests.put(f"{API}/campaigns/{cid}", json=payload,
+                             headers=h(gm_token))
+            assert r.status_code == 200, r.text
+            d = r.json()
+            assert d["system_id"] == "pf2e"
+            assert d["system"] == "Pathfinder 2E"
+        finally:
+            requests.delete(f"{API}/campaigns/{cid}", headers=h(gm_token))
+
+    def test_update_campaign_invalid_system_id_400(self, gm_token, campaign):
+        payload = {"name": campaign["name"], "description": "x",
+                   "visibility": "public", "max_players": 4,
+                   "system_id": "totally-fake-system"}
+        r = requests.put(f"{API}/campaigns/{campaign['id']}", json=payload,
+                         headers=h(gm_token))
+        assert r.status_code == 400, f"got {r.status_code}"
+
+    def test_player_still_cannot_create_campaign_regression(self, player_token):
+        r = requests.post(f"{API}/campaigns",
+                          json={"name": "TEST_player_cant", "description": "x",
+                                "visibility": "public", "max_players": 4,
+                                "system_id": "besm-4e"},
+                          headers=h(player_token))
+        assert r.status_code == 403
+
+
+class TestIter8PermissionsPolicyHeader:
+    def test_permissions_policy_on_systems(self):
+        r = requests.get(f"{API}/systems")
+        pp = r.headers.get("permissions-policy") or r.headers.get("Permissions-Policy")
+        assert pp, "Permissions-Policy header missing"
+        # Should at least mention camera/microphone
+        low = pp.lower()
+        assert "camera" in low or "microphone" in low

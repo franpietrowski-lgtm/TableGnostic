@@ -125,17 +125,9 @@ export default function CampaignDetail() {
         )}
       </Tabs.Root>
 
-      {/* Tri-Stat Emporium credit on BESM 4E campaigns */}
-      {(camp.system || "").toUpperCase().includes("BESM") && (
-        <div className="mt-10 pt-6 border-t border-gold/10 text-center" data-testid="tri-stat-credit">
-          <div className="font-display tracking-[0.3em] text-gold/70 text-xs uppercase">Tri-Stat Emporium</div>
-          <div className="text-[10px] text-mist/70 font-ui mt-1.5 max-w-2xl mx-auto leading-relaxed">
-            BESM (Big Eyes, Small Mouth) 4th Edition is © Mark MacKinnon &amp; Dyskami Publishing.
-            Table-Gnostic references rules, costs, and page numbers — it does not reproduce
-            the rulebook prose, lore, or examples. Bring your physical book to the table.
-          </div>
-        </div>
-      )}
+      {/* System credit footer — reflects whatever publisher matches camp.system_id.
+          Tri-Stat Emporium voice on BESM, generic publisher © on others. */}
+      <SystemCredit camp={camp}/>
 
       {/* Start Session modal */}
       {showStart && camp.is_gm && (
@@ -146,6 +138,31 @@ export default function CampaignDetail() {
           onStart={startSession}
         />
       )}
+    </div>
+  );
+}
+
+function SystemCredit({ camp }) {
+  const [sys, setSys] = useState(null);
+  useEffect(() => {
+    api.get("/systems").then((r) => {
+      const all = r.data.systems || [];
+      setSys(all.find((s) => s.id === (camp.system_id || "besm-4e")) || all[0]);
+    }).catch(() => {});
+  }, [camp.system_id]);
+  if (!sys) return null;
+  const isBesm = sys.id === "besm-4e";
+  return (
+    <div className="mt-10 pt-6 border-t border-gold/10 text-center" data-testid="tri-stat-credit">
+      <div className="font-display tracking-[0.3em] text-gold/70 text-xs uppercase">
+        {isBesm ? "Tri-Stat Emporium" : sys.publisher}
+      </div>
+      <div className="text-[10px] text-mist/70 font-ui mt-1.5 max-w-2xl mx-auto leading-relaxed">
+        {sys.copyright} Table-Gnostic references rules and page numbers — it does not
+        reproduce rulebook prose, lore, or examples.
+        {!sys.supported && " Mechanics for this system are scaffolded; reference content coming soon."}
+        {" "}Bring your physical book to the table.
+      </div>
     </div>
   );
 }

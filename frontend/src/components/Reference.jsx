@@ -41,6 +41,12 @@ export default function Reference() {
         This application references the BESM 4E rulebook. Look up names, costs, and page numbers here
         — consult the official rulebook for the full text and rules.
       </p>
+      <div className="mt-3 text-[11px] font-ui italic text-mist/70" data-testid="ref-system-note">
+        Reference cards reflect the campaign's selected game system. Today,
+        BESM 4E is fully populated — D&amp;D 5E, PF2e, CoC, Savage Worlds, FATE,
+        Cyberpunk RED, V5, Blades, Mothership, and Shadowrun 6E are scaffolded
+        for selection on campaign creation; their reference content is coming soon.
+      </div>
 
       <div className="mt-6 flex items-center gap-3 flex-wrap">
         <div className="flex items-center gap-2 border border-gold/20 rounded-sm px-3 bg-void/60 w-80">

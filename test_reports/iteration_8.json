@@ -1,0 +1,46 @@
+{
+  "summary": "V3.2 review — Game-system selector (11 systems) + comprehensive BESM blurb expansion. Added 17 new pytest cases (TestIter8GameSystems[4], TestIter8BesmBlurbCoverage[6], TestIter8CampaignSystemId[6], TestIter8PermissionsPolicyHeader[1]) — all 17 PASS. Updated 2 stale iter-7 tests (test_enhancement_blurb_shared, test_limiter_blurb_shared) that became wrong by design under V3.2 (per-name blurbs now, not shared); renamed to *_per_name and they pass. Full backend run: 123/125 stable (98.4%); 2 failures are pre-existing carry-overs from iter_3+ (CORS preflight wildcard short-circuit when FRONTEND_URL empty; LLM 429 cooldown on TestRecap::test_recap_bullet_style). The 1 transient WS flake (test_webrtc_answer_and_ice_targeted) PASSES on isolated rerun — not a regression. Frontend Playwright: (a) /app/campaigns?create=1 modal renders [data-testid='create-system'] with EXACTLY 11 options, first='✓ BESM 4E — Dyskami Publishing', all others prefixed '○ '. (b) Selecting dnd-5e updates [data-testid='system-blurb'] to D&D copy + scaffold disclaimer. (c) Creating a dnd-5e campaign succeeds and lands GM in Atelier (/genesis); the campaign DETAIL page shows tri-stat-credit with 'Wizards of the Coast' + 'Mechanics for this system are scaffolded; reference content coming soon. Bring your physical book to the table.' (d) BESM-system campaign detail still renders 'Tri-Stat Emporium / Dyskami' credit (regression intact). (e) /app/reference shows ref-system-note paragraph naming all 10 scaffolded systems; Defects tab = 36 ref-blurb-defects-* cards, Limiters tab = 23 cards with 23/23 unique blurb texts (Activation ≠ Charges confirmed), Enhancements tab = 5 cards with 5 distinct blurbs (Area/Duration/Range/Targets/Potent each unique). (f) Player @ /app/campaigns: new-campaign-btn HTML-disabled with text 'GMs only' (V3.1 P0 regression intact). All UI green; no console errors in the V3.2 surfaces.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "TestCORS::test_preflight_preview_origin_ok", "issue": "(carry-over from iter_3+) FRONTEND_URL empty in env → CORSMiddleware allow_origins=['*'] short-circuits regex matcher; preflight reflects '*' instead of caller origin. Fix: pass allow_origins=[] when wildcard semantics desired so allow_origin_regex applies."},
+      {"endpoint": "TestRecap::test_recap_bullet_style", "issue": "(carry-over) Returns 429 'Recap cooldown' under repeat runs; not a code bug but the test should mock LLM or apply a longer pre-test sleep."},
+      {"endpoint": "TestWebSocketPresence::test_webrtc_answer_and_ice_targeted", "issue": "Flaky in full-suite run under cluster load; PASSES on isolated rerun. Same flake noted in iter_7."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "(Optional, carry-over) Fix CORS wildcard short-circuit by using allow_origins=[] when FRONTEND_URL is empty so allow_origin_regex applies.",
+    "(Optional, carry-over) Add per-(session,user) cooldown bypass or LLM mock for recap tests so 429s don't bubble up.",
+    "(Optional) Cache /api/besm/reference (functools.lru_cache) — payload is fully static and now serialises 86+36+5+23+21+power_levels+generic_blurbs on every call. Hot endpoint."
+  ],
+  "critical_code_review_comments": [
+    "server.py is now ~1575 lines (up from 1543 in iter_7) — the system_id validation block (~lines 720-770) is duplicated between create_campaign and update_campaign. Extract a helper `_resolve_system(data) -> (sid, system_name)` that raises HTTPException(400) on unknown id; reduces drift risk.",
+    "GAME_SYSTEMS list is iterated via `next((s for s in GAME_SYSTEMS if s['id']==sid), None)` on every campaign POST/PUT. Build a module-level dict GAME_SYSTEMS_BY_ID at import time for O(1) lookup.",
+    "/api/systems is public (no auth) which is correct, but it does not set Cache-Control. Add `Cache-Control: public, max-age=300` since the payload is fully static — saves bandwidth on the CreateModal mount.",
+    "system_id default ('besm-4e') is hardcoded in CampaignIn (line 189) AND referenced as DEFAULT_SYSTEM_ID elsewhere — risk of drift. Use `system_id: str = Field(default_factory=lambda: DEFAULT_SYSTEM_ID)` so a future rename of the default flows automatically.",
+    "Frontend CreateModal: the '✓' / '○' prefixes render inside <option> text which won't show in some browsers' native select styling on macOS/iOS. Consider grouping with <optgroup label='Supported'> and <optgroup label='Coming soon'> for semantic clarity (still functional today, just brittle).",
+    "SystemCredit subcomponent fetches /api/systems on every CampaignDetail mount; cache the result in a module-level promise or a React context so it's loaded once per session."
+  ],
+  "updated_files": [
+    "/app/backend/tests/backend_test.py — appended 4 new test classes (17 cases) for V3.2; updated 2 stale iter_7 cases (test_enhancement_blurb_shared → test_enhancement_blurb_per_name; test_limiter_blurb_shared → test_limiter_blurb_per_name) to match V3.2's per-name-blurb design. Total backend suite: 125 tests."
+  ],
+  "success_rate": {
+    "backend": "98.4% (123/125 stable; all 17 new V3.2 tests + the 2 updated iter-7 blurb tests pass; 2 pre-existing carry-overs unrelated to V3.2; 1 transient WS flake passes on rerun)",
+    "frontend": "100% on tested V3.2 surfaces (create-system selector with 11 options + ✓/○ prefixes, system-blurb live update on dnd-5e selection, dnd campaign creation + Atelier landing, tri-stat-credit publisher swap to 'Wizards of the Coast' with scaffold disclaimer, BESM detail keeps Dyskami credit, ref-system-note + 36 defects / 23 unique limiters / 5 distinct enhancements blurbs, player new-campaign-btn 'GMs only' regression intact)"
+  },
+  "test_credentials": "admin@tablegnostic.com/admin123, gm@tablegnostic.com/gm123456, player@tablegnostic.com/player12345 — all confirmed working.",
+  "seed_data_creation": "TestIter8CampaignSystemId tests create+delete TEST_S_dnd_*, TEST_S_bad_*, TEST_S_def_*, TEST_S_upd_* campaigns with cleanup. Frontend test left one DnD campaign id=fe07781f-efcd-4049-8686-297c93371613 ('TEST_DnD_1777143523') in the GM's table — harmless.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "V3.2 testids confirmed in DOM: create-system (11 options, [0] prefixed '✓ ', [1..10] prefixed '○ '), system-blurb (updates on selection change with publisher copy + scaffold disclaimer for non-besm), tri-stat-credit (now system-aware via SystemCredit subcomponent — fetches /api/systems and renders publisher + copyright + scaffold-coming-soon for non-besm; legacy 'Tri-Stat Emporium' Dyskami text for besm-4e), ref-system-note, ref-blurb-defects-{0..35}, ref-blurb-limiters-{0..22} (all 23 distinct), ref-blurb-enhancements-{0..4} (5 distinct). GET /api/systems is unauthenticated — no token needed. CampaignIn.system_id validation: unknown id → 400; valid id → also overwrites .system field with the canonical name. /api/besm/reference now has blurb on every entry (86 attrs / 36 defects / 23 limiters / 5 enhancements / 21 extras_rules). The TestIter7BesmBlurbs::test_enhancement_blurb_shared and test_limiter_blurb_shared assertions were updated to match per-name design — see *_per_name in backend_test.py.",
+  "rca of the issue": "No new bugs in V3.2. The two iter_7 test failures encountered on first full run (test_enhancement_blurb_shared, test_limiter_blurb_shared) were stale assertions that became invalid by intentional V3.2 design (the spec calls for per-name blurbs); updated tests to assert per-name distinctness instead. All other carry-over failures match iter_7 baseline (CORS wildcard, LLM 429, WS-presence flake)."
+}

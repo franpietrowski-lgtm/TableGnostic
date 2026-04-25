@@ -82,13 +82,18 @@ export default function Campaigns() {
 
 function CreateModal({ onClose, onCreated }) {
   const [form, setForm] = useState({
-    name: "", description: "", system: "BESM 4E",
+    name: "", description: "", system_id: "besm-4e",
     tone: "", genre: "", tags: "", experience_level: "Any",
     schedule: "", max_players: 6, visibility: "public", power_level: "Heroic",
   });
+  const [systems, setSystems] = useState([]);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
   const nav = useNavigate();
+
+  useEffect(() => {
+    api.get("/systems").then((r) => setSystems(r.data.systems || [])).catch(() => {});
+  }, []);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -103,6 +108,8 @@ function CreateModal({ onClose, onCreated }) {
       setErr(formatApiErrorDetail(e.response?.data?.detail) || e.message);
     } finally { setBusy(false); }
   };
+
+  const selectedSys = systems.find((s) => s.id === form.system_id);
 
   return (
     <div className="fixed inset-0 z-50 bg-void/80 backdrop-blur-sm flex items-start justify-center p-6 overflow-auto" data-testid="create-campaign-modal">
@@ -124,6 +131,29 @@ function CreateModal({ onClose, onCreated }) {
             <label className="label-ref block mb-1">Description</label>
             <textarea className="input" value={form.description}
                       onChange={(e) => setForm({ ...form, description: e.target.value })} data-testid="create-description"/>
+          </div>
+          <div className="md:col-span-2">
+            <label className="label-ref block mb-1">Game System</label>
+            <select className="select" value={form.system_id}
+                    onChange={(e) => setForm({ ...form, system_id: e.target.value })}
+                    data-testid="create-system">
+              {systems.map((s) => (
+                <option key={s.id} value={s.id}>
+                  {s.supported ? "✓ " : "○ "}{s.name} — {s.publisher}
+                </option>
+              ))}
+            </select>
+            {selectedSys && (
+              <div className="mt-1.5 text-[11px] font-body text-mist leading-snug" data-testid="system-blurb">
+                {selectedSys.blurb}
+                {!selectedSys.supported && (
+                  <span className="block text-[10px] text-gold/70 italic mt-1">
+                    Mechanics scaffolded — Reference & Character Forge for {selectedSys.name} coming soon.
+                    Worldbuilding, sessions, and AV seats work today.
+                  </span>
+                )}
+              </div>
+            )}
           </div>
           <div>
             <label className="label-ref block mb-1">Tone</label>

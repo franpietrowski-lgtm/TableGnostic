@@ -297,45 +297,184 @@ def with_source(items):
 # They describe HOW a thing works inside the cost equation
 #   final_cost = base_cost × level × (1 + Σ enhancements − Σ limiters)
 # without reproducing the rulebook's prose, lore, or examples.
-# Look up by exact `name` (or category for ENHANCEMENT_BLURB / LIMITER_BLURB).
 ATTRIBUTE_BLURBS = {
+    "Absorption": "Convert incoming damage of a chosen energy type into a personal resource (HP, EP, or a fuel pool).",
+    "Alternate Form": "Switch to a secondary statblock at runtime; build the alternate form with a fraction of your points.",
+    "Alternate Identity": "Maintain a parallel social/legal identity; mechanic governs how easily one identity reveals the other.",
+    "Armour": "Each Level subtracts a fixed amount from incoming damage before HP loss is calculated.",
     "Attack Mastery": "Adds its Level to your Attack Combat Value, improving every attack roll by that amount.",
+    "Augmented": "A trait raised beyond the human ceiling. Each Level lifts a Stat or derived value above its normal cap.",
+    "Capacity": "Carry, store, or contain more than the baseline. Scales lift, hold, or stowage capacity per Level.",
+    "Change State": "Shift physical form (gas, liquid, light, etc.) for movement / defence purposes.",
+    "Cognition": "Bonus on knowledge / recall / mental analysis rolls. Each Level adds a flat bonus to deduction-style checks.",
+    "Combat Technique": "Each Level grants one named combat manoeuvre (Lightning Reflexes, Two Weapons, etc.). Stacks with weapons.",
+    "Companion": "A persistent allied character built with a fraction of your own points; acts on its own initiative.",
+    "Connected": "A network of contacts / favours. Higher Levels = wider, deeper, or more important contacts.",
+    "Control Environment": "Manipulate weather / terrain / ambient effects within a scene-scale area.",
+    "Conversion": "Persuade or recruit foes mid-encounter; resolves as a contested mental action.",
+    "Data Access": "Reach databases, archives, or networks beyond what mundane research can find.",
     "Defence Mastery": "Adds its Level to your Defence Combat Value, improving every defence roll by that amount.",
-    "Combat Technique": "Each Level lets you pick one combat manoeuvre (e.g. Two Weapons, Lightning Reflexes). Stacks with weapons.",
-    "Massive Damage": "Each Level adds +5 damage to a chosen damage source — typically a Weapon or unarmed strike.",
-    "Tough": "Each Level adds +5 Hit Points. Mechanically the cheapest way to soak more damage before falling.",
+    "Dimension Walk": "Step between adjacent realities or planes. Range and frequency scale with Level.",
+    "Dynamic Powers": "Open-ended effect-swap (10 pts/Level). Almost always restricted by GM Primer at lower power levels.",
+    "Elasticity": "Stretch or extend body parts. Reach and contortion scale with Level.",
+    "Enemy Attack": "A held-back attack that triggers on a foe's setup. Tactical reaction-style mechanic.",
+    "Enemy Defence": "A reactive defence that turns or punishes an opponent's incoming attack.",
     "Energised": "Each Level adds +5 Energy Points — the resource pool for stamina powers, casting, etc.",
-    "Skill Group": "Buys a tier-priced bundle of related skills. Cost rises with the tier (Lesser/Greater/Major).",
-    "Heightened Senses": "Each Level grants one keener sense or sense-class. Stacks with mundane perception checks.",
-    "Heightened Awareness": "Each Level adds a generic perception bonus across the board, regardless of sense.",
-    "Item": "Half-price Attribute (0.5 pts/Level) representing an external object that can be lost, stolen or broken.",
-    "Weapon": "A persistent damage-dealing object. Reshape with Enhancements (Penetrating, Reach, etc.) and Limiters (Charges, Activation).",
+    "Exorcism": "Banish or weaken supernatural / extradimensional entities through a contested check.",
+    "Extra Actions": "Each Level grants one additional action per round. Most expensive Level-1 Attribute (4 pts).",
+    "Extra Arms": "Adds appendages. Each pair grants extra grip / hold / parallel manipulation actions.",
+    "Features": "Each Level grants one minor narrative perk (sense, immunity-to-trivia, social grace, etc.).",
+    "Flight": "Aerial movement Attribute. Speed and ceiling scale with Level.",
+    "Force Field": "A second HP-like barrier sitting in front of your real HP. Each Level adds capacity.",
     "Gear": "A lump of mundane equipment your character carries. 1 pt/Level scales with quality and quantity.",
-    "Wealth": "Mundane economic class. Higher Levels unlock larger purchases without spending Character Points.",
-    "Companion": "A persistent allied character built with a fraction of your own points. They act on their own initiative.",
-    "Connected": "A network of contacts and favours. Higher Levels = wider, deeper, or more important contacts.",
-    "Mind Shield": "Each Level grants resistance against mental Attributes (e.g. Mind Control, Telepathy).",
-    "Flight": "Aerial movement Attribute. Cost scales with Level; combine with Enhancements for stunts.",
-    "Extra Actions": "Each Level grants one additional action per round. The most expensive Level-1 Attribute (4 pts).",
+    "Ground Speed": "Each Level multiplies overland movement rate.",
+    "Healing": "Restore HP to others or self. Each Level raises the rate or pool of healing per use.",
+    "Heightened Awareness": "Each Level adds a generic perception bonus across the board, regardless of sense.",
+    "Heightened Senses": "Each Level grants one keener sense or sense-class. Stacks with mundane perception checks.",
+    "Illusion": "Project sensory deception. Complexity and persistence scale with Level.",
+    "Immunity": "Each Level grants total immunity to a chosen damage type, condition, or hazard.",
+    "Immutable": "Resists a chosen kind of forced change (transformation, mind control, dispel, etc.).",
+    "Inspire": "Bonus to allies on a contested or social action. Buff-style effect.",
+    "Item": "Half-price Attribute (0.5 pts/Level) representing an external object that can be lost, stolen, or broken.",
+    "Jumping": "Vertical and horizontal leap distance. Each Level multiplies baseline jump.",
+    "Massive Damage": "Each Level adds +5 damage to a chosen damage source — typically a Weapon or unarmed strike.",
+    "Melee Attack": "Adds its Level to a chosen melee weapon class only. Cheaper than Attack Mastery, narrower scope.",
+    "Melee Defence": "Adds its Level to defence against a chosen melee weapon class only.",
+    "Merge": "Fuse with an object, host, or another character; combined statblock per merge rules.",
+    "Metamorphosis": "Reshape your physical form within a defined library of options.",
+    "Mimic": "Copy another's Attribute or Skill for a limited duration after observing it.",
     "Mind Control": "Mental compulsion Attribute. Highly restricted in most campaigns — confirm with the GM.",
-    "Dynamic Powers": "Open-ended power swap (10 pts/Level). Almost always restricted by GM Primer at lower power levels.",
+    "Mind Shield": "Each Level grants resistance against mental Attributes (Mind Control, Telepathy, etc.).",
+    "Minions": "A pool of low-level followers. Each Level grows the pool's size or competence.",
+    "Mulligan": "Re-roll a failed check (or force an opponent's re-roll) a limited number of times per session.",
+    "Nullify": "Suppress another's Attribute for a contested duration. Heavy GM-Primer territory.",
+    "Plant Control": "Manipulate flora — entangle, grow, blight. Area and effect scale with Level.",
+    "Pocket Dimension": "A private storage / sanctuary plane keyed to you. Capacity scales with Level.",
+    "Portal": "Open a traversable doorway between two locations. Range and aperture scale with Level.",
+    "Power Flux": "Reshape your own power loadout under defined constraints (10 pts/Level).",
+    "Power Variation": "Swap one specific Attribute for another within a thematic set, scene by scene.",
+    "Projection": "Cast a duplicate or astral form away from your body. Range and durability scale with Level.",
+    "Ranged Attack": "Adds its Level to a chosen ranged weapon class only. Narrower scope than Attack Mastery.",
+    "Ranged Defence": "Adds its Level to defence against a chosen ranged weapon class only.",
+    "Regeneration": "Auto-heal HP each round. Each Level raises the per-round restoration.",
+    "Reincarnation": "On death, return in a new form after a delay. Frequency and form scale with Level.",
+    "Resilient": "Resistance against environmental hazards (heat, cold, vacuum, radiation, etc.).",
+    "Sensory Block": "Project a barrier blocking a chosen sense or detection method within an area.",
+    "Sixth Sense": "Detect a specific category of phenomena (magic, evil, lies, etc.) without normal senses.",
+    "Size Change": "Grow or shrink dramatically (10 pts/Level). Affects reach, damage, defence, and stealth.",
+    "Skill Group": "Buys a tier-priced bundle of related skills. Cost rises with the tier (Lesser/Greater/Major).",
+    "Spaceflight": "Movement in vacuum / interplanetary scale. Each Level multiplies cosmic-scale speed.",
+    "Special Movement": "One specialised mode (climbing, swinging, balancing, etc.) bought per Level.",
+    "Summon Creatures": "Call temporary supernatural servants. Number and power scale with Level.",
+    "Supersense": "An exotic sense beyond mortal range (radar, X-ray, life-detection, etc.).",
+    "Superspeed": "Move and act at extreme tempo. Each Level multiplies movement and adds initiative.",
+    "Superstrength": "Lift, throw, and crush at superhuman scale. Each Level multiplies carrying / damage.",
+    "Swarm": "You are (or control) a body composed of many small parts; fragmented HP and immunity logic apply.",
+    "Telekinesis": "Move objects at range without contact. Strength and precision scale with Level.",
+    "Telepathy": "Two-way mental communication. Range and bandwidth scale with Level.",
+    "Teleport": "Instantaneous self-relocation. Range and frequency scale with Level.",
+    "Tough": "Each Level adds +5 Hit Points. Mechanically the cheapest way to soak more damage before falling.",
+    "Transfer": "Move HP, EP, or Attribute Levels from one target to another (consensual or contested).",
+    "Transmute": "Change matter from one state or substance to another. Mass and complexity scale with Level.",
+    "Tunnelling": "Bore through earth / stone / wall material. Speed and material grade scale with Level.",
+    "Unaffected": "Total immunity to a chosen ongoing condition or environmental class.",
+    "Undetectable": "Resists a chosen detection method (visual, magical, electronic, etc.).",
+    "Unique Attribute": "Custom GM-authored Attribute (1-10 pts/Level). Defined entirely by the table's primer.",
+    "Unknown Power": "An undefined power-slot. Cost is set by the GM at reveal time.",
+    "Water Speed": "Swimming / surface / underwater movement rate. Each Level multiplies aquatic speed.",
+    "Wealth": "Mundane economic class. Higher Levels unlock larger purchases without spending Character Points.",
+    "Weapon": "A persistent damage-dealing object. Reshape with Enhancements (Penetrating, Reach, etc.) and Limiters (Charges, Activation).",
 }
 
-# Defect families share the same mechanic shape, so we describe them by category.
+# Defect families share the same mechanic shape, so we describe them by category…
 DEFECT_CATEGORY_BLURBS = {
     "Lesser":  "Lesser Defect: returns +1 Character Point per Rank. Light narrative friction; little mechanical drag.",
     "Greater": "Greater Defect: returns +2 Character Points per Rank. Real mechanical or narrative cost in play.",
     "Serious": "Serious Defect: returns +3 Character Points per Rank. Defining flaw — expect frequent in-play impact.",
+    "Special": "Special / Custom Defect: GM defines refund and trigger conditions case-by-case.",
+}
+# …plus per-name nuance for the most-used picks.
+DEFECT_BLURBS = {
+    "Achilles Heel": "A specific stimulus deals extra damage or bypasses your defences entirely.",
+    "Awkward Size": "Item-only Defect: the object is too large/small for normal handling. Penalises stealth, fitting, or use.",
+    "Bane": "A category of foe (creature type, faction, etc.) hits you harder or resists your attacks.",
+    "Blind Fury": "Once triggered, you attack indiscriminately and lose target discrimination until calmed.",
+    "Conditional Ownership": "An asset (Item, Companion, Wealth) can be revoked by an external authority on any session.",
+    "Confined": "You are physically constrained to a defined space and lose access outside it.",
+    "Cursed": "A persistent supernatural malus tied to a trigger; surfaces at narratively inconvenient moments.",
+    "Easily Distracted": "Penalty on focus-dependent rolls when a competing stimulus is present.",
+    "Fragile": "Reduced HP-pool or shorter wound-thresholds compared to baseline.",
+    "Hounded": "An organised group continuously hunts you — recurring antagonist pressure.",
+    "Impaired Manipulation": "Penalty or outright inability for fine-motor / object-manipulation actions.",
+    "Impaired Speech": "Penalty or inability for verbal communication; reduces Social rolls and casting verbal components.",
+    "Inept Attack": "A specific Attack Combat Value bucket suffers a penalty.",
+    "Inept Defence": "A specific Defence Combat Value bucket suffers a penalty.",
+    "Involuntary Change": "Triggers an Alternate Form / Metamorphosis swap outside your control.",
+    "Ism": "Subject to social discrimination by a defined group — penalises Social rolls in their society.",
+    "Magnet": "Attracts a specific category of unwanted attention (police, predators, opportunists, etc.).",
+    "Marked": "An obvious distinguishing trait makes stealth and disguise harder.",
+    "Nemesis": "A recurring antagonist whose appearances tilt the table against you.",
+    "Nightmares": "Disrupted rest reduces full-recovery benefits between sessions.",
+    "Obligated": "Bound by oath / debt / role to act for a specific cause; refusal carries narrative cost.",
+    "Phobia": "Panic / freeze response when exposed to a specific trigger.",
+    "Physical Impairment": "A persistent bodily limitation imposing standing penalties.",
+    "Red Tape": "Bureaucratic friction — every official action takes longer or costs more.",
+    "Reduced Damage": "Your damage output is permanently below baseline for your power tier.",
+    "Sensory Impairment": "A blocked or dampened sense reduces Perception rolls in that channel.",
+    "Shortcoming": "A chosen Stat or Skill is below baseline for your power tier.",
+    "Significant Other": "A loved one creates leverage / kidnap-risk against you.",
+    "Skeleton in the Closet": "A concealed past will surface if your enemies dig. Reputation and secrecy are at risk.",
+    "Social Fault": "A faux-pas pattern that reliably degrades Social rolls in mixed company.",
+    "Special Requirement": "A regular ritual / consumption / contact is required to keep your build functioning.",
+    "Unappealing": "Reduced effectiveness on Social rolls that depend on personal appeal.",
+    "Unique Defect": "Custom GM-authored Defect. Refund set per primer.",
+    "Vulnerability": "Specific damage type bypasses Armour / Force Field or deals double.",
+    "Wanted": "Active arrest warrant or bounty creates ongoing pursuit pressure.",
+    "Weak Point": "A precise body part / interface, when struck, ignores defences or applies a status.",
 }
 
+# Per-name nuance for Enhancements (mechanic-only, not lore)
 ENHANCEMENT_BLURB = (
     "An Enhancement raises an Attribute's effective Level for cost purposes. "
     "Stacking N enhancements multiplies the per-Level cost: cost × Level × (1 + N − Limiters)."
 )
+ENHANCEMENT_BLURBS = {
+    "Area":     "Effect covers a wider area than baseline. Scale: from melee-radius up to scene-scale.",
+    "Duration": "Effect persists longer than the default round-or-action window.",
+    "Range":    "Effect projects further than its default contact / short-range default.",
+    "Targets":  "Effect can hit / govern more targets per activation.",
+    "Potent":   "Effect lands harder than baseline — overcomes one tier of resistance.",
+}
+
 LIMITER_BLURB = (
     "A Limiter lowers an Attribute's cost in exchange for narrative or situational restrictions. "
     "Stacking N limiters reduces the cost: cost × Level × (1 + Enhancements − N). Net cost cannot fall below 1 per Level."
 )
+LIMITER_BLURBS = {
+    "Activation":      "Requires a specific trigger word, gesture, or condition before the Attribute fires.",
+    "Assisted":        "Needs a partner / ally / tool to function. Lone use fails.",
+    "Backlash":        "Misuse or failure damages or hinders the user.",
+    "Charges":         "A finite number of uses per scene / session before a recharge phase.",
+    "Concentration":   "Maintaining the effect occupies your action; breaks if you take damage or split focus.",
+    "Consumable":      "Burns a physical component each use.",
+    "Delay":           "Takes time to spool up between activation and effect.",
+    "Dependent":       "Requires a specific external state (line-of-sight, ambient element, etc.).",
+    "Deplete":         "Each use temporarily reduces the effective Level until rest.",
+    "Detectable":      "Use is visible / audible / traceable by a defined detection method.",
+    "Emotional":       "Only functions when in a specific emotional state (rage, calm, fear, etc.).",
+    "Environmental":   "Only works in a specific terrain / element / atmosphere.",
+    "Equipment":       "The Attribute lives in a piece of gear — the gear can be lost, stolen, or destroyed.",
+    "Imbue":           "The Attribute must be loaded into an object that then carries it.",
+    "Irreversible":    "Once activated on a target, the effect cannot be cancelled by you.",
+    "Localised":       "Only one body part / facet can be affected at a time.",
+    "Maximum":         "Caps the maximum effective Level this Attribute can reach in play.",
+    "Object":          "Can only be used through a specific physical object.",
+    "Permanent":       "Always-on; cannot be turned off voluntarily.",
+    "Recovery":        "Long downtime required to recover after use.",
+    "Semi-Permanent":  "Cannot be turned off freely — requires a specific action / condition to dismiss.",
+    "Unique":          "Only one instance / target / occurrence can ever exist at a time.",
+    "Unpredictable":   "Result varies per use — sometimes weaker, sometimes off-target.",
+}
 
 EXTRAS_BLURBS = {
     "Power Packs": "A themed bundle of Attributes priced as a unit (e.g. a Wizardry pack). Cheaper than buying parts separately, but the bundle moves as one Attribute.",
@@ -348,6 +487,17 @@ EXTRAS_BLURBS = {
     "Skill Specialisations": "Narrow-focus subskills that grant a bonus inside their niche.",
     "Skill Ranks": "Rank-based skill progression (Rank 1–5). Replaces flat Levels with tiered competency.",
     "Threat Scores": "GM-facing threat budget for sessions / encounters. Spend to escalate stakes.",
+    "Genius Skills": "Optional rule that flags one or two Skills as 'prodigy-level', granting an oversize bonus.",
+    "Individual Skills": "Replaces grouped Skill purchases with one-skill-at-a-time precision (more granular, slightly higher accounting cost).",
+    "Templates and Skills": "Pre-built skill packages mapped to professions / archetypes — faster character creation.",
+    "Morale for NPCs": "Optional rout / surrender check for NPC groups when losses pass a threshold.",
+    "Grappling (Expanded)": "Fuller grapple resolution: position, escape, controlled movement, and damage from holds.",
+    "Tactical Combat": "Hex / square grid combat layer with facing, cover, and exact movement.",
+    "Combined Attacks": "Multiple attackers focus on one target, pooling rolls for greater effect.",
+    "Poisons": "Toxin / venom track separate from HP. Save tier and onset time per dose.",
+    "Disease": "Long-tail illness mechanic with stages, contagion, and recovery checks.",
+    "Deprivation": "Hunger / thirst / cold / exhaustion as accumulating penalties.",
+    "Artificial Intelligences": "Stat block style for non-biological NPCs — different vulnerabilities and recovery rules.",
 }
 
 POWER_LEVEL_BLURBS = {
@@ -378,11 +528,109 @@ GENERIC_BLURBS = {
 def attribute_blurb(name: str) -> str:
     return ATTRIBUTE_BLURBS.get(name, "")
 
-def defect_blurb(category: str) -> str:
-    return DEFECT_CATEGORY_BLURBS.get(category, "")
+def defect_blurb(category: str, name: str = "") -> str:
+    # Prefer the per-name blurb when available; fall back to category text.
+    return DEFECT_BLURBS.get(name) or DEFECT_CATEGORY_BLURBS.get(category, "")
+
+def enhancement_blurb(name: str) -> str:
+    return ENHANCEMENT_BLURBS.get(name) or ENHANCEMENT_BLURB
+
+def limiter_blurb(name: str) -> str:
+    return LIMITER_BLURBS.get(name) or LIMITER_BLURB
 
 def extras_blurb(name: str) -> str:
     return EXTRAS_BLURBS.get(name, "")
 
 def power_level_blurb(name: str) -> str:
     return POWER_LEVEL_BLURBS.get(name, "")
+
+
+# -------- Game-system registry --------
+# Table-Gnostic is BESM-native today; the registry advertises which other
+# systems we plan to support so GMs can already commit to one at campaign
+# creation. Mechanics for non-BESM systems are SCAFFOLD ONLY — the Reference
+# tab and Character Forge will surface a "system content coming soon" placeholder
+# until that system's data is filled in. This keeps the legal posture clean
+# (we never reproduce another publisher's text without licensing).
+GAME_SYSTEMS = [
+    {
+        "id": "besm-4e", "name": "BESM 4E", "publisher": "Dyskami Publishing",
+        "edition": "4th Edition", "year": 2020,
+        "copyright": "BESM (Big Eyes, Small Mouth) 4th Edition is © Mark MacKinnon & Dyskami Publishing.",
+        "supported": True,
+        "blurb": "Tri-Stat point-buy: Body / Mind / Soul plus Attributes, Defects, Skill Groups. Native to Table-Gnostic.",
+    },
+    {
+        "id": "dnd-5e", "name": "Dungeons & Dragons 5E", "publisher": "Wizards of the Coast",
+        "edition": "5th Edition", "year": 2014,
+        "copyright": "Dungeons & Dragons and D&D 5E are © Wizards of the Coast. SRD content available under OGL/CC.",
+        "supported": False,
+        "blurb": "Class + Level + Race; d20 + modifier vs DC. SRD-licensed content can be loaded; full PHB/DMG cannot.",
+    },
+    {
+        "id": "pf2e", "name": "Pathfinder 2E", "publisher": "Paizo",
+        "edition": "2nd Edition", "year": 2019,
+        "copyright": "Pathfinder 2E is © Paizo Inc. Most rules text is available under the ORC licence.",
+        "supported": False,
+        "blurb": "Three-action combat economy; d20 + modifier with critical success/failure on ±10.",
+    },
+    {
+        "id": "coc-7e", "name": "Call of Cthulhu 7E", "publisher": "Chaosium",
+        "edition": "7th Edition", "year": 2014,
+        "copyright": "Call of Cthulhu is © Chaosium Inc.",
+        "supported": False,
+        "blurb": "Percentile (d100) skill rolls with hard / extreme thresholds; Sanity track central to play.",
+    },
+    {
+        "id": "savage-worlds", "name": "Savage Worlds Adventure Edition", "publisher": "Pinnacle",
+        "edition": "Adventure Edition", "year": 2020,
+        "copyright": "Savage Worlds is © Pinnacle Entertainment Group.",
+        "supported": False,
+        "blurb": "Trait dice (d4–d12) with Wild Die for player characters; pulp tempo, Bennies for re-rolls.",
+    },
+    {
+        "id": "fate-core", "name": "FATE Core", "publisher": "Evil Hat Productions",
+        "edition": "Core", "year": 2013,
+        "copyright": "FATE Core is © Evil Hat Productions, available under the OGL and CC-BY.",
+        "supported": False,
+        "blurb": "4dF (Fate dice) + skill ladder; Aspects & Compels drive narrative leverage.",
+    },
+    {
+        "id": "cyberpunk-red", "name": "Cyberpunk RED", "publisher": "R. Talsorian Games",
+        "edition": "RED", "year": 2020,
+        "copyright": "Cyberpunk RED is © R. Talsorian Games.",
+        "supported": False,
+        "blurb": "Roles + Lifepath; d10 + skill + stat vs DV. Cyberware Humanity track central.",
+    },
+    {
+        "id": "vampire-5e", "name": "Vampire: The Masquerade 5E", "publisher": "Renegade Game Studios",
+        "edition": "5th Edition", "year": 2018,
+        "copyright": "Vampire: The Masquerade is © Paradox Interactive / White Wolf.",
+        "supported": False,
+        "blurb": "d10 dice pool with Hunger dice; Disciplines, Predator Type, Humanity / Touchstones.",
+    },
+    {
+        "id": "blades-in-the-dark", "name": "Blades in the Dark", "publisher": "Evil Hat Productions",
+        "edition": "1st", "year": 2017,
+        "copyright": "Blades in the Dark is © One Seven Design / John Harper.",
+        "supported": False,
+        "blurb": "Position / Effect rolls; Stress, Trauma, Devil's Bargains. Crew sheet shared by the table.",
+    },
+    {
+        "id": "mothership", "name": "Mothership 1E", "publisher": "Tuesday Knight Games",
+        "edition": "1st Edition", "year": 2023,
+        "copyright": "Mothership is © Tuesday Knight Games.",
+        "supported": False,
+        "blurb": "Percentile skills with Stress / Panic; sci-fi horror lethality dialled high.",
+    },
+    {
+        "id": "shadowrun-6e", "name": "Shadowrun 6E", "publisher": "Catalyst Game Labs",
+        "edition": "6th Edition", "year": 2019,
+        "copyright": "Shadowrun is © Topps / The Topps Company; published under licence by Catalyst Game Labs.",
+        "supported": False,
+        "blurb": "d6 dice pools, Edge as currency; Matrix / Magic / Mundane intertwined.",
+    },
+]
+
+GAME_SYSTEM_IDS = {s["id"] for s in GAME_SYSTEMS}
+DEFAULT_SYSTEM_ID = "besm-4e"

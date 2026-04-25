@@ -24,8 +24,9 @@ from besm_data import (
     BOOK, BOOK_EXTRAS, CORE_STATS, DERIVED_VALUES, ATTRIBUTES, DEFECTS,
     ENHANCEMENTS, LIMITERS, SKILL_GROUPS, POWER_LEVELS,
     NODE_TYPES, TARGET_NUMBERS, EXTRAS_RULES, with_source,
-    attribute_blurb, defect_blurb, extras_blurb, power_level_blurb,
-    ENHANCEMENT_BLURB, LIMITER_BLURB, GENERIC_BLURBS,
+    attribute_blurb, defect_blurb, enhancement_blurb, limiter_blurb,
+    extras_blurb, power_level_blurb, ENHANCEMENT_BLURB, LIMITER_BLURB,
+    GENERIC_BLURBS, GAME_SYSTEMS, GAME_SYSTEM_IDS, DEFAULT_SYSTEM_ID,
 )
 
 # -------- Config --------
@@ -181,6 +182,11 @@ class CampaignIn(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     description: str = ""
     system: str = "BESM 4E"
+    # Game-system selector — references entries in GAME_SYSTEMS (besm-4e, dnd-5e, etc.).
+    # When system_id != 'besm-4e', BESM-specific UIs (Reference, Character Forge)
+    # surface a 'content coming soon' placeholder while still letting the GM run
+    # worldbuilding, sessions, and AV seats normally.
+    system_id: str = "besm-4e"
     tone: Optional[str] = None
     genre: Optional[str] = None
     tags: List[str] = []
@@ -548,7 +554,7 @@ async def besm_reference():
     def enrich_attr(a):
         return {**a, "blurb": attribute_blurb(a["name"])}
     def enrich_def(d):
-        return {**d, "blurb": defect_blurb(d.get("category", ""))}
+        return {**d, "blurb": defect_blurb(d.get("category", ""), d.get("name", ""))}
     def enrich_pl(p):
         return {**p, "blurb": power_level_blurb(p["name"])}
     return {
@@ -557,8 +563,8 @@ async def besm_reference():
         "derived_values": with_source(DERIVED_VALUES),
         "attributes": [enrich_attr(a) for a in with_source(ATTRIBUTES)],
         "defects": [enrich_def(d) for d in with_source(DEFECTS)],
-        "enhancements": [{**e, "blurb": ENHANCEMENT_BLURB} for e in with_source(ENHANCEMENTS)],
-        "limiters": [{**lim, "blurb": LIMITER_BLURB} for lim in with_source(LIMITERS)],
+        "enhancements": [{**e, "blurb": enhancement_blurb(e["name"])} for e in with_source(ENHANCEMENTS)],
+        "limiters": [{**lim, "blurb": limiter_blurb(lim["name"])} for lim in with_source(LIMITERS)],
         "skill_groups": with_source(SKILL_GROUPS),
         "power_levels": [enrich_pl(p) for p in with_source(POWER_LEVELS)],
         "node_types": NODE_TYPES,
@@ -571,6 +577,17 @@ async def besm_reference():
         # Generic mechanic primers (about the costing equation, items vs gear, etc.)
         "generic_blurbs": [{"name": k, "blurb": v} for k, v in GENERIC_BLURBS.items()],
     }
+
+
+@api.get("/systems")
+async def list_game_systems():
+    """Public list of game systems advertised by Table-Gnostic.
+    BESM 4E is fully supported (mechanics, reference cards, builder).
+    Other systems are scaffolded — the campaign UI can pick them, but their
+    Reference / Character Forge / Roll Options surfaces show a 'content
+    coming soon' placeholder until that system's data is loaded.
+    """
+    return {"default": DEFAULT_SYSTEM_ID, "systems": GAME_SYSTEMS}
 
 # -------- Campaign Genesis (Great GM framework) --------
 # Credit: Framework inspired by Guy Sclanders, "The Complete Guide to Creating
@@ -705,6 +722,14 @@ async def create_campaign(body: CampaignIn, user: dict = Depends(get_current_use
         raise HTTPException(403, "Player accounts cannot create campaigns. "
                                  "Update your role to Game Master in your profile to host a table.")
     doc = body.model_dump()
+    # Validate game-system selection and sync the display label.
+    sid = doc.get("system_id") or DEFAULT_SYSTEM_ID
+    if sid not in GAME_SYSTEM_IDS:
+        raise HTTPException(400, f"Unknown game system '{sid}'.")
+    sys_meta = next((s for s in GAME_SYSTEMS if s["id"] == sid), None)
+    if sys_meta:
+        doc["system_id"] = sid
+        doc["system"] = sys_meta["name"]
     doc["id"] = new_id()
     doc["gm_id"] = user["id"]
     doc["gm_name"] = user["name"]
@@ -736,6 +761,13 @@ async def update_campaign(cid: str, body: CampaignIn, user: dict = Depends(get_c
     if camp["gm_id"] != user["id"] and user.get("role") != "admin":
         raise HTTPException(403, "Only GM may edit")
     data = body.model_dump()
+    sid = data.get("system_id") or DEFAULT_SYSTEM_ID
+    if sid not in GAME_SYSTEM_IDS:
+        raise HTTPException(400, f"Unknown game system '{sid}'.")
+    sys_meta = next((s for s in GAME_SYSTEMS if s["id"] == sid), None)
+    if sys_meta:
+        data["system_id"] = sid
+        data["system"] = sys_meta["name"]
     data["id"] = cid
     data["gm_id"] = camp["gm_id"]
     data["gm_name"] = camp["gm_name"]
