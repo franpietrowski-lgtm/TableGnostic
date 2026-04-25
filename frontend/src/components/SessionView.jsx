@@ -363,7 +363,7 @@ export default function SessionView() {
         </div>
         <div className="divider-sigil my-3"/>
         <div className="label-ref mb-2">Log</div>
-        <div className="flex-1 overflow-y-auto scroll-stylish space-y-2">
+        <div className="flex-1 overflow-y-auto scroll-stylish space-y-2" data-testid="session-roll-log">
           {dice.map((d) => (
             <div key={d.id} className="border border-gold/10 rounded-sm p-2" data-testid={`dice-log-${d.id}`}>
               <div className="text-[10px] font-ui uppercase tracking-widest text-gold/60">

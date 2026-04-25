@@ -1486,8 +1486,10 @@ async def add_journal_entry(cid: str, body: JournalEntryIn,
     if not ch:
         raise HTTPException(404, "Character not found")
     camp = await db.campaigns.find_one({"id": ch["campaign_id"]}, {"_id": 0})
+    if not camp:
+        raise HTTPException(404, "Character's campaign no longer exists.")
     is_owner = ch["owner_id"] == user["id"]
-    is_gm = camp and camp["gm_id"] == user["id"]
+    is_gm = camp["gm_id"] == user["id"]
     if not (is_owner or is_gm):
         raise HTTPException(403, "Only the character's owner or the campaign GM can journal.")
 
