@@ -1,48 +1,53 @@
 # Table-Gnostic — Product Requirements Document
 
 > **Tagline:** "Not the system. The table."
-> A BESM 4E-aware tabletop platform unifying worldbuilding, session play, character automation, and knowledge graphs.
+> A BESM 4E-aware tabletop platform unifying worldbuilding, session play, character automation, knowledge graphs, and now live voice/video.
 
 ## 1. Architecture
 
-- **Backend:** FastAPI + MongoDB (motor) + JWT auth + token-authed WebSockets + Resend email + Claude Sonnet 4.5 via emergentintegrations
-- **Frontend:** React 18 + Tailwind + Radix + lucide-react + custom SVG force-graph; dark cosmic/gold aesthetic
+- **Backend:** FastAPI + MongoDB (motor) + JWT auth + token-authed WebSockets + Resend email + Claude Sonnet 4.5 via emergentintegrations + WebRTC mesh signaling over the existing session WS
+- **Frontend:** React 18 + Tailwind + Radix + lucide-react + custom SVG force-graph + native WebRTC (RTCPeerConnection); dark cosmic/gold aesthetic
 - **Responsive:** mobile-first breakpoints (<768px) with bottom-nav + drawer pattern; desktop ≥768px keeps sidebar + multi-column
 
 ## 2. Implemented (cumulative)
 
-### V1.0–V2.0
-Auth · BESM 4E reference (86 attrs / 36 defects / 23 limiters / 21 Extras) · Campaigns · Character Forge · Live Sessions (WebSocket) · Knowledge Web · Atelier wizard (Sclanders framework, credited) · Player Primer + allow/prohibit lists · Invite links · Resend email · World Codex (8 article types) · Knowledge Graph canvas (force-directed SVG) · Character Folio (Edges/Obstacles/Goals/Family/Journal) · Session Recap generator (Claude Sonnet 4.5).
+### V1.0–V2.1
+Auth · BESM 4E reference (86 attrs / 36 defects / 23 limiters / 21 Extras) · Campaigns · Character Forge · Live Sessions (WebSocket) · Knowledge Web · Atelier wizard (Sclanders framework, credited) · Player Primer + allow/prohibit lists · Invite links · Resend email · World Codex (8 article types) · Knowledge Graph canvas (force-directed SVG) · Character Folio (Edges/Obstacles/Goals/Family/Journal) · Session Recap generator (Claude Sonnet 4.5) · Auto-pinned recaps · Mobile/desktop responsive UI · BESM term click-to-reference popovers.
 
-### V2.1 (this iteration — 2026-04-25)
+### V3.0 — AV Seats (this iteration — 2026-04-25)
 
-**"What happened last time…" auto-pin**
-- When a GM creates a new session in a campaign that already has a recap on file, the most recent recap is auto-posted as the first chat message and rendered with a sticky, gold-bordered "Pinned · Last time at the table" treatment that floats at the top of the chat pane
+**Camera/Mic Discord-like seats around the live session**
+- Backend `Bus` rewritten from `List[WebSocket]` → `List[Peer]` (uid + name + opaque conn_id) — see `server.py` lines ~1350-1495
+- WebSocket relay extended with `presence:room` (initial seed for joiner), `presence:join`, `presence:leave`, `presence:av-state` (mic/cam toggles), and targeted `webrtc:offer` / `webrtc:answer` / `webrtc:ice` (forwarded to a single peer via `to:` field, never broadcast)
+- Mesh peer-to-peer architecture: every participant maintains an RTCPeerConnection per other participant, via Google STUN servers; no SFU, no TURN
+- Glare avoidance: deterministic offerer rule (lexicographically smaller `conn_id` initiates the offer)
+- Frontend `<AVSeats>` component (`/app/frontend/src/components/AVSeats.jsx`):
+  - Sticky strip above the 3-col session grid on desktop, full-width on mobile
+  - Tile per participant (self + remotes) with avatar fallback, GM crown, mic/cam status
+  - Mic toggle, camera toggle, leave-call controls
+  - Tap-to-enlarge tile (mobile-friendly)
+  - Empty state when alone at the table
+- Signaling channel: shares the existing session WebSocket via a (subscribe / send) bridge in `SessionView.jsx`, so no second connection needed
+- Mobile-first: horizontal scroll strip on phones, wrap-grid on desktop
+- Audio + video both supported from launch (per user spec)
 
-**Mobile/desktop responsive UI (separate designs)**
-- **Shell**: sidebar persists on desktop; on mobile it collapses to a sticky topbar (logo + hamburger drawer) plus a fixed bottom-nav with icon+label tabs (Dashboard / Campaigns / Discover / Reference)
-- **SessionView**: 3-column desktop layout (Initiative · Chat · Dice) → 3-tab mobile layout with a sticky pane switcher; each pane gets full screen on phone
-- All forms, cards, and grids already used responsive Tailwind classes; verified at 390×844 (iPhone 14) and 1600×900 (desktop)
-
-**BESM term click-to-reference (smooth physical→digital handoff)**
-- New `<BesmTerm>` popover component on the Character Sheet — click any Attribute or Defect name to see its cost, category, page, and source book; explicitly says "Table-Gnostic references rules — it does not reproduce them" so the player knows where to flip in their physical book
-- Wired into Attributes and Defects on the Character Sheet; trivial to extend to Skills, Enhancements, Limiters
-
-**System rules adherence**
-- Source citations everywhere ("p.94 BESM 4E", "p.14 BESM Extras") on every Attribute/Defect/Skill row in the builder, sheet, picker, and Reference tome
-- Custom GM-authored rules (Atelier custom_attributes / custom_defects) carry their own page_ref string and surface alongside official rules with a "Custom (GM)" group label
-- BESM Extras (Shock Value, Sanity Points, Power Packs, Mass Combat, etc.) integrated as a separate tab in the Reference tome with `BESM Extras` source label
-- Player Primer + allow/prohibit lists ensure each table only sees what their GM has approved
-
-### Testing
-- Backend: 80/81 (98.8%); CORS issue resolved post-fix.
-- Mobile + desktop screenshots verified end-to-end.
+### V3.0 — Tested
+- Backend: 85/87 pytest (97.7%); 6/6 new TestWebSocketPresence cases pass; 5/5 prior WS regression tests still green after Bus rewrite. Two carry-over failures (CORS preflight wildcard, LLM 429) pre-date this iteration
+- Frontend Playwright: AV strip renders, empty state visible, join button visible, mobile (390×844) pane tabs still switch, two-context test (GM + Player) confirms peer tile upsert on `presence:join` and removal on `presence:leave`
+- Regressions verified green: chat send, dice roll, advance round, recap
 
 ## 3. Backlog
 
-### P1 — V3 candidates (next major iterations, large)
-- **Camera/mic Discord-like AV seats** (WebRTC) — voice/video tiles around the live session
+### P1 — V3+ candidates
 - **Battlemap + tokens** (canvas with grid, fog-of-war, drag tokens, line-of-sight)
+- **Backend refactor** of `server.py` (now 1500 lines) into modular routers (`/app/backend/routes/{auth,campaigns,characters,sessions,ws}.py`)
+
+### P2 — AV Seats hardening
+- Per-connection rate limit on the WS relay loop (50 msgs/sec) to prevent signaling-channel flooding
+- Pydantic validation for `presence:av-state` and `webrtc:*` payloads (currently pass-through)
+- Frontend WS reconnect with exponential backoff + presence:room re-sync (kube ingress idle drops)
+- Split `AVSeats.jsx` into `useMeshWebRTC()` hook + `<AVTile>` presentational component
+- TURN credentials for symmetric-NAT participants (today STUN-only)
 
 ### P2 — Polish
 - Extend `<BesmTerm>` to Skills, Enhancements, Limiters, and the Atelier
@@ -50,7 +55,6 @@ Auth · BESM 4E reference (86 attrs / 36 defects / 23 limiters / 21 Extras) · C
 - Timeline auto-renderer for `event` nodes
 - Family-tree / diplomatic-web specialised graph layouts
 - Recap export to PDF / handout
-- Mobile pass on Atelier (already responsive via Tailwind, but specific test on phone needed)
 - Verify Resend domain to enable arbitrary recipient emails
 
 ## 4. Credits
@@ -62,6 +66,6 @@ Auth · BESM 4E reference (86 attrs / 36 defects / 23 limiters / 21 Extras) · C
 
 ## 5. Next Tasks
 
-1. User decides between **AV seats** vs **Battlemap** as the next V3 build (each is a major project)
-2. Verify a Resend domain (or stay test-mode)
-3. Optional polish: extend `<BesmTerm>` everywhere; add map/timeline/family-tree views
+1. **Battlemap + tokens** (next major V3 build) OR backend refactor first
+2. AV seats hardening (rate-limit, validation, reconnect)
+3. Verify a Resend domain (or stay test-mode)

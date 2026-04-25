@@ -1402,7 +1402,9 @@ class Bus:
     async def send_to(self, sid: str, conn_id: str, payload: dict):
         for p in list(self.rooms.get(sid, [])):
             if p.conn_id == conn_id:
-                await self._safe_send(p, payload)
+                ok = await self._safe_send(p, payload)
+                if not ok:
+                    self.leave(sid, p.ws)
                 return
 
 bus = Bus()
