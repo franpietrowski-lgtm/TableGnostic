@@ -120,19 +120,25 @@ export default function CharacterSheet() {
             {ch.attributes.length === 0 && <div className="text-mist italic text-xs">—</div>}
             <div className="space-y-2">
               {ch.attributes.map((a, i) => (
-                <div key={i} className="border border-gold/10 rounded-sm p-3 flex items-center justify-between flex-wrap gap-2">
-                  <div>
+                <div key={i} className="border border-gold/10 rounded-sm p-3 flex items-start justify-between flex-wrap gap-2">
+                  <div className="min-w-0 flex-1">
                     <div className="text-sm font-ui">
                       <BesmTerm name={a.name} cost={`${a.cost_per_level} pts/level`}
                                 page={a.page} note={a.note}
                                 book={a.page ? "BESM 4E" : "Custom"}/>
                       <span className="text-gold ml-2">×{a.level}</span>
                     </div>
-                    <div className="text-[10px] text-mist font-ui uppercase tracking-widest flex items-center gap-1">
+                    {a.note && (
+                      <div className="text-[12px] text-parchment/85 italic mt-1 font-body leading-snug"
+                           data-testid={`attr-note-${i}`}>
+                        {a.note}
+                      </div>
+                    )}
+                    <div className="text-[10px] text-mist font-ui uppercase tracking-widest flex items-center gap-1 mt-1">
                       <BookOpen className="w-3 h-3"/> {a.page ? `p.${a.page} BESM 4E` : "Custom"}
                     </div>
                     {(a.enhancements.length > 0 || a.limiters.length > 0) && (
-                      <div className="mt-1 flex flex-wrap gap-1">
+                      <div className="mt-1.5 flex flex-wrap gap-1">
                         {a.enhancements.map((e, j) => <span key={j} className="tag border-gold/40 text-gold-bright">+{e}</span>)}
                         {a.limiters.map((l, j) => <span key={j} className="tag border-ember/40 text-ember">-{l}</span>)}
                       </div>
@@ -152,15 +158,21 @@ export default function CharacterSheet() {
             {ch.defects.length === 0 && <div className="text-mist italic text-xs">—</div>}
             <div className="space-y-2">
               {ch.defects.map((d, i) => (
-                <div key={i} className="border border-gold/10 rounded-sm p-3 flex items-center justify-between flex-wrap gap-2">
-                  <div>
+                <div key={i} className="border border-gold/10 rounded-sm p-3 flex items-start justify-between flex-wrap gap-2">
+                  <div className="min-w-0 flex-1">
                     <div className="text-sm font-ui">
                       <BesmTerm name={d.name} cost={`${d.points_per_rank} pts/rank`}
                                 page={d.page} note={d.note} category={d.category}
                                 book={d.page ? "BESM 4E" : "Custom"}/>
                       <span className="text-ember ml-2">×{d.rank}</span>
                     </div>
-                    <div className="text-[10px] text-mist font-ui uppercase tracking-widest flex items-center gap-1">
+                    {d.note && (
+                      <div className="text-[12px] text-parchment/85 italic mt-1 font-body leading-snug"
+                           data-testid={`defect-note-${i}`}>
+                        {d.note}
+                      </div>
+                    )}
+                    <div className="text-[10px] text-mist font-ui uppercase tracking-widest flex items-center gap-1 mt-1">
                       <BookOpen className="w-3 h-3"/> {d.page ? `p.${d.page} BESM 4E` : "Custom"} · {d.category}
                     </div>
                   </div>
@@ -175,10 +187,32 @@ export default function CharacterSheet() {
             {ch.skills.length === 0 && <div className="text-mist italic text-xs">—</div>}
             <div className="space-y-2">
               {ch.skills.map((s, i) => (
-                <div key={i} className="border border-gold/10 rounded-sm p-3 flex items-center justify-between flex-wrap gap-2">
-                  <div>
-                    <div className="text-sm text-parchment font-ui">{s.group} <span className="text-gold">×{s.level}</span></div>
-                    <div className="text-[10px] text-mist font-ui uppercase tracking-widest flex items-center gap-1">
+                <div key={i} className="border border-gold/10 rounded-sm p-3 flex items-start justify-between flex-wrap gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm text-parchment font-ui">
+                      {s.group} <span className="text-gold">×{s.level}</span>
+                      {s.cost_per_level ? <span className="text-gold/60 text-[10px] ml-2 font-ui uppercase tracking-widest">{s.cost_per_level} pt/lvl</span> : null}
+                    </div>
+                    {s.note && (
+                      <div className="text-[12px] text-parchment/85 italic mt-1 font-body leading-snug"
+                           data-testid={`skill-note-${i}`}>
+                        {s.note}
+                      </div>
+                    )}
+                    {Array.isArray(s.components) && s.components.length > 0 && (
+                      <ul className="mt-1.5 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-0.5 text-[11px] font-body text-mist"
+                          data-testid={`skill-components-${i}`}>
+                        {s.components.map((c, j) => (
+                          <li key={j} className="flex items-baseline gap-1.5">
+                            <span className="text-gold/60 font-ui">·</span>
+                            <span className="text-parchment/90">{c.name}</span>
+                            {c.level ? <span className="text-gold">×{c.level}</span> : null}
+                            {c.note && <span className="italic text-mist/70">— {c.note}</span>}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    <div className="text-[10px] text-mist font-ui uppercase tracking-widest flex items-center gap-1 mt-1.5">
                       <BookOpen className="w-3 h-3"/> {s.page ? `p.${s.page} BESM 4E` : "Custom"}
                     </div>
                   </div>
@@ -188,6 +222,42 @@ export default function CharacterSheet() {
               ))}
             </div>
           </div>
+
+          {/* Power Packs / Source-of-Power groupings — narrative bundles that
+              tie a character's powers, materials, or training back to a
+              single in-setting source (BESM Extras p.42 — Power Packs/Bundles). */}
+          {Array.isArray(ch.power_packs) && ch.power_packs.length > 0 && (
+            <div className="card-mystic p-6" data-testid="power-packs">
+              <div className="h-arcane text-sm mb-3">Power Pack · Source of Power</div>
+              <div className="space-y-3">
+                {ch.power_packs.map((pp, i) => (
+                  <div key={i} className="border border-gold/15 rounded-sm p-3" data-testid={`power-pack-${i}`}>
+                    <div className="flex items-baseline justify-between flex-wrap gap-2">
+                      <div className="text-sm font-ui text-parchment">{pp.name}</div>
+                      <div className="text-[10px] font-ui uppercase tracking-widest text-gold/70">
+                        {pp.cost ? `${pp.cost} pts` : "Narrative · no cost"}
+                      </div>
+                    </div>
+                    {pp.description && (
+                      <div className="text-[12px] text-parchment/85 italic mt-1 font-body leading-snug">
+                        {pp.description}
+                      </div>
+                    )}
+                    {Array.isArray(pp.references) && pp.references.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {pp.references.map((r, j) => (
+                          <span key={j} className="tag border-arcane/40 text-arcane">{r}</span>
+                        ))}
+                      </div>
+                    )}
+                    <div className="text-[10px] text-mist font-ui uppercase tracking-widest flex items-center gap-1 mt-1.5">
+                      <BookOpen className="w-3 h-3"/> BESM Extras · Power Packs
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="card-mystic p-6">
             <div className="flex items-center justify-between">

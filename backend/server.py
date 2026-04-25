@@ -257,11 +257,30 @@ class CharacterDefect(BaseModel):
     page: Optional[int] = None
     note: Optional[str] = ""
 
+class CharacterSkillComponent(BaseModel):
+    name: str
+    level: int = 1
+    note: str = ""
+
 class CharacterSkill(BaseModel):
     group: str
     level: int = 1
     cost_per_level: int
     page: Optional[int] = None
+    note: str = ""
+    components: List[CharacterSkillComponent] = []
+
+class CharacterPowerPack(BaseModel):
+    """A narrative grouping of a character's powers / materials / training
+    tied to one in-setting source (e.g., 'Cryptosha · Serenitas Tincture Kit').
+    Defaults to free; GM Primer can authorise a fixed cost via the campaign's
+    `power_pack_cost_template` map (P2). References are display-only labels
+    pointing at Attribute / Defect / Skill names already on the sheet.
+    """
+    name: str
+    description: str = ""
+    references: List[str] = []
+    cost: int = 0  # 0 = narrative / free; positive = GM-set cost
 
 class CharacterIn(BaseModel):
     campaign_id: str
@@ -273,6 +292,7 @@ class CharacterIn(BaseModel):
     attributes: List[CharacterAttribute] = []
     defects: List[CharacterDefect] = []
     skills: List[CharacterSkill] = []
+    power_packs: List[CharacterPowerPack] = []
     notes: str = ""
     published: bool = False
     # Character Folio (Dyskami v1.01) — narrative depth
@@ -981,6 +1001,7 @@ async def seed_evereantha_pcs(cid: str, user: dict = Depends(get_current_user)):
             "attributes": pc["attributes"],
             "defects": pc["defects"],
             "skills": pc.get("skills", []),
+            "power_packs": pc.get("power_packs", []),
             "notes": "Evereantha sample PC — Adventurous tier (~80 pts).",
             "published": True,
             "folio": pc.get("folio", {}),
