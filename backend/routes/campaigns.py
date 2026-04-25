@@ -1,0 +1,296 @@
+"""Campaigns — CRUD, membership, invite tokens, custom rules, genesis (Atelier)."""
+import secrets
+from typing import Any, Dict
+
+from fastapi import APIRouter, Depends, HTTPException
+
+from core.cost_engine import resolve_system_id
+from core.db import db, new_id, now_iso, sanitize
+from core.models import CampaignIn, CustomAttributeIn, GenesisIn, JoinIn
+from core.security import get_current_user
+
+router = APIRouter(prefix="/api", tags=["campaigns"])
+
+
+@router.post("/campaigns")
+async def create_campaign(body: CampaignIn, user: dict = Depends(get_current_user)):
+    """Player-role accounts are seat-only — gm + admin may host campaigns."""
+    if user.get("role") not in ("gm", "admin"):
+        raise HTTPException(403, "Player accounts cannot create campaigns. "
+                                 "Update your role to Game Master in your profile to host a table.")
+    doc = body.model_dump()
+    resolve_system_id(doc)
+    doc["id"] = new_id()
+    doc["gm_id"] = user["id"]
+    doc["gm_name"] = user["name"]
+    doc["member_ids"] = []
+    doc["invite_token"] = secrets.token_urlsafe(16)
+    doc["created_at"] = now_iso()
+    await db.campaigns.insert_one(doc)
+    return sanitize(doc)
+
+
+@router.get("/campaigns")
+async def list_campaigns(mine: bool = False, user: dict = Depends(get_current_user)):
+    q: Dict[str, Any] = {}
+    if mine:
+        q = {"$or": [{"gm_id": user["id"]}, {"member_ids": user["id"]}]}
+    else:
+        q = {"$or": [
+            {"visibility": "public"},
+            {"gm_id": user["id"]},
+            {"member_ids": user["id"]},
+        ]}
+    rows = await db.campaigns.find(q, {"_id": 0}).sort("created_at", -1).to_list(200)
+    return rows
+
+
+@router.put("/campaigns/{cid}")
+async def update_campaign(cid: str, body: CampaignIn, user: dict = Depends(get_current_user)):
+    camp = await db.campaigns.find_one({"id": cid}, {"_id": 0})
+    if not camp:
+        raise HTTPException(404, "Not found")
+    if camp["gm_id"] != user["id"] and user.get("role") != "admin":
+        raise HTTPException(403, "Only GM may edit")
+    data = body.model_dump()
+    resolve_system_id(data)
+    data["id"] = cid
+    data["gm_id"] = camp["gm_id"]
+    data["gm_name"] = camp["gm_name"]
+    data["member_ids"] = camp.get("member_ids", [])
+    data["invite_token"] = camp.get("invite_token") or secrets.token_urlsafe(16)
+    data["created_at"] = camp.get("created_at", now_iso())
+    data["updated_at"] = now_iso()
+    await db.campaigns.replace_one({"id": cid}, data)
+    return sanitize(data)
+
+
+@router.post("/campaigns/{cid}/regenerate-invite")
+async def regenerate_invite(cid: str, user: dict = Depends(get_current_user)):
+    camp = await db.campaigns.find_one({"id": cid}, {"_id": 0})
+    if not camp or camp["gm_id"] != user["id"]:
+        raise HTTPException(403, "Only GM")
+    new_token = secrets.token_urlsafe(16)
+    await db.campaigns.update_one({"id": cid}, {"$set": {"invite_token": new_token}})
+    return {"invite_token": new_token}
+
+
+@router.get("/invites/{token}")
+async def get_invite(token: str):
+    """Public invite lookup (no auth) — minimal summary for onboarding."""
+    camp = await db.campaigns.find_one({"invite_token": token}, {"_id": 0})
+    if not camp:
+        raise HTTPException(404, "Invite not found or revoked")
+    return {
+        "campaign_id": camp["id"], "name": camp["name"],
+        "description": camp.get("description", ""),
+        "system": camp.get("system", "BESM 4E"),
+        "power_level": camp.get("power_level", "Heroic"),
+        "gm_name": camp.get("gm_name", ""),
+        "tags": camp.get("tags", []),
+        "tone": camp.get("tone"), "genre": camp.get("genre"),
+        "schedule": camp.get("schedule"),
+        "experience_level": camp.get("experience_level"),
+        "seated": len(camp.get("member_ids", [])),
+        "max_players": camp.get("max_players", 6),
+        "full": len(camp.get("member_ids", [])) >= camp.get("max_players", 6),
+    }
+
+
+@router.post("/invites/{token}/accept")
+async def accept_invite(token: str, user: dict = Depends(get_current_user)):
+    camp = await db.campaigns.find_one({"invite_token": token}, {"_id": 0})
+    if not camp:
+        raise HTTPException(404, "Invite not found or revoked")
+    cid = camp["id"]
+    if user["id"] == camp["gm_id"]:
+        return {"ok": True, "campaign_id": cid, "already": "gm"}
+    if user["id"] in camp.get("member_ids", []):
+        return {"ok": True, "campaign_id": cid, "already": True}
+    if len(camp.get("member_ids", [])) >= camp.get("max_players", 6):
+        raise HTTPException(400, "Table full")
+    await db.campaigns.update_one({"id": cid}, {"$addToSet": {"member_ids": user["id"]}})
+    return {"ok": True, "campaign_id": cid}
+
+
+@router.get("/campaigns/{cid}")
+async def get_campaign(cid: str, user: dict = Depends(get_current_user)):
+    camp = await db.campaigns.find_one({"id": cid}, {"_id": 0})
+    if not camp:
+        raise HTTPException(404, "Not found")
+    if camp["visibility"] != "public" and camp["gm_id"] != user["id"] and user["id"] not in camp.get("member_ids", []):
+        raise HTTPException(403, "Not permitted")
+    members = await db.users.find(
+        {"id": {"$in": camp.get("member_ids", [])}},
+        {"_id": 0, "password_hash": 0},
+    ).to_list(100)
+    camp["members"] = members
+    camp["is_gm"] = (camp["gm_id"] == user["id"])
+    return camp
+
+
+@router.post("/campaigns/{cid}/join")
+async def join_campaign(cid: str, body: JoinIn, user: dict = Depends(get_current_user)):
+    camp = await db.campaigns.find_one({"id": cid}, {"_id": 0})
+    if not camp:
+        raise HTTPException(404, "Not found")
+    if user["id"] == camp["gm_id"]:
+        raise HTTPException(400, "You are the GM")
+    if user["id"] in camp.get("member_ids", []):
+        return {"ok": True, "already": True}
+    if len(camp.get("member_ids", [])) >= camp.get("max_players", 6):
+        raise HTTPException(400, "Table full")
+    await db.campaigns.update_one({"id": cid}, {"$addToSet": {"member_ids": user["id"]}})
+    return {"ok": True}
+
+
+@router.post("/campaigns/{cid}/leave")
+async def leave_campaign(cid: str, user: dict = Depends(get_current_user)):
+    await db.campaigns.update_one({"id": cid}, {"$pull": {"member_ids": user["id"]}})
+    return {"ok": True}
+
+
+@router.delete("/campaigns/{cid}")
+async def delete_campaign(cid: str, user: dict = Depends(get_current_user)):
+    camp = await db.campaigns.find_one({"id": cid}, {"_id": 0})
+    if not camp:
+        raise HTTPException(404, "Not found")
+    if camp["gm_id"] != user["id"] and user.get("role") != "admin":
+        raise HTTPException(403, "Only GM may delete")
+    await db.campaigns.delete_one({"id": cid})
+    await db.characters.delete_many({"campaign_id": cid})
+    await db.nodes.delete_many({"campaign_id": cid})
+    await db.edges.delete_many({"campaign_id": cid})
+    await db.sessions.delete_many({"campaign_id": cid})
+    await db.custom_attributes.delete_many({"campaign_id": cid})
+    return {"ok": True}
+
+
+# -------- Custom GM rules (custom Attributes / Defects / Skills) --------
+
+@router.post("/campaigns/{campaign_id}/custom")
+async def create_custom(campaign_id: str, body: CustomAttributeIn,
+                        user: dict = Depends(get_current_user)):
+    camp = await db.campaigns.find_one({"id": campaign_id}, {"_id": 0})
+    if not camp:
+        raise HTTPException(404, "Campaign not found")
+    if camp["gm_id"] != user["id"] and user.get("role") != "admin":
+        raise HTTPException(403, "Only GM can add custom entries")
+    doc = body.model_dump()
+    doc["id"] = new_id()
+    doc["campaign_id"] = campaign_id
+    doc["created_by"] = user["id"]
+    doc["created_at"] = now_iso()
+    await db.custom_attributes.insert_one(doc)
+    return sanitize(doc)
+
+
+@router.get("/campaigns/{campaign_id}/custom")
+async def list_custom(campaign_id: str, user: dict = Depends(get_current_user)):
+    rows = await db.custom_attributes.find({"campaign_id": campaign_id}, {"_id": 0}).to_list(500)
+    return rows
+
+
+@router.delete("/campaigns/{campaign_id}/custom/{cid}")
+async def delete_custom(campaign_id: str, cid: str, user: dict = Depends(get_current_user)):
+    camp = await db.campaigns.find_one({"id": campaign_id}, {"_id": 0})
+    if not camp or (camp["gm_id"] != user["id"] and user.get("role") != "admin"):
+        raise HTTPException(403, "Only GM can remove")
+    await db.custom_attributes.delete_one({"id": cid, "campaign_id": campaign_id})
+    return {"ok": True}
+
+
+# -------- Genesis (Sclanders Atelier) --------
+
+@router.get("/campaigns/{cid}/genesis")
+async def get_genesis(cid: str, user: dict = Depends(get_current_user)):
+    camp = await db.campaigns.find_one({"id": cid}, {"_id": 0})
+    if not camp:
+        raise HTTPException(404, "Campaign not found")
+    if camp["gm_id"] != user["id"]:
+        raise HTTPException(403, "Only GM can view genesis")
+    doc = await db.genesis.find_one({"campaign_id": cid}, {"_id": 0})
+    if not doc:
+        doc = GenesisIn(campaign_id=cid).model_dump()
+        doc["id"] = new_id()
+        doc["created_at"] = now_iso()
+        await db.genesis.insert_one(dict(doc))
+        doc.pop("_id", None)
+    return doc
+
+
+@router.put("/campaigns/{cid}/genesis")
+async def update_genesis(cid: str, body: GenesisIn,
+                         user: dict = Depends(get_current_user)):
+    camp = await db.campaigns.find_one({"id": cid}, {"_id": 0})
+    if not camp:
+        raise HTTPException(404, "Campaign not found")
+    if camp["gm_id"] != user["id"]:
+        raise HTTPException(403, "Only GM can edit genesis")
+    data = body.model_dump()
+    data["campaign_id"] = cid
+    data["updated_at"] = now_iso()
+    existing = await db.genesis.find_one({"campaign_id": cid}, {"_id": 0})
+    if existing:
+        data["id"] = existing["id"]
+        data["created_at"] = existing.get("created_at", now_iso())
+        await db.genesis.replace_one({"campaign_id": cid}, data)
+    else:
+        data["id"] = new_id()
+        data["created_at"] = now_iso()
+        await db.genesis.insert_one(dict(data))
+    data.pop("_id", None)
+    return data
+
+
+@router.post("/campaigns/{cid}/genesis/seed-nodes")
+async def seed_nodes_from_genesis(cid: str, user: dict = Depends(get_current_user)):
+    """Convert genesis seed_npcs / nemesis / adventures into gm_only knowledge nodes."""
+    camp = await db.campaigns.find_one({"id": cid}, {"_id": 0})
+    if not camp or camp["gm_id"] != user["id"]:
+        raise HTTPException(403, "Only GM can seed")
+    g = await db.genesis.find_one({"campaign_id": cid}, {"_id": 0})
+    if not g:
+        raise HTTPException(404, "No genesis")
+    created = 0
+    if g.get("nemesis_name"):
+        await db.nodes.insert_one({
+            "id": new_id(), "campaign_id": cid, "type": "npc",
+            "title": g["nemesis_name"],
+            "content": (f"Nemesis · {g.get('nemesis_type','')}\n"
+                        f"Motive: {g.get('nemesis_motive','')}\n"
+                        f"Resources: {g.get('nemesis_resources','')}\n"
+                        f"Weakness: {g.get('nemesis_weakness','')}"),
+            "tags": ["nemesis"], "visibility": "gm_only", "revealed_to": [],
+            "links": [], "author_id": user["id"], "author_name": user["name"],
+            "created_at": now_iso(),
+        })
+        created += 1
+    for npc in g.get("seed_npcs", []) or []:
+        if not npc.get("name"):
+            continue
+        await db.nodes.insert_one({
+            "id": new_id(), "campaign_id": cid, "type": "npc",
+            "title": npc["name"],
+            "content": f"{npc.get('role','')}\n\n{npc.get('note','')}",
+            "tags": [npc.get("role", "").lower()] if npc.get("role") else [],
+            "visibility": "gm_only", "revealed_to": [], "links": [],
+            "author_id": user["id"], "author_name": user["name"],
+            "created_at": now_iso(),
+        })
+        created += 1
+    for adv in g.get("adventures", []) or []:
+        if not adv.get("title"):
+            continue
+        await db.nodes.insert_one({
+            "id": new_id(), "campaign_id": cid, "type": "quest",
+            "title": adv["title"],
+            "content": (f"Hook: {adv.get('hook','')}\nStakes: {adv.get('stakes','')}\n"
+                        f"Outcome: {adv.get('outcome','')}"),
+            "tags": [adv.get("kind", "").lower()] if adv.get("kind") else [],
+            "visibility": "gm_only", "revealed_to": [], "links": [],
+            "author_id": user["id"], "author_name": user["name"],
+            "created_at": now_iso(),
+        })
+        created += 1
+    return {"ok": True, "nodes_created": created}
