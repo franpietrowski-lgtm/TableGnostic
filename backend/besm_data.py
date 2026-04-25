@@ -556,7 +556,17 @@ GAME_SYSTEMS = [
     {
         "id": "besm-4e", "name": "BESM 4E", "publisher": "Dyskami Publishing",
         "edition": "4th Edition", "year": 2020,
-        "copyright": "BESM (Big Eyes, Small Mouth) 4th Edition is © Mark MacKinnon & Dyskami Publishing.",
+        # Dyskami's exact required notice for Tri-Stat Emporium / BESM 4E works.
+        # The {YEAR} token is filled at render time.
+        "copyright": (
+            "BESM Fourth Edition created and written by Mark MacKinnon. "
+            "BESM Fourth Edition published by Dyskami Publishing Company with Japanime Games. "
+            "Tri-Stat Emporium, Tri-Stat System, and BESM are trademarks of "
+            "White Wolf Entertainment AB. Tri-Stat System text © {YEAR} "
+            "White Wolf Entertainment AB. All rights reserved under international law."
+        ),
+        "links": ["http://www.white-wolf.com", "http://BESM4.life"],
+        "logo_url": "https://customer-assets.emergentagent.com/job_rules-forge/artifacts/yhzl2ww7_Tri-Stat%20Emporium%20BESM%20Logo%20300dpi.png",
         "supported": True,
         "blurb": "Tri-Stat point-buy: Body / Mind / Soul plus Attributes, Defects, Skill Groups. Native to Table-Gnostic.",
     },

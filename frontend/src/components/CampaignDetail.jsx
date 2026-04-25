@@ -152,16 +152,44 @@ function SystemCredit({ camp }) {
   }, [camp.system_id]);
   if (!sys) return null;
   const isBesm = sys.id === "besm-4e";
+  const year = new Date().getFullYear();
+  const copyright = (sys.copyright || "").replaceAll("{YEAR}", year);
+  const headline = isBesm ? "Tri-Stat Emporium" : sys.publisher;
   return (
-    <div className="mt-10 pt-6 border-t border-gold/10 text-center" data-testid="tri-stat-credit">
-      <div className="font-display tracking-[0.3em] text-gold/70 text-xs uppercase">
-        {isBesm ? "Tri-Stat Emporium" : sys.publisher}
-      </div>
-      <div className="text-[10px] text-mist/70 font-ui mt-1.5 max-w-2xl mx-auto leading-relaxed">
-        {sys.copyright} Table-Gnostic references rules and page numbers — it does not
-        reproduce rulebook prose, lore, or examples.
-        {!sys.supported && " Mechanics for this system are scaffolded; reference content coming soon."}
-        {" "}Bring your physical book to the table.
+    <div className="mt-10 pt-6 border-t border-gold/10" data-testid="tri-stat-credit">
+      <div className="flex flex-col items-center gap-3">
+        {sys.logo_url && (
+          <img src={sys.logo_url} alt={`${sys.name} logo`}
+               data-testid="system-logo"
+               className="h-20 md:h-24 w-auto object-contain opacity-95 drop-shadow-lg"
+               // The Emporium guidelines REQUIRE that the logo's aspect ratio is
+               // preserved and the logo is not otherwise altered.
+               style={{ imageRendering: "auto" }} />
+        )}
+        <div className="font-display tracking-[0.3em] text-gold/70 text-xs uppercase">
+          {headline}
+        </div>
+        <div className="text-[10.5px] text-mist/80 font-ui max-w-2xl text-center leading-relaxed">
+          {copyright}
+        </div>
+        {sys.links && sys.links.length > 0 && (
+          <div className="flex gap-3 text-[10px] font-ui uppercase tracking-widest text-gold/60">
+            {sys.links.map((href) => (
+              <a key={href} href={href} target="_blank" rel="noreferrer" className="hover:text-gold-bright">
+                {href.replace(/^https?:\/\//, "")}
+              </a>
+            ))}
+          </div>
+        )}
+        {!sys.supported && (
+          <div className="text-[10px] text-gold/60 italic">
+            Mechanics for {sys.name} are scaffolded — reference content coming soon.
+          </div>
+        )}
+        <div className="text-[10px] text-mist/60 italic mt-1">
+          Table-Gnostic references rules and page numbers — it does not reproduce
+          rulebook prose, lore, or examples. Bring your physical book to the table.
+        </div>
       </div>
     </div>
   );
@@ -217,15 +245,38 @@ function StartSessionModal({ defaultTitle, campName, onClose, onStart }) {
 }
 
 function CharactersTab({ camp, characters, onRefresh }) {
+  const [seeding, setSeeding] = useState(false);
+  const [seedErr, setSeedErr] = useState("");
+  const isBesm = (camp.system_id || "besm-4e") === "besm-4e";
+  const seed = async () => {
+    if (!window.confirm("Seed three Adventurous-tier sample PCs from the Evereantha setting?\n\n• Cyma Glasswort — Apocophea (Herbalist)\n• Tarsis Hammergrip — Ferralith (Monk-Smith)\n• Vela Stoneglyph — Lithomorph (Geomantic Sculptor)\n\nThey'll be added as published characters in this campaign.")) return;
+    setSeedErr(""); setSeeding(true);
+    try {
+      await api.post(`/campaigns/${camp.id}/seed/evereantha`);
+      onRefresh();
+    } catch (e) {
+      setSeedErr(formatApiErrorDetail(e.response?.data?.detail) || e.message);
+    } finally { setSeeding(false); }
+  };
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
         <h3 className="h-arcane text-sm">Player Characters</h3>
-        <Link to={`/app/campaigns/${camp.id}/characters/new`} className="btn btn-primary text-xs"
-              data-testid="new-character-btn">
-          <Plus className="w-3 h-3"/> Forge character
-        </Link>
+        <div className="flex items-center gap-2">
+          {camp.is_gm && isBesm && (
+            <button onClick={seed} disabled={seeding} className="btn btn-ghost text-xs"
+                    data-testid="seed-evereantha-btn"
+                    title="Seed three Adventurous-tier sample PCs from the public Evereantha setting (BESM 4E mechanics).">
+              <Sparkles className="w-3 h-3"/> {seeding ? "Seeding…" : "Seed Evereantha samples"}
+            </button>
+          )}
+          <Link to={`/app/campaigns/${camp.id}/characters/new`} className="btn btn-primary text-xs"
+                data-testid="new-character-btn">
+            <Plus className="w-3 h-3"/> Forge character
+          </Link>
+        </div>
       </div>
+      {seedErr && <div className="text-ember text-[11px] mb-2 font-ui">{seedErr}</div>}
       {characters.length === 0 ? (
         <div className="text-mist italic font-body text-sm">No souls at this table yet.</div>
       ) : (

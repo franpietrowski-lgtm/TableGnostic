@@ -6,51 +6,57 @@
 ## 1. Architecture
 
 - **Backend:** FastAPI + MongoDB (motor) + JWT auth + token-authed WebSockets + Resend email + Claude Sonnet 4.5 via emergentintegrations + WebRTC mesh signaling over the existing session WS + Permissions-Policy header for camera/mic
-- **Frontend:** React 18 + Tailwind + Radix + lucide-react + custom SVG force-graph + native WebRTC (RTCPeerConnection); dark cosmic/gold aesthetic; iframe-aware AV
-- **Roles:** `player` (seat-only), `gm` (can host campaigns), `admin` (everything). Legacy `user` accounts auto-migrate to `gm`. Role chosen at registration.
-- **Game Systems:** 11 advertised — BESM 4E fully supported; D&D 5E / Pathfinder 2E / Call of Cthulhu 7E / Savage Worlds / FATE Core / Cyberpunk RED / Vampire 5E / Blades in the Dark / Mothership / Shadowrun 6E scaffolded (campaign-create + worldbuilding + sessions + AV work today; system-specific Reference + Character Forge content coming with each system's data fill-in).
-- **Responsive:** mobile-first <768px (bottom-nav + drawer); desktop ≥768px (sidebar + multi-column)
+- **Frontend:** React 18 + Tailwind + Radix + lucide-react + custom SVG force-graph + native WebRTC; iframe-aware AV; system-aware footer credit + logo
+- **Roles:** `player` / `gm` / `admin`. Legacy `user` accounts auto-migrate to `gm`. Role chosen at registration.
+- **Game Systems:** 11 advertised — BESM 4E fully supported (full mechanic data); 10 scaffolded.
 
 ## 2. Implemented (cumulative)
 
-### V1.0–V3.1
-Auth · BESM 4E reference (full mechanic data) · Campaigns · Character Forge · Live Sessions (WebSocket) · Knowledge Web · Atelier wizard · Player Primer + allow/prohibit lists · Invite links · Resend email · World Codex · Knowledge Graph canvas · Character Folio · Session Recap generator · Auto-pinned recaps · Mobile/desktop responsive UI · BESM term click-to-reference popovers · Mesh WebRTC AV seats · Role separation · Tri-Stat Emporium credit · GM Primer caps.
+### V1.0–V3.2
+Auth · BESM 4E reference (full data) · Campaigns · Character Forge · Live Sessions · Knowledge Web · Atelier wizard · Player Primer + caps · Invite links · Resend email · World Codex · Knowledge Graph · Character Folio · Session Recap generator · Auto-pinned recaps · Mobile/desktop responsive · BESM term click-to-reference · Mesh WebRTC AV seats · Role separation · GM Primer caps · Game-system selector + 10-system scaffold.
 
-### V3.2 — BESM data fill + Game-system selector (this iteration — 2026-04-25)
+### V3.3 — Customise crash fix + Tri-Stat compliance + Evereantha samples (this iteration — 2026-04-25)
 
-**Comprehensive BESM 4E reference data**
-- Original mechanic-only blurbs on **every** entry of the Reference: 86/86 Attributes, 36/36 Defects (per-name with category fallback), 23/23 Limiters (per-name), 5/5 Enhancements (per-name: Area / Duration / Range / Targets / Potent), 21/21 Extras Rules
-- Blurbs describe HOW each entry slots into the cost equation `cost × Level × (1 + ΣEnh − ΣLim)` and the trigger / refund shape for Defects — 100% original wording, no rulebook prose / lore / examples
-- CharacterBuilder picker now surfaces these blurbs inline so players see what each pick *does* before committing points
+**P0 bug fix — `Customise` link runtime crash**
+- Root cause: `AttributeRow` received `ref={ref}` from its parent — `ref` is a *reserved* React prop intercepted for `forwardRef`, so inside the component `ref` was `undefined`, and `ref.enhancements.map(...)` threw "Cannot read properties of undefined". Fixed by renaming the prop to `reference={ref}` everywhere.
+- Verified: clicking Customise on any Attribute row now reveals all 5 Enhancements + 23 Limiters as togglable chips; toggling AREA correctly raises Attack Mastery from 1 → 2 pts (cost equation `cost × Level × (1 + Enh − Lim)`).
 
-**Game-system selector + 10-system scaffold**
-- Backend `GAME_SYSTEMS` registry with id / name / publisher / edition / year / copyright / supported / blurb for 11 systems
-- New public endpoint `GET /api/systems` (cache-friendly)
-- `CampaignIn.system_id` validated on POST + PUT via shared `_resolve_system_id()` helper; bad ids return 400; valid ids auto-sync the human-readable `system` label
-- Campaign create modal: live system dropdown with ✓ supported / ○ scaffolded indicators + per-system blurb + "scaffolded — content coming soon" disclaimer for non-BESM
-- `<SystemCredit>` subcomponent in CampaignDetail — renders the appropriate publisher footer per campaign system (BESM = Tri-Stat Emporium / Dyskami; D&D = Wizards of the Coast; etc.)
-- Reference page `ref-system-note` paragraph naming all 10 scaffolded systems
+**Tri-Stat Emporium compliance (Dyskami's exact required text + logo)**
+- Updated BESM 4E `GAME_SYSTEMS` entry with:
+  - The official BESM/Tri-Stat Emporium logo URL (rendered in `SystemCredit` at h-20/h-24, aspect ratio preserved per Dyskami's requirement)
+  - Dyskami's exact required notice for BESM 4th Edition products with `{YEAR}` token (filled at render time from `new Date().getFullYear()`)
+  - Both required URLs (`http://www.white-wolf.com` and `http://BESM4.life`) rendered as small footer links
+- `<SystemCredit>` now centers the logo, headline, full legal text, links, and the Table-Gnostic disclaimer in a vertical stack — every BESM 4E campaign now displays compliant attribution
 
-### V3.2 — Tested
-- Backend: 123/125 stable (98.4%); 17/17 new V3.2 tests pass across 4 new classes (TestIter8GameSystems, BesmBlurbCoverage, CampaignSystemId, PermissionsPolicyHeader); 2 carry-over failures (CORS empty-FRONTEND_URL, LLM 429) pre-date V3.2
-- Frontend Playwright: 11-option `create-system` selector with ✓/○ prefixes; D&D blurb + scaffold disclaimer live-update; D&D campaign creation succeeds with publisher='Wizards of the Coast' credit; BESM keeps Dyskami credit; Defects tab = 36 unique blurbs; Limiters tab = 23 unique blurbs; Enhancements tab = 5 distinct blurbs; player CTA still 'GMs only' (V3.1 regression intact)
-- One small post-test fix: extracted `_resolve_system_id()` helper + `GAME_SYSTEMS_BY_ID` O(1) lookup dict (addressed iter_8 code-review hints)
+**Three Adventurous-tier Evereantha sample PCs**
+- Created `/app/backend/seed_evereantha.py` with three fully-statted PCs from the public Evereantha setting (provided by the user as "Evereantha old.pdf"):
+  - **Cyma Glasswort** — Apocophea (Herbalist–Alchemist) of the Taurid Tor villages — Healing/Cognition/Heightened Senses + Vial Bandolier (Item shell), 50/80 pts
+  - **Tarsis Hammergrip** — Ferralith (Metal Whisperer Monk-Smith) of Oriun's Reach — Tough/Attack Mastery/Combat Technique + Resonant war-hammer Weapon, 53/80 pts
+  - **Vela Stoneglyph** — Lithomorph (Geomantic Sculptor) of Continenta Aurea — Control Environment/Armour/Tunnelling/Sixth Sense + glyph-armour, 42/80 pts
+- All three reference setting-specific Apocophean, Ferralith, Lithomorph artisan classes; defects nod to the Order of the Darkening Star, Mortiscura Curses, and Aetheris Ocean dread
+- New endpoint `POST /api/campaigns/{cid}/seed/evereantha` (GM-only, BESM 4E-only) — inserts the three as published characters with full Folio entries
+- New GM-only "Seed Evereantha samples" button in the CharactersTab on BESM 4E campaigns (`data-testid="seed-evereantha-btn"`)
 
-## 3. Backlog
+## 3. Backlog (in user's stated order)
 
-### P1 — Next major builds (in user's order)
-- **Initiative-driven AV layout + spotlight** — GM grid orders tiles by initiative; chat slides under the active player's tile; the active player swaps from grid to character-sheet + auto-generated roll-options popup. Includes "Loremaster's hush" CSS pulse when GM speaks.
-- **Roll-options generator** — built from BESM mechanics + GM Primer ("everything not explicitly prohibited")
+### P1 — Next major build
+- **Initiative-driven AV layout + spotlight + roll-options popup + Loremaster's hush** — active player tile enlarges, chat slides under it, the active player swaps from grid to char-sheet+roll-options popup; roll-options auto-built from current-system mechanics + GM Primer ("everything not explicitly prohibited"); GM-speak triggers gold sigil pulse on player tiles.
+- **Character Journal ↔ Sheet bond** — journal lives on the sheet; journal entries feed session summaries + campaign-to-date + end-campaign story summaries. Pairs naturally with the active-player popup (the popup IS the sheet+journal surface during turns).
+
+### P1 — Compliance / UX layering
+- **BESM-themed Dyskami layout influence** within BESM 4E campaign context (palette/typography accent that nods to the Tri-Stat house style without copying trade dress). Apply the same pattern (system-themed accent on system-specific surfaces) to D&D / PF2e / Cypher / FATE when their content is loaded.
 - **Player → GM live "Primer change request"** popup alerts; GM Primer live-edit mid-campaign
-- **Backend refactor** — `server.py` (~1577 lines) → `/app/backend/routes/{auth,campaigns,characters,sessions,ws,besm,systems}.py`
-- **Battlemap + tokens** (V3 major)
-- **Discord-style channels + threads PBP** per campaign (deferred — its own focused build)
 
-### P1 — System content fill (driven by demand)
-- D&D 5E mechanics from SRD (OGL/CC content only)
-- PF2e mechanics from ORC-licensed content
-- FATE Core (already CC-BY)
-- Other systems require licensing or stay scaffold-only
+### P1 — Architecture
+- **Backend refactor** — `server.py` (~1623 lines) → `/app/backend/routes/{auth,campaigns,characters,sessions,ws,besm,systems,seed}.py` (recommended before Battlemap)
+
+### P2 — V3 majors
+- **Discord-style channels + threads PBP** per campaign
+- **Battlemap + tokens** (canvas grid, fog-of-war, drag tokens, line-of-sight)
+
+### Later VIP — Distribution
+- **DriveThruRPG-ready export** — pre-formatted, properly flowed, page-numbered, accessible PDFs ready for digital release. Layout templates that match Dyskami's Tri-Stat Emporium trade-dress requirements (BESM 4E products use the BESM/Tri-Stat Emporium combined logo on the cover; legal page carries the Dyskami-mandated text).
+- **8-session demo campaign on Evereantha (BESM 4E)** with auto-summarised sessions, per-player engagement tooltips (chat / rolls / mic-cam time), full character-relationship summaries, and end-of-campaign story summary. The 3 Cyma/Tarsis/Vela PCs + a 4th-PC slot already exist as the seed.
 
 ### P2 — AV hardening
 - Per-connection rate limit on the WS relay loop (50 msgs/sec)
@@ -68,23 +74,27 @@ Auth · BESM 4E reference (full mechanic data) · Campaigns · Character Forge �
 - WS presence test stabiliser
 - `CampaignIn.system_id` should use `Field(default_factory=lambda: DEFAULT_SYSTEM_ID)` for drift-safety
 - React context for `/api/systems` so `<SystemCredit>` doesn't refetch on every CampaignDetail mount
-- `<optgroup>` in CreateModal system selector (replace ✓/○ prefixes with semantic groups for macOS/iOS native styling)
+- `<optgroup>` in CreateModal system selector
+- BESM cost engine: clamp net cost-per-level to `≥ 1` per BESM 4E rule (currently allows 0 or negative when limiters > enhancements + 1) — minor design call, currently makes heavily-limited Attributes effectively free
 
-### P2 — Carry-overs (pre-V3.2)
+### P2 — Carry-overs (pre-V3.3)
 - CORS preflight wildcard fix when FRONTEND_URL is empty
 - 502 sanitisation in generate_recap; per-(session,user) cooldown so LLM 429 stops bubbling
 
 ## 4. Credits
 
-- BESM 4E (Mark MacKinnon, Dyskami Publishing, 2020) — referenced, not reproduced
+- BESM 4E (Mark MacKinnon, Dyskami Publishing, 2020) — referenced, not reproduced; full Tri-Stat Emporium attribution in footer
 - BESM Extras / Character Folio (Dyskami)
 - Campaign Atelier framework (Guy Sclanders, *How to be a Great GM*, 2018)
-- World Codex inspiration (World Anvil article-typed worldbuilding pattern)
+- World Codex inspiration (World Anvil)
 - All 10 scaffolded systems credited to their respective publishers in `GAME_SYSTEMS`
+- Evereantha setting (user-provided, public)
 
 ## 5. Next Tasks
 
-1. **Initiative-driven AV layout + spotlight** + **roll-options generator** + **Player→GM Primer-change request alerts** (large UX build — next dedicated session)
-2. **Backend refactor** of `server.py` → modular routers (recommended before Battlemap)
-3. **Battlemap + tokens** (V3 major)
-4. **Discord-style channels + threads PBP**
+1. **Initiative-driven AV layout + spotlight + Character Journal ↔ Sheet bond** (paired build — the active-player popup IS the sheet+journal surface)
+2. **Player → GM Primer change-request alerts** + GM live-edit
+3. **Discord-style channels + threads PBP**
+4. **Backend refactor** → routers
+5. **Battlemap + tokens**
+6. **Later VIP**: DriveThruRPG export pipeline + 8-session Evereantha demo

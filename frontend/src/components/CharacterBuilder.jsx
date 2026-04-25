@@ -337,7 +337,7 @@ export default function CharacterBuilder() {
             limiterOpts={ref.limiters}
             onAdd={addAttribute}
             renderRow={(a, idx) => (
-              <AttributeRow key={idx} idx={idx} a={a} ref={ref} maxRank={maxAttrRank}
+              <AttributeRow key={idx} idx={idx} a={a} reference={ref} maxRank={maxAttrRank}
                 onUpdate={(next) => {
                   const arr = [...ch.attributes]; arr[idx] = next;
                   setCh({ ...ch, attributes: arr });
@@ -627,7 +627,8 @@ function ListSection({ title, items, options, onAdd, renderRow, kind, testIdPref
   );
 }
 
-function AttributeRow({ idx, a, ref, onUpdate, onRemove, maxRank = 0 }) {
+function AttributeRow({ idx, a, reference, onUpdate, onRemove, maxRank = 0 }) {
+  const ref = reference;
   const [openCust, setOpenCust] = useState(false);
   const toggle = (kind, name) => {
     const list = a[kind].includes(name) ? a[kind].filter((x) => x !== name) : [...a[kind], name];
