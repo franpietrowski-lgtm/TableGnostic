@@ -12,6 +12,7 @@ export default function SessionView() {
   const [init, setInit] = useState([]);
   const [effects, setEffects] = useState([]);
   const [characters, setCharacters] = useState([]);
+  const [campaign, setCampaign] = useState(null);
   const [msg, setMsg] = useState("");
   const [roll, setRoll] = useState("2d6");
   const [label, setLabel] = useState("");
@@ -41,14 +42,16 @@ export default function SessionView() {
   const loadAll = async () => {
     const s = await api.get(`/sessions/${id}`).then((r) => r.data);
     setSession(s);
-    const [c, d, i, e, chs] = await Promise.all([
+    const [c, d, i, e, chs, camp] = await Promise.all([
       api.get(`/sessions/${id}/chat`).then(r => r.data),
       api.get(`/sessions/${id}/dice`).then(r => r.data),
       api.get(`/sessions/${id}/initiative`).then(r => r.data),
       api.get(`/sessions/${id}/effects`).then(r => r.data),
       api.get(`/campaigns/${s.campaign_id}/characters`).then(r => r.data),
+      api.get(`/campaigns/${s.campaign_id}`).then(r => r.data),
     ]);
     setChat(c); setDice(d); setInit(i); setEffects(e); setCharacters(chs);
+    setCampaign(camp);
   };
 
   useEffect(() => { loadAll(); }, [id]);
@@ -153,6 +156,8 @@ export default function SessionView() {
           subscribe={wsSubscribe}
           send={wsSend}
           sessionTitle={session.title}
+          sessionId={id}
+          campaign={campaign}
           characters={characters}
           initiative={init}
         />

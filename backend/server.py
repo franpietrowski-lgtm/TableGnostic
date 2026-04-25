@@ -1467,6 +1467,65 @@ async def apply_damage(body: DamageIn, user: dict = Depends(get_current_user)):
 EMERGENT_LLM_KEY = os.environ.get("EMERGENT_LLM_KEY", "").strip()
 _recap_cooldown: Dict[str, datetime] = {}  # in-memory cooldown tracker
 
+
+class JournalEntryIn(BaseModel):
+    text: str = Field(min_length=1, max_length=2000)
+    session_id: Optional[str] = None  # if set, also broadcasts a journal event into the session log
+
+
+@api.post("/characters/{cid}/journal")
+async def add_journal_entry(cid: str, body: JournalEntryIn,
+                            user: dict = Depends(get_current_user)):
+    """Append a journal entry to a character's Folio. The entry is timestamped
+    and (optionally) echoed as a system-tagged chat line into the session so
+    the recap LLM can pick it up alongside everything else that happened.
+    Only the character's owner may journal as them; the GM may journal as any
+    character in their campaign.
+    """
+    ch = await db.characters.find_one({"id": cid}, {"_id": 0})
+    if not ch:
+        raise HTTPException(404, "Character not found")
+    camp = await db.campaigns.find_one({"id": ch["campaign_id"]}, {"_id": 0})
+    is_owner = ch["owner_id"] == user["id"]
+    is_gm = camp and camp["gm_id"] == user["id"]
+    if not (is_owner or is_gm):
+        raise HTTPException(403, "Only the character's owner or the campaign GM can journal.")
+
+    folio = ch.get("folio") or {}
+    journal = folio.get("journal")
+    # Defensive: legacy seeds stored journal as a string. Keep arrays only.
+    if not isinstance(journal, list):
+        journal = []
+    entry = {
+        "id": new_id(),
+        "text": body.text.strip(),
+        "by_uid": user["id"],
+        "by_name": user["name"],
+        "created_at": now_iso(),
+    }
+    journal.append(entry)
+    folio["journal"] = journal
+    await db.characters.update_one({"id": cid}, {"$set": {"folio": folio}})
+
+    # Echo into the session's chat log as a system-tagged line so the recap
+    # pipeline picks it up. Only if the caller passed a session_id AND that
+    # session belongs to the same campaign.
+    if body.session_id:
+        sess = await db.sessions.find_one({"id": body.session_id}, {"_id": 0})
+        if sess and sess.get("campaign_id") == ch["campaign_id"]:
+            log_doc = {
+                "id": new_id(), "session_id": body.session_id,
+                "message": f"[journal] {ch.get('name','?')}: {body.text.strip()}",
+                "kind": "journal", "user_id": user["id"], "user_name": user["name"],
+                "character_id": cid,
+                "created_at": now_iso(),
+            }
+            await db.chat_logs.insert_one(log_doc)
+            await broadcast(body.session_id, {"type": "chat", "data": sanitize(log_doc)})
+
+    return {"ok": True, "entry": entry, "count": len(journal)}
+
+
 class RecapIn(BaseModel):
     style: Literal["narrative", "bullet", "in-character"] = "narrative"
 

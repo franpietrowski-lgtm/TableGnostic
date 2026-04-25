@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import { Mic, MicOff, Video, VideoOff, PhoneOff, Phone, Crown } from "lucide-react";
+import ActorPopover from "./ActorPopover";
 
 /**
  * AVSeats — mesh WebRTC voice/video, mobile-first.
@@ -23,7 +24,7 @@ function shouldOffer(myConnId, theirConnId) {
   return String(myConnId) < String(theirConnId);
 }
 
-export default function AVSeats({ subscribe, send, sessionTitle, characters = [], initiative = [] }) {
+export default function AVSeats({ subscribe, send, sessionTitle, characters = [], initiative = [], sessionId, campaign }) {
   const [me, setMe] = useState(null);            // {conn_id, uid, name, is_gm}
   const [peers, setPeers] = useState({});        // conn_id -> {conn_id, uid, name, is_gm, micOn, camOn, stream}
   const [joined, setJoined] = useState(false);
@@ -68,6 +69,8 @@ export default function AVSeats({ subscribe, send, sessionTitle, characters = []
   const pcsRef = useRef({});         // conn_id -> RTCPeerConnection
   const pendingIceRef = useRef({});  // conn_id -> queued ICE candidates before remoteDescription is set
   const meRef = useRef(null);        // mirror of `me` for use in async callbacks
+  const selfTileRef = useRef(null);  // wrapper around the self <Tile>; anchor for ActorPopover
+  const [popoverOpen, setPopoverOpen] = useState(true);  // user can dismiss; reopens when initiative cycles
 
   // ------------ helpers ------------
   const upsertPeer = (conn_id, patch) => {
@@ -350,6 +353,11 @@ export default function AVSeats({ subscribe, send, sessionTitle, characters = []
   const activePeerConnId = activeUid && !isActiveSelf
     ? (orderedPeers.find((p) => p.uid === activeUid) || {}).conn_id
     : null;
+  const myCharacter = me ? charByUid[me.uid] : null;
+
+  // Auto-reopen the popover whenever a new active actor takes the spotlight,
+  // even if the user dismissed it for the previous turn.
+  useEffect(() => { setPopoverOpen(true); }, [activeUid]);
 
   return (
     <div
@@ -435,21 +443,23 @@ export default function AVSeats({ subscribe, send, sessionTitle, characters = []
         data-testid="av-tiles"
       >
         {joined && (
-          <Tile
-            key="self"
-            name={charByUid[me?.uid]?.name || (me?.name || "You") + " (you)"}
-            speakerName={(me?.name || "You") + " (you)"}
-            isGm={!!me?.is_gm}
-            isSelf
-            tokenColor={charByUid[me?.uid]?.token_color || ""}
-            videoRef={localVideoRef}
-            micOn={micOn}
-            camOn={camOn}
-            inCall
-            isActive={isActiveSelf}
-            enlarged={isActiveSelf || enlarged === "self"}
-            onToggleEnlarge={() => setEnlarged(enlarged === "self" ? null : "self")}
-          />
+          <div ref={selfTileRef} className="shrink-0">
+            <Tile
+              key="self"
+              name={charByUid[me?.uid]?.name || (me?.name || "You") + " (you)"}
+              speakerName={(me?.name || "You") + " (you)"}
+              isGm={!!me?.is_gm}
+              isSelf
+              tokenColor={charByUid[me?.uid]?.token_color || ""}
+              videoRef={localVideoRef}
+              micOn={micOn}
+              camOn={camOn}
+              inCall
+              isActive={isActiveSelf}
+              enlarged={isActiveSelf || enlarged === "self"}
+              onToggleEnlarge={() => setEnlarged(enlarged === "self" ? null : "self")}
+            />
+          </div>
         )}
         {orderedPeers.map((p) => {
           const character = charByUid[p.uid];
@@ -473,6 +483,19 @@ export default function AVSeats({ subscribe, send, sessionTitle, characters = []
           </div>
         )}
       </div>
+
+      {/* Active-player surface — opens automatically when initiative
+          puts THIS player on top of the order. Anchors to the self tile.
+          See ActorPopover.jsx for roll-options + journal flow. */}
+      {isActiveSelf && popoverOpen && myCharacter && sessionId && (
+        <ActorPopover
+          anchorEl={selfTileRef.current}
+          sessionId={sessionId}
+          character={myCharacter}
+          campaign={campaign}
+          onClose={() => setPopoverOpen(false)}
+        />
+      )}
     </div>
   );
 }
