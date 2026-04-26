@@ -336,17 +336,18 @@ Per-system audit covering all 13 systems in the selector. Status table:
 
 ## 5. Next Tasks
 
-> Items 5 and 7 below were completed in **V4.4 (2026-04-26)** — see §V4.4 changelog.
+> Items 5, 7, and 8 below were completed in **V4.4 (2026-04-26)** — see §V4.4 changelog.
 
-1. **DriveThruRPG export pipeline** — reportlab-driven branded PDF (cover + chapter-per-session + per-system legal footer from `LEGAL_COMPLIANCE.md`). Each finalised `session_record` becomes one chapter in tone-order.
-2. **Anime 5E full content** — extract attribute/skill/defect/template content from the 5 uploaded PDFs into `besm_data.py`, wire to the `anime-5e` system.
+1. **DriveThruRPG export pipeline** — reportlab-driven branded PDF (cover + chapter-per-session + per-system legal footer from `LEGAL_COMPLIANCE.md`). Each finalised `session_record` becomes one chapter in tone-order. Logo assets ready: BESM, Anime 5E + Tri-Stat Emporium (300dpi PNG at `/app/frontend/public/system-logos/`).
+2. **Anime 5E full content** — extract attribute/skill/defect/template content from the uploaded Anime 5E SRD (`Anime_5E_SRD_v1.01.rtf`) + Layout Templates PDF + Table Reference RTF into `besm_data.py`. Tag entries `cross_systems: ["dnd-5e"]` so they're selectable from the D&D 5E selector too. Logo asset received.
 3. **Cypher full content** — extract from the 5 Cypher / Numenera / Godforsaken PDFs into the Cypher selector. Compliance-checked per `LEGAL_COMPLIANCE.md` §5.
-4. **Knowledge Web file ingestion** — GM uploads PDF/MD/TXT → Claude Sonnet diff-review → suggested nodes. Reuses the same `emergentintegrations` integration the chronicle weaver already uses.
+4. **Knowledge Web mechanic-aware ingestion** — GM uploads PDF/MD/TXT → Claude Sonnet diff-review → suggested **Attributes / Power Packs / Power Bundles / Items / Weapons / Skills / NPCs / Locations** AND atelier-phase-specific suggestions (e.g. "this maps to Phase 4 Master Plot Act III — would you like to bind?"). Reuses the same `emergentintegrations` integration the chronicle weaver already uses.
 5. ~~**CharacterBuilder** in-builder live cost-preview update to V4.1 rule~~ — **DONE (V4.4)**.
 6. **Primer change-request alerts** + GM live-edit mid-campaign.
 7. ~~**8-session Evereantha demo** — pre-seeded chronicle that ships out of the box.~~ — **DONE (V4.4)**.
-8. **Atelier dynamic scaling** — Session 0/1 vs Arc vs Master Plot tiers with continuity checks for the GM.
+8. ~~**Atelier dynamic scaling** — Session 0/1 vs Arc vs Master Plot tiers with continuity checks for the GM.~~ — **DONE (V4.4 Phase B)**.
 9. **System-native macro library expansion** — wire BESM/Cypher/Anime 5E core macros (skill-component picker, action-preset menu, GM-roll templates) so each system's table feels native, not generic.
+10. **XP scorecard polish** — show per-PC bonus_breakdown popover (which quantum contributed how much), and a campaign-level XP ledger for GMs to see all conversions over time.
 
 ## V4.4 — Bug-fix Sweep + Map Upload + Demo Chronicle (2026-04-26)
 
@@ -368,4 +369,31 @@ Per-system audit covering all 13 systems in the selector. Status table:
 
 ### Legal compliance reaffirmed
 - Per `LEGAL_COMPLIANCE.md` (Tri-Stat Emporium licence): page references and mechanic names only — never reproduce rulebook prose, stat-block descriptions, lore, or examples. The new Evereantha Chronicle dialogue uses **only user-provided "Artisan's Tale" original setting material** with mechanic-only references back to BESM 4E (page numbers + attribute names). The `besm_data.py` Cypher/Anime 5E entries continue to cite mechanics + page numbers without reproducing flavour text.
+
+## V4.4 Phase A+B — Card Clarity + XP System + Atelier Tiers (2026-04-26)
+
+### Phase A.1 — Character-sheet card display clarity
+- Attribute rows now show `Name ×N assigned · cost N×M = K pts · X applications · Y enhancements ↓eff · Z limiters ↑eff` plus a top-of-card legend explaining BESM 4E V4.1 semantics. Each toggled enhancement / limiter row is exactly one application; multi-application requires re-listing.
+- Skill rows show assigned level, per-level cost, total cost, and component count.
+- Defect rows show rank, refund formula (`pts/rank × rank = total`).
+- (`/app/frontend/src/components/CharacterSheet.jsx`)
+
+### Phase A.2 — XP System (BESM 4E p.232 — Advancement)
+- New `routes/xp.py`: `GET /sessions/{sid}/xp/suggest`, `POST /sessions/{sid}/xp/commit`, `POST /characters/{cid}/xp` (manual award/correction), `POST /characters/{cid}/xp/convert` (XP → Character Points 1:1). Engagement weights: chat_ic 0.05, chat_ooc 0.01, dice_macro 0.10, journal 0.25, spotlight 0.50; bonus capped at +2.0 per session. Default baseline 2 XP (BESM 4E "standard" session). **Suggest-only** — never auto-awards.
+- Storage: `character.xp_total`, `character.xp_unspent`, `character.xp_log[]` audit trail (every entry tagged with source: `gm_award` / `session_baseline` / `engagement_bonus` / `correction` / `convert`).
+- New `XPAwardPanel` modal in SessionView (`open-xp-btn`): GM-only, table of every published PC with IC/OOC/Dice/Journal counts, Spotlight checkbox, editable Base + Bonus + Note, computed Total, single Commit button. Per user choice: IC weighted higher than OOC.
+- CharacterSheet header shows live `XP X.XX earned · Y.YY unspent` badge.
+- (`/app/backend/routes/xp.py`, `/app/frontend/src/components/XPAwardPanel.jsx`, `/app/frontend/src/components/SessionView.jsx`, `/app/frontend/src/components/CharacterSheet.jsx`)
+
+### Phase B — Atelier Dynamic Scaling
+- New `routes/atelier.py` + `atelier` Mongo collection. Three planning tiers stacked: **Session 0** (table contract, lines/veils, safety tools, schedule, expectations, character integration, recurring themes, completed flag) → **Arcs** (~3-session spans with title/status/expected_sessions/summary/referenced NPCs/locations and beats: hook/rising/turn/echo/denouement) → **Master Plot mirror** (read-only of `genesis.master_acts`).
+- `POST /api/atelier/{cid}/continuity` — deterministic continuity sweep flags `empty_arc`, `missing_node`, `act_arc_mismatch`, `dead_alive_conflict` findings.
+- Player-view: GET as a non-GM returns ONLY safety subset (`lines`, `veils`, `safety_tools`, `schedule`, `table_contract`) — GM private planning never leaks.
+- New "Atelier" tab in CampaignDetail (GM-only, `data-testid="tab-atelier"`).
+- Admin reset wipe list now includes `atelier`, `battlemaps`, `channels`, `channel_messages`.
+- (`/app/backend/routes/atelier.py`, `/app/frontend/src/components/AtelierTab.jsx`, `/app/frontend/src/components/CampaignDetail.jsx`, `/app/backend/routes/admin.py`)
+
+### Testing
+- `/app/test_reports/iteration_16.json` — 12/12 new pytest pass (XP weights/suggest/commit/convert + atelier GET/PUT/continuity + player-view safety subset). Cumulative regression: 124 PASS / 0 FAIL. Phase A.1 visual clarity self-verified in browser screenshot — Eli's Healing card renders `×3 assigned · cost 4×3 = 12 pts · 2 applications · 1 enhancement ↓eff · 1 limiter ↑eff · +Range / −Consumable`. XP badge `XP 5.00 earned · 5.00 unspent` confirmed.
+
 
