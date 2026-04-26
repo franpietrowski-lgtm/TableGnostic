@@ -69,7 +69,8 @@ class TestHealthAndOpenAPI:
         assert body["service"] == "table-gnostic"
         assert "time" in body
 
-    def test_openapi_has_8_tags_57_ops(self):
+    def test_openapi_has_expected_tags_and_ops(self):
+        # Re-baseline after V4.0 (admin/battlemap/channels added).
         # Public preview URL serves SPA at /openapi.json (HTML); use direct backend.
         r = requests.get("http://localhost:8001/openapi.json", timeout=10)
         assert r.status_code == 200
@@ -78,9 +79,10 @@ class TestHealthAndOpenAPI:
                        if isinstance(op, dict) for t in op.get("tags", [])})
         ops = [(m, p) for p, methods in d["paths"].items() for m in methods
                if m in ("get", "post", "put", "delete", "patch")]
-        assert tags == ["auth", "campaigns", "characters", "knowledge-web",
-                        "recap", "reference", "seed", "sessions"], tags
-        assert len(ops) == 57, f"expected 57 ops got {len(ops)}"
+        assert tags == ["admin", "auth", "battlemap", "campaigns", "channels",
+                        "characters", "knowledge-web", "recap", "reference",
+                        "seed", "sessions"], tags
+        assert len(ops) >= 75, f"expected ≥75 ops, got {len(ops)}"
 
 
 # ============= 1. Auth =============

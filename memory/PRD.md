@@ -99,6 +99,56 @@ middleware (camera/microphone for AV Seats), `@on_event("startup") → run_start
 - The `webrtc:offer/answer/ice` targeted relay + `presence:av-state` broadcast
   in `routes/sessions.py.ws_session` are the only call sites that would change.
 
+### V4.0 — Evereantha Seed + Battlemap + PBP Channels (this iteration — 2026-04-26)
+
+**1. AV black-square fix (`AVSeats.jsx`)**
+- The self-tile `<video>` is rendered conditionally on `joined` — `localVideoRef.current` was therefore null at the moment `getUserMedia()` resolved, so `srcObject` was set on a null ref and silently lost.
+- Moved the attach into a post-mount `useEffect(()=>{ ... }, [joined, camOn])`.
+- Added `.play().catch(()=>{})` on both self + peer tiles for Safari/older Chromium autoplay quirks.
+
+**2. Phase A — Evereantha canonical seed**
+- New module `seed_evereantha.py` (full rewrite): three apprentice PCs from the user's "Artisan's Tale" PDF —
+  - **Eli** (Apocophae alchemist) — token green, B4/M7/S6, Healing+Range-Consumable, alchemy bandolier, Apocophae Discipline lvl 3
+  - **Laryk** (Ferrilith earth-smith monk) — token bronze, B6/M4/S5, Massive Damage, Heavy Armour, Hammer & Forge special attack
+  - **Roney** (Techgnostic tinker) — token copper, B4/M7/S5, Item L8 + concussive horn, light burst, brass harness
+- Each PC ships with a Power Pack bundle that references the appropriate attributes/skills.
+- 20-node **World Codex**: 5 locations (Aurea / Eagles Nest / Golden Forests / Montes Inexpugnabilis / Solar-Lunar Caldera) · 2 factions (Artisans Guild + Order of the Darkening Star nemesis) · 6 NPCs (Mayor + Maid + Nyaulis + Mishtee + Frock + Malshe) · 1 creature (Lancing Andrewsarchus) · 2 lore (Barter Economy + Artisan Disciplines) · 4 quests (Maiden Adventure / Cataclysm Reagent / Forge-Glass Hammer / Sigil in the Harness — the last GM-only).
+- 7-phase **Atelier/Genesis** pre-fill — Sentence + Theme + Nemesis + 6 Master-Plot Acts + 5 Adventures + 6 seed NPCs + Beginning + Ending.
+- New endpoint `POST /api/admin/reset-to-evereantha` (admin-only) — wipes all game collections (preserves users, login_attempts, password_reset_tokens) and seeds the canonical Evereantha demo table atomically.
+
+**3. Phase B — Battlemap (`routes/battlemap.py` + `Battlemap.jsx`)**
+- Per-session canvas state (`db.battlemaps`) — square grid + image bg + tokens + walls + fog cells + measurements.
+- Endpoints: `GET/PUT /sessions/{sid}/map`, `POST/DELETE /sessions/{sid}/map/tokens[/{tid}]`, `POST /sessions/{sid}/map/fog` (reveal/hide deltas), `POST/DELETE /sessions/{sid}/map/walls[/{wid}]`.
+- Access: read = any campaign member. Token moves: GM moves any token; player moves only tokens whose `character_id` they own. All other writes (image/grid, walls, fog) are GM-only.
+- Real-time: re-uses session WebSocket bus — broadcasts `map:state` / `map:token` / `map:token-remove` / `map:fog` / `map:wall`.
+- Frontend: `<Battlemap>` component opens as a full-screen overlay from the new "Map" button in `SessionView`. Square grid SVG, draggable token buttons, mode toggles (Select / Fog / Wall), GM tools (image URL / grid resize / Seed PCs / Hide-all / Reveal-all), HP bars, status rings, init-driven gold-ring spotlight on the active actor's token.
+
+**4. Phase C — Discord-style PBP channels (`routes/channels.py` + `ChannelsPanel.jsx`)**
+- Per-campaign text channels (`db.campaign_channels`), threads (`db.threads`), messages (`db.channel_msgs`).
+- Endpoints: channels CRUD (GM-only writes) · threads CRUD · messages CRUD with markdown bodies · reactions toggle · pin (GM-only) · attachments[].
+- Slash-commands parsed server-side: `/roll <notation>` (executes via `routes.sessions.roll_dice`, stores result in `slash_meta.result`, kind=`"roll"`) · `/me <text>` (emote, slash_meta.kind=`"emote"`) · `/w @handle <text>` (whisper).
+- Mention resolution: `@handle` matched against campaign members' `name` / `email` prefix; resolved uids stored in `mention_uids` for highlight.
+- First channel auto-creates as `#tavern` on first GET — fresh campaigns always have somewhere to talk.
+- Frontend: `<ChannelsPanel>` lives in a new "Channels" tab inside `CampaignDetail`. Discord-like layout — channels rail · message stream with hover toolbar (react / thread / pin / delete) · markdown body · /roll renders as big total + dice breakdown · /me as third-person italics · /w as private aside · thread drawer slides in from the right.
+- Polling: 4 s on the active channel (campaign WS room is wired but not yet subscribed — V1.5).
+
+**5. Sheet macros**
+- `CharacterSheet.jsx` core stat tiles are now clickable buttons (`2d6-Body`, `2d6-Mind`, `2d6-Soul`).
+- The shared `roll()` function now ALSO posts `/roll <notation>     # <PC name> · <label>` into the campaign's first PBP channel (so the table sees rolls even when no live session is open).
+- Existing attribute / skill `Roll` buttons reuse the same path.
+
+### V4.0 — Tested (iter_12)
+- Backend: **33/33 new tests PASS** (`test_iter12_v40.py`) — covers admin reset (forbidden for player+gm; 200 for admin), Evereantha seed integrity (campaign + 20 nodes by-type breakdown + 3 PCs with computed `spent.total_spent` + Genesis phase 7), battlemap (member 200 / non-member 403 / GM-only PUT / GM token add / player can move OWN token / player cannot add unbound / GM fog hide-then-reveal / player cannot fog / GM walls CRUD / GM delete token), battlemap WebSocket (`map:token` event delivered after POST), channels (auto-tavern · player-cannot-create · admin-creates · /roll dice expansion · /me + /w slash kinds · mention resolution · reaction toggle · pin GM-only · threads CRUD + filter · edit + delete authorisation · GM channel delete), regression (`/api/health` · OpenAPI new tags · `/api/dice` still works).
+- iter_11 OpenAPI assertion re-baselined to expect 11 tags + ≥75 ops (was 8 / 57 — V4.0 added admin/battlemap/channels).
+- Found-and-fixed in this run: **ObjectId leak** in `routes/channels.py::list_channels` auto-create branch (motor mutates the input dict to inject `_id` — wrapped the default in `sanitize()` before return).
+- Test fixture fix: switched the character ownership-transfer write from `motor` (asyncio loop flake) to sync `pymongo`, and added a `load_dotenv` so the test connects to the same DB as the running backend.
+
+### V4.0 — Code-review notes (deferred — not blocking)
+- `roll_dice` in `routes/sessions.py` is imported by `routes/channels.py` inside the handler to avoid a cycle. Hoisting to `core/dice.py` would let both routes import freely (cosmetic).
+- `POST /api/admin/reset-to-evereantha` is destructive and irreversible. Consider gating behind `?confirm=WIPE` to defend against automation triggers.
+- `PUT /api/characters/{id}` silently drops `owner_id` changes (frozen on update). Fine by design but should either 400 explicitly or expose an admin-only ownership-transfer endpoint.
+- Campaign-scoped channel broadcasts go to a `campaign:{cid}` WS room that has no current subscriber. Frontend uses 4 s polling; a `/api/ws/campaign/{cid}` upgrade would make channels real-time.
+
 ### V3.9 — Tested (iter_11)
 - Backend: **46/46 tests PASS** — 36 new (`test_refactor_iter11.py`) + 10 carry-over
   (`test_iter10_v38.py`). Coverage: auth (incl. brute-force semantics), reference,
@@ -176,11 +226,13 @@ middleware (camera/microphone for AV Seats), `@on_event("startup") → run_start
 
 ## 5. Next Tasks
 
-1. **Discord PBP** + **Battlemap + tokens** (V3 majors)
-2. **System theming layer** (Dyskami / D&D / Cypher palettes)
-3. **Anime 5E full content**
-4. **Cypher full content**
-5. **Knowledge Web file ingestion**
-6. **Primer change-request alerts** + GM live-edit
-7. **Brute-force lock IP-key fix** (pre-existing security finding from iter_11)
-8. **Later VIP**: DriveThruRPG export + 8-session Evereantha demo
+1. **System theming layer** (Dyskami / D&D / Cypher palettes)
+2. **Anime 5E full content**
+3. **Cypher full content**
+4. **Knowledge Web file ingestion** (Claude Sonnet diff-review)
+5. **Primer change-request alerts** + GM live-edit
+6. **Battlemap V2** — line-of-sight raycast against walls + measure tool + per-token status-effect binding to `/api/effects`
+7. **Channels V2** — `/api/ws/campaign/{cid}` for real-time + file/image attachment uploads + `@mention` autocomplete
+8. **Brute-force lock IP-key fix** (pre-existing security finding from iter_11)
+9. **`POST /api/admin/reset-to-evereantha` confirmation gate** (`?confirm=WIPE`)
+10. **Later VIP**: DriveThruRPG export + 8-session Evereantha demo

@@ -15,6 +15,10 @@ import time
 
 import pytest
 import requests
+from dotenv import load_dotenv
+
+# Load /app/backend/.env so DB_NAME / MONGO_URL match the running backend.
+load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL",
                           "https://rules-forge.preview.emergentagent.com").rstrip("/")
@@ -165,19 +169,23 @@ def evereantha_pc_owned_by_player(admin_tok, player_tok):
     chars = requests.get(f"{API}/campaigns/{cid}/characters", headers=_h(admin_tok), timeout=10).json()
     target = chars[0]
     # Direct DB ownership transfer (no API exposes owner_id mutation by design).
-    import asyncio
-    from motor.motor_asyncio import AsyncIOMotorClient
+    # Sync pymongo here — the asyncio.get_event_loop() pattern flaked under
+    # pytest-collection on some runs and silently no-op'd the transfer.
+    from pymongo import MongoClient
     mongo_url = os.environ.get("MONGO_URL", "mongodb://localhost:27017")
     db_name = os.environ.get("DB_NAME", "test_database")
-
-    async def _xfer():
-        client = AsyncIOMotorClient(mongo_url)
-        await client[db_name].characters.update_one(
-            {"id": target["id"]},
-            {"$set": {"owner_id": player_uid, "owner_name": "Player"}},
-        )
-        client.close()
-    asyncio.get_event_loop().run_until_complete(_xfer())
+    sync_client = MongoClient(mongo_url)
+    res = sync_client[db_name].characters.update_one(
+        {"id": target["id"]},
+        {"$set": {"owner_id": player_uid, "owner_name": "Player"}},
+    )
+    sync_client.close()
+    assert res.modified_count >= 0  # just confirm the call returned
+    # Re-read to confirm the transfer actually landed before downstream tests.
+    fresh = requests.get(f"{API}/characters/{target['id']}",
+                         headers=_h(admin_tok), timeout=10).json()
+    assert fresh["owner_id"] == player_uid, \
+        f"Ownership transfer didn't land: {fresh.get('owner_id')} != {player_uid}"
     return cid, target["id"], player_uid
 
 
