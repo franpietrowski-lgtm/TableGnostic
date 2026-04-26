@@ -2,10 +2,13 @@
 from fastapi import APIRouter, Response
 
 from besm_data import (
-    ATTRIBUTES, BOOK, BOOK_EXTRAS, CORE_STATS, DEFECTS, DEFAULT_SYSTEM_ID,
+    ACTIONS, ARMOUR, ATTRIBUTES, AUREA_CUSTOM_ATTRIBUTES, AUREA_CUSTOM_BOOK,
+    AUREA_CUSTOM_POWER_PACKS, AUREA_CUSTOM_SKILLS, AUREA_RULE_NOTE,
+    BOOK, BOOK_EXTRAS, COMPANIONS, CORE_STATS, DEFECTS, DEFAULT_SYSTEM_ID,
     DERIVED_VALUES, ENHANCEMENTS, EXTRAS_RULES, GAME_SYSTEMS,
-    GENERIC_BLURBS, LIMITERS, NODE_TYPES, POWER_LEVELS, SIZE_TEMPLATES,
-    SKILL_GROUPS, TARGET_NUMBERS, attribute_blurb, attribute_whitelist,
+    GENERIC_BLURBS, ITEMS_GEAR, LIMITERS, NODE_TYPES, POWER_LEVELS,
+    RACE_TEMPLATES, SIZE_MODIFIERS, SIZE_TEMPLATES, SKILL_GROUPS,
+    TARGET_NUMBERS, WEAPONS, attribute_blurb, attribute_whitelist,
     defect_blurb, enhancement_blurb, extras_blurb, limiter_blurb,
     power_level_blurb, with_source,
 )
@@ -46,6 +49,22 @@ async def besm_reference():
                          for r in EXTRAS_RULES],
         "generic_blurbs": [{"name": k, "blurb": v} for k, v in GENERIC_BLURBS.items()],
         "size_templates": SIZE_TEMPLATES,
+        # New expanded reference sections (V4.1)
+        "actions": with_source(ACTIONS),
+        "companions": with_source(COMPANIONS),
+        "race_templates": with_source(RACE_TEMPLATES),
+        "size_modifiers": with_source(SIZE_MODIFIERS),
+        "weapons": with_source(WEAPONS),
+        "items_gear": with_source(ITEMS_GEAR),
+        "armour": with_source(ARMOUR),
+        # Custom / Created — Aurea magic system as a worked BESM example.
+        "custom": {
+            "book": AUREA_CUSTOM_BOOK,
+            "rule_note": AUREA_RULE_NOTE,
+            "attributes": AUREA_CUSTOM_ATTRIBUTES,
+            "power_packs": AUREA_CUSTOM_POWER_PACKS,
+            "skills": AUREA_CUSTOM_SKILLS,
+        },
     }
 
 

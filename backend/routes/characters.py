@@ -6,12 +6,21 @@ its `folio.journal` array is the player-facing diary that feeds the recap LLM.
 from fastapi import APIRouter, Depends, HTTPException
 
 from core.bus import broadcast
-from core.cost_engine import calc_derived, calc_spent_points
+from core.cost_engine import calc_derived, calc_spent_points, effective_level
 from core.db import db, new_id, now_iso, sanitize
 from core.models import CharacterIn, JournalEntryIn
 from core.security import get_current_user
 
 router = APIRouter(prefix="/api", tags=["characters"])
+
+
+def _decorate(ch: dict) -> dict:
+    """Stamp `effective_level` (BESM 4E: level + #lim − #enh, ≥1) on each
+    Attribute. Pure decoration — never persisted, so legacy data still loads.
+    """
+    for a in ch.get("attributes", []) or []:
+        a["effective_level"] = effective_level(a)
+    return ch
 
 
 @router.post("/characters")
@@ -29,13 +38,13 @@ async def create_character(body: CharacterIn, user: dict = Depends(get_current_u
     doc["derived"] = calc_derived(doc, camp)
     doc["spent"] = calc_spent_points(doc)
     await db.characters.insert_one(doc)
-    return sanitize(doc)
+    return sanitize(_decorate(doc))
 
 
 @router.get("/campaigns/{cid}/characters")
 async def list_characters(cid: str, user: dict = Depends(get_current_user)):
     rows = await db.characters.find({"campaign_id": cid}, {"_id": 0}).to_list(200)
-    return rows
+    return [_decorate(r) for r in rows]
 
 
 @router.get("/characters/{ch_id}")
@@ -43,7 +52,7 @@ async def get_character(ch_id: str, user: dict = Depends(get_current_user)):
     ch = await db.characters.find_one({"id": ch_id}, {"_id": 0})
     if not ch:
         raise HTTPException(404, "Not found")
-    return ch
+    return _decorate(ch)
 
 
 @router.put("/characters/{ch_id}")
@@ -64,7 +73,7 @@ async def update_character(ch_id: str, body: CharacterIn,
     update["spent"] = calc_spent_points(update)
     update["updated_at"] = now_iso()
     await db.characters.replace_one({"id": ch_id}, update)
-    return sanitize(update)
+    return sanitize(_decorate(update))
 
 
 @router.delete("/characters/{ch_id}")

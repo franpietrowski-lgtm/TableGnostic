@@ -34,15 +34,29 @@ Bearer fallback: frontend also stores `access_token` in localStorage and sends
 
 Brute-force protection: 5 failed login attempts per (ip, email) = HTTP 423 lock for 15 minutes.
 
+# Test credentials
+
+## Demo accounts
+
+| Email                          | Password       | Role     | Notes                                    |
+|--------------------------------|----------------|----------|------------------------------------------|
+| **franpietrowski@gmail.com**   | **PieGod08!!** | admin    | **GMFran** — primary testing account     |
+| admin@tablegnostic.com         | admin123       | admin    | Generic Admin                            |
+| gm@tablegnostic.com            | gm123456       | gm       | Demo GM                                  |
+| player@tablegnostic.com        | player12345    | player   | Demo Player                              |
+
+All accounts are seeded idempotently from `core/startup.py` on every backend boot — manual edits get overwritten.
+
 ## Test campaigns
 
 | Field            | Value                                          |
 |------------------|------------------------------------------------|
-| Evereantha demo  | `b554f58a21524773acafa713fb0395bd` (Evereantha — The Maiden Adventure) |
-| GM/owner         | admin@tablegnostic.com (also acts as GM)       |
-| PCs (3)          | Eli (Apocophae), Laryk (Ferrilith), Roney (Techgnostic) |
+| Evereantha demo  | Run `POST /api/admin/reset-to-evereantha` to (re)create. Owner = caller of the reset. |
 | World Codex      | 20 nodes — 5 locations, 2 factions, 6 NPCs, 1 creature, 2 lore, 4 quests |
+| PCs (3)          | Eli (Apocophae), Laryk (Ferrilith), Roney (Techgnostic) |
 | Atelier/Genesis  | All 7 phases pre-filled. Nemesis: Order of the Darkening Star |
 
 Re-seed at any time: `POST /api/admin/reset-to-evereantha` (admin role only).
 This wipes campaigns/characters/sessions/chat/dice/initiative/effects/nodes/edges/recaps/custom_attributes/genesis (preserves users) and recreates the canonical Evereantha demo table.
+
+Any GM/admin can also `POST /api/campaigns/{cid}/clone` to fork any visible campaign into their own copy (carries nodes, edges, Genesis, custom rules, published characters).

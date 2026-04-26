@@ -782,3 +782,325 @@ GAME_SYSTEMS = [
 GAME_SYSTEM_IDS = {s["id"] for s in GAME_SYSTEMS}
 GAME_SYSTEMS_BY_ID = {s["id"]: s for s in GAME_SYSTEMS}
 DEFAULT_SYSTEM_ID = "besm-4e"
+
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Expanded reference catalogues (BESM 4E core book)
+# ──────────────────────────────────────────────────────────────────────────
+
+# Combat / scene actions taxonomy (Chapter 8 — Combat)
+ACTIONS = [
+    {"name": "Standard Attack", "category": "Attack",
+     "ap_cost": 1, "page": 178,
+     "summary": "Roll 2d6+ATK vs target's DEF; on hit, deal Damage."},
+    {"name": "Defend (Active)", "category": "Defence",
+     "ap_cost": 0, "page": 180,
+     "summary": "Use DEF + 2d6 to oppose an incoming attack."},
+    {"name": "Block / Parry", "category": "Defence",
+     "ap_cost": 1, "page": 180,
+     "summary": "Spend an AP to gain +2 to next active defence."},
+    {"name": "Move", "category": "Movement",
+     "ap_cost": 1, "page": 178,
+     "summary": "Cross your Movement value in metres on a single Move action."},
+    {"name": "Sprint", "category": "Movement",
+     "ap_cost": 2, "page": 178,
+     "summary": "Cover up to 2× Movement; cannot make ranged attacks the same turn."},
+    {"name": "Charge", "category": "Attack",
+     "ap_cost": 2, "page": 179,
+     "summary": "Move + melee attack at +1 ATK / -1 DEF until next turn."},
+    {"name": "Aim", "category": "Modifier",
+     "ap_cost": 1, "page": 179,
+     "summary": "Stack +1 ATK on next ranged attack (max +3 over consecutive turns)."},
+    {"name": "Dodge", "category": "Defence",
+     "ap_cost": 1, "page": 180,
+     "summary": "Move up to 1m and gain +2 DEF until your next turn."},
+    {"name": "Grapple", "category": "Attack",
+     "ap_cost": 1, "page": 181,
+     "summary": "Body-vs-Body roll-under; success holds the target."},
+    {"name": "Ranged Attack", "category": "Attack",
+     "ap_cost": 1, "page": 182,
+     "summary": "ATK + range modifier vs target DEF."},
+    {"name": "Skill Check", "category": "Action",
+     "ap_cost": 1, "page": 174,
+     "summary": "2d6 + Stat + Skill vs Target Number."},
+    {"name": "Recover", "category": "Action",
+     "ap_cost": 2, "page": 183,
+     "summary": "Regain (Mind+Soul) Energy Points; once per scene."},
+    {"name": "Use Power Pack", "category": "Action",
+     "ap_cost": "varies", "page": 73,  # BESM Extras
+     "summary": "Activate a bundled Power Pack — see its trigger condition."},
+]
+
+# Companions / Henchmen / Servants (Chapter 5 — Attribute · Companion)
+COMPANIONS = [
+    {"name": "Henchman", "type": "Companion",
+     "page": 88,
+     "summary": "Single follower; allotted CP via Servant Attribute. "
+                "Follows orders, may earn promotion."},
+    {"name": "Servant", "type": "Companion",
+     "page": 124,
+     "summary": "Group / household / unit attached to the PC; CP per servant."},
+    {"name": "Mecha / Vehicle", "type": "Companion",
+     "page": 102,
+     "summary": "Sentient or piloted construct treated as a Companion build."},
+    {"name": "Mount / Animal", "type": "Companion",
+     "page": 88,
+     "summary": "Trained beast — bonded by Loyalty defect or Companion attribute."},
+    {"name": "AI / Spirit", "type": "Companion",
+     "page": 93,  # BESM Extras
+     "summary": "Non-corporeal partner; Soul-only build, no Body."},
+]
+
+# Race templates — BESM 4E ships these as quick "kits"; users can extend.
+# These cover only the *names + costs + page refs*, no rule prose.
+RACE_TEMPLATES = [
+    {"name": "Human (Standard)", "cp_cost": 0,  "page": 35,
+     "summary": "Baseline 0-cost; no template attributes."},
+    {"name": "Half-Demon",       "cp_cost": 8,  "page": 36,
+     "summary": "+1 Body, Aura of Inhuman Beauty 1, Tough 1; Vow defect 1."},
+    {"name": "Beastfolk",        "cp_cost": 6,  "page": 37,
+     "summary": "Heightened Senses 2, Speed 1, Natural Weapons 1; Marked 1."},
+    {"name": "Construct",        "cp_cost": 12, "page": 38,
+     "summary": "Tough 2, Heavy Armour 1, Special Defence (Sleep, Poison) 2; Conditional Ownership 1."},
+    {"name": "Faerie",           "cp_cost": 10, "page": 39,
+     "summary": "Flight 1, Stealth 1, Resilience 1; Marked 1, Vulnerability (Iron) 1."},
+    {"name": "Spirit (Bodiless)", "cp_cost": 14, "page": 40,
+     "summary": "Insubstantial 1, Special Movement (Phasing), Heightened Awareness; Phys-Imp 1, Restricted Activities 1."},
+    {"name": "Animal (Sentient)", "cp_cost": 4, "page": 41,
+     "summary": "Heightened Senses 2, Speed 1; Awkward Size, Inept (Social) 1."},
+    {"name": "Apprentice Artisan (Aurea)", "cp_cost": 4, "page": None,
+     "summary": "Custom — Aurean apprentice race-template: Skill Group "
+                "(Crafts) at Lvl 1, Wealth 1; Marked 1 (artisan brand). See Custom Catalogue."},
+]
+
+# Size modifiers — applied per-creature; SIZE_TEMPLATES already lists them
+# above. This block is the consolidated Combat-effect table players reference
+# during a fight (BESM 4E p.149 + Extras hp scaling p.32).
+SIZE_MODIFIERS = [
+    {"size": "Microscopic", "scale_metres": 0.0001, "atk_mod": -8,  "def_mod": +8,  "hp_mult": 0.05, "page": 149},
+    {"size": "Tiny",        "scale_metres": 0.5,    "atk_mod": -4,  "def_mod": +4,  "hp_mult": 0.50, "page": 149},
+    {"size": "Small",       "scale_metres": 1.5,    "atk_mod": -2,  "def_mod": +2,  "hp_mult": 0.75, "page": 149},
+    {"size": "Medium",      "scale_metres": 2.0,    "atk_mod": 0,   "def_mod": 0,   "hp_mult": 1.00, "page": 149},
+    {"size": "Large",       "scale_metres": 4.0,    "atk_mod": +2,  "def_mod": -2,  "hp_mult": 1.50, "page": 149},
+    {"size": "Huge",        "scale_metres": 8.0,    "atk_mod": +4,  "def_mod": -4,  "hp_mult": 2.50, "page": 149},
+    {"size": "Massive",     "scale_metres": 16.0,   "atk_mod": +6,  "def_mod": -6,  "hp_mult": 4.00, "page": 149},
+    {"size": "Colossal",    "scale_metres": 32.0,   "atk_mod": +8,  "def_mod": -8,  "hp_mult": 6.00, "page": 149},
+]
+
+# Weapon table — names + class + damage; rules / page refs only.
+WEAPONS = [
+    {"name": "Dagger",          "class": "Light Melee",  "damage_mod": +5,  "concealable": True,  "page": 184},
+    {"name": "Short Sword",     "class": "Melee",        "damage_mod": +10, "concealable": False, "page": 184},
+    {"name": "Long Sword",      "class": "Melee",        "damage_mod": +15, "concealable": False, "page": 184},
+    {"name": "Greatsword",      "class": "Heavy Melee",  "damage_mod": +20, "concealable": False, "page": 184},
+    {"name": "Spear",           "class": "Melee/Reach",  "damage_mod": +12, "concealable": False, "page": 184},
+    {"name": "Axe (One-handed)", "class": "Melee",       "damage_mod": +13, "concealable": False, "page": 184},
+    {"name": "Hammer (Smith)",  "class": "Melee/Improv", "damage_mod": +12, "concealable": False, "page": 184},
+    {"name": "Crossbow",        "class": "Ranged",       "damage_mod": +18, "range_m": 60, "page": 185},
+    {"name": "Short Bow",       "class": "Ranged",       "damage_mod": +12, "range_m": 50, "page": 185},
+    {"name": "Long Bow",        "class": "Ranged",       "damage_mod": +18, "range_m": 100, "page": 185},
+    {"name": "Throwing Knife",  "class": "Thrown",       "damage_mod": +6,  "range_m": 10, "page": 185},
+    {"name": "Pistol",          "class": "Firearm",      "damage_mod": +20, "range_m": 30, "page": 186},
+    {"name": "Rifle",           "class": "Firearm",      "damage_mod": +30, "range_m": 200, "page": 186},
+    {"name": "Pocket Lamp Burst (Custom)", "class": "Special / Item", "damage_mod": +0, "range_m": 5, "page": None,
+     "note": "Aurea custom — Roney's pocket lamp; blinds Body-roll-under for 1d6 turns."},
+]
+
+# Items / common gear (non-weapon)
+ITEMS_GEAR = [
+    {"name": "Backpack",          "category": "Carry",      "page": 188},
+    {"name": "Climbing Kit",      "category": "Tool",       "page": 188},
+    {"name": "Lantern (Oil)",     "category": "Illumination", "page": 188},
+    {"name": "Healer's Kit",      "category": "Medical",    "page": 188},
+    {"name": "Smith's Toolset",   "category": "Crafting",   "page": 188},
+    {"name": "Alchemy Bandolier", "category": "Crafting",   "page": None,
+     "note": "Aurea custom — twelve-vial leather bandolier (Eli's signature kit)."},
+    {"name": "Tinker Harness",    "category": "Crafting",   "page": None,
+     "note": "Aurea custom — folding brass-frame harness (Roney's signature kit)."},
+    {"name": "Forge Bellows (Folding)", "category": "Crafting", "page": None,
+     "note": "Aurea custom — Laryk's travelling field-forge."},
+    {"name": "Reagent Pouches",   "category": "Crafting",   "page": 188},
+    {"name": "Spyglass",          "category": "Tool",       "page": 189},
+    {"name": "Compass",           "category": "Tool",       "page": 189},
+    {"name": "Iron Stakes (Bag)", "category": "Crafting",   "page": None,
+     "note": "Aurea custom — set of forged stakes; barter currency among Ferrilith."},
+]
+
+# Armour table — names + AR + weight class; mechanics-only.
+ARMOUR = [
+    {"name": "Padded / Cloth",        "armour_rating": 4,  "weight_class": "Light",  "page": 190},
+    {"name": "Leather Jerkin",        "armour_rating": 6,  "weight_class": "Light",  "page": 190},
+    {"name": "Boiled Leather",        "armour_rating": 8,  "weight_class": "Medium", "page": 190},
+    {"name": "Studded Leather",       "armour_rating": 9,  "weight_class": "Medium", "page": 190},
+    {"name": "Chain Shirt",           "armour_rating": 12, "weight_class": "Medium", "page": 190},
+    {"name": "Breastplate",           "armour_rating": 14, "weight_class": "Medium", "page": 190},
+    {"name": "Banded Mail",           "armour_rating": 16, "weight_class": "Heavy",  "page": 190},
+    {"name": "Plate Harness (Full)",  "armour_rating": 20, "weight_class": "Heavy",  "page": 190},
+    {"name": "Smith's Apron (Aurea)", "armour_rating": 8,  "weight_class": "Light",  "page": None,
+     "note": "Aurea custom — Laryk's hammered apron; Ferrilith-marked, not for sale outside the Order."},
+    {"name": "Apothecary Coat",       "armour_rating": 4,  "weight_class": "Light",  "page": None,
+     "note": "Aurea custom — vial-loops; +1 to Apocophae Discipline rolls when drawing in haste."},
+]
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# AUREA — Custom / Created BESM 4E content
+#
+# Magic system designed using BESM 4E core + BESM Extras as a worked example.
+# All four Disciplines (Apocophae, Ferrilith, Techgnostic, Faunamimic) are
+# expressed PURELY through BESM Attribute / Skill / Defect mechanics — no
+# new sub-systems. This catalogue powers the Reference page's "Custom"
+# subsection (toggle: Custom / Created → Attributes · Power Packs · Skills).
+# ──────────────────────────────────────────────────────────────────────────
+
+AUREA_CUSTOM_BOOK = "Aurea (Table-Gnostic original setting)"
+
+# Custom-attribute subsection — adapted Attributes specific to Aurea's
+# magic system. Each row maps onto an existing BESM attribute (so the
+# cost engine doesn't change), with a setting-specific name and its
+# enhancement / limiter intent recorded. These are TEACHING examples —
+# GMs can copy the rows into their own custom_attributes for re-use.
+AUREA_CUSTOM_ATTRIBUTES = [
+    {"name": "Apothecary Tincture",
+     "based_on": "Healing", "base_cost_per_level": 4,
+     "enhancements_intent": ["Range (vial throw)", "Affects Incorporeal (purges curse)"],
+     "limiters_intent":     ["Consumable (single dose)", "Restricted (prepared in advance)"],
+     "discipline": "Apocophae",
+     "summary": "Bottled tinctures — heal, purge, soothe. Cost is base × Level "
+                "(BESM 4E rule); Limiters raise effective Level (more potent), "
+                "Enhancements lower it (broader application)."},
+    {"name": "Stone-Shape",
+     "based_on": "Special Movement", "base_cost_per_level": 2,
+     "enhancements_intent": ["Affects Others (carry party across raised stair)"],
+     "limiters_intent":     ["Restricted (must touch worked stone)"],
+     "discipline": "Ferrilith",
+     "summary": "Coax slate / granite / basalt into stair, jack, or barrier — "
+                "a movement / construction Attribute. Restricted to materials "
+                "the Ferrilith has prayed over."},
+    {"name": "Forge-Strike",
+     "based_on": "Special Attack", "base_cost_per_level": 4,
+     "enhancements_intent": ["Penetrating (Armour)", "Burning"],
+     "limiters_intent":     ["Activation (must shout the Word)", "Limited Shots (3/scene)"],
+     "discipline": "Ferrilith",
+     "summary": "A struck blow that splits shield like kindling. Encodes the "
+                "Ferrilith's vow of strength + a forge-fire effect."},
+    {"name": "Cog-Insight",
+     "based_on": "Cognition", "base_cost_per_level": 1,
+     "enhancements_intent": ["Affects Others (read a partner's tool)"],
+     "limiters_intent":     ["Restricted (mechanical objects only)"],
+     "discipline": "Techgnostic",
+     "summary": "Reads the linkages — gears, fluids, springs, hidden geometry."},
+    {"name": "Pocket Detonation",
+     "based_on": "Special Attack", "base_cost_per_level": 4,
+     "enhancements_intent": ["Area Effect", "Stun (Mind)"],
+     "limiters_intent":     ["Limited Shots (1/scene, must be rebuilt)"],
+     "discipline": "Techgnostic",
+     "summary": "Brass concussion horn — a one-shot, scene-changing detonation "
+                "the Techgnostic builds during downtime."},
+    {"name": "Wild Speech",
+     "based_on": "Telepathy", "base_cost_per_level": 4,
+     "enhancements_intent": ["Affects Others (entire pack/herd)"],
+     "limiters_intent":     ["Restricted (animals only, not sapients)"],
+     "discipline": "Faunamimic",
+     "summary": "Wordless conversation with non-sapient animals; Faunamimic apologies "
+                "and bargains are spoken in this register."},
+    {"name": "Pelt-Shift",
+     "based_on": "Alternate Form", "base_cost_per_level": 5,
+     "enhancements_intent": ["Multiple Forms (elder + youth)"],
+     "limiters_intent":     ["Activation (firelight required)", "Restricted (specific two forms only)"],
+     "discipline": "Faunamimic",
+     "summary": "The signature Faunamimic shift between an elder fur-clad form and "
+                "a younger almost-human form. Always two forms, no more."},
+    {"name": "Reagent-Sense",
+     "based_on": "Heightened Senses", "base_cost_per_level": 1,
+     "enhancements_intent": ["Range (50m)"],
+     "limiters_intent":     ["Restricted (Apocophae herbs only)"],
+     "discipline": "Apocophae",
+     "summary": "Names a tincture by scent at five paces and a poison at three; "
+                "Apocophae apprentices train this from year one."},
+]
+
+# Aurea-specific Power Packs (BESM Extras — Power Packs / Bundles, p.73-76).
+# Each Pack is a narrative + mechanical bundle that tags an attribute
+# combination by setting-source ("the Apocophae Field Kit"). These are the
+# templates apprentice PCs roll with on day one.
+AUREA_CUSTOM_POWER_PACKS = [
+    {"name": "Apocophae's Field Kit",
+     "discipline": "Apocophae",
+     "components": ["Apothecary Tincture", "Reagent-Sense",
+                    "Apocophae Discipline (Skill Group)"],
+     "barter_value": "12 vials @ 1 prestige · 8-week tincture stock",
+     "summary": "Glass-and-leather bandolier of tinctures, folding mortar-pestle, "
+                "preserving wax tin, a folio of recipe cards in the master's hand."},
+    {"name": "Ferrilith's Anvil",
+     "discipline": "Ferrilith",
+     "components": ["Forge-Strike", "Stone-Shape", "Heavy Armour",
+                    "Ferrilith Discipline (Skill Group)"],
+     "barter_value": "Iron stakes @ 1 prestige · Smith's apron @ 4 prestige",
+     "summary": "Folding bellows, twin tongs, spike-hammer wrapped in oiled "
+                "leather, and a pouch of iron stakes."},
+    {"name": "Techgnost's Workbench",
+     "discipline": "Techgnostic",
+     "components": ["Item L8 (harness)", "Pocket Detonation", "Cog-Insight",
+                    "Techgnostic Discipline (Skill Group)"],
+     "barter_value": "Light burst @ 2 prestige · Springs @ 0.1 prestige each",
+     "summary": "Canvas harness on a folding brass frame; pocket gadgets within "
+                "easy reach: light burst, concussive instrument, half-finished prototypes."},
+    {"name": "Faunamimic's Cloak",
+     "discipline": "Faunamimic",
+     "components": ["Pelt-Shift", "Wild Speech", "Heightened Senses",
+                    "Skill Group (Wilderness)"],
+     "barter_value": "Pelts barter only by direct apology — no prestige",
+     "summary": "Patchwork pelts, traps, and a hand-bound book of animal-name "
+                "syllables. Faunamimic packs are never sold — they are *given*."},
+    {"name": "Apprentice's Carry-All (Generic)",
+     "discipline": "All",
+     "components": ["Item L4 (kit)", "Wealth 1", "Skill Group (Discipline) L1"],
+     "barter_value": "Issue-standard 4-prestige kit",
+     "summary": "The starter pack each apprentice walks out of the master's "
+                "shop with on Maiden-Adventure dawn."},
+]
+
+# Aurea-specific Skills — extend SKILL_GROUPS with the four Disciplines
+# as 2-pt/Lvl Lesser Groups (BESM 4E p.120 cost class).
+AUREA_CUSTOM_SKILLS = [
+    {"group": "Apocophae Discipline",  "tier": "Lesser Group", "cost_per_level": 2,
+     "components": ["Foraging", "Brewing", "Diagnosis", "Reagent Lore"],
+     "discipline": "Apocophae",
+     "summary": "Gather, infuse, dose, dispense — every Apocophae apprentice's "
+                "core kit. Each component starts at L1 when the Group is taken."},
+    {"group": "Ferrilith Discipline",  "tier": "Lesser Group", "cost_per_level": 2,
+     "components": ["Smithing", "Stone-Shaping", "Engineering", "Survivalist"],
+     "discipline": "Ferrilith",
+     "summary": "Shape stone, smith iron, raise wall and stair. The Ferrilith "
+                "Lesser Group covers all four trades at L1."},
+    {"group": "Techgnostic Discipline", "tier": "Lesser Group", "cost_per_level": 2,
+     "components": ["Mechanics", "Tinkering", "Drafting", "Lockpicking"],
+     "discipline": "Techgnostic",
+     "summary": "Design, fabricate, repair, improvise. Drafting at L1 lets a "
+                "Techgnostic write plans another artisan can build from."},
+    {"group": "Faunamimic Discipline",  "tier": "Lesser Group", "cost_per_level": 2,
+     "components": ["Tracking", "Trap-laying", "Animal Empathy", "Mimicry"],
+     "discipline": "Faunamimic",
+     "summary": "The wilderness craft of the Faunamimic. Animal Empathy is "
+                "the bridge to Wild Speech; Mimicry is *not* for Sapients."},
+    {"group": "Aurean Barter & Etiquette", "tier": "Lesser Group", "cost_per_level": 2,
+     "components": ["Bartering", "Heraldry (Guild Sigils)", "Manners (Manor)",
+                    "Reading Letters of Marque"],
+     "discipline": "All",
+     "summary": "The non-magical skill set every apprentice picks up on the road. "
+                "Without it the Mayor will not even open the door."},
+]
+
+# Mechanics-only blurb explaining the rule we enforce in code.
+AUREA_RULE_NOTE = (
+    "BESM 4E rule (Mark MacKinnon, Dyskami primer): Enhancements and Limiters "
+    "do NOT change point cost — they change EFFECTIVE LEVEL. "
+    "Cost = assigned Level × Cost-per-Level. "
+    "Effective Level = assigned Level + #Limiters − #Enhancements (≥ 1). "
+    "All Aurea custom attributes obey this rule — the Apocophae's Apothecary "
+    "Tincture with one Limiter (Consumable) functions one Level above its "
+    "assigned cost, and one Enhancement (Range) drops it back. Stack "
+    "Limiters for narrow but powerful tinctures."
+)

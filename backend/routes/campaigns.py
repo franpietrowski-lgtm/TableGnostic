@@ -30,6 +30,110 @@ async def create_campaign(body: CampaignIn, user: dict = Depends(get_current_use
     return sanitize(doc)
 
 
+@router.post("/campaigns/{cid}/clone")
+async def clone_campaign(cid: str, user: dict = Depends(get_current_user)):
+    """Fork any campaign you can see (your own, public, or one you've joined)
+    into a brand-new campaign you GM. Carries World Codex, edges, Genesis,
+    custom rules, and *published* characters (re-owned by the cloning GM).
+    Excludes: sessions, chat, dice, recaps, battlemaps, channel history.
+    GM/admin role required (Player accounts cannot host).
+    """
+    if user.get("role") not in ("gm", "admin"):
+        raise HTTPException(403, "Only GM/admin accounts can clone campaigns.")
+
+    src = await db.campaigns.find_one({"id": cid}, {"_id": 0})
+    if not src:
+        raise HTTPException(404, "Source campaign not found")
+    visible = (src.get("visibility") == "public"
+               or src.get("gm_id") == user["id"]
+               or user["id"] in src.get("member_ids", [])
+               or user.get("role") == "admin")
+    if not visible:
+        raise HTTPException(403, "You can only clone campaigns you can see.")
+
+    new_cid = new_id()
+    forged = {
+        **{k: v for k, v in src.items()
+           if k not in ("id", "gm_id", "gm_name", "member_ids", "invite_token", "created_at")},
+        "id": new_cid,
+        "name": f"{src.get('name', 'Campaign')} (copy)",
+        "gm_id": user["id"],
+        "gm_name": user["name"],
+        "member_ids": [],
+        "invite_token": secrets.token_urlsafe(16),
+        "created_at": now_iso(),
+        "cloned_from": cid,
+    }
+    await db.campaigns.insert_one(forged)
+
+    # ---- Knowledge Web nodes ----
+    node_id_map: Dict[str, str] = {}
+    src_nodes = await db.nodes.find({"campaign_id": cid}, {"_id": 0}).to_list(2000)
+    for n in src_nodes:
+        new_nid = new_id()
+        node_id_map[n["id"]] = new_nid
+        copy_n = {**n,
+                  "id": new_nid, "campaign_id": new_cid,
+                  "author_id": user["id"], "author_name": user["name"],
+                  "revealed_to": [],  # private to the new GM until re-revealed
+                  "created_at": now_iso()}
+        await db.nodes.insert_one(copy_n)
+
+    # ---- Edges (remap node ids) ----
+    src_edges = await db.edges.find({"campaign_id": cid}, {"_id": 0}).to_list(2000)
+    for e in src_edges:
+        from_n = node_id_map.get(e.get("from_node"))
+        to_n = node_id_map.get(e.get("to_node"))
+        if not (from_n and to_n):
+            continue
+        await db.edges.insert_one({
+            **e, "id": new_id(), "campaign_id": new_cid,
+            "from_node": from_n, "to_node": to_n, "created_at": now_iso(),
+        })
+
+    # ---- Genesis (Atelier pre-fill) ----
+    src_gen = await db.genesis.find_one({"campaign_id": cid}, {"_id": 0})
+    if src_gen:
+        copy_g = {**src_gen,
+                  "id": new_id(), "campaign_id": new_cid,
+                  "created_at": now_iso()}
+        await db.genesis.insert_one(copy_g)
+
+    # ---- Custom attributes / rules ----
+    src_custom = await db.custom_attributes.find({"campaign_id": cid}, {"_id": 0}).to_list(500)
+    for c in src_custom:
+        await db.custom_attributes.insert_one({
+            **c, "id": new_id(), "campaign_id": new_cid,
+            "created_at": now_iso(),
+        })
+
+    # ---- Characters (only published; re-owned by the cloning GM until they
+    # reassign to the players) ----
+    src_chars = await db.characters.find(
+        {"campaign_id": cid, "published": True}, {"_id": 0},
+    ).to_list(500)
+    chars_copied = 0
+    for ch in src_chars:
+        await db.characters.insert_one({
+            **{k: v for k, v in ch.items()
+               if k not in ("id", "campaign_id", "owner_id", "owner_name",
+                            "created_at", "updated_at")},
+            "id": new_id(), "campaign_id": new_cid,
+            "owner_id": user["id"], "owner_name": user["name"],
+            "created_at": now_iso(),
+        })
+        chars_copied += 1
+
+    return {
+        "ok": True,
+        "campaign": sanitize(forged),
+        "nodes_cloned": len(src_nodes),
+        "edges_cloned": len(src_edges),
+        "characters_cloned": chars_copied,
+        "genesis_cloned": bool(src_gen),
+    }
+
+
 @router.get("/campaigns")
 async def list_campaigns(mine: bool = False, user: dict = Depends(get_current_user)):
     q: Dict[str, Any] = {}

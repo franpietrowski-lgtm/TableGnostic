@@ -70,6 +70,18 @@ export default function CampaignDetail() {
           </div>
         </div>
         <div className="flex gap-2">
+          {(user?.role === "gm" || user?.role === "admin") && (
+            <button onClick={async () => {
+              if (!window.confirm(`Clone "${camp.name}" into a new campaign you GM?`)) return;
+              try {
+                const { data } = await api.post(`/campaigns/${id}/clone`);
+                window.location.href = `/app/campaigns/${data.campaign.id}`;
+              } catch (e) { alert(formatApiErrorDetail(e.response?.data?.detail) || e.message); }
+            }} className="btn btn-ghost" data-testid="clone-campaign-btn"
+                title="Fork this campaign into a copy you GM (carries World Codex, Genesis, edges, custom rules, and published characters).">
+              <Copy className="w-4 h-4"/> Clone
+            </button>
+          )}
           {camp.is_gm && <Link to={`/app/campaigns/${id}/genesis`} className="btn" data-testid="genesis-btn">
             <Wand2 className="w-4 h-4"/> Atelier
           </Link>}
@@ -451,30 +463,61 @@ function NodeCard({ n, camp, onReveal, onRemove, onClick }) {
 
 function NodeDetail({ node, camp, onClose, onReveal, onRemove }) {
   const tmpl = NODE_TEMPLATES[node.type];
+  const visBadge = {
+    "gm_only":  { label: "GM-only", cls: "border-ember/50 text-ember" },
+    "shared":   { label: "Shared with players", cls: "border-arcane/50 text-arcane-light" },
+    "revealed": { label: "Revealed", cls: "border-gold/60 text-gold-bright" },
+  }[node.visibility] || { label: "Unknown", cls: "border-mist/40 text-mist" };
   return (
-    <div className="card-mystic p-5 mt-4" data-testid="node-detail">
-      <div className="flex items-start justify-between">
-        <div>
-          <span className="tag uppercase" style={{ borderColor: colorForType(node.type) + "55", color: colorForType(node.type) }}>
-            {labelForType(node.type)}
-          </span>
-          <div className="font-display text-2xl text-parchment mt-2">{node.title}</div>
-        </div>
-        <button onClick={onClose} className="btn btn-ghost p-2"><X className="w-4 h-4"/></button>
-      </div>
-      {node.content && <div className="text-sm text-mist mt-3 whitespace-pre-wrap font-body leading-relaxed">{node.content}</div>}
-      {tmpl && Object.keys(node.fields || {}).length > 0 && (
-        <div className="mt-4 grid md:grid-cols-2 gap-3">
-          {tmpl.fields.filter((f) => node.fields[f.key]).map((f) => (
-            <div key={f.key}>
-              <div className="label-ref">{f.label}</div>
-              <div className="text-sm text-parchment/90 font-body whitespace-pre-wrap mt-1">{node.fields[f.key]}</div>
+    <div className="card-mystic p-6 mt-4" data-testid="node-detail">
+      <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="tag uppercase" style={{ borderColor: colorForType(node.type) + "55", color: colorForType(node.type) }}>
+              {labelForType(node.type)}
+            </span>
+            <span className={`tag uppercase ${visBadge.cls}`}>{visBadge.label}</span>
+            {(node.tags || []).slice(0, 4).map((t) => (
+              <span key={t} className="tag border-mist/30 text-mist/70 text-[10px]">#{t}</span>
+            ))}
+          </div>
+          <h3 className="font-display text-3xl text-parchment mt-3 leading-tight">{node.title}</h3>
+          {node.author_name && (
+            <div className="text-[10px] font-ui uppercase tracking-widest text-gold/50 mt-1">
+              authored by {node.author_name}
             </div>
-          ))}
+          )}
         </div>
+        <button onClick={onClose} className="btn btn-ghost p-2 shrink-0"><X className="w-4 h-4"/></button>
+      </div>
+
+      {node.content && (
+        <>
+          <div className="divider-sigil my-4"/>
+          <div className="text-base text-parchment/95 whitespace-pre-wrap font-body leading-relaxed"
+               data-testid="node-detail-content">
+            {node.content}
+          </div>
+        </>
+      )}
+
+      {tmpl && Object.keys(node.fields || {}).length > 0 && (
+        <>
+          <div className="divider-sigil my-4"/>
+          <div className="grid md:grid-cols-2 gap-4">
+            {tmpl.fields.filter((f) => node.fields[f.key]).map((f) => (
+              <div key={f.key}>
+                <div className="label-ref">{f.label}</div>
+                <div className="text-sm text-parchment/90 font-body whitespace-pre-wrap mt-1.5 leading-relaxed">
+                  {node.fields[f.key]}
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
       )}
       {camp.is_gm && (
-        <div className="mt-4 flex gap-2">
+        <div className="mt-5 pt-4 border-t border-gold/10 flex gap-2">
           {node.visibility !== "revealed" && (
             <button onClick={onReveal} className="btn btn-ghost text-xs"><Eye className="w-3 h-3"/> Reveal to players</button>
           )}

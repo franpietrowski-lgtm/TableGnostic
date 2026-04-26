@@ -58,6 +58,8 @@ async def run_startup():
     await seed_user("admin@tablegnostic.com", "admin123", "Admin", "admin")
     await seed_user("gm@tablegnostic.com", "gm123456", "Game Master", "gm")
     await seed_user("player@tablegnostic.com", "player12345", "Player", "player")
+    # GMFran — primary admin/GM testing account (also runs the Evereantha demo).
+    await seed_user("franpietrowski@gmail.com", "PieGod08!!", "GMFran", "admin")
     # Backfill invite tokens for legacy campaigns.
     async for c in db.campaigns.find({"invite_token": {"$exists": False}}, {"_id": 0, "id": 1}):
         await db.campaigns.update_one(

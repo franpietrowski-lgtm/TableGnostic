@@ -172,6 +172,13 @@ export default function CharacterSheet() {
                                 page={a.page} note={a.note}
                                 book={a.page ? "BESM 4E" : "Custom"}/>
                       <span className="text-gold ml-2">×{a.level}</span>
+                      {typeof a.effective_level === "number" && a.effective_level !== a.level && (
+                        <span className="ml-2 text-arcane-light text-[11px] font-ui uppercase tracking-widest"
+                              title={`BESM 4E: cost stays at ${a.cost_per_level}×${a.level}; +1 effective Level per Limiter, −1 per Enhancement.`}
+                              data-testid={`attr-eff-level-${i}`}>
+                          (eff. ×{a.effective_level})
+                        </span>
+                      )}
                     </div>
                     {a.note && (
                       <div className="text-[12px] text-parchment/85 italic mt-1 font-body leading-snug"
