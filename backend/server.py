@@ -27,6 +27,8 @@ from routes import admin as admin_routes
 from routes import battlemap as battlemap_routes
 from routes import channels as channels_routes
 from routes import uploads as uploads_routes
+from routes import xp as xp_routes
+from routes import atelier as atelier_routes
 
 app = FastAPI(title="Table-Gnostic API")
 
@@ -72,6 +74,8 @@ app.include_router(admin_routes.router)
 app.include_router(battlemap_routes.router)
 app.include_router(channels_routes.router)
 app.include_router(uploads_routes.router)
+app.include_router(xp_routes.router)
+app.include_router(atelier_routes.router)
 
 # Static-file mount: serve uploaded battlemap images from disk so GMs can
 # drop in renders from Inkarnate / DungeonCraft / Talespire / RPGEngine

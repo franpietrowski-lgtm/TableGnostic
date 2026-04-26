@@ -5,6 +5,7 @@ import * as Tabs from "@radix-ui/react-tabs";
 import { Users, Plus, UserPlus2, ArrowRight, Trash2, Sparkles, Eye, EyeOff, Link as LinkIcon, Wand2, Shield, Copy, RefreshCw, Check, Save, Network, ListTree, Lightbulb, X, BookOpen, ChevronDown, ChevronRight, ScrollText } from "lucide-react";
 import KnowledgeGraph from "./KnowledgeGraph";
 import ChannelsPanel from "./ChannelsPanel";
+import AtelierTab from "./AtelierTab";
 import { useAuth } from "../lib/api";
 import { NODE_TYPES, NODE_TEMPLATES, colorForType, labelForType } from "../lib/nodeTemplates";
 
@@ -107,7 +108,7 @@ export default function CampaignDetail() {
             ["knowledge", "Knowledge Web"],
             ["sessions", "Sessions"],
             ["primer", "Player Primer"],
-            ...(camp.is_gm ? [["custom", "Custom Rules"], ["invite", "Invite & Share"]] : []),
+            ...(camp.is_gm ? [["atelier", "Atelier"], ["custom", "Custom Rules"], ["invite", "Invite & Share"]] : []),
           ].map(([v, l]) => (
             <Tabs.Trigger key={v} value={v}
               className="px-4 py-2 text-xs font-ui tracking-widest uppercase text-mist hover:text-parchment
@@ -134,6 +135,11 @@ export default function CampaignDetail() {
         <Tabs.Content value="primer" className="pt-6">
           <PrimerTab camp={camp} onRefresh={load} />
         </Tabs.Content>
+        {camp.is_gm && (
+          <Tabs.Content value="atelier" className="pt-6">
+            <AtelierTab campId={id} camp={camp} />
+          </Tabs.Content>
+        )}
         {camp.is_gm && (
           <Tabs.Content value="custom" className="pt-6">
             <CustomTab campId={id} customs={customs} onRefresh={load} />

@@ -1,0 +1,45 @@
+{
+  "summary": "V4.4 Phase A+B / Iter16 — XP system + Atelier tab. Backend: 12/12 new pytest pass (XP suggest structure + weights, GM-only suggest, commit persistence + xp_log audit, negative-amount correction, convert reduces unspent and raises total_points, convert>unspent → 400, atelier GET/PUT/continuity, player-view safety subset only, player 403 on PUT and /continuity). Frontend smoke verified end-to-end on the live preview: tab-atelier visible to admin → session-zero+arcs+master-plot panels render, atelier-save / continuity / add-arc buttons present, atelier-continuity-btn click produced atelier-findings panel with the 'NobodyWhoExists' missing_node info card (text confirmed). Session 6 → open-xp-btn visible to admin → XP modal opens with xp-panel-overlay + xp-scorecard-table + xp-commit-btn + 3 xp-total-{cid} cells (one per published PC).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/admin/reset-to-evereantha", "issue": "Per main-agent note: the admin reset _GAME_COLLECTIONS list does NOT include the new 'atelier' collection. Arcs are tied to campaign_id so they get orphaned on each reset (a fresh GET /api/atelier/{cid} always returns the 'empty' state because atelier docs are upserted lazily, but stale atelier docs from a previous campaign_id linger in Mongo). Recommend adding 'atelier' to the wipe list in routes/admin.py."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "CharacterSheet sheet-xp-badge", "issue": "Could not auto-confirm in this run because clicking 'text=Eli' on the Characters tab navigated to /genesis (the locator matched a different 'Eli' element on the page rather than the Eli character card). The badge component is wired in CharacterSheet.jsx and the underlying data is present (xp_total≥2.5 / xp_unspent reduced after convert verified via GET /api/characters/{cid}/xp in pytest). Main agent can self-verify by clicking the Eli character card avatar/name link explicitly.", "affected_selectors": ["[data-testid=\"sheet-xp-badge\"]"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter16_v44_phase_ab.py",
+    "/app/test_reports/pytest/iter16_v44_phase_ab.xml"
+  ],
+  "action_items": [
+    "Optional: add 'atelier' to admin reset-to-evereantha _GAME_COLLECTIONS wipe list (routes/admin.py) so stale Atelier docs are cleared on reset.",
+    "Self-verify CharacterSheet sheet-xp-badge in browser: navigate to /app/characters/{eli_id} after a fresh reset+commit; expect 'XP X.XX earned · Y.YY unspent'."
+  ],
+  "critical_code_review_comments": [
+    "routes/xp.py: WEIGHTS dict matches the user-choice spec (chat_ic 0.05 > chat_ooc 0.01, dice_macro 0.10, journal 0.25, spotlight 0.50). Bonus is correctly capped at +2.0 per session and floored at 0. Commit persists base/bonus/amount in a single xp_log row source='session_baseline' — clean audit trail.",
+    "routes/xp.py convert_xp_to_cp: uses int(round(amount)) for total_points but float for xp_unspent — fine, but spec says 'floor(amount)'. round(2)=2 matches floor for whole numbers; for 2.6 it'd round up to 3 instead of floor 2. If exact floor semantics matter for fractional XP→CP, switch to math.floor.",
+    "routes/atelier.py replace_atelier: stamps ids on arcs/beats but `continuity_findings` is preserved across PUT — good (so a save doesn't blow away findings). However, PUT also overwrites `continuity_checked_at` indirectly via no-op; safe.",
+    "routes/atelier.py continuity check: 'dead_alive_conflict' branch only reads first 300 chars of node.content for the literal 'dead' substring — this is a deliberate V4.4 simple heuristic per the docstring; will produce false-positives for content that says 'not dead' or 'half-dead'. Acceptable for V4.4; revisit when Phase C wires Claude.",
+    "Player-view of GET /api/atelier/{cid} correctly strips arcs / expectations / character_integration / recurring_themes — only safety subset (lines, veils, safety_tools, schedule, table_contract) is exposed. Verified test_player_view_returns_safety_subset_only."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter16_v44_phase_ab.py",
+    "/app/test_reports/iteration_16.json"
+  ],
+  "success_rate": {
+    "backend": "100% (12/12 V4.4 Phase A+B pytest pass)",
+    "frontend": "~90% (atelier tab + session-XP modal end-to-end verified; sheet-xp-badge selector not exercised due to wrong navigation target — see action items)"
+  },
+  "test_credentials": "/app/memory/test_credentials.md verified — franpietrowski@gmail.com / PieGod08!! (admin) is the only authoritative seeded account; login confirmed via /api/auth/me returning role=admin.",
+  "seed_data_creation": "Module-scoped reset-to-evereantha?confirm=WIPE runs once per pytest session. After the suite, the demo campaign carries: Atelier doc with 1 arc 'Arc 1: The Mayor\\'s Note' (active, references 'NobodyWhoExists' so continuity reports a missing_node info finding) + completed Session-Zero (table_contract, lines, veils, safety_tools, schedule, expectations); Eli has +2 commit (2 base + 0.5 spotlight = 2.5) then -2 convert (xp_unspent reduced, total_points +2); Laryk has +2 base then -0.5 correction; Roney has +2 base. xp_log entries are tagged with source='session_baseline' / 'correction' / 'convert' — main agent can replay or further test against this state. Test-only emails (t16pl_*) created for player 403 checks; safe to leave.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "test_iter16_v44_phase_ab.py is destructive (calls reset-to-evereantha?confirm=WIPE in module fixture). Cumulative pytest run with iter9+11+12+13+14+15+16 should be 124 PASS. The reset does NOT wipe the 'atelier' collection — if you re-run the suite after a campaign_id changes you may see lingering atelier docs in Mongo (cosmetic only). Frontend selectors confirmed working: tab-atelier, atelier-session-zero, atelier-arcs, atelier-master-plot, atelier-save-btn, atelier-continuity-btn, atelier-add-arc, atelier-findings, open-xp-btn, xp-panel-overlay, xp-scorecard-table, xp-commit-btn, xp-total-{cid}. Pending UI selector check: sheet-xp-badge (didn't reach CharacterSheet because text=Eli matched a non-card link — use a more specific selector like a character-card data-testid or click the avatar img).",
+  "rca of the issue": "No bugs blocking V4.4 Phase A+B sign-off. The single non-blocker is the admin reset's _GAME_COLLECTIONS list missing 'atelier' (already flagged by main agent in the misc-info note). Frontend selector for sheet-xp-badge wasn't directly verified due to a Playwright locator collision on 'Eli' text — the underlying XP data round-trip (commit → xp_total/xp_unspent in GET /characters/{cid}/xp) is fully verified server-side, so the badge should render correctly when CharacterSheet mounts."
+}

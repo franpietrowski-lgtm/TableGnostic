@@ -112,6 +112,13 @@ export default function CharacterSheet() {
           <div className="text-[10px] font-ui uppercase tracking-widest text-gold/60 mt-2">
             by {ch.owner_name} · spent {ch.spent?.total_spent ?? 0} / {ch.total_points} pts
             {ch.size && ch.size !== "Medium" ? ` · ${ch.size}` : ""}
+            {(ch.xp_total || ch.xp_unspent) ? (
+              <span className="ml-2 text-arcane-light"
+                    title="BESM 4E p.232 — Advancement. 1 XP ≈ 1 Character Point at GM discretion."
+                    data-testid="sheet-xp-badge">
+                · XP {Number(ch.xp_total || 0).toFixed(2)} earned · {Number(ch.xp_unspent || 0).toFixed(2)} unspent
+              </span>
+            ) : null}
           </div>
         </div>
         <div className="flex gap-2">
@@ -164,22 +171,45 @@ export default function CharacterSheet() {
         {/* Middle: Attributes / Defects / Skills */}
         <div className="lg:col-span-2 space-y-6">
           <div className="card-mystic p-6">
-            <div className="h-arcane text-sm mb-3">Attributes</div>
+            <div className="flex items-baseline justify-between mb-3 flex-wrap gap-2">
+              <div className="h-arcane text-sm">Attributes</div>
+              <div className="text-[9px] font-ui uppercase tracking-widest text-mist/60"
+                   title="BESM 4E V4.1 — each Enhancement / Limiter row equals exactly one application. To apply the same modifier twice, list it twice.">
+                <span className="text-gold-bright">×n assigned</span> · paid points · {" "}
+                <span className="text-arcane-light">eff. ×n</span> = function lvl {" "}
+                (+1 per Limiter, −1 per Enhancement, floored 1)
+              </div>
+            </div>
             {ch.attributes.length === 0 && <div className="text-mist italic text-xs">—</div>}
             <div className="space-y-2">
-              {ch.attributes.map((a, i) => (
+              {ch.attributes.map((a, i) => {
+                // BESM 4E V4.1: each toggled Enhancement / Limiter row is exactly
+                // ONE application. Multiple applications of the same name require
+                // re-listing it (the array preserves duplicates). Effective Level
+                // = assigned Level + #Limiters − #Enhancements (floored at 1).
+                const enhCount = (a.enhancements || []).length;
+                const limCount = (a.limiters || []).length;
+                const itemDefRefund = (a.defects || []).reduce(
+                  (s, d) => s + (d.points_per_rank || 0) * (d.rank || 0), 0);
+                const effLvl = typeof a.effective_level === "number"
+                  ? a.effective_level
+                  : Math.max(1, (a.level || 1) + limCount - enhCount);
+                const effDelta = effLvl - (a.level || 1);
+                return (
                 <div key={i} className="border border-gold/10 rounded-sm p-3 flex items-start justify-between flex-wrap gap-2">
                   <div className="min-w-0 flex-1">
                     <div className="text-sm font-ui">
                       <BesmTerm name={a.name} cost={`${a.cost_per_level} pts/level`}
                                 page={a.page} note={a.note}
                                 book={a.page ? "BESM 4E" : "Custom"}/>
-                      <span className="text-gold ml-2">×{a.level}</span>
-                      {typeof a.effective_level === "number" && a.effective_level !== a.level && (
+                      <span className="text-gold ml-2" title="Assigned Level — what the player paid points for">
+                        ×{a.level} <span className="text-gold/60 text-[10px] font-ui">assigned</span>
+                      </span>
+                      {effDelta !== 0 && (
                         <span className="ml-2 text-arcane-light text-[11px] font-ui uppercase tracking-widest"
-                              title={`BESM 4E: cost stays at ${a.cost_per_level}×${a.level}; +1 effective Level per Limiter, −1 per Enhancement.`}
+                              title={`BESM 4E: cost stays at ${a.cost_per_level}×${a.level}. Each Enhancement lowers effective Level by 1 (more potent per assigned point). Each Limiter raises it by 1 (narrower scope = more functional power). Floored at 1.`}
                               data-testid={`attr-eff-level-${i}`}>
-                          (eff. ×{a.effective_level})
+                          eff. ×{effLvl}
                         </span>
                       )}
                     </div>
@@ -191,11 +221,23 @@ export default function CharacterSheet() {
                     )}
                     <div className="text-[10px] text-mist font-ui uppercase tracking-widest flex items-center gap-1 mt-1">
                       <BookOpen className="w-3 h-3"/> {a.page ? `p.${a.page} BESM 4E` : "Custom"}
+                      <span className="ml-2 text-gold/70">
+                        cost {a.cost_per_level}×{a.level} = {Math.max(0, a.cost_per_level * a.level - itemDefRefund)} pts
+                        {itemDefRefund > 0 ? ` (${a.cost_per_level * a.level} − ${itemDefRefund} item-defect refund)` : ""}
+                      </span>
                     </div>
-                    {(a.enhancements.length > 0 || a.limiters.length > 0) && (
-                      <div className="mt-1.5 flex flex-wrap gap-1">
-                        {a.enhancements.map((e, j) => <span key={j} className="tag border-gold/40 text-gold-bright">+{e}</span>)}
-                        {a.limiters.map((l, j) => <span key={j} className="tag border-ember/40 text-ember">-{l}</span>)}
+                    {(enhCount > 0 || limCount > 0) && (
+                      <div className="mt-1.5">
+                        <div className="text-[9px] font-ui uppercase tracking-widest text-mist/60 mb-1"
+                             data-testid={`attr-applications-${i}`}>
+                          {enhCount + limCount} application{enhCount + limCount === 1 ? "" : "s"} ·
+                          {" "}{enhCount} enhancement{enhCount === 1 ? "" : "s"} ↓eff
+                          {" "}· {limCount} limiter{limCount === 1 ? "" : "s"} ↑eff
+                        </div>
+                        <div className="flex flex-wrap gap-1">
+                          {a.enhancements.map((e, j) => <span key={`e${j}`} className="tag border-gold/40 text-gold-bright" title="Enhancement — lowers effective Level by 1">+{e}</span>)}
+                          {a.limiters.map((l, j) => <span key={`l${j}`} className="tag border-ember/40 text-ember" title="Limiter — raises effective Level by 1">−{l}</span>)}
+                        </div>
                       </div>
                     )}
                   </div>
@@ -204,7 +246,8 @@ export default function CharacterSheet() {
                     <Dice6 className="w-3 h-3"/> 2d6
                   </button>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 
@@ -219,7 +262,9 @@ export default function CharacterSheet() {
                       <BesmTerm name={d.name} cost={`${d.points_per_rank} pts/rank`}
                                 page={d.page} note={d.note} category={d.category}
                                 book={d.page ? "BESM 4E" : "Custom"}/>
-                      <span className="text-ember ml-2">×{d.rank}</span>
+                      <span className="text-ember ml-2" title="Rank — narrative severity">
+                        ×{d.rank} <span className="text-ember/60 text-[10px] font-ui">rank</span>
+                      </span>
                     </div>
                     {d.note && (
                       <div className="text-[12px] text-parchment/85 italic mt-1 font-body leading-snug"
@@ -229,9 +274,10 @@ export default function CharacterSheet() {
                     )}
                     <div className="text-[10px] text-mist font-ui uppercase tracking-widest flex items-center gap-1 mt-1">
                       <BookOpen className="w-3 h-3"/> {d.page ? `p.${d.page} BESM 4E` : "Custom"} · {d.category}
+                      <span className="ml-2 text-ember/70">refunds {d.points_per_rank}×{d.rank} = {d.points_per_rank * d.rank} pts</span>
                     </div>
                   </div>
-                  <span className="text-ember font-display">{d.points_per_rank * d.rank} pts</span>
+                  <span className="text-ember font-display">+{d.points_per_rank * d.rank}</span>
                 </div>
               ))}
             </div>
@@ -241,12 +287,25 @@ export default function CharacterSheet() {
             <div className="h-arcane text-sm mb-3">Skill Groups</div>
             {ch.skills.length === 0 && <div className="text-mist italic text-xs">—</div>}
             <div className="space-y-2">
-              {ch.skills.map((s, i) => (
+              {ch.skills.map((s, i) => {
+                const totalCost = (s.cost_per_level || 0) * (s.level || 0);
+                const compCount = Array.isArray(s.components) ? s.components.length : 0;
+                return (
                 <div key={i} className="border border-gold/10 rounded-sm p-3 flex items-start justify-between flex-wrap gap-2">
                   <div className="min-w-0 flex-1">
                     <div className="text-sm text-parchment font-ui">
-                      {s.group} <span className="text-gold">×{s.level}</span>
-                      {s.cost_per_level ? <span className="text-gold/60 text-[10px] ml-2 font-ui uppercase tracking-widest">{s.cost_per_level} pt/lvl</span> : null}
+                      {s.group} <span className="text-gold" title="Group Level">×{s.level}</span>
+                      <span className="text-gold/50 text-[10px] ml-1 font-ui">assigned</span>
+                      {s.cost_per_level ? (
+                        <span className="text-gold/60 text-[10px] ml-2 font-ui uppercase tracking-widest">
+                          {s.cost_per_level} pt/lvl · {totalCost} pts total
+                        </span>
+                      ) : null}
+                      {compCount > 0 && (
+                        <span className="text-mist/60 text-[10px] ml-2 font-ui">
+                          · {compCount} component{compCount === 1 ? "" : "s"}
+                        </span>
+                      )}
                     </div>
                     {s.note && (
                       <div className="text-[12px] text-parchment/85 italic mt-1 font-body leading-snug"
@@ -274,7 +333,8 @@ export default function CharacterSheet() {
                   <button onClick={() => roll("2d6", `${s.group} skill roll`)}
                           className="btn btn-ghost text-xs"><Dice6 className="w-3 h-3"/> Roll</button>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </div>
 

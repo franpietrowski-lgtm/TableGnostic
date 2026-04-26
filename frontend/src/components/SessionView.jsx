@@ -4,6 +4,7 @@ import { api, API, useAuth } from "../lib/api";
 import { Dice6, Send, Plus, X, Swords, Heart, Zap, Skull, Shield, ChevronRight, Sparkles, ScrollText, Users, MessageSquare, Map as MapIcon } from "lucide-react";
 import AVSeats from "./AVSeats";
 import Battlemap from "./Battlemap";
+import XPAwardPanel from "./XPAwardPanel";
 
 export default function SessionView() {
   const { id } = useParams();
@@ -25,6 +26,7 @@ export default function SessionView() {
   const [recapStyle, setRecapStyle] = useState("narrative");
   const [mobilePane, setMobilePane] = useState("chat"); // chat | init | dice (mobile only)
   const [mapOpen, setMapOpen] = useState(false);
+  const [xpOpen, setXpOpen] = useState(false);
   const chatEnd = useRef(null);
   const wsRef = useRef(null);
   const subsRef = useRef([]); // AVSeats subscribers
@@ -275,6 +277,12 @@ export default function SessionView() {
                     data-testid="open-battlemap-btn" title="Open the battlemap">
               <MapIcon className="w-3 h-3"/> Map
             </button>
+            {campaign && (campaign.gm_id === user?.id || user?.role === "admin") && (
+              <button onClick={() => setXpOpen(true)} className="btn btn-ghost text-xs"
+                      data-testid="open-xp-btn" title="Award session XP (BESM 4E p.232)">
+                <Sparkles className="w-3 h-3"/> XP
+              </button>
+            )}
             <select className="select w-auto text-xs" value={recapStyle}
                     onChange={(e) => setRecapStyle(e.target.value)} data-testid="recap-style">
               <option value="narrative">Narrative</option>
@@ -407,6 +415,16 @@ export default function SessionView() {
             />
           </div>
         </div>
+      )}
+
+      {/* XP Award scorecard — GM-only, suggest-then-commit */}
+      {xpOpen && campaign && (
+        <XPAwardPanel
+          sessionId={id}
+          campaign={campaign}
+          onClose={() => setXpOpen(false)}
+          onCommitted={() => loadAll()}
+        />
       )}
     </div>
   );
