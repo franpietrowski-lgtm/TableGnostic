@@ -72,13 +72,16 @@ export default function CharacterSheet() {
     try { await api.post(`/channels/${pbpChannelId}/messages`, { body: `/me ${text}` }); } catch {}
   };
 
+  // BESM 4E (Tri-Stat): Stat checks are 2d6 + Stat ≥ Target Number.
+  // Combat rolls (ATK/DEF) similarly add the derived value.
+  // Initiative is 1d6 + Mind (BESM 4E p.171).
   const quickRolls = [
-    { label: "Body Roll", notation: "2d6-body", hint: "Roll 2d6, subtract Body (BESM roll-under)" },
-    { label: "Mind Roll", notation: "2d6-mind" },
-    { label: "Soul Roll", notation: "2d6-soul" },
+    { label: "Body Roll", notation: "2d6+body", hint: "Roll 2d6, add Body, meet/beat the GM's Target Number." },
+    { label: "Mind Roll", notation: "2d6+mind" },
+    { label: "Soul Roll", notation: "2d6+soul" },
     { label: "Attack", notation: "2d6+atk" },
     { label: "Defence", notation: "2d6+def" },
-    { label: "Initiative", notation: "1d6+body+mind" },
+    { label: "Initiative", notation: "1d6+mind" },
   ];
 
   const delChar = async () => {
@@ -126,13 +129,13 @@ export default function CharacterSheet() {
           <div className="mt-3 grid grid-cols-3 gap-2 text-center">
             {["body", "mind", "soul"].map((s) => (
               <button key={s} type="button"
-                      onClick={() => roll(`2d6-${s}`, `${ch.name} · ${s} check`)}
+                      onClick={() => roll(`2d6+${s}`, `${ch.name} · ${s} check`)}
                       className="border border-gold/15 rounded-sm py-3 hover:border-gold/40 hover:bg-gold/5 transition-colors group"
                       data-testid={`sheet-stat-${s}`}
-                      title={`Roll 2d6-${s} (BESM roll-under)`}>
+                      title={`Roll 2d6+${s} (BESM 4E: meet/beat the Target Number)`}>
                 <div className="label-ref">{s}</div>
                 <div className="font-display text-3xl text-gold">{ch.stats[s]}</div>
-                <div className="text-[9px] font-ui uppercase tracking-widest text-mist/50 group-hover:text-gold-bright">2d6-{s}</div>
+                <div className="text-[9px] font-ui uppercase tracking-widest text-mist/50 group-hover:text-gold-bright">2d6+{s}</div>
               </button>
             ))}
           </div>

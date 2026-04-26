@@ -331,6 +331,15 @@ function KnowledgeTab({ camp, nodes, edges, onRefresh }) {
   const [showNew, setShowNew] = useState(false);
   const [filterType, setFilterType] = useState("all");
   const [selectedNode, setSelectedNode] = useState(null);
+  const detailRef = React.useRef(null);
+
+  // When a node is selected (whether from card grid or graph) scroll the
+  // full Codex entry into view so GMs/players never wonder where the
+  // detail panel went on long boards.
+  React.useEffect(() => {
+    if (!selectedNode || !detailRef.current) return;
+    detailRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [selectedNode?.id]);
 
   const filtered = filterType === "all" ? nodes : nodes.filter((n) => n.type === filterType);
 
@@ -431,10 +440,12 @@ function KnowledgeTab({ camp, nodes, edges, onRefresh }) {
                           selectedId={selectedNode?.id}
                           onSelect={(n) => setSelectedNode(n)}/>
           {selectedNode && (
-            <NodeDetail node={selectedNode} camp={camp}
-                        onClose={() => setSelectedNode(null)}
-                        onSetVisibility={(v) => setVisibility(selectedNode, v)}
-                        onRemove={() => { remove(selectedNode); setSelectedNode(null); }}/>
+            <div ref={detailRef}>
+              <NodeDetail node={selectedNode} camp={camp}
+                          onClose={() => setSelectedNode(null)}
+                          onSetVisibility={(v) => setVisibility(selectedNode, v)}
+                          onRemove={() => { remove(selectedNode); setSelectedNode(null); }}/>
+            </div>
           )}
         </div>
       ) : filtered.length === 0 ? (
@@ -451,10 +462,12 @@ function KnowledgeTab({ camp, nodes, edges, onRefresh }) {
           {/* Detail panel ALWAYS appears in card-grid mode when a node is selected.
               Previously only rendered in graph mode — cards looked unresponsive. */}
           {selectedNode && (
-            <NodeDetail node={selectedNode} camp={camp}
-                        onClose={() => setSelectedNode(null)}
-                        onSetVisibility={(v) => setVisibility(selectedNode, v)}
-                        onRemove={() => { remove(selectedNode); setSelectedNode(null); }}/>
+            <div ref={detailRef}>
+              <NodeDetail node={selectedNode} camp={camp}
+                          onClose={() => setSelectedNode(null)}
+                          onSetVisibility={(v) => setVisibility(selectedNode, v)}
+                          onRemove={() => { remove(selectedNode); setSelectedNode(null); }}/>
+            </div>
           )}
         </div>
       )}

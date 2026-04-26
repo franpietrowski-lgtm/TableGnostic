@@ -1,0 +1,47 @@
+{
+  "summary": "V4.4 / Iter15 — validated all 4 P0 bug fixes + P0.5 map upload feature. Backend: 12/12 new tests pass (8-session Evereantha chronicle, knowledge-node fields, map upload role/size/type gates). Frontend: Bug 1 (CharacterSheet 2d6+stat) and Bug 2 (CharacterBuilder cost preview + 'N enh ↓ / M lim ↑' counter) verified end-to-end against the live preview. Bug 3 (Knowledge NodeDetail) confirmed in code + backend; full UI auto-scroll/structured-fields render not exercisable via Playwright in this run due to tab-click timing. Battlemap GM toolbar not exercised in UI (would require Start Session flow); upload endpoint fully validated server-side.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "Knowledge Web NodeDetail (Bug 3 P0)",
+        "issue": "Could not auto-confirm via Playwright that NodeDetail panel auto-scrolls and renders structured fields after clicking 'Aurea'/'Eagles Nest'/'Nyaulis'. KNOWLEDGE WEB tab click intermittently did not switch the panel content within 2-3s. Root cause is likely test timing/ tab click state — code in CampaignDetail.jsx KnowledgeTab does have detailRef + scrollIntoView wired and renders structured fields[] when present (lines 340-341, 548, 584). Backend confirms the three node titles carry non-empty fields dicts. Main agent should self-verify in the browser.",
+        "affected_selectors": ["[data-testid=\"node-detail\"]", "tab text 'KNOWLEDGE WEB'"]
+      }
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter15_v44.py",
+    "/app/test_reports/pytest/iter15_v44.xml"
+  ],
+  "action_items": [
+    "Manually click into a Knowledge Web node (Aurea/Eagles Nest/Nyaulis) in /app/campaigns/{cid} after reset-to-evereantha and confirm the NodeDetail panel scrolls into view + shows structured fields beyond the short content blurb (in BOTH list and graph view).",
+    "Manually verify Battlemap GM toolbar in a live Session: data-testid='map-bg-upload-btn', map-bg-url-btn, map-grid-btn, map-cell-btn should all be present for GM/admin only. Backend POST /api/uploads/map already verified for 200/400/403/413."
+  ],
+  "critical_code_review_comments": [
+    "CharacterSheet.jsx (lines 75-85, 127-138): quickRolls notation correctly uses '2d6+body|mind|soul|atk|def' and '1d6+mind' for Initiative; stat-tile onClick rolls `2d6+${s}` with the spec'd title 'Roll 2d6+body (BESM 4E: meet/beat the Target Number)'. Verified by intercepting POST /api/dice — payload contained \"notation\":\"2d6+body\". BESM 4E meet/beat semantics are correctly NOT subtracting the stat.",
+    "CharacterBuilder.jsx (line 86, 761-765): subtotal = cost_per_level × level, the spent useMemo and AttributeRow both omit Enh/Lim from cost. Effective Level = max(1, level + #limiters - #enhancements). The eff. badge (data-testid='attr-eff-level-builder-{idx}') is hidden when effDelta === 0. With level=1 and only 1 enhancement, effLevel floors back to 1 → badge hidden — this is mathematically correct, but the spec language 'when at least one Enhancement OR Limiter is selected' would technically expect a visible badge in that edge case. Adding 1 limiter (level=1+1=2) correctly makes the badge appear. Recommend either keeping current behaviour (no-op delta) or explicitly showing 'eff. ×1 (clamped)' for transparency.",
+    "CampaignDetail.jsx KnowledgeTab (lines 329-345, 548, 574-595): detailRef + useEffect → scrollIntoView on selectedNode change is correct; NodeDetail renders both `node.content` AND, when `node.fields[f.key]` is truthy, each template field via tmpl.fields.filter(...).map(...). Admin reset (routes/admin.py line 83) correctly copies `n.get('fields', {})` from seed_evereantha into Mongo, so structured fields are persisted on every reset.",
+    "routes/uploads.py: streaming-read with 1MB chunks + hard MAX_BYTES=12MB cap is memory-safe; cleanup unlink on overflow is in place; ALLOWED_IMAGE_TYPES whitelists png/jpeg/webp; GM/admin role gate is correct (player → 403). _sniff_dims uses Pillow defensively — falls back to (None,None) which the frontend already handles via natural <img> dimensions.",
+    "seed_evereantha.EVEREANTHA_SESSIONS (~line 660+): 8 sessions, Session 2 chat logs include the Nyaulis 'You took from this wood.' line as required, Session 8 ends with the cliffhanger referencing Roney + the Mayor's note. Verified via GET /api/sessions/{sid}/chat against the live DB after reset."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter15_v44.py",
+    "/app/test_reports/iteration_15.json"
+  ],
+  "success_rate": {
+    "backend": "100% (12/12 V4.4 tests; 0 failed)",
+    "frontend": "67% (Bug 1 + Bug 2 verified end-to-end; Bug 3 + Battlemap toolbar self-test recommended)"
+  },
+  "test_credentials": "/app/memory/test_credentials.md verified. franpietrowski@gmail.com / PieGod08!! (admin) is the only seeded account and works.",
+  "seed_data_creation": "Module performs the destructive reset-to-evereantha?confirm=WIPE ONCE per session (module-scoped fixture). After this, the demo campaign is clean: 1 campaign, 3 PCs (Eli/Laryk/Roney), ~17 Codex nodes, Atelier Genesis pre-fill, 8 sessions (S1-S7 closed, S8 open), ~129 chat lines, ~22 dice rolls. Test-uploaded maps are written to /app/backend/uploads/maps/ — small (~70-byte) PNGs that do not interfere with anything. One ~13MB upload is rejected before write so no orphan file is left.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "test_iter15_v44.py is destructive on first run (it calls reset-to-evereantha?confirm=WIPE). Run it BEFORE any iter that depends on transient state, or run it standalone. Cumulative pytest with iter9+11+12+13+14+15 should still be 112 PASS / 18 SKIP / 0 FAIL — iter15 adds 12 new passes. The map-upload tests use a hand-rolled 70-byte PNG (no Pillow needed in test) and a 13MB null-byte payload to trigger the 413 path. Knowledge nodes 'Aurea', 'Eagles Nest', 'Nyaulis' all carry .fields populated (verified backend-side). Frontend self-test path: login as GMFran → /app/campaigns/{cid} → Knowledge Web tab → click Aurea card → assert detail panel scrolls + shows geography/government/etc. headings beyond the short content blurb.",
+  "rca of the issue": "No bugs found. All four P0 fixes from Message 746 are correctly wired: (1) CharacterSheet stat rolls send 2d6+stat (BESM 4E meet/beat) — verified by intercepting POST /api/dice payload, (2) CharacterBuilder cost stays at base*level when toggling Enh/Lim and counter shows 'N enh ↓ / M lim ↑' — verified end-to-end (cost stayed at 5 pts before/after toggling 1 enhancement; counter changed from '0 enh ↓ / 0 lim ↑' to '1 enh ↓ / 0 lim ↑'), (3) Knowledge NodeDetail now copies and exposes node.fields — verified backend-side (fields dict present on Aurea/Eagles Nest/Nyaulis), (4) 8-session Evereantha chronicle + Nyaulis S2 line + S8 Roney/Mayor cliffhanger all seed correctly. Map upload endpoint is fully spec-compliant (200/400/403/413/401 paths all verified)."
+}

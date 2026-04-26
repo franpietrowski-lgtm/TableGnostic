@@ -267,7 +267,59 @@ export default function Battlemap({
   }, [mode]);
 
   // ─── GM controls ───
-  const setBgImage = async () => {
+  // V4.4 — direct file upload (no more URL pasting). After a successful
+  // upload we ALSO offer to auto-scale the grid to the image's pixel
+  // dimensions assuming a target cell size in px (default 64) — that gets
+  // most Inkarnate / DungeonCraft / Talespire / RPGEngine renders to a
+  // playable grid in one click.
+  const fileInputRef = useRef(null);
+  const [uploadBusy, setUploadBusy] = useState(false);
+  const [uploadErr, setUploadErr] = useState("");
+  const setBgImageFromFile = async (file) => {
+    setUploadErr("");
+    if (!file) return;
+    if (file.size > 12 * 1024 * 1024) {
+      setUploadErr("Image exceeds 12 MB cap.");
+      return;
+    }
+    const fd = new FormData();
+    fd.append("file", file);
+    setUploadBusy(true);
+    try {
+      const { data } = await api.post(`/uploads/map`, fd, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      const apiBase = process.env.REACT_APP_BACKEND_URL || "";
+      const fullUrl = data.url.startsWith("http") ? data.url : `${apiBase}${data.url}`;
+      // Persist the URL on the map state.
+      const next = {
+        grid: state.grid,
+        image: { ...state.image, url: fullUrl, fit: "contain" },
+        tokens: state.tokens, walls: state.walls, fog: state.fog,
+      };
+      // If the upload reported pixel dimensions, offer auto-grid scaling so
+      // GMs don't have to do the cell-size math themselves.
+      if (data.width && data.height) {
+        const cellPx = state.grid.size_px || 64;
+        const cols = Math.max(4, Math.round(data.width / cellPx));
+        const rows = Math.max(4, Math.round(data.height / cellPx));
+        const fit = window.confirm(
+          `Image is ${data.width}×${data.height}px.\n\n` +
+          `Auto-scale grid to ${cols} × ${rows} cells at ${cellPx}px/cell?\n` +
+          `(Cancel = keep current ${state.grid.cols}×${state.grid.rows} grid)`
+        );
+        if (fit) next.grid = { ...state.grid, cols, rows };
+      }
+      await api.put(`/sessions/${sessionId}/map`, next);
+    } catch (e) {
+      const detail = e?.response?.data?.detail || e.message;
+      setUploadErr(typeof detail === "string" ? detail : "Upload failed.");
+    } finally {
+      setUploadBusy(false);
+    }
+  };
+  const setBgImageUrl = async () => {
+    // Legacy escape hatch — paste a public URL (Inkarnate share-link, etc.)
     const url = window.prompt("Background image URL?", state?.image?.url || "");
     if (url == null) return;
     await api.put(`/sessions/${sessionId}/map`, {
@@ -282,6 +334,20 @@ export default function Battlemap({
     if (!cols || !rows) return;
     await api.put(`/sessions/${sessionId}/map`, {
       grid: { ...state.grid, cols, rows },
+      image: state.image,
+      tokens: state.tokens, walls: state.walls, fog: state.fog,
+    });
+  };
+  // V4.4 — pixel size of each cell. Smaller cells = denser grid for the
+  // same map image. Useful when scaling a high-DPI Inkarnate render down.
+  const setCellSize = async () => {
+    const px = parseInt(window.prompt(
+      "Pixel size of each grid cell (12–256)?",
+      state.grid.size_px || 48,
+    ), 10);
+    if (!px || px < 12 || px > 256) return;
+    await api.put(`/sessions/${sessionId}/map`, {
+      grid: { ...state.grid, size_px: px },
       image: state.image,
       tokens: state.tokens, walls: state.walls, fog: state.fog,
     });
@@ -388,11 +454,34 @@ export default function Battlemap({
 
       {isGm && (
         <div className="flex flex-wrap gap-1.5 mb-2 text-[10px]" data-testid="map-gm-tools">
-          <button onClick={setBgImage} className="btn btn-ghost text-[10px]" data-testid="map-bg-btn">
-            <ImageIcon className="w-3 h-3"/> Image
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            className="hidden"
+            data-testid="map-bg-file-input"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) setBgImageFromFile(f);
+              e.target.value = "";  // allow re-uploading same file
+            }}
+          />
+          <button onClick={() => fileInputRef.current?.click()}
+                  disabled={uploadBusy}
+                  className="btn btn-ghost text-[10px]" data-testid="map-bg-upload-btn"
+                  title="Upload a PNG/JPEG/WEBP map image (≤12 MB)">
+            <ImageIcon className="w-3 h-3"/> {uploadBusy ? "Uploading…" : "Upload Map"}
+          </button>
+          <button onClick={setBgImageUrl} className="btn btn-ghost text-[10px]" data-testid="map-bg-url-btn"
+                  title="Paste a public image URL (Inkarnate share-link, etc.)">
+            URL
           </button>
           <button onClick={setGrid} className="btn btn-ghost text-[10px]" data-testid="map-grid-btn">
-            <MapIcon className="w-3 h-3"/> Grid
+            <MapIcon className="w-3 h-3"/> Grid · {state.grid.cols}×{state.grid.rows}
+          </button>
+          <button onClick={setCellSize} className="btn btn-ghost text-[10px]" data-testid="map-cell-btn"
+                  title="Pixel size of each grid cell (default 48)">
+            ⊞ {state.grid.size_px}px
           </button>
           <button onClick={seedTokensFromCharacters} className="btn btn-ghost text-[10px]" data-testid="map-seed-tokens">
             <Plus className="w-3 h-3"/> Seed PCs
@@ -403,6 +492,9 @@ export default function Battlemap({
           <button onClick={clearAllFog} className="btn btn-ghost text-[10px]" data-testid="map-fog-clear">
             <Eye className="w-3 h-3"/> Reveal all
           </button>
+          {uploadErr && (
+            <span className="text-ember text-[10px] font-ui ml-2" data-testid="map-upload-err">{uploadErr}</span>
+          )}
         </div>
       )}
 

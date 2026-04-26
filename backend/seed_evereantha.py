@@ -293,6 +293,15 @@ EVEREANTHA_NODES = [
     # ----- LOCATIONS -----
     {"type": "location", "title": "Aurea",
      "tags": ["country", "core"], "visibility": "shared",
+     "fields": {
+         "loc_type": "kingdom",
+         "geography": "Temperate. Golden-leaved forests in the south, the Montes Inexpugnabilis range to the north, the scarred Solar/Lunar Caldera at the centre.",
+         "government": "Decentralised. Manor lords + Artisans Guild councils.",
+         "economy": "Pure barter — no coin minted. The Artisans Guild's Barter Certificates are the only universally honoured equivalent of currency.",
+         "landmarks": "Solar/Lunar Caldera; Eagles Nest hamlet; Montes Inexpugnabilis pass.",
+         "history": "The Solar/Lunar Cataclysm scarred the central basin; the Order of the Darkening Star is rumoured to have known the cause.",
+         "inhabitants": "Apocophae, Ferrilith, Techgnostic, Faunamimic — the recognised Disciplines.",
+     },
      "content": (
          "The kingdom of Aurea spans a temperate, magic-soaked landscape — golden-leaved "
          "forests in the south, the Montes Inexpugnabilis range to the north, and the "
@@ -302,6 +311,16 @@ EVEREANTHA_NODES = [
      )},
     {"type": "location", "title": "Eagles Nest",
      "tags": ["hamlet", "starting-area"], "visibility": "shared",
+     "fields": {
+         "loc_type": "hamlet",
+         "geography": "Forty single-family huts arranged around farm and irrigation ponds. Six weeks' travel from Aurea's capital.",
+         "population": "~120 souls (forty households).",
+         "government": "Manor lord (the Mayor) — issues Barter Certificates personally.",
+         "economy": "Subsistence farming + apprentice-level artisan workshops (Apocophae, Ferrilith, Techgnostic).",
+         "landmarks": "The Mayor's manor; the dyer's stall; Master Caryana's apothecary; Master Davalan's forge.",
+         "inhabitants": "Eli (Apocophae apprentice); Laryk (Ferrilith apprentice); Roney (Techgnostic apprentice); Master Caryana; Master Davalan; Master Halnen; The Maid.",
+         "connections": "Golden Forests to the south; Montes Inexpugnabilis to the north; Solar/Lunar Caldera at the centre.",
+     },
      "content": (
          "A hamlet of about forty single-family huts, arranged around farm and irrigation "
          "ponds with a centrally located lord's manor. Six weeks' travel from Aurea's "
@@ -370,6 +389,18 @@ EVEREANTHA_NODES = [
      )},
     {"type": "npc", "title": "Nyaulis",
      "tags": ["faunamimic", "wilderness", "ally"], "visibility": "shared",
+     "fields": {
+         "aliases": "Nyaulis the Trapper · the Elder-In-Furs",
+         "gender_species_age": "Human · Faunamimic · indeterminate (appears 60+ in elder form, 25 in firelight form)",
+         "occupation": "Faunamimic — hunter, trapper, shape-changer; sworn keeper of a stretch of the Golden Forests.",
+         "physical_description": "Grizzled fur-clad elder by daylight; in firelight a younger, almost-human form. Eyes hold the same forest patience in both shapes.",
+         "personality": "Empathetic to wildlife to a fault. Demands apologies for what is taken from his forest. Speaks rarely, and almost never in elder form.",
+         "motivations": "Protect his stretch of forest. Repay the apprentices for the iron stakes Laryk forged him.",
+         "fears": "The Order's green coins — he has refused three. He suspects a fourth will not be offered.",
+         "affiliations": "Faunamimic Discipline; uneasy alliance with the apprentices after Session 2.",
+         "inventory": "Horn-handled knife · twin iron stakes (Laryk's work) · dark shin-guard set forged on the road · a pouch of dried smoke-leaf.",
+         "backstory": "Lost his pack-brother to a Lancing Andrewsarchus twelve winters past. Has not crossed the Caldera since. Joined the apprentices in Session 2 after Laryk apologised in craft, not in word.",
+     },
      "content": (
          "A Faunamimic — hunter, trapper, shape-changer between a grizzled fur-clad "
          "elder and a younger almost-human form. Empathetic to wildlife to a fault. "
@@ -401,6 +432,14 @@ EVEREANTHA_NODES = [
     # ----- BESTIARY -----
     {"type": "creature", "title": "Lancing Andrewsarchus",
      "tags": ["apex-predator", "magical", "northern"], "visibility": "shared",
+     "fields": {
+         "biology": "Colossal solitary predator (over 9 ft at the shoulders, over 18 ft long, 3+ tons). Magical essence fortifies bone and pelt against ordinary trauma. Razor-serrated teeth, robust shredding claws, whip-tail with spiked protrusions, mottled-fur camouflage.",
+         "lifespan": "60–80 years; solitary except during cubbing.",
+         "abilities": "Heat-signature and magical-aura sight. Howl is a magical resonance that disorients prey across vast distances. Predatory reach: roughly 50 miles.",
+         "weaknesses": "Sated young — a cub raised by humans loses the howl's magical resonance. Pelt seam under the foreleg admits a Penetrating strike (Ferrilith hammer-and-forge style).",
+         "relations": "Hunts solo; will not enter the Golden Forests proper, but its kin pass through the northern reaches in late autumn.",
+         "origin": "Tradition holds the Lancing Andrewsarchus is a survivor of the pre-Cataclysm bestiary — a creature whose magic predates the Solar/Lunar Temple's fall.",
+     },
      "content": (
          "Colossal solitary predator (over 9 ft at the shoulders, over 18 ft long, "
          "3+ tons). Magical essence fortifies bone and pelt against ordinary trauma. "
@@ -592,3 +631,239 @@ EVEREANTHA_CAMPAIGN = {
     "default_character_size": "Medium",
     "damage_rating_baseline": 5,
 }
+
+
+
+# ────────────────────── 8-SESSION CHRONICLE (V4.4) ──────────────────────────
+#
+# Pre-recorded chat dialogue, dice rolls, and GM notes for an entire opening
+# arc — eight sequential sessions of the Maiden Adventure. Drops into a
+# freshly reset Evereantha campaign so a GM can walk into the platform and
+# *immediately* see the table at work: in-character lines, /roll outputs,
+# GM scene-set narration, and a final cliffhanger.
+#
+# Continuity rules (per the Artisan's Tale manuscript):
+#   * Session 1: departure + first night in Golden Forests.
+#   * Session 2: Nyaulis (Faunamimic) traps + apologies-in-craft → JOINS THE PARTY.
+#   * Sessions 3–4: travelling artisans (Mishtee, Frock, Malshe) — Frock's wound.
+#   * Session 5: First sighting of the Lancing Andrewsarchus + cub rescue.
+#   * Session 6: Solar/Lunar Caldera — cataclysm-soil harvest, Order encountered.
+#   * Session 7: Frock dies; green coin found; nightmare visions begin.
+#   * Session 8: Order ambush at Master's Pass · ends on cliffhanger
+#                (Roney's harness sigil flares; he vanishes mid-line).
+#
+# Format note: each line is either {"speaker", "kind", "text"} or
+# {"speaker", "kind": "dice", "notation", "result", "label"}.
+# `speaker` matches a PC name (Eli/Laryk/Roney/Nyaulis), "GM" for narration,
+# or "" for system-bot messages. `kind` ∈ {chat, action, ooc, system, dice}.
+
+EVEREANTHA_SESSIONS = [
+    # ============================ SESSION 1 ============================
+    {
+        "title": "Session 1 — The Maiden Road",
+        "gm_notes": "Departure from Eagles Nest at dawn. The Mayor refuses to sign anything in advance. The Maid watches them through the manor window. First night beneath the Golden Forests' canopy; the trees hold colour even by moonlight.",
+        "log": [
+            {"speaker": "GM", "kind": "system", "text": "Dawn. The hamlet's irrigation ponds steam. Master Caryana, Master Davalan, and Master Halnen stand at the manor gate. The Mayor does not. A folded route token passes from hand to hand. The Maid watches from the upper window."},
+            {"speaker": "Eli", "kind": "action", "text": "tucks the cataclysm-soil vial into the third loop of her bandolier — the one closest to her ribs."},
+            {"speaker": "Laryk", "kind": "chat", "text": "Six weeks."},
+            {"speaker": "Roney", "kind": "chat", "text": "Five weeks if we run. Eight if the cub eats again."},
+            {"speaker": "GM", "kind": "system", "text": "The cub trills from the brass-frame harness. Its mechanical hind-leg ticks, off-rhythm by half a beat."},
+            {"speaker": "Eli", "kind": "dice", "notation": "2d6+mind", "label": "Read the route token", "result": {"total": 11, "rolls": [{"results": [4, 5]}, {"ref": "mind", "value": 7}], "flat": 7}},
+            {"speaker": "GM", "kind": "system", "text": "The token reads simply: GOLDEN FORESTS · MONTES PASS · CALDERA · RETURN. Three weeks out, three back. The Mayor's hand is unmistakable."},
+            {"speaker": "Laryk", "kind": "action", "text": "shoulders his spike-hammer and steps onto the road first. Says nothing."},
+            {"speaker": "GM", "kind": "system", "text": "The Golden Forest closes around them by midday. Leaves do not fall here — they hold colour. Every branch hums faintly with the Discipline-magic Aurea breathes."},
+            {"speaker": "Roney", "kind": "chat", "text": "It's louder than I thought. The trees, I mean. They sound like clockwork."},
+            {"speaker": "Eli", "kind": "chat", "text": "That's not the trees. That's the fauna. Listen for the spaces between."},
+            {"speaker": "Eli", "kind": "dice", "notation": "2d6+mind", "label": "Reagent foraging", "result": {"total": 14, "rolls": [{"results": [5, 2]}, {"ref": "mind", "value": 7}], "flat": 7}},
+            {"speaker": "GM", "kind": "system", "text": "Eli finds Serenitas-leaf and a stand of golden lichen the Apocophae texts prize for clotting. Three doses' worth."},
+            {"speaker": "GM", "kind": "system", "text": "Dusk. They make camp in a hollow ringed by gold-barked oaks. The silence is comfortable. For now."},
+            {"speaker": "Laryk", "kind": "action", "text": "stacks stones into a hearth and bank-fires it the Ferrilith way — three flat slabs, draught-channel beneath."},
+            {"speaker": "Roney", "kind": "ooc", "text": "(everyone roll Soul to see if you sleep — first night out always gets one)"},
+            {"speaker": "Eli", "kind": "dice", "notation": "2d6+soul", "label": "First-night sleep", "result": {"total": 10, "rolls": [{"results": [3, 1]}, {"ref": "soul", "value": 6}], "flat": 6}},
+            {"speaker": "Laryk", "kind": "dice", "notation": "2d6+soul", "label": "First-night sleep", "result": {"total": 13, "rolls": [{"results": [4, 4]}, {"ref": "soul", "value": 5}], "flat": 5}},
+            {"speaker": "Roney", "kind": "dice", "notation": "2d6+soul", "label": "First-night sleep", "result": {"total": 8, "rolls": [{"results": [2, 1]}, {"ref": "soul", "value": 5}], "flat": 5}},
+            {"speaker": "GM", "kind": "system", "text": "Roney does not sleep. Around the third bell of night the cub climbs out of his harness, wraps itself around his neck, and growls — once — at the dark."},
+            {"speaker": "GM", "kind": "system", "text": "End of session. Three apprentices on a road they have never walked. Something hummed back."},
+        ],
+    },
+    # ============================ SESSION 2 ============================
+    {
+        "title": "Session 2 — The Faunamimic's Apology",
+        "gm_notes": "Nyaulis's traps catch the apprentices in their sleep. He demands an apology in craft, not in word. Laryk forges his iron stakes at the road-side hearth. Nyaulis JOINS the party as an uneasy ally for the rest of the arc.",
+        "log": [
+            {"speaker": "GM", "kind": "system", "text": "Pre-dawn. A snare hisses tight. Then a second. Then a third."},
+            {"speaker": "Roney", "kind": "ooc", "text": "WHAT"},
+            {"speaker": "GM", "kind": "system", "text": "All three are hung from a gold-barked branch by the ankle. Politely. The cub remains in Roney's harness, unimpressed."},
+            {"speaker": "GM", "kind": "system", "text": "A figure walks into the clearing. Fur-clad. Grizzled. Older than any of them by forty years. The Faunamimic's eyes hold a forest's patience."},
+            {"speaker": "Nyaulis", "kind": "chat", "text": "You took from this wood."},
+            {"speaker": "Eli", "kind": "chat", "text": "Three Serenitas leaves. Lichen, two handfuls. I left the roots."},
+            {"speaker": "Nyaulis", "kind": "chat", "text": "I know what you took. The forest told me. I am asking what you will give back."},
+            {"speaker": "Laryk", "kind": "action", "text": "looks at his hammer. Then at the road. Then back at Nyaulis."},
+            {"speaker": "Laryk", "kind": "chat", "text": "Iron."},
+            {"speaker": "Nyaulis", "kind": "chat", "text": "Iron is not an apology. Craft is."},
+            {"speaker": "GM", "kind": "system", "text": "Nyaulis cuts them down. Sets them on the ground without ceremony. Sits across from the dead hearth. Waits."},
+            {"speaker": "Laryk", "kind": "dice", "notation": "2d6+body", "label": "Re-light the hearth + raise stake-anvil", "result": {"total": 10, "rolls": [{"results": [3, 1]}, {"ref": "body", "value": 6}], "flat": 6}},
+            {"speaker": "Laryk", "kind": "dice", "notation": "2d6+mind", "label": "Forge twin iron stakes (Smithing)", "result": {"total": 12, "rolls": [{"results": [4, 4]}, {"ref": "mind", "value": 4}], "flat": 4}},
+            {"speaker": "GM", "kind": "system", "text": "Two stakes. One for each of Nyaulis's snare-anchors. Hammered while Eli hums something only Apocophae apprentices know."},
+            {"speaker": "Nyaulis", "kind": "action", "text": "weighs the stakes in each hand. One. Then the other. Sets them across his thighs."},
+            {"speaker": "Nyaulis", "kind": "chat", "text": "I will walk the next ridge with you. You will not be ambushed. After the ridge, we will speak of payment."},
+            {"speaker": "Roney", "kind": "ooc", "text": "BRO WE GOT A FAUNAMIMIC"},
+            {"speaker": "GM", "kind": "system", "text": "Nyaulis joins the party as ally — fur-clad elder by daylight, almost-human youth by firelight. He does not introduce himself in any other way."},
+            {"speaker": "Eli", "kind": "dice", "notation": "2d6+soul", "label": "Read his bearing — is he Order?", "result": {"total": 9, "rolls": [{"results": [2, 1]}, {"ref": "soul", "value": 6}], "flat": 6}},
+            {"speaker": "GM", "kind": "system", "text": "Eli sees no green coin on him. She sees three small scars on the back of his hand — the kind a green coin leaves when refused fast enough."},
+            {"speaker": "GM", "kind": "system", "text": "End of session. The trio is now four. The forest goes quiet around them — politely."},
+        ],
+    },
+    # ============================ SESSION 3 ============================
+    {
+        "title": "Session 3 — Strangers on the Road",
+        "gm_notes": "Mishtee, Frock, and Malshe — three travelling artisans — cross paths at the forest's edge. Frock's unhealable wound is revealed; first whispered name 'Order of the Darkening Star'.",
+        "log": [
+            {"speaker": "GM", "kind": "system", "text": "The forest thins. A road-camp ahead — three artisans, a hobbled mule, a fire too large for the company. Bracers of a bowyer flash in the light."},
+            {"speaker": "Nyaulis", "kind": "chat", "text": "Mishtee. She has lost two already this year."},
+            {"speaker": "Mishtee", "kind": "chat", "text": "Faunamimic. You pick odd company."},
+            {"speaker": "Nyaulis", "kind": "chat", "text": "They paid in iron."},
+            {"speaker": "GM", "kind": "system", "text": "The wounded one — Frock — half-rises from his bedroll. The bandage on his side is dark, but not the dark of fresh blood. The dark beneath it is older."},
+            {"speaker": "Eli", "kind": "action", "text": "kneels beside Frock with two vials uncorked already. Doesn't ask permission."},
+            {"speaker": "Eli", "kind": "dice", "notation": "2d6+mind", "label": "Diagnose Frock's wound", "result": {"total": 8, "rolls": [{"results": [1, 0]}, {"ref": "mind", "value": 7}], "flat": 7}},
+            {"speaker": "GM", "kind": "system", "text": "Whatever did this is not a creature Eli's training names. The flesh around the wound darkens but does not rot. Her clotting tincture beads on the surface and rolls off."},
+            {"speaker": "Frock", "kind": "chat", "text": "Don't waste it. I've had three Apocophae try."},
+            {"speaker": "Malshe", "kind": "chat", "text": "Four, if you count the road one."},
+            {"speaker": "Roney", "kind": "chat", "text": "Where did you get it?"},
+            {"speaker": "Frock", "kind": "chat", "text": "I don't remember. That's the worst of it."},
+            {"speaker": "Malshe", "kind": "action", "text": "leans across the fire and drops it like a coin: 'Order of the Darkening Star. Go on. Say it back.'"},
+            {"speaker": "Eli", "kind": "ooc", "text": "(everyone hold for a beat. We say it back.)"},
+            {"speaker": "Eli", "kind": "chat", "text": "Order of the Darkening Star."},
+            {"speaker": "GM", "kind": "system", "text": "Nothing happens. Which is, in its own way, a thing happening."},
+            {"speaker": "Mishtee", "kind": "chat", "text": "The wound tracks something the Order does. We've seen it twice this season. The third one we found dead. Nobody finds Frock dead. Not on my watch."},
+            {"speaker": "Laryk", "kind": "chat", "text": "We walk together to the ridge."},
+            {"speaker": "Mishtee", "kind": "chat", "text": "We walk together to the Caldera."},
+            {"speaker": "GM", "kind": "system", "text": "End of session. Six on the road now. One of them dying slowly."},
+        ],
+    },
+    # ============================ SESSION 4 ============================
+    {
+        "title": "Session 4 — Frock's Wound",
+        "gm_notes": "Eli works the wound across the next two days. The bandage hides a green coin pressed into Frock's flesh — Mishtee swears she did not put it there. First confirmed Order signature.",
+        "log": [
+            {"speaker": "GM", "kind": "system", "text": "Three days on. The party climbs the lower passes of the Montes Inexpugnabilis. Frock walks slower each morning. Eli has rebandaged the wound four times."},
+            {"speaker": "Eli", "kind": "dice", "notation": "2d6+mind", "label": "Apocophae deep-clean — fifth attempt", "result": {"total": 13, "rolls": [{"results": [3, 3]}, {"ref": "mind", "value": 7}], "flat": 7}},
+            {"speaker": "GM", "kind": "system", "text": "Eli pulls back the dressing. Beneath the dark — pressed flat into the flesh — is a green coin. Five-pointed star, one ray blackened."},
+            {"speaker": "Roney", "kind": "ooc", "text": "no. NO."},
+            {"speaker": "Mishtee", "kind": "chat", "text": "I did NOT put that there. He has not been alone for three weeks."},
+            {"speaker": "Frock", "kind": "chat", "text": "I did not feel it go in."},
+            {"speaker": "Nyaulis", "kind": "chat", "text": "It would not announce itself. The forest does not announce a snare."},
+            {"speaker": "Eli", "kind": "dice", "notation": "2d6+soul", "label": "Steady-hand removal — coin", "result": {"total": 11, "rolls": [{"results": [3, 2]}, {"ref": "soul", "value": 6}], "flat": 6}},
+            {"speaker": "GM", "kind": "system", "text": "The coin lifts free with a sound like ice cracking. Frock exhales for the first time in days without rattling."},
+            {"speaker": "Eli", "kind": "action", "text": "wraps the coin in waxed leather and stows it in the bottom of her bandolier — separate."},
+            {"speaker": "Malshe", "kind": "chat", "text": "Don't touch it again. Don't even look at it. It hears."},
+            {"speaker": "Frock", "kind": "chat", "text": "Ask me what I saw at the Caldera."},
+            {"speaker": "Eli", "kind": "chat", "text": "What did you see at the Caldera?"},
+            {"speaker": "Frock", "kind": "chat", "text": "A robed one. Not in fur, not in armour. Robe. They were planting coins in the soil itself. Like seeds."},
+            {"speaker": "GM", "kind": "system", "text": "End of session. The wound will close. The coin in Eli's bandolier will not stop humming."},
+        ],
+    },
+    # ============================ SESSION 5 ============================
+    {
+        "title": "Session 5 — The First Silence",
+        "gm_notes": "The forest goes silent on the third night past the ridge. A Lancing Andrewsarchus is within fifty miles. Combat is brief; survival depends on a cub rescue Roney refuses to abandon.",
+        "log": [
+            {"speaker": "GM", "kind": "system", "text": "Night four. The forest goes silent in a way that has no analogue. Even the wind stops. Nyaulis is on his feet before any of them register why."},
+            {"speaker": "Nyaulis", "kind": "chat", "text": "Andrewsarchus. North-northwest. We have one bell."},
+            {"speaker": "Roney", "kind": "ooc", "text": "ROLLING INITIATIVE"},
+            {"speaker": "Roney", "kind": "dice", "notation": "1d6+mind", "label": "Initiative", "result": {"total": 11, "rolls": [{"results": [4]}, {"ref": "mind", "value": 7}], "flat": 7}},
+            {"speaker": "Eli", "kind": "dice", "notation": "1d6+mind", "label": "Initiative", "result": {"total": 10, "rolls": [{"results": [3]}, {"ref": "mind", "value": 7}], "flat": 7}},
+            {"speaker": "Laryk", "kind": "dice", "notation": "1d6+mind", "label": "Initiative", "result": {"total": 8, "rolls": [{"results": [4]}, {"ref": "mind", "value": 4}], "flat": 4}},
+            {"speaker": "GM", "kind": "system", "text": "The Andrewsarchus crashes through the upper treeline. Three tons of mottled fur. Eyes that read heat. Roney sees a cub stumbling at the creature's flank — the mother is wounded already, by something the party did not do."},
+            {"speaker": "Roney", "kind": "chat", "text": "It's already dying. The cub — the cub is alive."},
+            {"speaker": "Laryk", "kind": "action", "text": "raises the Hammer & Forge stance. The strike that splits a shield."},
+            {"speaker": "Laryk", "kind": "dice", "notation": "2d6+atk", "label": "Hammer & Forge — Penetrating", "result": {"total": 12, "rolls": [{"results": [5, 3]}, {"ref": "atk", "value": 4}], "flat": 4}},
+            {"speaker": "GM", "kind": "system", "text": "The hammer lands beneath the foreleg. The Andrewsarchus does not roar. It exhales — once — and folds. The forest's silence breaks. Birds, abruptly, again."},
+            {"speaker": "Roney", "kind": "action", "text": "drops the harness frame and crawls under the dying mother to the cub. Waist-high. Wide-eyed. Mechanical-tail-already-broken-eyed."},
+            {"speaker": "Eli", "kind": "dice", "notation": "2d6+mind", "label": "Andrewsarchus magical-essence reading", "result": {"total": 14, "rolls": [{"results": [5, 2]}, {"ref": "mind", "value": 7}], "flat": 7}},
+            {"speaker": "GM", "kind": "system", "text": "The mother carried a green coin in her pelt — sewn there, not embedded. Someone sent her at them. The Order can mark beasts now. Or always could, and the party did not know."},
+            {"speaker": "Roney", "kind": "chat", "text": "The cub is mine."},
+            {"speaker": "Nyaulis", "kind": "chat", "text": "The cub is the forest's. You will tend it for the forest."},
+            {"speaker": "GM", "kind": "system", "text": "End of session. The harness is now permanent. The cub does not howl. It hums — off-rhythm, like Roney's clockwork."},
+        ],
+    },
+    # ============================ SESSION 6 ============================
+    {
+        "title": "Session 6 — The Caldera",
+        "gm_notes": "The Solar/Lunar Caldera is reached. Cataclysm-soil is harvested — and the Order is already there, harvesting too. First face-to-face contact. The robed one Frock saw is real.",
+        "log": [
+            {"speaker": "GM", "kind": "system", "text": "The Montes Inexpugnabilis open. The Caldera is below — ten miles of black glass and scarred basalt. The air is hot in a way that has nothing to do with sun."},
+            {"speaker": "Eli", "kind": "action", "text": "uncorks the empty soil-vial. Hands tremble once. Steady on the second try."},
+            {"speaker": "GM", "kind": "system", "text": "Down the slope, three figures in dark robes. They are not wearing the green coin. They ARE the green coin — that same five-pointed sigil sewn at the throat."},
+            {"speaker": "Mishtee", "kind": "chat", "text": "Don't speak first. Order procedure."},
+            {"speaker": "GM", "kind": "system", "text": "The middle robed one steps forward. Voice not loud. Voice pleasant."},
+            {"speaker": "Order Agent", "kind": "chat", "text": "Apprentices. We are also harvesting. There is enough soil for both parties. Will you walk down?"},
+            {"speaker": "Roney", "kind": "ooc", "text": "EVERY INSTINCT IS NO"},
+            {"speaker": "Laryk", "kind": "chat", "text": "We walk down. We do not stand near."},
+            {"speaker": "Eli", "kind": "dice", "notation": "2d6+mind", "label": "Cataclysm-soil harvest under hostile witness", "result": {"total": 13, "rolls": [{"results": [3, 3]}, {"ref": "mind", "value": 7}], "flat": 7}},
+            {"speaker": "GM", "kind": "system", "text": "The vial fills. The soil does not move like soil. It moves like water with thought."},
+            {"speaker": "Order Agent", "kind": "chat", "text": "Tell Master Caryana the Order remembers her."},
+            {"speaker": "Eli", "kind": "action", "text": "freezes. Does not look up. Does not acknowledge."},
+            {"speaker": "Frock", "kind": "chat", "text": "That's the one. That's the robe I saw."},
+            {"speaker": "Nyaulis", "kind": "action", "text": "draws the iron stakes and steps between the apprentices and the agents. Does not say a word."},
+            {"speaker": "GM", "kind": "system", "text": "The Order does not press. They withdraw up the opposite slope. Their footprints in the black glass smoke for an hour after they leave."},
+            {"speaker": "Malshe", "kind": "chat", "text": "They knew her name. Eli — they knew Caryana's name."},
+            {"speaker": "Eli", "kind": "chat", "text": "She told me they would. I did not believe her."},
+            {"speaker": "GM", "kind": "system", "text": "End of session. Soil in the vial. Three names known on the other side. The road back is six weeks long and does not feel that long anymore."},
+        ],
+    },
+    # ============================ SESSION 7 ============================
+    {
+        "title": "Session 7 — The Wound Closes Wrong",
+        "gm_notes": "Frock dies in the night despite the coin's removal. A second green coin is found in his bedroll — placed AFTER the party fell asleep. The Order has someone in the company.",
+        "log": [
+            {"speaker": "GM", "kind": "system", "text": "Three days back from the Caldera. A road-camp at the lip of the Montes pass. Frock has been walking unaided for two days. The party allows itself, for the first time, to hope."},
+            {"speaker": "GM", "kind": "system", "text": "Pre-dawn. Frock does not wake."},
+            {"speaker": "Eli", "kind": "dice", "notation": "2d6+mind", "label": "Diagnose — cause of death", "result": {"total": 11, "rolls": [{"results": [3, 1]}, {"ref": "mind", "value": 7}], "flat": 7}},
+            {"speaker": "GM", "kind": "system", "text": "The wound is closed. The wound is perfectly closed. The skin around it is unmarked. Frock has died of nothing visible."},
+            {"speaker": "Roney", "kind": "ooc", "text": "no no no no no"},
+            {"speaker": "Mishtee", "kind": "action", "text": "tears the bedroll apart. Finds it in the third fold."},
+            {"speaker": "GM", "kind": "system", "text": "A green coin. Fresh. Five-pointed star, one ray blackened. Placed there in the night."},
+            {"speaker": "Laryk", "kind": "chat", "text": "Someone here did this."},
+            {"speaker": "Nyaulis", "kind": "chat", "text": "Someone here, or something close enough to here."},
+            {"speaker": "Mishtee", "kind": "chat", "text": "I did not. Malshe did not. We have been bonded for nine years. I would know."},
+            {"speaker": "Eli", "kind": "dice", "notation": "2d6+soul", "label": "Read the camp — who slept where", "result": {"total": 8, "rolls": [{"results": [1, 1]}, {"ref": "soul", "value": 6}], "flat": 6}},
+            {"speaker": "GM", "kind": "system", "text": "Eli sees nothing useful. The camp is the camp. The Order does not leave footprints when it does not want to."},
+            {"speaker": "Malshe", "kind": "chat", "text": "The cub."},
+            {"speaker": "Roney", "kind": "chat", "text": "What."},
+            {"speaker": "Malshe", "kind": "chat", "text": "The Order can mark beasts. You said so yourself, Eli."},
+            {"speaker": "Roney", "kind": "action", "text": "checks the cub. Inside lid of the harness. The sigil is there. THE SIGIL HAS ALWAYS BEEN THERE."},
+            {"speaker": "GM", "kind": "system", "text": "Roney remembers, in pieces, the sigil. The cub did not put it there. Roney's harness has had the sigil since week two of the Maiden Adventure. Since the cub joined the harness."},
+            {"speaker": "Roney", "kind": "ooc", "text": "what do I do guys. WHAT DO I DO."},
+            {"speaker": "Eli", "kind": "chat", "text": "We bury Frock. We don't sleep. We get to Master's Pass."},
+            {"speaker": "GM", "kind": "system", "text": "End of session. One down. The road home is shorter than the road out, and longer than any of them have words for."},
+        ],
+    },
+    # ============================ SESSION 8 ============================ CLIFFHANGER
+    {
+        "title": "Session 8 — Master's Pass",
+        "gm_notes": "Cliffhanger session. The Order ambushes the party at the narrow throat of Master's Pass. Roney's harness sigil flares mid-line — and Roney is gone. Vanished. Mid-sentence. End of arc.",
+        "log": [
+            {"speaker": "GM", "kind": "system", "text": "Master's Pass. Four days from Eagles Nest. The road narrows to a throat between two basalt cliffs. The mule is hobbled at the entrance. The party walks the throat in single file."},
+            {"speaker": "Nyaulis", "kind": "chat", "text": "I do not like this geometry."},
+            {"speaker": "Mishtee", "kind": "chat", "text": "Nobody likes this geometry."},
+            {"speaker": "GM", "kind": "system", "text": "Robes appear at the upper rim. Five of them. The same agent from the Caldera at the centre. The voice is the same. Pleasant."},
+            {"speaker": "Order Agent", "kind": "chat", "text": "We will not ask twice. The Techgnostic comes with us. The rest may go."},
+            {"speaker": "Roney", "kind": "ooc", "text": "OH. OH."},
+            {"speaker": "Laryk", "kind": "action", "text": "raises his hammer. Says nothing. Does not need to."},
+            {"speaker": "Eli", "kind": "dice", "notation": "2d6+mind", "label": "Read the agents' positions — find the weakest", "result": {"total": 12, "rolls": [{"results": [4, 1]}, {"ref": "mind", "value": 7}], "flat": 7}},
+            {"speaker": "GM", "kind": "system", "text": "The eastern agent is shaking. Young. The middle agent is holding something Eli has no name for — a coin too large for any pouch."},
+            {"speaker": "Nyaulis", "kind": "dice", "notation": "1d6+mind", "label": "Initiative", "result": {"total": 9, "rolls": [{"results": [4]}, {"ref": "mind", "value": 5}], "flat": 5}},
+            {"speaker": "Roney", "kind": "dice", "notation": "1d6+mind", "label": "Initiative", "result": {"total": 12, "rolls": [{"results": [5]}, {"ref": "mind", "value": 7}], "flat": 7}},
+            {"speaker": "Roney", "kind": "chat", "text": "I'm not going with you. I'm staying with my—"},
+            {"speaker": "GM", "kind": "system", "text": "The sigil in Roney's harness FLARES. Green. Bright enough to read by. The cub yowls — once. Roney does not finish his sentence."},
+            {"speaker": "Eli", "kind": "ooc", "text": "RONEY"},
+            {"speaker": "Laryk", "kind": "ooc", "text": "WHERE IS HE"},
+            {"speaker": "GM", "kind": "system", "text": "Roney is not in the throat. The harness is on the ground. The cub is alone in it, eyes wide, completely silent. The Order agents are gone too — the upper rim is empty. The robe of the middle agent is on the ground at the apprentices' feet. There is nothing inside it but a single green coin and a folded scrap of parchment."},
+            {"speaker": "GM", "kind": "system", "text": "Eli unfolds the parchment. The handwriting is unmistakable."},
+            {"speaker": "GM", "kind": "system", "text": "It is the Mayor of Eagles Nest's hand. It reads: 'You will not bring him home. — M.'"},
+            {"speaker": "GM", "kind": "system", "text": "END OF ARC. End of Session 8. Roney is gone. The Order is gone. The Mayor signed something they did not ask him to sign. Three weeks of road still lies between the apprentices and a hamlet that may not be the hamlet they left."},
+            {"speaker": "GM", "kind": "ooc", "text": "Take a breath, table. Next session begins with the cub."},
+        ],
+    },
+]

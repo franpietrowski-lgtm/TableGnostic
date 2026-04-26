@@ -18,6 +18,7 @@ load_dotenv()
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from core.config import ALLOW_ORIGINS, ALLOW_ORIGIN_REGEX
 from core.startup import run_startup
@@ -25,6 +26,7 @@ from routes import auth, besm, campaigns, characters, nodes, recap, seed, sessio
 from routes import admin as admin_routes
 from routes import battlemap as battlemap_routes
 from routes import channels as channels_routes
+from routes import uploads as uploads_routes
 
 app = FastAPI(title="Table-Gnostic API")
 
@@ -69,3 +71,14 @@ app.include_router(recap.router)
 app.include_router(admin_routes.router)
 app.include_router(battlemap_routes.router)
 app.include_router(channels_routes.router)
+app.include_router(uploads_routes.router)
+
+# Static-file mount: serve uploaded battlemap images from disk so GMs can
+# drop in renders from Inkarnate / DungeonCraft / Talespire / RPGEngine
+# without hosting them publicly first. The /api/uploads prefix is required
+# so Kubernetes ingress routes correctly to this backend.
+import os as _os
+from pathlib import Path as _Path
+_UPLOAD_ROOT = _Path(_os.environ.get("UPLOAD_DIR", "/app/backend/uploads")).resolve()
+(_UPLOAD_ROOT / "maps").mkdir(parents=True, exist_ok=True)
+app.mount("/api/uploads", StaticFiles(directory=str(_UPLOAD_ROOT)), name="uploads")

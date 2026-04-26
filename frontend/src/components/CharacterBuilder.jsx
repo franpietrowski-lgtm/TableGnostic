@@ -77,13 +77,13 @@ export default function CharacterBuilder() {
   const spent = useMemo(() => {
     if (!ch) return { stat_cost: 0, attribute_cost: 0, skill_cost: 0, defect_points: 0, total_spent: 0 };
     const stat_cost = ch.stats.body + ch.stats.mind + ch.stats.soul;
-    // Mirror the backend cost engine: per_level = max(1, cost_per_level + mods),
-    // subtotal = per_level × level, then subtract any nested Item/Weapon defect
-    // refunds floored at 0.
+    // V4.1 BESM 4E: Enhancements and Limiters do NOT change point cost — they
+    // change the *effective Level* at which the Attribute functions
+    // (Limiters raise it, Enhancements lower it). Cost is base × level only,
+    // minus any nested Item/Weapon defect refunds (floored at 0).
     const attribute_cost = ch.attributes.reduce((s, a) => {
       const lvl = Math.max(1, a.level || 1);
-      const perLvl = Math.max(1, (a.cost_per_level || 0) + (a.enhancements.length - a.limiters.length));
-      const subtotal = perLvl * lvl;
+      const subtotal = (a.cost_per_level || 0) * lvl;
       const itemDefRefund = (a.defects || []).reduce((x, d) => x + (d.points_per_rank || 0) * (d.rank || 0), 0);
       return s + Math.max(0, subtotal - itemDefRefund);
     }, 0);
@@ -756,10 +756,13 @@ function AttributeRow({ idx, a, reference, onUpdate, onRemove, maxRank = 0 }) {
     const list = a[kind].includes(name) ? a[kind].filter((x) => x !== name) : [...a[kind], name];
     onUpdate({ ...a, [kind]: list });
   };
-  const perLevel = Math.max(1, a.cost_per_level + (a.enhancements.length - a.limiters.length));
-  const subtotal = perLevel * a.level;
+  // V4.1 BESM 4E: cost is base × level (Enh/Lim do NOT change cost).
+  // Effective Level shown separately = level + #Limiters − #Enhancements (floored at 1).
+  const subtotal = (a.cost_per_level || 0) * a.level;
   const itemDefectRefund = (a.defects || []).reduce((s, d) => s + (d.points_per_rank || 0) * (d.rank || 0), 0);
   const cost = Math.max(0, subtotal - itemDefectRefund);
+  const effLevel = Math.max(1, (a.level || 1) + (a.limiters?.length || 0) - (a.enhancements?.length || 0));
+  const effDelta = effLevel - (a.level || 1);
   const cap = maxRank > 0 ? maxRank : 10;
   const overCap = maxRank > 0 && a.level > maxRank;
   const onLevelChange = (v) => {
@@ -782,6 +785,13 @@ function AttributeRow({ idx, a, reference, onUpdate, onRemove, maxRank = 0 }) {
           <input type="number" min={1} max={cap} className="input w-20 text-center"
                  value={a.level} onChange={(e) => onLevelChange(e.target.value)}
                  data-testid={`attr-level-${idx}`}/>
+          {effDelta !== 0 && (
+            <span className="text-[10px] font-ui uppercase tracking-widest text-arcane-light"
+                  title="BESM 4E V4.1 — Enhancements and Limiters do NOT change point cost. Limiters raise effective Level (+1 each); Enhancements lower it (−1 each). Floored at 1."
+                  data-testid={`attr-eff-level-builder-${idx}`}>
+              eff. ×{effLevel}
+            </span>
+          )}
           <span className="text-gold font-display">{cost} pts</span>
           <button onClick={onRemove} className="text-ember/70 hover:text-ember" data-testid={`attr-remove-${idx}`}><X className="w-4 h-4"/></button>
         </div>
@@ -794,14 +804,14 @@ function AttributeRow({ idx, a, reference, onUpdate, onRemove, maxRank = 0 }) {
       <div className="mt-2 flex gap-2 text-[10px]">
         <button className="btn btn-ghost text-[10px] py-1" onClick={() => setOpenCust(!openCust)}
                 data-testid={`attr-cust-${idx}`}>
-          {openCust ? "Hide" : "Customise"} ({a.enhancements.length}↑ / {a.limiters.length}↓)
+          {openCust ? "Hide" : "Customise"} ({a.enhancements.length} enh ↓ / {a.limiters.length} lim ↑)
         </button>
       </div>
       {openCust && (
         <div className="mt-2 space-y-3">
           <div className="grid md:grid-cols-2 gap-3">
             <div>
-              <div className="label-ref mb-1">Enhancements (+1/lvl each) · p.145</div>
+              <div className="label-ref mb-1">Enhancements (eff. lvl −1 each, no cost change) · p.145</div>
               <div className="flex flex-wrap gap-1">
                 {ref.enhancements.map((e) => {
                   // Whitelist comes from the Attribute reference, NOT from `e` itself.
@@ -824,7 +834,7 @@ function AttributeRow({ idx, a, reference, onUpdate, onRemove, maxRank = 0 }) {
               </div>
             </div>
             <div>
-              <div className="label-ref mb-1">Limiters (-1/lvl each) · p.148</div>
+              <div className="label-ref mb-1">Limiters (eff. lvl +1 each, no cost change) · p.148</div>
               <div className="flex flex-wrap gap-1">
                 {ref.limiters.map((lim) => {
                   const attrRef = ref.attributes.find((x) => x.name === a.name);
