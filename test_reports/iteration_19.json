@@ -1,0 +1,47 @@
+{
+  "summary": "V4.4 Phases F+G+H+I+J (iter19) — saleable-chronicle batch. Backend: 27/27 PASS in 3.24s for the new iter19 suite covering bi-directional KB↔character sync (4 PCs incl. Nyaulis with linked_node_id, twin npc nodes with character_id + tags['pc'] + visibility='shared'), location scale + parent_location hierarchy, GM Session Journal pinned node auto-creation, XP-approval propose→reject (state UNCHANGED) and propose→approve (Tough +1 + xp_unspent debited), insufficient-XP 400, non-GM/non-owner 403s, Reference Editor CRUD with page-validation (valid p.196 vs invalid p.999 reason 'outside the known range 1-320 for BESM Fourth Edition'), validate-page utility for anime-5e p.50, and PDF export — cover has WRITTEN BY/ADDITIONAL WRITING/SPECIAL THANKS + Mark MacKinnon + Dyskami Publishing Company with Japanime Games + Fran Pietrowski + © 2026 + Tri-Stat trademark bar + http://BESM4.life, NO 'Artwork by' / 'Graphic Production by' rows; World Codex appendix has ≥4 locations with [scale: ...] tags; APPENDIX A/B/C/D per-PC sheets with Body/Mind/Soul/ACV/DCV stat lines; Reference appendix shows Spike-hammer p.196. Frontend: end-to-end smoke verified on live preview — Atelier renders ingest-panel + reference-editor (all 5 kind tabs) + instructions-panel + instructions-gm-materials + atelier-export-pdf-btn; xp-approval-queue correctly hidden when empty; reference-page-warn appears with correct copy when page=999 saved; CharacterSheet (Eli) renders xp-spend-open which opens xp-spend-form with kind/stat/attr selector + delta + cost + reason + submit. Two regression failures in earlier iter15/iter18 are PRE-EXISTING STALE ASSERTIONS made obsolete by the intentional Phase F (4th PC = 4 chars seeded, not 3) and Phase G (cover redesign — 'Weaved in TableGnostic' line replaced by BESM4 layout) changes; not runtime bugs.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "test_iter15_v44.py::TestEvereanthaChronicle::test_reset_seeds_8_sessions", "issue": "Stale assertion `characters_created == 3` — Phase F adds Nyaulis as 4th PC, real value is now 4. Test, not the route, needs updating to `==4` or `>=3`."},
+      {"endpoint": "test_iter18_v44_phase_e.py::TestPdfPolish::test_cover_byline_and_weaved_and_dyskami", "issue": "Stale assertion 'Weaved in TableGnostic' on cover — Phase G cover redesign per BESM4 Layout Templates removed that subtitle in favour of WRITTEN BY/Mark MacKinnon/Dyskami structure. The Dyskami line + © 2026 + Fran Pietrowski byline are still present, but the 'Weaved in TableGnostic' copy is no longer rendered on the cover (it now appears only in body footer chrome). Test needs to be relaxed to assert the new BESM4 credits set instead."},
+      {"endpoint": "test_refactor_iter11.py::test_openapi_has_expected_tags_and_ops", "issue": "Pre-existing stale exact-list assertion (carried over from iter18 baseline). Not caused by iter19."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter19_v44_phase_fghij.py",
+    "/app/test_reports/pytest/iter19_v44_phase_fghij.xml"
+  ],
+  "action_items": [
+    "Refresh test_iter15_v44::test_reset_seeds_8_sessions to assert characters_created==4 (or >=3) so it survives the Nyaulis 4th-PC addition.",
+    "Refresh test_iter18_v44_phase_e::test_cover_byline_and_weaved_and_dyskami to match the new BESM4-Layout cover (drop the 'Weaved in TableGnostic' on-cover assertion; keep Fran Pietrowski + Dyskami + © 2026 as the canonical cover credits)."
+  ],
+  "critical_code_review_comments": [
+    "routes/admin.py 5b/5c: Bi-directional sync correctly stamps fields.character_id on the npc node and linked_node_id on the character in a single pass driven by chars_by_name. GM Session Journal node has the right tag triplet ['gm-only','session-journal','pinned'] + fields.is_pinned/is_gm_journal/entries=[]. Clean implementation.",
+    "routes/xp_approval.py: _apply_change is well-scoped (stats.{body,mind,soul} + attribute_level + raise_total_points only) — narrow surface keeps audit safe. The dry-run apply on propose (line 127–130) is the right call to reject malformed patches before they reach the GM queue. xp escrow model is correct: xp_unspent is NOT debited until approve, so reject is a true no-op.",
+    "routes/reference_editor.py: KNOWN_BOOK_RANGES gives a meaningful 'outside the known range X-Y for {Title}' message rather than a hard 422 — proper UX. _validate_page never raises so the GM gets the warning instead of a 500. Good fall-through to camp.system_id when body.book is omitted.",
+    "routes/pdf_export.py: cover_page() implements all 7 BESM4 layout requirements (TITLE band, three credit rows, Mark MacKinnon, Dyskami Publishing Company with Japanime Games, rounded blue trademark bar, BESM4.life URL, Tri-Stat Emporium logo bottom-right) and explicitly omits 'Artwork by'/'Graphic Production by' rows. World Codex appendix sorts by scale and emits [scale: …] tags. Per-PC appendices labelled APPENDIX A/B/C/D with stat lines validated. Reference appendix renders Spike-hammer p.196.",
+    "frontend/components/ReferenceEditor.jsx: data-testid coverage is exemplary — every interactive element (tabs, add-btn, save-btn, all 5 inputs, page-warn) has a stable selector. Page-validation warning text 'p.999 is outside the known range 1-320 for BESM Fourth Edition.' renders verbatim from the backend response — good integration.",
+    "frontend/components/XPApprovalQueue.jsx: GM queue only renders when rows.length > 0 (intentional vertical-space saver per reviewer-note). XPSpendForm exposes kind/stat/attr/delta/cost/reason/submit with separate testids — submit posts to /api/characters/{cid}/xp-spend and returns the pending row. CharacterSheet wires xp-spend-open → form → backend in the standard flow."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter19_v44_phase_fghij.py",
+    "/app/test_reports/iteration_19.json",
+    "/app/test_reports/pytest/iter19_v44_phase_fghij.xml"
+  ],
+  "success_rate": {
+    "backend": "100% on iter19 suite (27/27). Two pre-existing stale assertions in iter15 and iter18 are made obsolete by the intentional Phase F/G changes — not runtime bugs.",
+    "frontend": "100% — Atelier panels (reference-editor + instructions-panel + instructions-gm-materials + atelier-export-pdf-btn + ingest-panel) all render; xp-approval-queue correctly hidden on empty; reference-page-warn renders with backend-supplied copy on p.999; xp-spend-open + xp-spend-form fully wired on Eli's character sheet."
+  },
+  "test_credentials": "franpietrowski@gmail.com / PieGod08!! (admin) — verified via /app/memory/test_credentials.md. Player fixture: TEST_iter19_player_<rand>@example.com / Pp123456!! created at runtime.",
+  "seed_data_creation": "iter19 fixture runs reset-to-evereantha?confirm=WIPE at module start (destructive). After reset: 4 PCs (Eli, Laryk, Roney, Nyaulis), Spike-hammer reference row created at p.196 for the PDF appendix, byline left as 'Fran Pietrowski' on franpietrowski@gmail.com.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "iter19 is destructive (reset). When chained with iter18/iter15 in a single pytest run, the second/third resets clobber the previous module's state — running each module in isolation is the canonical mode. The two regression failures (iter15 chars==3, iter18 'Weaved in TableGnostic' on cover) are stale assertions from intentional Phase F/G changes and should be refreshed at main-agent's leisure; they do NOT block V4.4 sign-off. Frontend selectors confirmed live: reference-editor / reference-tab-{weapon|armor|item|companion|custom} / reference-add-btn / reference-input-{name,page,book,kind,cost,summary} / reference-save-btn / reference-page-warn / xp-spend-open / xp-spend-form / xp-spend-{kind,stat,attr,delta,cost,reason,submit} / xp-approval-queue (conditional) / instructions-panel / instructions-gm-materials / atelier-export-pdf-btn / ingest-panel.",
+  "rca of the issue": "N/A — not a bug-fix iteration. iter19 verifies the V4.4 Phases F+G+H+I+J build end-to-end. The two regression failures observed in cumulative pytest runs are stale assertions in pre-existing iter15 and iter18 tests caused by intentional, spec-mandated changes in this batch (Phase F = +1 PC, Phase G = cover redesign). They do not represent a runtime regression."
+}

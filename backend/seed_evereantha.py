@@ -284,6 +284,87 @@ EVEREANTHA_PCS = [
         },
         "published": True,
     },
+    # ---------- 4. Nyaulis — Faunamimic (joins Session 2) ----------
+    {
+        "name": "Nyaulis",
+        "concept": "Faunamimic hermit — shape-shifter, trapper, sworn keeper of a stretch of the Golden Forests",
+        "power_level": "Adventurous",
+        "total_points": 90,  # slightly above the apprentices — he's seasoned
+        "token_color": "#7a5a36",  # weathered fur-cloak brown
+        "size": "Medium",
+        "stats": {"body": 7, "mind": 6, "soul": 7},
+        "attributes": [
+            {"name": "Alternate Form (firelight youth ↔ elder hermit)", "level": 2,
+             "cost_per_level": 8, "page": 110,
+             "enhancements": [], "limiters": ["Fire-source proximity (firelight only)"]},
+            {"name": "Heightened Senses (all five, forest-tuned)", "level": 3,
+             "cost_per_level": 1, "page": 156,
+             "enhancements": ["Detect heat-signature"], "limiters": []},
+            {"name": "Tracking", "level": 4, "cost_per_level": 1, "page": 188,
+             "enhancements": [], "limiters": ["Native ecosystem only"]},
+            {"name": "Companion (forest creatures, summoned)", "level": 2,
+             "cost_per_level": 4, "page": 124,
+             "enhancements": [], "limiters": ["Local biome only"]},
+            {"name": "Weapon (twin iron stakes, by Laryk)", "level": 2,
+             "cost_per_level": 2, "page": 196,
+             "enhancements": ["Penetrating"], "limiters": ["Reach 1m"]},
+        ],
+        "defects": [
+            {"name": "Marked", "category": "Marked", "rank": 2, "points_per_rank": 1,
+             "page": 212, "note": "Three Order green-coin scars on the back of his hand. Refused them all — but they remember him."},
+            {"name": "Code of Conduct (forest-keeper's apology rule)", "category": "Conduct",
+             "rank": 1, "points_per_rank": 1, "page": 208,
+             "note": "Demands an apology in craft from any who take from his stretch of the Golden Forests. Won't bargain on that."},
+        ],
+        "skills": [
+            {"group": "Wilderness", "level": 4, "cost_per_level": 1, "page": 84,
+             "components": [
+                 {"name": "Tracking", "level": 4, "note": "Reads heat and bent leaves alike."},
+                 {"name": "Survival", "level": 4, "note": "Has not slept indoors in nine winters."},
+                 {"name": "Animal Handling", "level": 3, "note": "Forest fauna only — will not work with livestock."},
+             ]},
+            {"group": "Stealth", "level": 3, "cost_per_level": 2, "page": 76,
+             "components": [
+                 {"name": "Hide", "level": 3, "note": "His pack-brother's lesson — stillness is the first weapon."},
+                 {"name": "Move silently", "level": 3, "note": "Even with iron stakes."},
+             ]},
+        ],
+        "power_packs": [],
+        "notes": "Joins the apprentices' Maiden Adventure in Session 2 after Laryk forges him twin iron stakes (apology in craft).",
+        "folio": {
+            "aliases": ["the Elder-In-Furs", "Nyaulis the Trapper"],
+            "gender_species_age": "Human · Faunamimic · indeterminate (firelight ~25, elder ~60+)",
+            "physical_description": (
+                "Grizzled fur-clad elder by daylight. Almost-human youth in firelight — "
+                "the same forest patience in either body. Eyes like a forest reading you back."
+            ),
+            "personality": (
+                "Empathetic to wildlife to a fault. Speaks rarely in elder form, almost "
+                "never. Demands apologies for what is taken from his forest."
+            ),
+            "fears": [
+                {"title": "A fourth green coin", "kind": "secret",
+                 "note": "He has refused three. Suspects a fourth will not be offered."},
+            ],
+            "goals": [
+                {"title": "Protect his stretch of Golden Forests", "kind": "ongoing"},
+                {"title": "Repay the apprentices for the iron stakes", "kind": "active",
+                 "note": "Walking with them through the Caldera arc."},
+            ],
+            "family": [
+                {"name": "(former pack-brother, deceased)", "relation": "lost twelve winters past",
+                 "note": "Killed by a Lancing Andrewsarchus during a kin-pass through the northern reaches."},
+            ],
+            "history_events": [
+                {"date": "12 winters past", "title": "Lost his pack-brother",
+                 "note": "Has not crossed the Caldera since."},
+                {"date": "Maiden Adventure · S2", "title": "Apology in iron",
+                 "note": "Laryk forged twin stakes for the snare-anchors. Joined the apprentices."},
+            ],
+            "journal": [],
+        },
+        "published": True,
+    },
 ]
 
 
@@ -294,7 +375,9 @@ EVEREANTHA_NODES = [
     {"type": "location", "title": "Aurea",
      "tags": ["country", "core"], "visibility": "shared",
      "fields": {
+         "scale": "country",
          "loc_type": "kingdom",
+         "parent_location": None,
          "geography": "Temperate. Golden-leaved forests in the south, the Montes Inexpugnabilis range to the north, the scarred Solar/Lunar Caldera at the centre.",
          "government": "Decentralised. Manor lords + Artisans Guild councils.",
          "economy": "Pure barter — no coin minted. The Artisans Guild's Barter Certificates are the only universally honoured equivalent of currency.",
@@ -312,7 +395,9 @@ EVEREANTHA_NODES = [
     {"type": "location", "title": "Eagles Nest",
      "tags": ["hamlet", "starting-area"], "visibility": "shared",
      "fields": {
+         "scale": "hamlet",
          "loc_type": "hamlet",
+         "parent_location": "Aurea",
          "geography": "Forty single-family huts arranged around farm and irrigation ponds. Six weeks' travel from Aurea's capital.",
          "population": "~120 souls (forty households).",
          "government": "Manor lord (the Mayor) — issues Barter Certificates personally.",
@@ -330,6 +415,14 @@ EVEREANTHA_NODES = [
      )},
     {"type": "location", "title": "Golden Forests of Aurea",
      "tags": ["wilderness", "biome"], "visibility": "shared",
+     "fields": {
+         "scale": "biome",
+         "loc_type": "forest",
+         "parent_location": "Aurea",
+         "geography": "Vast forest of golden-leaved trees that hold colour year-round. Spans the southern third of Aurea.",
+         "inhabitants": "Faunamimic hermits (Nyaulis among them); rare magical flora harvested by the Apocophae.",
+         "connections": "Borders Eagles Nest to the south; Montes Inexpugnabilis at the northern treeline.",
+     },
      "content": (
          "A vast forest of golden-leaved trees that hold colour year-round. Home to "
          "rare flora the Apocophae harvest and to creatures of inherent magical "
@@ -337,7 +430,15 @@ EVEREANTHA_NODES = [
          "through the northern reaches in late autumn."
      )},
     {"type": "location", "title": "Montes Inexpugnabilis",
-     "tags": ["mountains", "biome"], "visibility": "shared",
+     "tags": ["mountains", "biome", "border"], "visibility": "shared",
+     "fields": {
+         "scale": "mountain-range",
+         "loc_type": "mountain range",
+         "parent_location": "Aurea",
+         "geography": "Impassable-by-name range. Forms the southern border of Aurea, separating the kingdom from the lands beyond. Internal running falls and underground ponds; cave systems rich in luminescent rock.",
+         "inhabitants": "Ferrilith order trainees in the lower passes; rumoured stone-singers in the upper passes.",
+         "connections": "South border of Aurea; northern reach abuts the Golden Forests; Master's Pass cuts through to Eagles Nest.",
+     },
      "content": (
          "An impassable-by-name range. Internal running falls and underground ponds. "
          "Cave systems rich in luminescent rock and bio-luminescent flora. The "
@@ -346,11 +447,79 @@ EVEREANTHA_NODES = [
      )},
     {"type": "location", "title": "The Solar / Lunar Caldera",
      "tags": ["cataclysm", "lore"], "visibility": "gm_only",
+     "fields": {
+         "scale": "landmark",
+         "loc_type": "scarred basin",
+         "parent_location": "Aurea",
+         "geography": "Centre of Aurea — ten miles of black-glass basin and basalt scar where the ancient Solar/Lunar Temple stood before the Cataclysm.",
+     },
      "content": (
          "Ancient site of the Solar and Lunar Temple, destroyed in a volcanic cataclysm "
          "whose cause the Order of the Darkening Star claims to know. The basin is "
          "scarred glass and black stone for ten miles around. Reagents harvested here "
          "behave wrongly — but powerfully."
+     )},
+
+    # ----- PC TWIN NODES (bi-directional sync with character sheets) -----
+    # Each PC has a public-facing NPC node so other tables / readers see them
+    # in the Knowledge Web. The character sheet remains the source of truth
+    # for stats; the node holds narrative description + image hooks.
+    {"type": "npc", "title": "Eli",
+     "tags": ["pc", "apocophae", "alchemist", "eagles-nest"], "visibility": "shared",
+     "fields": {
+         "is_player_character": True,
+         "linked_character_name": "Eli",
+         "discipline": "Apocophae (alchemist)",
+         "homeland": "Eagles Nest, Aurea",
+         "physical_description": "Wiry build, green-stained fingers, a leather bandolier of corked vials worn high on the ribs. Eyes that read herbs before they read faces.",
+         "personality": "Methodical to a fault. Trusts what she can clot, distill, or buffer. Slow to laugh, slower to forget a debt.",
+         "motivations": "Earn Barter Certification from Master Caryana. Find what the Stranger wanted with her father.",
+         "fears": "That the Stranger came back for her, not him.",
+         "affiliations": "Apocophae apprenticeship under Master Caryana. Maiden Adventure trio with Laryk and Roney.",
+         "inventory": "Bandolier (cataclysm-soil vial · serenitas-leaf bundle · golden lichen · clotting tincture). Apothecary kit.",
+     },
+     "content": (
+         "Apocophae apprentice from Eagles Nest. Methodical, vial-handed, "
+         "scarred by the Stranger her father knew. Travelling the Maiden "
+         "Adventure to earn her Barter Certificate."
+     )},
+    {"type": "npc", "title": "Laryk",
+     "tags": ["pc", "ferrilith", "smith-monk", "eagles-nest"], "visibility": "shared",
+     "fields": {
+         "is_player_character": True,
+         "linked_character_name": "Laryk",
+         "discipline": "Ferrilith (earth-smith monk)",
+         "homeland": "Eagles Nest, Aurea",
+         "physical_description": "Bronze-skinned, hands like hearth-stones, a spike-hammer slung across his back. Speaks rarely; what he forges, he says.",
+         "personality": "Quiet. Acts in iron. Apologies are stakes; promises are ridges welded into a blade.",
+         "motivations": "Match Master Davalan's Hammer-and-Forge stance in the field. Repay Nyaulis in craft, not in word.",
+         "fears": "The day a strike doesn't land where the breath says it will.",
+         "affiliations": "Ferrilith apprenticeship under Master Davalan. Maiden Adventure trio with Eli and Roney. Sworn-debt to Nyaulis (iron stakes).",
+         "inventory": "Spike-hammer (Penetrating, Ferrilith Hammer-and-Forge stance). Travel anvil. Iron ingots, three.",
+     },
+     "content": (
+         "Ferrilith apprentice from Eagles Nest. Earth-smith monk whose "
+         "apologies are forged, not spoken. Travelling the Maiden Adventure "
+         "to earn his Barter Certificate."
+     )},
+    {"type": "npc", "title": "Roney",
+     "tags": ["pc", "techgnostic", "tinker", "eagles-nest"], "visibility": "shared",
+     "fields": {
+         "is_player_character": True,
+         "linked_character_name": "Roney",
+         "discipline": "Techgnostic (tinker)",
+         "homeland": "Eagles Nest, Aurea",
+         "physical_description": "Lean, copper-haired, a brass-frame harness worn over the shoulders that hosts a half-clockwork creature companion (the cub). Always one tool short of finished.",
+         "personality": "Warm, jittery, talks in OOC even when the cub doesn't. Loyal in a way that ignores the cost.",
+         "motivations": "Build a harness frame the cub doesn't outgrow. Find out who marked his harness with the Order's sigil — and when.",
+         "fears": "That the sigil was always there. That the cub knows.",
+         "affiliations": "Techgnostic apprenticeship under Master Halnen. Maiden Adventure trio. Bonded (literally) with the Lancing Andrewsarchus cub.",
+         "inventory": "Brass-frame harness (cub mounted). Tinker's tool roll. Pocket lens. A coin Eli told him not to touch — he kept it anyway.",
+     },
+     "content": (
+         "Techgnostic apprentice from Eagles Nest. Brass-harness tinker. "
+         "Bonded with a half-clockwork Andrewsarchus cub. Vanished mid-line "
+         "at Master's Pass, sigil flaring."
      )},
 
     # ----- FACTIONS -----
@@ -388,8 +557,10 @@ EVEREANTHA_NODES = [
          "Order's green coin on a chain under her apron."
      )},
     {"type": "npc", "title": "Nyaulis",
-     "tags": ["faunamimic", "wilderness", "ally"], "visibility": "shared",
+     "tags": ["faunamimic", "wilderness", "ally", "pc"], "visibility": "shared",
      "fields": {
+         "is_player_character": True,
+         "linked_character_name": "Nyaulis",
          "aliases": "Nyaulis the Trapper · the Elder-In-Furs",
          "gender_species_age": "Human · Faunamimic · indeterminate (appears 60+ in elder form, 25 in firelight form)",
          "occupation": "Faunamimic — hunter, trapper, shape-changer; sworn keeper of a stretch of the Golden Forests.",

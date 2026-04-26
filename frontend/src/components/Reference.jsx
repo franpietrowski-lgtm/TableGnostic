@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { api } from "../lib/api";
 import { BookOpen, Search, Sparkles } from "lucide-react";
+import { InstructionsPanel } from "./ReferenceEditor";
 
 /**
  * Reference page — three tab groups:
@@ -85,6 +86,12 @@ export default function Reference() {
         ["custom_attributes", "Custom Attributes"],
         ["custom_power_packs", "Power Packs / Bundles"],
         ["custom_skills", "Custom Skills"],
+      ],
+    },
+    {
+      label: "Help",
+      tabs: [
+        ["instructions", "Instructions"],
       ],
     },
   ];
@@ -192,7 +199,13 @@ export default function Reference() {
         </div>
       )}
 
+      {/* Instructions tab — short how-to guide for players (and GMs see extra). */}
+      {tab === "instructions" && (
+        <InstructionsPanel isGm={false}/>
+      )}
+
       {/* Card grid */}
+      {tab !== "instructions" && (
       <div className="grid md:grid-cols-2 gap-3">
         {(lists[tab] || []).map((item, i) => (
           <div key={i} className="card-mystic p-4" data-testid={`ref-card-${tab}-${i}`}>
@@ -273,6 +286,7 @@ export default function Reference() {
           <div className="text-mist italic text-sm">No matches.</div>
         )}
       </div>
+      )}
 
       {/* Generic mechanic primers — only on the Attributes tab as the most relevant home */}
       {tab === "attributes" && ref.generic_blurbs && ref.generic_blurbs.length > 0 && (

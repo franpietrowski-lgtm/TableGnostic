@@ -29,6 +29,7 @@ _GAME_COLLECTIONS = (
     "initiative", "effects", "nodes", "edges", "recaps",
     "custom_attributes", "genesis", "atelier", "ingestions",
     "battlemaps", "channels", "channel_messages",
+    "xp_pending", "campaign_reference",
 )
 
 
@@ -96,9 +97,10 @@ async def reset_to_evereantha(confirm: str = "", user: dict = Depends(get_curren
         "created_at": now_iso(),
     })
 
-    # ---- 5. Three apprentice PCs ----
+    # ---- 5. Apprentice PCs (3 apprentices + Nyaulis) ----
     chars_inserted = []
     chars_by_name: Dict[str, str] = {}  # name -> character_id (for chat user_name fallback)
+    pc_to_node_id: Dict[str, str] = {}  # name -> npc node id
     for pc in EVEREANTHA_PCS:
         doc = {
             "id": new_id(),
@@ -117,15 +119,68 @@ async def reset_to_evereantha(confirm: str = "", user: dict = Depends(get_curren
             "defects": pc["defects"],
             "skills": pc.get("skills", []),
             "power_packs": pc.get("power_packs", []),
-            "notes": "Evereantha Maiden Adventure — apprentice (Adventurous tier).",
+            "notes": pc.get("notes",
+                "Evereantha Maiden Adventure — apprentice (Adventurous tier)."),
             "published": pc.get("published", True),
             "folio": pc.get("folio", {}),
+            "xp_total": 0.0,
+            "xp_unspent": 0.0,
+            "xp_log": [],
         }
         doc["derived"] = calc_derived(doc, camp)
         doc["spent"] = calc_spent_points(doc)
         await db.characters.insert_one(doc)
         chars_inserted.append(sanitize(doc))
         chars_by_name[pc["name"]] = doc["id"]
+
+    # ---- 5b. Bi-directional sync: stamp node↔character ids on the npc
+    # nodes we just inserted that carry a `linked_character_name` hint.
+    matched_nodes = await db.nodes.find(
+        {"campaign_id": camp_id, "type": "npc",
+         "fields.linked_character_name": {"$exists": True}},
+        {"_id": 0, "id": 1, "fields": 1}
+    ).to_list(50)
+    for n in matched_nodes:
+        link_name = (n.get("fields") or {}).get("linked_character_name")
+        cid = chars_by_name.get(link_name)
+        if cid:
+            await db.nodes.update_one(
+                {"id": n["id"]},
+                {"$set": {"fields.character_id": cid}},
+            )
+            await db.characters.update_one(
+                {"id": cid},
+                {"$set": {"linked_node_id": n["id"]}},
+            )
+            pc_to_node_id[link_name] = n["id"]
+
+    # ---- 5c. GM Session Journal — pinned, GM-only ongoing node.
+    await db.nodes.insert_one({
+        "id": new_id(),
+        "campaign_id": camp_id,
+        "type": "lore",
+        "title": "GM Session Journal",
+        "content": (
+            "GM-only ongoing journal. After every session, append: notes "
+            "(what changed in canon), plans (what to seed next), issues "
+            "(rules friction, pacing), pros/cons, and any other relevant "
+            "thread. Used for arc design, master-plot updates, and primer "
+            "change-requests."
+        ),
+        "tags": ["gm-only", "session-journal", "pinned"],
+        "visibility": "gm_only",
+        "revealed_to": [],
+        "links": [],
+        "fields": {
+            "is_pinned": True,
+            "is_gm_journal": True,
+            "entries": [],
+        },
+        "author_id": user["id"],
+        "author_name": user["name"],
+        "created_at": now_iso(),
+    })
+    nodes_inserted += 1
 
     # ---- 6. 8-Session Chronicle (V4.4) ----
     sessions_inserted = 0

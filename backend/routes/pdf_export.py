@@ -370,7 +370,8 @@ async def _session_prose(s: Dict[str, Any], camp_id: str) -> Tuple[str, List[Dic
 # ─────────────────────── PDF rendering ───────────────────────
 
 def _build_pdf(camp: Dict[str, Any], chapters_data: List[Dict[str, Any]],
-                profile: Dict[str, Any], gm_user: Optional[Dict[str, Any]] = None) -> bytes:
+                profile: Dict[str, Any], gm_user: Optional[Dict[str, Any]] = None,
+                extras: Optional[Dict[str, Any]] = None) -> bytes:
     """Render the PDF and return the raw bytes."""
     from reportlab.lib.pagesizes import LETTER
     from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
@@ -410,117 +411,156 @@ def _build_pdf(camp: Dict[str, Any], chapters_data: List[Dict[str, Any]],
 
     legal_text = _legal_excerpt(camp.get("system_id") or "")
     required_footer = _legal_required_footer(camp.get("system_id") or "")
-    legal_block = required_footer or _legal_block(camp.get("system_id") or "")  # short cover-footer attribution
+    # Note: legal_block (short cover-footer attribution) intentionally unused —
+    # the new BESM4-styled cover prints its own trademark text in the rounded
+    # blue bar. Kept the helper available for non-BESM systems.
     system_name = profile["name"]
     camp_name = camp.get("name", "Untitled Campaign")
     gm_byline = (gm_user or {}).get("byline_name") or (gm_user or {}).get("name") or "the GM"
     current_year = datetime.now(timezone.utc).year
 
     def cover_page(canv, _doc):
+        # Cover layout adapted from the BESM 4E Layout Templates
+        # (Tri-Stat Emporium content-creator pack):
+        #   * Wide title block at the top in primary system colour.
+        #   * Centred logo at upper-mid.
+        #   * Three credit rows (WRITTEN BY / ADDITIONAL WRITING BY /
+        #     SPECIAL THANKS TO) — no Artwork-By or Graphic-Production-By
+        #     rows per user request (strips art-copyright surface area).
+        #   * Mark MacKinnon attribution + Dyskami Publishing Company line.
+        #   * Bottom rounded blue bar with the Tri-Stat trademark text +
+        #     http://BESM4.life URL + Tri-Stat Emporium logo at right.
         canv.saveState()
-        # Background flood
+        # Background
         canv.setFillColor(HexColor(p["background"]))
         canv.rect(0, 0, pw, ph, fill=1, stroke=0)
-        # Top accent bar (system colour)
+        # Top primary band — TITLE OF THE BOOK area
         canv.setFillColor(primary)
-        canv.rect(0, ph - 0.5 * inch, pw, 0.5 * inch, fill=1, stroke=0)
-        # Bottom accent bar (secondary) — slightly taller to host the legal block
-        canv.setFillColor(secondary)
-        canv.rect(0, 0, pw, 1.4 * inch, fill=1, stroke=0)
-        # Vertical accent stripe (yellow / accent)
-        canv.setFillColor(accent)
-        canv.rect(0.4 * inch, 1.4 * inch, 0.12 * inch, ph - 1.9 * inch, fill=1, stroke=0)
-        # System name (top-right)
-        canv.setFont(f["subheading"], 11)
+        canv.rect(0, ph - 1.5 * inch, pw, 1.5 * inch, fill=1, stroke=0)
+        # System badge top-left
+        canv.setFont(f["subheading"], 10)
         canv.setFillColor(HexColor("#FFFFFF"))
-        canv.drawRightString(pw - margin, ph - 0.3 * inch, system_name.upper())
-        # Logo (centred, ~2.4 inches tall — bigger now that it's the system mark)
+        canv.drawString(margin, ph - 0.4 * inch, system_name.upper())
+        # Big TITLE — width-aware, centred inside the top band.
+        title_max_w = pw - 2 * margin
+        title_para = None
+        title_h = 0
+        for fontsize, leading in [(38, 42), (32, 36), (26, 30), (22, 26)]:
+            ts = ParagraphStyle("cover-title", fontName=f["heading"],
+                                 fontSize=fontsize,
+                                 textColor=HexColor("#FFFFFF"),
+                                 leading=leading, alignment=TA_CENTER)
+            tp = Paragraph(_html_escape(camp_name.upper()), ts)
+            tw, th = tp.wrap(title_max_w, 1.2 * inch)
+            if th <= 1.2 * inch:
+                title_para = tp
+                title_h = th
+                break
+        if title_para is None:
+            title_para = tp
+            title_h = th
+        title_para.drawOn(canv, margin,
+                           ph - 0.5 * inch - title_h - 0.05 * inch)
+
+        # Centred logo at upper-mid
         logo_path = _resolve_logo(profile)
-        logo_bottom = ph - 4.0 * inch  # default if no logo
+        logo_bottom = ph - 4.0 * inch
         if logo_path:
             try:
                 from PIL import Image as PILImage
                 with PILImage.open(logo_path) as im:
                     iw, ih = im.size
-                target_h = 2.4 * inch
+                target_h = 1.6 * inch
                 target_w = (iw / ih) * target_h
                 max_w = pw - 2 * margin - inch
                 if target_w > max_w:
                     target_w = max_w
                     target_h = (ih / iw) * target_w
                 logo_x = (pw - target_w) / 2
-                logo_y = ph - 1.0 * inch - target_h
+                logo_y = ph - 1.7 * inch - target_h - 0.4 * inch
                 canv.drawImage(str(logo_path), logo_x, logo_y,
                                 width=target_w, height=target_h,
                                 preserveAspectRatio=True, mask='auto')
-                logo_bottom = logo_y - 0.2 * inch
+                logo_bottom = logo_y - 0.25 * inch
             except Exception:
                 pass
-        # Title — width-aware, centred. We render through a paragraph so
-        # long titles wrap onto multiple lines instead of overflowing.
-        title_style = ParagraphStyle(
-            "cover-title", fontName=f["heading"], fontSize=42,
-            textColor=ink, leading=46, alignment=TA_CENTER,
-        )
-        title_para = Paragraph(_html_escape(camp_name), title_style)
-        # Width = full inner width minus a comfortable gutter so long titles
-        # don't visually crash into the accent stripe.
-        title_max_w = pw - 2 * margin - 0.4 * inch
-        title_avail_h = logo_bottom - 2.2 * inch  # reserve space below for byline+legal
-        # Auto-shrink the font if the title still overflows.
-        for fontsize, leading in [(42, 46), (34, 38), (28, 32), (22, 26), (18, 22)]:
-            ts = ParagraphStyle("cover-title", fontName=f["heading"],
-                                 fontSize=fontsize, textColor=ink,
-                                 leading=leading, alignment=TA_CENTER)
-            tp = Paragraph(_html_escape(camp_name), ts)
-            tw, th = tp.wrap(title_max_w, title_avail_h)
-            if th <= title_avail_h:
-                title_para = tp
-                title_h = th
-                break
-        else:
-            title_h = title_avail_h
-        title_top_y = logo_bottom - 0.2 * inch
-        title_para.drawOn(canv, (pw - title_max_w) / 2,
-                           title_top_y - title_h)
-        title_bottom_y = title_top_y - title_h
-        # Subtitle
-        canv.setFont(f["italic"], 14)
-        canv.setFillColor(muted)
-        canv.drawCentredString(pw / 2, title_bottom_y - 0.35 * inch,
-                                profile["cover_subtitle"])
-        # Decorative diamond rule
-        canv.setStrokeColor(accent)
-        canv.setLineWidth(2)
-        deco_y = title_bottom_y - 0.75 * inch
-        canv.line(pw / 2 - 0.6 * inch, deco_y, pw / 2 + 0.6 * inch, deco_y)
-        canv.setFillColor(accent)
-        canv.circle(pw / 2, deco_y, 0.08 * inch, fill=1, stroke=0)
-        # GM byline
+
+        # Credits block (centred). Order matches BESM 4 layout, minus art rows.
+        credits_y = logo_bottom
+        canv.setFont(f["subheading"], 11)
+        canv.setFillColor(secondary)
+        canv.drawCentredString(pw / 2, credits_y, "WRITTEN BY:")
         canv.setFont(f["heading"], 14)
-        canv.setFillColor(primary)
-        canv.drawCentredString(pw / 2, deco_y - 0.45 * inch,
-                                f"by {gm_byline}")
-        canv.setFont(f["italic"], 10)
+        canv.setFillColor(ink)
+        canv.drawCentredString(pw / 2, credits_y - 0.22 * inch, gm_byline)
+
+        canv.setFont(f["subheading"], 10)
+        canv.setFillColor(secondary)
+        canv.drawCentredString(pw / 2, credits_y - 0.55 * inch, "ADDITIONAL WRITING BY:")
+        canv.setFont(f["body"], 10)
         canv.setFillColor(muted)
-        canv.drawCentredString(pw / 2, deco_y - 0.65 * inch,
-                                "Weaved in TableGnostic")
-        # Bottom legal block — sits inside the secondary-coloured bar.
+        canv.drawCentredString(pw / 2, credits_y - 0.72 * inch, "the players at the Evereantha table")
+
+        canv.setFont(f["subheading"], 10)
+        canv.setFillColor(secondary)
+        canv.drawCentredString(pw / 2, credits_y - 1.0 * inch, "SPECIAL THANKS TO:")
+        canv.setFont(f["body"], 10)
+        canv.setFillColor(muted)
+        canv.drawCentredString(pw / 2, credits_y - 1.17 * inch,
+                                "the wider TableGnostic community of Game Masters")
+
+        # Mark MacKinnon attribution
+        canv.setFont(f["subheading"], 9)
+        canv.setFillColor(secondary)
+        canv.drawCentredString(pw / 2, credits_y - 1.55 * inch,
+                                f"{system_name.upper()} CREATED AND WRITTEN BY:")
+        canv.setFont(f["heading"], 11)
+        canv.setFillColor(ink)
+        canv.drawCentredString(pw / 2, credits_y - 1.70 * inch, "Mark MacKinnon")
+
+        canv.setFont(f["subheading"], 9)
+        canv.setFillColor(secondary)
+        canv.drawCentredString(pw / 2, credits_y - 1.95 * inch,
+                                f"{system_name.upper()} PUBLISHED BY:")
+        canv.setFont(f["heading"], 11)
+        canv.setFillColor(ink)
+        canv.drawCentredString(pw / 2, credits_y - 2.10 * inch,
+                                "Dyskami Publishing Company with Japanime Games")
+
+        # Bottom rounded blue bar — Tri-Stat trademark line + URL.
+        bar_h = 1.35 * inch
+        canv.setFillColor(secondary)
+        canv.roundRect(margin / 2, 0.4 * inch, pw - margin, bar_h,
+                        radius=14, fill=1, stroke=0)
         canv.setFillColor(HexColor("#FFFFFF"))
-        canv.setFont(f["heading"], 8)
-        canv.drawCentredString(pw / 2, 1.18 * inch,
-                                f"© {current_year} {gm_byline} · All Aurea original content")
-        canv.setFont(f["body"], 7.5)
-        # Wrap the per-system legal block across 4-5 lines.
-        legal_lines = _wrap_lines(legal_block, 110)
-        ly = 0.95 * inch
-        for ln in legal_lines[:5]:
-            canv.drawCentredString(pw / 2, ly, ln)
-            ly -= 0.13 * inch
-        # Footer attribution at the very bottom
         canv.setFont(f["body"], 8)
-        canv.drawCentredString(pw / 2, 0.18 * inch,
-                                "Generated by TableGnostic · DriveThruRPG-ready")
+        ttext_lines = [
+            "Tri-Stat System and BESM are trademarks of Paradox Interactive Group, used under licence.",
+            "BESM Fourth Edition mechanics © Mark MacKinnon, published by Dyskami Publishing Company.",
+            f"This chronicle was weaved in TableGnostic by {gm_byline} · © {current_year} {gm_byline}.",
+            "All Aurea original content © Table-Gnostic contributors. All other rights reserved.",
+            "http://BESM4.life",
+        ]
+        ly = 0.4 * inch + bar_h - 0.25 * inch
+        for ln in ttext_lines:
+            canv.drawCentredString(pw / 2, ly, ln)
+            ly -= 0.18 * inch
+        # Tri-Stat Emporium logo bottom-right (Anime5E/Tri-Stat is the Emporium mark)
+        emporium_path = LOGO_DIR / "anime5e-tristat-emporium.png"
+        if emporium_path.exists():
+            try:
+                from PIL import Image as PILImage
+                with PILImage.open(emporium_path) as im:
+                    iw, ih = im.size
+                em_h = 0.8 * inch
+                em_w = (iw / ih) * em_h
+                canv.drawImage(str(emporium_path),
+                                pw - margin - em_w - 0.1 * inch,
+                                0.5 * inch,
+                                width=em_w, height=em_h,
+                                preserveAspectRatio=True, mask='auto')
+            except Exception:
+                pass
         canv.restoreState()
 
     def chrome(canv, doc, kind: str = "body"):
@@ -661,6 +701,173 @@ def _build_pdf(camp: Dict[str, Any], chapters_data: List[Dict[str, Any]],
                     Paragraph(title.upper(), callout_label),
                     Paragraph(_html_escape(j.get("content", "").strip()), callout_body),
                 ]))
+
+    # ── Knowledge Web Appendix ──
+    # Pull all SHARED nodes (gm_only excluded so we never publish GM secrets).
+    flow.append(NextPageTemplate("body"))
+    flow.append(PageBreak())
+    flow.append(Paragraph("Appendix · World Codex", h1))
+    flow.append(_thin_rule(rule))
+    flow.append(Paragraph(
+        "The Knowledge Web below collects every shared lore entry, location, "
+        "NPC, creature, and faction the table referenced during play. "
+        "GM-only entries are intentionally excluded so the chronicle is safe "
+        "to publish.", italic))
+    if extras and extras.get("nodes"):
+        # Sort nodes: locations first (by scale), then NPCs/creatures, then everything else.
+        scale_rank = {"country": 0, "kingdom": 0, "region": 1, "biome": 2,
+                       "mountain-range": 2, "forest": 2,
+                       "city": 3, "town": 4, "hamlet": 5, "landmark": 6,
+                       "building": 7}
+        type_rank = {"location": 0, "npc": 1, "creature": 2, "faction": 3,
+                     "lore": 4, "event": 5, "object": 6, "quest": 7}
+        def _node_key(n):
+            t = n.get("type", "lore")
+            tr = type_rank.get(t, 9)
+            sc = (n.get("fields") or {}).get("scale")
+            sr = scale_rank.get(sc, 9) if t == "location" else 0
+            return (tr, sr, n.get("title", "").lower())
+        for n in sorted(extras["nodes"], key=_node_key):
+            tags_str = " · ".join((n.get("tags") or [])[:5]) if n.get("tags") else ""
+            type_label = (n.get("type") or "lore").upper()
+            scale_str = ""
+            if n.get("type") == "location":
+                sc = (n.get("fields") or {}).get("scale")
+                if sc:
+                    scale_str = f"  [scale: {sc}]"
+            flow.append(Paragraph(
+                f"{type_label}{scale_str}", chapter_label))
+            flow.append(Paragraph(_html_escape(n.get("title", "Untitled")),
+                                    session_title))
+            if tags_str:
+                flow.append(Paragraph(_html_escape(tags_str), italic))
+            content = (n.get("content") or "").strip()
+            if content:
+                for para in [pp.strip() for pp in content.split("\n\n") if pp.strip()]:
+                    flow.append(Paragraph(_html_escape(para), body_first))
+            # Structured fields table.
+            fields = n.get("fields") or {}
+            interesting = [(k, v) for k, v in fields.items()
+                           if k not in ("character_id", "linked_character_name",
+                                          "is_pinned", "is_gm_journal",
+                                          "is_player_character", "entries")
+                           and v not in (None, "", [], {})]
+            for k, v in interesting:
+                if isinstance(v, (list, tuple)):
+                    val = "; ".join(str(x) for x in v)
+                else:
+                    val = str(v)
+                flow.append(Paragraph(
+                    f"<b>{_html_escape(k.replace('_',' ').title())}:</b> "
+                    f"{_html_escape(val[:600])}",
+                    callout_body))
+            flow.append(Spacer(1, 0.15 * inch))
+    else:
+        flow.append(Paragraph("(No shared codex entries.)", italic))
+
+    # ── Character Sheet Appendices ──
+    # Each published PC gets a one-page sheet so the chronicle is play-ready.
+    if extras and extras.get("characters"):
+        for ci, ch in enumerate(extras["characters"]):
+            flow.append(PageBreak())
+            flow.append(Paragraph(f"APPENDIX&nbsp;&nbsp;{chr(ord('A')+ci)}", chapter_label))
+            flow.append(Paragraph(_html_escape(f"{ch.get('name','?')} — Character Sheet"),
+                                    chapter_title))
+            concept = ch.get("concept", "")
+            if concept:
+                flow.append(Paragraph(_html_escape(concept), chapter_subtitle))
+            flow.append(_thin_rule(rule))
+            # Stats line
+            stats = ch.get("stats", {})
+            derived = ch.get("derived", {})
+            flow.append(Paragraph(
+                f"<b>Body</b> {stats.get('body','-')} &nbsp;·&nbsp; "
+                f"<b>Mind</b> {stats.get('mind','-')} &nbsp;·&nbsp; "
+                f"<b>Soul</b> {stats.get('soul','-')} &nbsp;·&nbsp; "
+                f"<b>ACV</b> {derived.get('acv','-')} &nbsp; "
+                f"<b>DCV</b> {derived.get('dcv','-')} &nbsp; "
+                f"<b>HP</b> {derived.get('hp','-')} &nbsp; "
+                f"<b>EP</b> {derived.get('ep','-')}",
+                body_first))
+            flow.append(Paragraph(
+                f"<b>Power Level:</b> {ch.get('power_level','-')} · "
+                f"<b>Total Points:</b> {ch.get('total_points',0)} · "
+                f"<b>Spent:</b> {ch.get('spent',{}).get('total_spent',0)} · "
+                f"<b>XP:</b> {ch.get('xp_total',0)} earned / "
+                f"{ch.get('xp_unspent',0)} unspent",
+                body_first))
+            # Attributes
+            attrs = ch.get("attributes") or []
+            if attrs:
+                flow.append(Spacer(1, 0.1 * inch))
+                flow.append(Paragraph("Attributes", session_title))
+                for a in attrs:
+                    enh = a.get("enhancements") or []
+                    lim = a.get("limiters") or []
+                    eff = max(1, int(a.get("level",1)) + len(lim) - len(enh))
+                    line = (f"<b>{_html_escape(a.get('name','?'))}</b> "
+                            f"×{a.get('level',1)} "
+                            f"<font color='{p['muted']}'>(eff. ×{eff} · "
+                            f"{a.get('cost_per_level',0)} pt/lvl)</font>")
+                    if enh:
+                        line += f" &nbsp; <i>+ {_html_escape('; '.join(enh))}</i>"
+                    if lim:
+                        line += f" &nbsp; <i>− {_html_escape('; '.join(lim))}</i>"
+                    if a.get("page"):
+                        line += f" &nbsp; <font color='{p['muted']}' size='8'>p.{a['page']}</font>"
+                    flow.append(Paragraph(line, body_first))
+            # Skills
+            skills = ch.get("skills") or []
+            if skills:
+                flow.append(Spacer(1, 0.1 * inch))
+                flow.append(Paragraph("Skills", session_title))
+                for s in skills:
+                    flow.append(Paragraph(
+                        f"<b>{_html_escape(s.get('group','?'))}</b> "
+                        f"×{s.get('level',1)} "
+                        f"<font color='{p['muted']}'>({s.get('cost_per_level',0)} pt/lvl)</font>",
+                        body_first))
+                    for c in s.get("components", []) or []:
+                        flow.append(Paragraph(
+                            f"&nbsp;&nbsp;&nbsp;· {_html_escape(c.get('name','?'))} "
+                            f"×{c.get('level','-')}",
+                            body_first))
+            # Defects
+            defects = ch.get("defects") or []
+            if defects:
+                flow.append(Spacer(1, 0.1 * inch))
+                flow.append(Paragraph("Defects", session_title))
+                for d in defects:
+                    flow.append(Paragraph(
+                        f"<b>{_html_escape(d.get('name','?'))}</b> "
+                        f"rank&nbsp;{d.get('rank',1)} "
+                        f"<font color='{p['muted']}'>(refund "
+                        f"{d.get('points_per_rank',1)}×{d.get('rank',1)} = "
+                        f"{int(d.get('points_per_rank',1))*int(d.get('rank',1))} pts)</font>",
+                        body_first))
+
+    # ── Custom Reference Appendix (GM-editable weapons/armor/items/companions) ──
+    if extras and extras.get("reference"):
+        flow.append(PageBreak())
+        flow.append(Paragraph("Appendix · Campaign Reference", chapter_title))
+        flow.append(_thin_rule(rule))
+        kinds = {"weapon": "Weapons", "armor": "Armor", "item": "Items",
+                  "companion": "Companions", "custom": "Custom Rules"}
+        for kind, label in kinds.items():
+            kind_rows = [r for r in extras["reference"] if r.get("kind") == kind
+                         and not (r.get("fields") or {}).get("gm_only")]
+            if not kind_rows:
+                continue
+            flow.append(Paragraph(label, session_title))
+            for r in kind_rows:
+                page = f"  <font size='8' color='{p['muted']}'>p.{r['page']}</font>" if r.get("page") else ""
+                cost = f"  ({r['cost']})" if r.get("cost") else ""
+                flow.append(Paragraph(
+                    f"<b>{_html_escape(r.get('name','?'))}</b>{cost}{page}",
+                    body_first))
+                if r.get("summary"):
+                    flow.append(Paragraph(_html_escape(r["summary"]), body))
+            flow.append(Spacer(1, 0.1 * inch))
 
     # ── Legal footer page
     flow.append(NextPageTemplate("body"))
@@ -832,7 +1039,19 @@ async def export_pdf(cid: str, user: dict = Depends(get_current_user)):
     # name) so the cover + page footer can credit a real human.
     gm_user = await db.users.find_one({"id": camp.get("gm_id")},
                                        {"_id": 0, "byline_name": 1, "name": 1, "email": 1})
-    pdf_bytes = _build_pdf(camp, chapters_data, profile, gm_user)
+    # Hydrate extras: shared codex nodes, published characters, GM-editable
+    # campaign reference. All are filtered to be safe-to-publish.
+    nodes = await db.nodes.find(
+        {"campaign_id": cid, "visibility": "shared"}, {"_id": 0}
+    ).sort("title", 1).to_list(500)
+    chars = await db.characters.find(
+        {"campaign_id": cid, "published": True}, {"_id": 0}
+    ).sort("name", 1).to_list(50)
+    refs = await db.campaign_reference.find(
+        {"campaign_id": cid}, {"_id": 0}
+    ).sort("kind", 1).to_list(500)
+    extras = {"nodes": nodes, "characters": chars, "reference": refs}
+    pdf_bytes = _build_pdf(camp, chapters_data, profile, gm_user, extras)
     # Header values must be latin-1 safe; strip non-ASCII from filename.
     raw_name = (camp.get("name") or "campaign").replace(" ", "_")
     safe = "".join(ch if ord(ch) < 128 and ch not in '"\\' else "_" for ch in raw_name)

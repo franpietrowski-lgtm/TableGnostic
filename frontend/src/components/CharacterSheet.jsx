@@ -3,6 +3,7 @@ import { Link, useParams, useNavigate } from "react-router-dom";
 import { api, formatApiErrorDetail } from "../lib/api";
 import { Dice6, Edit3, BookOpen, Trash2 } from "lucide-react";
 import BesmTerm from "./ui/BesmTerm";
+import XPApprovalQueue, { XPSpendForm } from "./XPApprovalQueue";
 
 export default function CharacterSheet() {
   const { id } = useParams();
@@ -120,6 +121,10 @@ export default function CharacterSheet() {
               </span>
             ) : null}
           </div>
+          <div className="mt-3">
+            <XPSpendForm characterId={ch.id} character={ch} onProposed={load}/>
+          </div>
+          <XPApprovalQueue campaignId={ch.campaign_id} characterId={ch.id} isGm={false} onUpdate={load}/>
         </div>
         <div className="flex gap-2">
           <Link to={`/app/characters/${ch.id}/edit`} className="btn" data-testid="edit-character-btn">

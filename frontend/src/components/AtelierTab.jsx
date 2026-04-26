@@ -2,6 +2,8 @@ import React, { useEffect, useState } from "react";
 import { api, formatApiErrorDetail } from "../lib/api";
 import { Plus, X, AlertTriangle, CheckCircle2, Save, Layers, ListTree, ScrollText, FileDown } from "lucide-react";
 import IngestPanel from "./IngestPanel";
+import XPApprovalQueue from "./XPApprovalQueue";
+import ReferenceEditor, { InstructionsPanel } from "./ReferenceEditor";
 
 /**
  * AtelierTab — V4.4 dynamic-scaling tiers.
@@ -139,6 +141,15 @@ export default function AtelierTab({ campId, camp }) {
 
       {/* ---------- Knowledge Web ingestion ---------- */}
       <IngestPanel campId={campId}/>
+
+      {/* ---------- XP Approval Queue (GM-side) ---------- */}
+      <XPApprovalQueue campaignId={campId} isGm/>
+
+      {/* ---------- Campaign Reference Tables (GM-editable) ---------- */}
+      <ReferenceEditor campaignId={campId} isGm systemId={camp?.system_id}/>
+
+      {/* ---------- GM Instructions ---------- */}
+      <InstructionsPanel isGm={true}/>
 
       {/* ---------- Session 0 ---------- */}
       <SessionZeroPanel sz={state.session_zero || {}} setSZ={setSZ}/>
