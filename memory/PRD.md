@@ -336,18 +336,20 @@ Per-system audit covering all 13 systems in the selector. Status table:
 
 ## 5. Next Tasks
 
-> Items 5, 7, and 8 below were completed in **V4.4 (2026-04-26)** — see §V4.4 changelog.
+> Items 5, 7, 8, **and 1, 2(partial), 4** below were completed in **V4.4 (2026-04-26)** — see §V4.4 changelog.
 
-1. **DriveThruRPG export pipeline** — reportlab-driven branded PDF (cover + chapter-per-session + per-system legal footer from `LEGAL_COMPLIANCE.md`). Each finalised `session_record` becomes one chapter in tone-order. Logo assets ready: BESM, Anime 5E + Tri-Stat Emporium (300dpi PNG at `/app/frontend/public/system-logos/`).
-2. **Anime 5E full content** — extract attribute/skill/defect/template content from the uploaded Anime 5E SRD (`Anime_5E_SRD_v1.01.rtf`) + Layout Templates PDF + Table Reference RTF into `besm_data.py`. Tag entries `cross_systems: ["dnd-5e"]` so they're selectable from the D&D 5E selector too. Logo asset received.
-3. **Cypher full content** — extract from the 5 Cypher / Numenera / Godforsaken PDFs into the Cypher selector. Compliance-checked per `LEGAL_COMPLIANCE.md` §5.
-4. **Knowledge Web mechanic-aware ingestion** — GM uploads PDF/MD/TXT → Claude Sonnet diff-review → suggested **Attributes / Power Packs / Power Bundles / Items / Weapons / Skills / NPCs / Locations** AND atelier-phase-specific suggestions (e.g. "this maps to Phase 4 Master Plot Act III — would you like to bind?"). Reuses the same `emergentintegrations` integration the chronicle weaver already uses.
+1. ~~**DriveThruRPG export pipeline**~~ — **DONE (V4.4 Phase E)**. System-native styling for BESM 4E + Anime 5E shipped; chapters group S0+S1+S2 / pairs.
+2. **Anime 5E full content** — extract attribute/skill/defect/template content from the uploaded Anime 5E SRD into `besm_data.py`. Tag entries `cross_systems: ["dnd-5e"]` for D&D-5E setting overlay. (Logo + style profile already in.)
+3. **Cypher full content** — extract from the 5 Cypher / Numenera / Godforsaken PDFs into the Cypher selector. Compliance-checked per `LEGAL_COMPLIANCE.md` §5. Build a new `STYLE_PROFILES["cypher"]` entry when extracted.
+4. ~~**Knowledge Web mechanic-aware ingestion**~~ — **DONE (V4.4 Phase C)**. 10-category Claude diff-review with atelier-phase tagging.
 5. ~~**CharacterBuilder** in-builder live cost-preview update to V4.1 rule~~ — **DONE (V4.4)**.
 6. **Primer change-request alerts** + GM live-edit mid-campaign.
 7. ~~**8-session Evereantha demo** — pre-seeded chronicle that ships out of the box.~~ — **DONE (V4.4)**.
 8. ~~**Atelier dynamic scaling** — Session 0/1 vs Arc vs Master Plot tiers with continuity checks for the GM.~~ — **DONE (V4.4 Phase B)**.
 9. **System-native macro library expansion** — wire BESM/Cypher/Anime 5E core macros (skill-component picker, action-preset menu, GM-roll templates) so each system's table feels native, not generic.
 10. **XP scorecard polish** — show per-PC bonus_breakdown popover (which quantum contributed how much), and a campaign-level XP ledger for GMs to see all conversions over time.
+11. **Style-profile theming for D&D 5E + Cypher + Numenera** PDF exports.
+12. **Ingestion preview** — show the GM the parsed text excerpt before committing the Claude call (so the GM can verify the parse caught the right pages).
 
 ## V4.4 — Bug-fix Sweep + Map Upload + Demo Chronicle (2026-04-26)
 
@@ -370,7 +372,39 @@ Per-system audit covering all 13 systems in the selector. Status table:
 ### Legal compliance reaffirmed
 - Per `LEGAL_COMPLIANCE.md` (Tri-Stat Emporium licence): page references and mechanic names only — never reproduce rulebook prose, stat-block descriptions, lore, or examples. The new Evereantha Chronicle dialogue uses **only user-provided "Artisan's Tale" original setting material** with mechanic-only references back to BESM 4E (page numbers + attribute names). The `besm_data.py` Cypher/Anime 5E entries continue to cite mechanics + page numbers without reproducing flavour text.
 
-## V4.4 Phase A+B — Card Clarity + XP System + Atelier Tiers (2026-04-26)
+## V4.4 Phase C+E — Knowledge Web Ingestion + DriveThruRPG PDF Export (2026-04-26)
+
+### Phase C — Knowledge Web mechanic-aware ingestion
+- New `routes/ingest.py`: `POST /api/campaigns/{cid}/ingest` (multipart, GM/admin only, 24 MB cap, **PDF · MD · TXT · RTF · DOCX**), `GET /api/campaigns/{cid}/ingestions`, `GET /api/ingestions/{id}`, `POST /api/ingestions/{id}/accept` (with idempotency guard — re-clicking never duplicates), `DELETE /api/ingestions/{id}`.
+- File parsers: `pypdf` (PDF) · `python-docx` (DOCX) · `striprtf` (RTF) · UTF-8 (MD/TXT). LLM input capped at 60 k chars (head 60% + tail 40%) to control spend on the shared Emergent LLM key.
+- Claude Sonnet 4.5 (via `emergentintegrations`) returns STRICT JSON across **10 categories**: `attribute · power_pack · power_bundle · item · weapon · skill · npc · location · lore · quest`. Each suggestion carries `kind`, `title`, mechanic-only `summary` (≤240 chars, **never reproduces rulebook prose** per Tri-Stat Emporium licence), structured `fields`, `atelier_phase` (1-7 mapped to Genesis phases), optional `target_arc`, and a `source_ref` audit anchor.
+- Acceptance routes suggestions to two persistence paths:
+  - Lore / NPC / Location / Quest → `db.nodes` (gm_only by default; tags include `ingest` + `atelier-phase-{N}`).
+  - Attribute / Power Pack / Power Bundle / Item / Weapon / Skill → `db.custom_attributes` (so they appear in Character Builder selector).
+- New `IngestPanel.jsx` embedded in the GM-only Atelier tab: history list, upload picker, categorized review tabs (`ingest-tab-{kind}`), per-suggestion checkbox, **"Mark visible"** + **"Accept all marked"** master controls (per user choice 'c' — categorized tabs *with* a master batch button).
+- Storage: new `ingestions` collection added to `_GAME_COLLECTIONS` so admin reset clears it cleanly.
+
+### Phase E — DriveThruRPG-ready system-branded PDF export
+- New `routes/pdf_export.py`: `GET /api/campaigns/{cid}/export.pdf` returns a real `application/pdf` stream (latin-1-safe Content-Disposition strips non-ASCII from filename to prevent header errors on em-dash titles).
+- **System-native style profiles** (full visual identity, not just accent colours):
+  - **BESM 4E** — palette: white #FFFFFF · purple #3B1E63 · red #C81D1D · yellow #E8B339 · black #0B0710. Fonts: Helvetica-Bold heading / Helvetica-Oblique subheading / Helvetica body. Cover subtitle "Big Eyes, Small Mouth · Fourth Edition".
+  - **Anime 5E** — palette: pink #E03A8E · blue #1E66C9 · white · red #C81D1D · black. Fonts: Helvetica-Bold headings / Times-Roman body / Times-Italic. Cover subtitle "Anime · 5E · A Tri-Stat Emporium System".
+  - **Default** fallback profile so every system gets *some* PDF, even before authoring its own theme.
+- **Chapter grouping (per user)**: Chapter 1 = **Session 0 + Session 1 + Session 2** (S0 as Prologue), every chapter from Ch2 onwards groups two sessions (Ch2 = S3+S4, Ch3 = S5+S6, Ch4 = S7+S8). Falls back gracefully if no S0 exists.
+- Each session's narrative prefers the GM-finalised `session_record` chronicle (Phase 4.3 Chronicle Weave), falls back to the latest recap, then to a chat-log digest. Player journals append as visually distinct callout boxes with system-coloured borders.
+- **Cover** has a top accent bar (primary), bottom accent bar (secondary), vertical accent stripe (accent), centred logo (`/app/frontend/public/system-logos/<system>.png`), camp title, system subtitle, decorative rule, and "Generated by TableGnostic · DriveThruRPG-ready" footer attribution.
+- **Header chrome** on every body page: top + bottom rules in system primary colour, camp name top-left, system name top-right, page number bottom-right.
+- **Legal page** at the end pulls per-system footer text from `LEGAL_COMPLIANCE.md` and references DriveThruRPG as the distribution channel.
+- New `ExportPdfBtn` in the Atelier toolbar (`atelier-export-pdf-btn`) — fetches with bearer token, downloads as blob.
+
+### Testing
+- `/app/test_reports/iteration_17.json` — 13/13 new pytest pass (ingestion endpoints, multipart upload, file-type validation, accept persistence, delete, PDF magic + size + chapter ToC + latin-1 header + non-GM 403 + zero-sessions 400 + ingestions wipe). Cumulative regression: 137 PASS / 0 FAIL. Frontend self-verified — Atelier tab renders Ingest panel + Export PDF button; PDF download triggers HTTP 200 via Playwright network interception. Browser screenshot confirmed `sample_lore.md` ingestion with 11 suggestions across 6 categories (npc, location, attribute, item, lore, power_pack).
+
+### Legal compliance reaffirmed (Phase C-specific)
+- The Claude prompt explicitly forbids reproduction of rulebook prose, lore paragraphs, examples, or stat-block descriptions — only mechanic names, page references, and numerics. Suggestion `summary` capped at 240 chars to prevent accidental quotation.
+- Raw uploaded text is parsed in-memory and **never** persisted; only Claude's structured JSON output lands in the `ingestions` collection.
+
+
 
 ### Phase A.1 — Character-sheet card display clarity
 - Attribute rows now show `Name ×N assigned · cost N×M = K pts · X applications · Y enhancements ↓eff · Z limiters ↑eff` plus a top-of-card legend explaining BESM 4E V4.1 semantics. Each toggled enhancement / limiter row is exactly one application; multi-application requires re-listing.

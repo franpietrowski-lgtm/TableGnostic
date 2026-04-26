@@ -320,6 +320,10 @@ async def accept_suggestions(ingest_id: str, body: AcceptIn,
     for idx in body.accepted_indices:
         if idx < 0 or idx >= len(sugs):
             continue
+        # Idempotency: skip already-accepted indices so re-clicking the
+        # accept button never creates duplicate nodes / custom_attributes.
+        if sugs[idx].get("accepted"):
+            continue
         s = dict(sugs[idx])
         # Apply GM overrides if present.
         ov = body.overrides.get(idx) or body.overrides.get(str(idx)) or {}
