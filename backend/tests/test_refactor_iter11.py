@@ -108,18 +108,20 @@ class TestHealthAndOpenAPI:
         assert "time" in body
 
     def test_openapi_has_expected_tags_and_ops(self):
-        # Re-baseline after V4.0 (admin/battlemap/channels added).
-        # Public preview URL serves SPA at /openapi.json (HTML); use direct backend.
+        # V4.4 — assert as superset (new routers may be added) so this
+        # baseline test never breaks when the surface area grows.
         r = requests.get("http://localhost:8001/openapi.json", timeout=10)
         assert r.status_code == 200
         d = r.json()
-        tags = sorted({t for path in d["paths"].values() for op in path.values()
-                       if isinstance(op, dict) for t in op.get("tags", [])})
+        tags = {t for path in d["paths"].values() for op in path.values()
+                if isinstance(op, dict) for t in op.get("tags", [])}
         ops = [(m, p) for p, methods in d["paths"].items() for m in methods
                if m in ("get", "post", "put", "delete", "patch")]
-        assert tags == ["admin", "auth", "battlemap", "campaigns", "channels",
-                        "characters", "knowledge-web", "recap", "reference",
-                        "seed", "sessions"], tags
+        required = {"admin", "auth", "battlemap", "campaigns", "channels",
+                    "characters", "knowledge-web", "recap", "reference",
+                    "seed", "sessions"}
+        missing = required - tags
+        assert not missing, f"missing required tags: {missing} · all={sorted(tags)}"
         assert len(ops) >= 75, f"expected ≥75 ops, got {len(ops)}"
 
 

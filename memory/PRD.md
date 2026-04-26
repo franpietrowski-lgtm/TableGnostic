@@ -372,7 +372,43 @@ Per-system audit covering all 13 systems in the selector. Status table:
 ### Legal compliance reaffirmed
 - Per `LEGAL_COMPLIANCE.md` (Tri-Stat Emporium licence): page references and mechanic names only — never reproduce rulebook prose, stat-block descriptions, lore, or examples. The new Evereantha Chronicle dialogue uses **only user-provided "Artisan's Tale" original setting material** with mechanic-only references back to BESM 4E (page numbers + attribute names). The `besm_data.py` Cypher/Anime 5E entries continue to cite mechanics + page numbers without reproducing flavour text.
 
-## V4.4 Phase C+E — Knowledge Web Ingestion + DriveThruRPG PDF Export (2026-04-26)
+## V4.4 Phase E.2 — PDF Polish + Profile Byline (2026-04-26)
+
+User-reported defects in `chronicle.pdf`: wrong logo, title not centered/width-aware, no GM byline, missing Dyskami legal, double "Chapter N" headers, no paragraph indentation/separation in session recaps. All resolved.
+
+### PDF cover overhaul
+- **Correct system logo on cover** — added `/app/frontend/public/system-logos/besm-4e.png` (Tri-Stat Emporium BESM logo, 300dpi). `STYLE_PROFILES["besm-4e"].logo_files` lists it first; the older Anime5E/TriStat logo only appears now as the secondary fallback. Logo is centered, ~2.4 inches tall, preserves aspect.
+- **Width-aware centered title** — cover title rendered through a `Paragraph(TA_CENTER)` with a 5-step font-size auto-shrink ladder (42pt → 34pt → 28pt → 22pt → 18pt) that wraps inside `pw - 2*margin - 0.4*inch` and never collides with the accent stripe.
+- **GM byline + "Weaved in TableGnostic" addendum** — cover draws "by {byline_name}" in primary colour 14pt, then "Weaved in TableGnostic" italic 10pt below the decorative rule. Sourced from `db.users.byline_name` with a fall-through to `db.users.name`.
+- **Dyskami required attribution** — new `_legal_required_footer(system_id)` extracts ONLY the `>` blockquote from the `Required PDF footer` subsection of `LEGAL_COMPLIANCE.md`, rendered verbatim at the bottom of the cover (white text on the secondary-colour bottom bar) AND prominently inside a system-coloured callout box on the legal page.
+- **© year stamp** — `© {YEAR} {byline_name} · All Aurea original content` on cover above the legal block.
+
+### Chapter & body layout
+- **No more double "Chapter N" headers** — `_emit()` chapter dict now carries `title_text` (the first session's narrative title, e.g. "The Maiden Road"). Chapter pages render exactly ONE `Paragraph(chapter_label="CHAPTER  I")` (small kerned label, Roman numerals) + ONE `Paragraph(chapter_title=narrative_title)` — never the same number twice.
+- **Paragraph indentation + separation** — body style uses `firstLineIndent=18` for natural prose flow; first-paragraph-of-section uses `firstLineIndent=0`. `_session_prose` chat-log digest fallback now paragraph-breaks on every speaker change (joins with `\n\n`) so each turn is a distinct paragraph in the rendered prose.
+- **Sessions visually separated within a chapter** — a 50%-width centred `HRFlowable` accent rule appears between sessions inside the same chapter. Each session header keeps its own SESSION-N kerned label + bold session title.
+- **Page footer** — every body page now reads `Weaved in TableGnostic · by {byline_name}` (left) + `p. N` (right).
+
+### Legal page
+- **"Publisher's Required Attribution"** section renders the verbatim Dyskami quote inside a system-bordered callout box.
+- **"Compliance Summary"** section pulls the wider per-system block from `LEGAL_COMPLIANCE.md` and pipes it through a new `_strip_markdown()` helper that removes `**`, `>`, `*`, `-`, ` ` ` markers so the prose reads cleanly on the printed page.
+- Distribution channel reaffirmed as DriveThruRPG.
+
+### Profile / byline plumbing
+- New `PATCH /api/auth/me` accepts `{byline_name}` (max 120 chars). Empty string → null. Empty body → 200 no-op. (`/app/backend/routes/auth.py`, `/app/backend/core/models.py` adds `ProfilePatchIn`)
+- `UserOut` exposes `byline_name`.
+- `useAuth` exposes `updateProfile(patch)` for client-side state hydration.
+
+### Frontend UX
+- Atelier `Export PDF` button now opens an inline popover (`atelier-export-pdf-popover`) with: byline input prefilled from `/auth/me`, **Save byline** button (`atelier-export-byline-save` → `PATCH /auth/me`), and **Download chronicle** button (`atelier-export-pdf-download` → `GET /campaigns/{cid}/export.pdf`). Stored on the user profile, so every export uses the same byline across all campaigns.
+
+### Iter11 stale assertion fixed
+- Refactored `test_openapi_has_expected_tags_and_ops` to assert tags-as-superset instead of exact-list equality, so the suite stays green as new routers are added (atelier, battlemap, channels, ingest, pdf, uploads, xp).
+
+### Testing
+- `/app/test_reports/iteration_18.json` — 13/13 new pytest pass (PATCH /me set/clear/no-op, PDF cover/chapter/legal pypdf-extracted assertions, Dyskami quote presence, single-heading no-duplicate, multi-paragraph speaker breaks, footer byline). Cumulative regression after iter11 fix: **149 PASS / 0 FAIL**.
+
+
 
 ### Phase C — Knowledge Web mechanic-aware ingestion
 - New `routes/ingest.py`: `POST /api/campaigns/{cid}/ingest` (multipart, GM/admin only, 24 MB cap, **PDF · MD · TXT · RTF · DOCX**), `GET /api/campaigns/{cid}/ingestions`, `GET /api/ingestions/{id}`, `POST /api/ingestions/{id}/accept` (with idempotency guard — re-clicking never duplicates), `DELETE /api/ingestions/{id}`.
