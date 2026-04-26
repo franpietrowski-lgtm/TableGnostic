@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import io
 import os
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -42,6 +43,50 @@ LOGO_DIR = Path("/app/frontend/public/system-logos")
 LEGAL_PATH = Path("/app/memory/LEGAL_COMPLIANCE.md")
 
 
+def _legal_required_footer(system_id: str) -> str:
+    """Extract ONLY the ``Required PDF footer`` blockquote from the
+    per-system entry in LEGAL_COMPLIANCE.md. This is the official text
+    the publisher requires us to print verbatim on saleable PDFs (e.g.
+    Dyskami's Tri-Stat Emporium attribution for BESM 4E)."""
+    try:
+        text = LEGAL_PATH.read_text(encoding="utf-8")
+    except Exception:
+        return ""
+    needle = system_id.lower().replace("-", "").replace(" ", "")
+    needle_loose = system_id.lower().replace("-", " ")
+    lines = text.split("\n")
+    in_section = False
+    in_quote = False
+    quote_lines: List[str] = []
+    saw_required_marker = False
+    for ln in lines:
+        if ln.startswith("###"):
+            stripped = ln.lower().replace("-", " ")
+            is_system_block = (needle in stripped.replace(" ", "")
+                               or needle_loose in stripped)
+            if is_system_block and any(c.isdigit() for c in ln[:8]):
+                in_section = True
+                in_quote = False
+                continue
+            elif in_section and any(c.isdigit() for c in ln[:8]):
+                # Hit the next system block — stop.
+                break
+        if not in_section:
+            continue
+        if "required pdf footer" in ln.lower():
+            saw_required_marker = True
+            continue
+        if saw_required_marker and ln.startswith(">"):
+            in_quote = True
+            quote_lines.append(ln.lstrip("> ").rstrip())
+            continue
+        if in_quote and not ln.startswith(">"):
+            if quote_lines and ln.strip() == "":
+                continue  # tolerate blank lines inside the quote
+            break
+    return " ".join(q for q in quote_lines if q).strip()
+
+
 def _legal_excerpt(system_id: str) -> str:
     """Pull the per-system legal-footer paragraph from LEGAL_COMPLIANCE.md.
     Falls back to a generic DriveThruRPG attribution if the file is
@@ -56,24 +101,35 @@ def _legal_excerpt(system_id: str) -> str:
         text = LEGAL_PATH.read_text(encoding="utf-8")
     except Exception:
         return default
-    # Look for ## or ### header containing the system id.
-    needle = system_id.lower()
+    # Look for a header containing the system id. The system_id arrives
+    # with a hyphen (e.g. "besm-4e") but the markdown headers are
+    # human-readable ("BESM 4E"); compare both shapes plus a stripped
+    # alpha-numeric form so the match is robust.
+    needle = system_id.lower().replace("-", "").replace(" ", "")  # "besm4e"
+    needle_loose = system_id.lower().replace("-", " ")  # "besm 4e"
     lines = text.split("\n")
     capture: List[str] = []
     capturing = False
     for ln in lines:
-        if ln.startswith(("#", "##", "###")):
+        if ln.startswith("#"):
             if capturing:
-                break
-            if needle in ln.lower():
+                # Stop only when we hit another top-level system header
+                # (### at the same depth). Within-section ### subheaders
+                # like "Required PDF footer" should still be captured.
+                if ln.startswith("### ") and any(c.isdigit() for c in ln[:8]):
+                    break
+                # Otherwise keep going — we want the full system block.
+                capture.append(ln)
+                continue
+            stripped = ln.lower().replace("-", " ")
+            if needle in stripped.replace(" ", "") or needle_loose in stripped:
                 capturing = True
                 continue
         if capturing:
             capture.append(ln)
     out = "\n".join(capture).strip() or default
-    # Cap length — a legal note shouldn't overflow the footer.
-    if len(out) > 1200:
-        out = out[:1180].rsplit(" ", 1)[0] + "…"
+    if len(out) > 2400:
+        out = out[:2380].rsplit(" ", 1)[0] + "…"
     return out
 
 
@@ -179,6 +235,15 @@ def _group_sessions_into_chapters(sessions: List[Dict[str, Any]]) -> List[Dict[s
 
     Sessions are sorted by `created_at` then a "Session N" hint in the
     title so we honour the seed order when timestamps are clustered.
+
+    Each returned chapter carries:
+      number — int (1-based).
+      title  — short descriptor like "Chapter I" (used in TOC).
+      title_text — the chapter's narrative title (e.g. taken from the
+                   first session's title-after-em-dash). Used as the
+                   single big H1 on the chapter page so we never render
+                   "Chapter 1" twice.
+      sessions — list of full session dicts.
     """
     def _session_index(s: Dict[str, Any]) -> int:
         t = (s.get("title") or "").lower()
@@ -188,41 +253,55 @@ def _group_sessions_into_chapters(sessions: List[Dict[str, Any]]) -> List[Dict[s
         # Fallback: order of insertion.
         return 99 + sessions.index(s)
 
+    def _short_title(s: Dict[str, Any]) -> str:
+        """The phrase after the em-dash, e.g. 'The Maiden Road'."""
+        t = (s.get("title") or "Session")
+        if "—" in t:
+            return t.split("—", 1)[1].strip()
+        if "-" in t:
+            return t.split("-", 1)[1].strip()
+        return t
+
     ordered = sorted(sessions, key=lambda s: (_session_index(s), s.get("created_at", "")))
     chapters: List[Dict[str, Any]] = []
     if not ordered:
         return chapters
 
     has_s0 = any(_session_index(s) == 0 for s in ordered)
+
+    def _emit(sess_chunk: List[Dict[str, Any]]):
+        chapters.append({
+            "number": len(chapters) + 1,
+            "title": f"Chapter {_roman(len(chapters) + 1)}",
+            # Narrative chapter title = first session's short title.
+            "title_text": _short_title(sess_chunk[0]) if sess_chunk else "",
+            "sessions": sess_chunk,
+        })
+
     if has_s0:
         # Ch1 = S0 + S1 + S2. Then pairs.
         first = [s for s in ordered if _session_index(s) <= 2]
         rest = [s for s in ordered if _session_index(s) > 2]
         if first:
-            chapters.append({"number": 1, "title": "Chapter 1", "sessions": first})
+            _emit(first)
         for i in range(0, len(rest), 2):
-            chunk = rest[i:i+2]
-            chapters.append({
-                "number": len(chapters) + 1,
-                "title": f"Chapter {len(chapters) + 1}",
-                "sessions": chunk,
-            })
+            _emit(rest[i:i+2])
     else:
         # No Session 0 → Ch1 = S1+S2, Ch2 = S3+S4, etc.
         for i in range(0, len(ordered), 2):
-            chunk = ordered[i:i+2]
-            chapters.append({
-                "number": len(chapters) + 1,
-                "title": f"Chapter {len(chapters) + 1}",
-                "sessions": chunk,
-            })
+            _emit(ordered[i:i+2])
     return chapters
 
 
 async def _session_prose(s: Dict[str, Any], camp_id: str) -> Tuple[str, List[Dict[str, Any]]]:
     """Return (narrative_text, journal_quotes). The narrative prefers a
     finalised chronicle node; falls back to the latest recap; falls back
-    to a chat-log digest if nothing else exists."""
+    to a chat-log digest if nothing else exists.
+
+    For the digest fallback we paragraph-break on every speaker change
+    so the Paragraph flowable renders distinct paragraphs (with first-
+    line indent) instead of a single wall of text.
+    """
     sid = s["id"]
     # 1. Look for a finalised session_record node.
     node = await db.nodes.find_one(
@@ -239,17 +318,45 @@ async def _session_prose(s: Dict[str, Any], camp_id: str) -> Tuple[str, List[Dic
         if recap and recap.get("text"):
             narrative = recap["text"]
         else:
-            # 3. Chat-log digest (truncated).
+            # 3. Chat-log digest. Group by speaker so each speaker turn
+            #    becomes its own paragraph.
             chats = await db.chat_logs.find({"session_id": sid}, {"_id": 0}) \
                                        .sort("created_at", 1).to_list(120)
-            lines = []
-            for c in chats[:80]:
+            paragraphs: List[str] = []
+            buf: List[str] = []
+            last_speaker: Optional[str] = None
+            for c in chats[:120]:
                 kind = c.get("kind", "chat")
+                speaker = c.get("user_name", "?")
+                msg = (c.get("message", "") or "").strip()
+                if not msg:
+                    continue
                 if kind == "system":
-                    lines.append(f"  · {c.get('message','')}")
+                    # GM narration — its own paragraph.
+                    if buf:
+                        paragraphs.append(" ".join(buf))
+                        buf = []
+                    paragraphs.append(msg)
+                    last_speaker = None
                 else:
-                    lines.append(f"  {c.get('user_name','?')}: {c.get('message','')}")
-            narrative = "\n".join(lines) or "(No transcript available.)"
+                    line = (
+                        f"\u201C{msg}\u201D" if kind == "chat" else
+                        f"{speaker} {msg.lstrip()}" if kind == "action" else
+                        f"({speaker}: {msg})"
+                    )
+                    # New speaker starts a new paragraph; same speaker
+                    # continues the current one for natural prose flow.
+                    if speaker != last_speaker:
+                        if buf:
+                            paragraphs.append(" ".join(buf))
+                            buf = []
+                        buf.append(f"\u2014 {speaker}: {line}" if kind == "chat" else line)
+                    else:
+                        buf.append(line)
+                    last_speaker = speaker
+            if buf:
+                paragraphs.append(" ".join(buf))
+            narrative = "\n\n".join(paragraphs) or "(No transcript available.)"
 
     # Player journals tied to this session.
     journals = await db.nodes.find(
@@ -263,7 +370,7 @@ async def _session_prose(s: Dict[str, Any], camp_id: str) -> Tuple[str, List[Dic
 # ─────────────────────── PDF rendering ───────────────────────
 
 def _build_pdf(camp: Dict[str, Any], chapters_data: List[Dict[str, Any]],
-                profile: Dict[str, Any]) -> bytes:
+                profile: Dict[str, Any], gm_user: Optional[Dict[str, Any]] = None) -> bytes:
     """Render the PDF and return the raw bytes."""
     from reportlab.lib.pagesizes import LETTER
     from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
@@ -271,8 +378,9 @@ def _build_pdf(camp: Dict[str, Any], chapters_data: List[Dict[str, Any]],
     from reportlab.lib.colors import HexColor
     from reportlab.platypus import (
         BaseDocTemplate, Frame, NextPageTemplate, PageBreak, PageTemplate,
-        Paragraph, Spacer, Image as RLImage, KeepTogether,
+        Paragraph, Spacer, Image as RLImage, KeepTogether, HRFlowable,
     )
+    from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_JUSTIFY
 
     p = profile["palette"]
     f = profile["fonts"]
@@ -301,8 +409,12 @@ def _build_pdf(camp: Dict[str, Any], chapters_data: List[Dict[str, Any]],
                           showBoundary=0, id="chapter_body")
 
     legal_text = _legal_excerpt(camp.get("system_id") or "")
+    required_footer = _legal_required_footer(camp.get("system_id") or "")
+    legal_block = required_footer or _legal_block(camp.get("system_id") or "")  # short cover-footer attribution
     system_name = profile["name"]
     camp_name = camp.get("name", "Untitled Campaign")
+    gm_byline = (gm_user or {}).get("byline_name") or (gm_user or {}).get("name") or "the GM"
+    current_year = datetime.now(timezone.utc).year
 
     def cover_page(canv, _doc):
         canv.saveState()
@@ -312,56 +424,102 @@ def _build_pdf(camp: Dict[str, Any], chapters_data: List[Dict[str, Any]],
         # Top accent bar (system colour)
         canv.setFillColor(primary)
         canv.rect(0, ph - 0.5 * inch, pw, 0.5 * inch, fill=1, stroke=0)
-        # Bottom accent bar (secondary)
+        # Bottom accent bar (secondary) — slightly taller to host the legal block
         canv.setFillColor(secondary)
-        canv.rect(0, 0, pw, 0.4 * inch, fill=1, stroke=0)
+        canv.rect(0, 0, pw, 1.4 * inch, fill=1, stroke=0)
         # Vertical accent stripe (yellow / accent)
         canv.setFillColor(accent)
-        canv.rect(0.4 * inch, 0.4 * inch, 0.12 * inch, ph - 0.9 * inch, fill=1, stroke=0)
+        canv.rect(0.4 * inch, 1.4 * inch, 0.12 * inch, ph - 1.9 * inch, fill=1, stroke=0)
         # System name (top-right)
         canv.setFont(f["subheading"], 11)
         canv.setFillColor(HexColor("#FFFFFF"))
         canv.drawRightString(pw - margin, ph - 0.3 * inch, system_name.upper())
-        # Logo (centred, ~2 inches tall)
+        # Logo (centred, ~2.4 inches tall — bigger now that it's the system mark)
         logo_path = _resolve_logo(profile)
+        logo_bottom = ph - 4.0 * inch  # default if no logo
         if logo_path:
             try:
                 from PIL import Image as PILImage
                 with PILImage.open(logo_path) as im:
                     iw, ih = im.size
-                target_h = 1.8 * inch
+                target_h = 2.4 * inch
                 target_w = (iw / ih) * target_h
-                if target_w > pw - 2 * margin - inch:
-                    target_w = pw - 2 * margin - inch
+                max_w = pw - 2 * margin - inch
+                if target_w > max_w:
+                    target_w = max_w
                     target_h = (ih / iw) * target_w
-                canv.drawImage(str(logo_path),
-                                (pw - target_w) / 2,
-                                ph - 3.4 * inch,
+                logo_x = (pw - target_w) / 2
+                logo_y = ph - 1.0 * inch - target_h
+                canv.drawImage(str(logo_path), logo_x, logo_y,
                                 width=target_w, height=target_h,
                                 preserveAspectRatio=True, mask='auto')
+                logo_bottom = logo_y - 0.2 * inch
             except Exception:
                 pass
-        # Title
-        canv.setFillColor(ink)
-        canv.setFont(f["heading"], 36)
-        title_y = ph - 4.4 * inch
-        canv.drawCentredString(pw / 2, title_y, camp_name[:60])
+        # Title — width-aware, centred. We render through a paragraph so
+        # long titles wrap onto multiple lines instead of overflowing.
+        title_style = ParagraphStyle(
+            "cover-title", fontName=f["heading"], fontSize=42,
+            textColor=ink, leading=46, alignment=TA_CENTER,
+        )
+        title_para = Paragraph(_html_escape(camp_name), title_style)
+        # Width = full inner width minus a comfortable gutter so long titles
+        # don't visually crash into the accent stripe.
+        title_max_w = pw - 2 * margin - 0.4 * inch
+        title_avail_h = logo_bottom - 2.2 * inch  # reserve space below for byline+legal
+        # Auto-shrink the font if the title still overflows.
+        for fontsize, leading in [(42, 46), (34, 38), (28, 32), (22, 26), (18, 22)]:
+            ts = ParagraphStyle("cover-title", fontName=f["heading"],
+                                 fontSize=fontsize, textColor=ink,
+                                 leading=leading, alignment=TA_CENTER)
+            tp = Paragraph(_html_escape(camp_name), ts)
+            tw, th = tp.wrap(title_max_w, title_avail_h)
+            if th <= title_avail_h:
+                title_para = tp
+                title_h = th
+                break
+        else:
+            title_h = title_avail_h
+        title_top_y = logo_bottom - 0.2 * inch
+        title_para.drawOn(canv, (pw - title_max_w) / 2,
+                           title_top_y - title_h)
+        title_bottom_y = title_top_y - title_h
         # Subtitle
         canv.setFont(f["italic"], 14)
         canv.setFillColor(muted)
-        canv.drawCentredString(pw / 2, title_y - 0.45 * inch,
+        canv.drawCentredString(pw / 2, title_bottom_y - 0.35 * inch,
                                 profile["cover_subtitle"])
-        # Decorative diamond / petal
+        # Decorative diamond rule
         canv.setStrokeColor(accent)
         canv.setLineWidth(2)
-        deco_y = title_y - 1.0 * inch
+        deco_y = title_bottom_y - 0.75 * inch
         canv.line(pw / 2 - 0.6 * inch, deco_y, pw / 2 + 0.6 * inch, deco_y)
         canv.setFillColor(accent)
         canv.circle(pw / 2, deco_y, 0.08 * inch, fill=1, stroke=0)
-        # Footer attribution
-        canv.setFont(f["body"], 9)
+        # GM byline
+        canv.setFont(f["heading"], 14)
+        canv.setFillColor(primary)
+        canv.drawCentredString(pw / 2, deco_y - 0.45 * inch,
+                                f"by {gm_byline}")
+        canv.setFont(f["italic"], 10)
+        canv.setFillColor(muted)
+        canv.drawCentredString(pw / 2, deco_y - 0.65 * inch,
+                                "Weaved in TableGnostic")
+        # Bottom legal block — sits inside the secondary-coloured bar.
         canv.setFillColor(HexColor("#FFFFFF"))
-        canv.drawCentredString(pw / 2, 0.16 * inch,
+        canv.setFont(f["heading"], 8)
+        canv.drawCentredString(pw / 2, 1.18 * inch,
+                                f"© {current_year} {gm_byline} · All Aurea original content")
+        canv.setFont(f["body"], 7.5)
+        # Wrap the per-system legal block across 4-5 lines.
+        legal_lines = _wrap_lines(legal_block, 110)
+        ly = 0.95 * inch
+        for ln in legal_lines[:5]:
+            canv.drawCentredString(pw / 2, ly, ln)
+            ly -= 0.13 * inch
+        # Footer attribution at the very bottom
+        canv.setFont(f["body"], 8)
+        canv.drawCentredString(pw / 2, 0.18 * inch,
                                 "Generated by TableGnostic · DriveThruRPG-ready")
         canv.restoreState()
 
@@ -383,35 +541,53 @@ def _build_pdf(camp: Dict[str, Any], chapters_data: List[Dict[str, Any]],
         canv.setFont(f["body"], 8)
         canv.setFillColor(muted)
         canv.drawString(margin, 0.38 * inch,
-                         "Generated by TableGnostic · DriveThruRPG-ready")
+                         f"Weaved in TableGnostic · by {gm_byline}")
         canv.drawRightString(pw - margin, 0.38 * inch, f"p. {doc.page}")
         canv.restoreState()
 
     doc = BaseDocTemplate(buf, pagesize=LETTER,
                           leftMargin=margin, rightMargin=margin,
                           topMargin=margin, bottomMargin=margin,
-                          title=camp_name, author="TableGnostic")
+                          title=camp_name, author=gm_byline)
     doc.addPageTemplates([
         PageTemplate(id="cover", frames=[cover_frame], onPage=cover_page),
         PageTemplate(id="body", frames=[body_frame], onPage=lambda c, d: chrome(c, d, "body")),
         PageTemplate(id="chapter", frames=[chapter_frame], onPage=lambda c, d: chrome(c, d, "chapter")),
     ])
 
-    # Paragraph styles
-    h1 = ParagraphStyle("h1", fontName=f["heading"], fontSize=26,
-                        textColor=primary, leading=30, spaceAfter=12)
-    h2 = ParagraphStyle("h2", fontName=f["heading"], fontSize=18,
-                        textColor=secondary, leading=22, spaceBefore=16, spaceAfter=8)
-    h3 = ParagraphStyle("h3", fontName=f["subheading"], fontSize=12,
-                        textColor=primary, leading=16, spaceBefore=10, spaceAfter=4)
+    # Paragraph styles — first-line indent for body, generous spacing.
+    chapter_label = ParagraphStyle("chapter-label", fontName=f["subheading"],
+                                    fontSize=10, textColor=secondary,
+                                    leading=12, spaceAfter=2,
+                                    alignment=TA_CENTER, letterSpacing=2)
+    chapter_title = ParagraphStyle("chapter-title", fontName=f["heading"],
+                                    fontSize=30, textColor=primary,
+                                    leading=34, spaceAfter=4,
+                                    alignment=TA_CENTER)
+    chapter_subtitle = ParagraphStyle("chapter-subtitle",
+                                       fontName=f["italic"], fontSize=11,
+                                       textColor=muted, leading=14,
+                                       spaceAfter=18, alignment=TA_CENTER)
+    h1 = chapter_title
+    session_label = ParagraphStyle("session-label", fontName=f["subheading"],
+                                    fontSize=9, textColor=secondary,
+                                    leading=11, spaceBefore=22, spaceAfter=2,
+                                    alignment=TA_LEFT, letterSpacing=2)
+    session_title = ParagraphStyle("session-title", fontName=f["heading"],
+                                    fontSize=18, textColor=primary,
+                                    leading=22, spaceAfter=10,
+                                    alignment=TA_LEFT)
     body = ParagraphStyle("body", fontName=f["body"], fontSize=10.5,
-                          textColor=ink, leading=15, spaceAfter=8)
+                          textColor=ink, leading=16, spaceAfter=10,
+                          firstLineIndent=18, alignment=TA_JUSTIFY)
+    body_first = ParagraphStyle("body-first", parent=body,
+                                 firstLineIndent=0)  # first paragraph of a section, no indent
     italic = ParagraphStyle("italic", fontName=f["italic"], fontSize=10,
                             textColor=muted, leading=14, spaceAfter=8)
     callout_label = ParagraphStyle("callout-label", fontName=f["heading"], fontSize=8,
                                     textColor=callout_border, leading=10,
                                     spaceAfter=2, alignment=0,
-                                    leftIndent=10)
+                                    leftIndent=10, letterSpacing=1)
     callout_body = ParagraphStyle("callout", fontName=f["italic"], fontSize=9.5,
                                    textColor=ink, leading=13,
                                    leftIndent=10, rightIndent=10,
@@ -420,7 +596,9 @@ def _build_pdf(camp: Dict[str, Any], chapters_data: List[Dict[str, Any]],
                                    borderPadding=8)
     legal_style = ParagraphStyle("legal", fontName=f["body"], fontSize=8,
                                   textColor=muted, leading=11,
-                                  spaceBefore=10)
+                                  spaceBefore=10, alignment=TA_JUSTIFY)
+    toc_style = ParagraphStyle("toc", fontName=f["body"], fontSize=11,
+                                textColor=ink, leading=18, spaceAfter=6)
 
     flow: List[Any] = []
 
@@ -434,22 +612,47 @@ def _build_pdf(camp: Dict[str, Any], chapters_data: List[Dict[str, Any]],
     for ch in chapters_data:
         sess_titles = " · ".join((s.get("title") or "Session").split("—")[0].strip()
                                   for s in ch["sessions"])
-        flow.append(Paragraph(f"<b>{ch['title']}</b> &nbsp;&nbsp; <font color='{p['muted']}'>{sess_titles}</font>",
-                                body))
+        flow.append(Paragraph(
+            f"<b>{_html_escape(ch['title'])}</b> &nbsp;&nbsp; "
+            f"<font color='{p['muted']}'>{_html_escape(sess_titles)}</font>",
+            toc_style))
     flow.append(Spacer(1, 0.2 * inch))
 
     # ── Chapters
     for ch in chapters_data:
         flow.append(NextPageTemplate("chapter"))
         flow.append(PageBreak())
-        flow.append(Paragraph(f"{profile['chapter_prefix']} {ch['number']}", h3))
-        flow.append(Paragraph(ch["title"], h1))
+        # Single-source heading: small kerned label + big roman-numeral
+        # title. No more duplicated "Chapter N" lines.
+        flow.append(Paragraph(_chapter_label(ch["number"]), chapter_label))
+        flow.append(Paragraph(_html_escape(ch["title_text"] or ch["title"]),
+                                chapter_title))
+        # Subtitle = list of session titles in this chapter, comma-joined.
+        sub = " · ".join((s.get("title") or "").strip() for s in ch["sessions"])
+        if sub:
+            flow.append(Paragraph(_html_escape(sub), chapter_subtitle))
         flow.append(_thin_rule(rule))
-        for s in ch["sessions"]:
-            flow.append(Paragraph(s.get("title") or "Session", h2))
+        # Each session within the chapter is its own block, separated by
+        # a horizontal divider so the user can keep them visually distinct.
+        for s_idx, s in enumerate(ch["sessions"]):
+            if s_idx > 0:
+                # Divider between sessions inside the same chapter.
+                flow.append(Spacer(1, 0.25 * inch))
+                flow.append(HRFlowable(width="50%", thickness=0.5,
+                                        color=accent, spaceBefore=0, spaceAfter=10,
+                                        hAlign="CENTER"))
+            # Session header — "SESSION N" small label + bigger title
+            sess_label_text = _session_label(s)
+            if sess_label_text:
+                flow.append(Paragraph(sess_label_text, session_label))
+            flow.append(Paragraph(_html_escape((s.get("title") or "Session")),
+                                    session_title))
+
             narrative = s.get("_narrative") or "(No transcript available.)"
-            for para in [pp.strip() for pp in narrative.split("\n\n") if pp.strip()]:
-                flow.append(Paragraph(_html_escape(para), body))
+            paragraphs = [pp.strip() for pp in narrative.split("\n\n") if pp.strip()]
+            for i, para in enumerate(paragraphs):
+                style = body_first if i == 0 else body
+                flow.append(Paragraph(_html_escape(para), style))
             journals = s.get("_journals") or []
             for j in journals:
                 ch_name = (j.get("fields") or {}).get("character_name", "")
@@ -465,18 +668,119 @@ def _build_pdf(camp: Dict[str, Any], chapters_data: List[Dict[str, Any]],
     flow.append(Paragraph("Legal &amp; Compliance", h1))
     flow.append(_thin_rule(rule))
     flow.append(Paragraph("Distribution channel: <b>DriveThruRPG</b>.", italic))
-    for para in [pp.strip() for pp in legal_text.split("\n\n") if pp.strip()]:
-        flow.append(Paragraph(_html_escape(para), legal_style))
-    flow.append(Spacer(1, 0.2 * inch))
     flow.append(Paragraph(
-        f"This chronicle was generated by TableGnostic for the campaign "
-        f"<b>{_html_escape(camp_name)}</b>. The {_html_escape(system_name)} "
-        f"branding is used under the publisher's distribution licence.",
+        f"This chronicle was produced and weaved by <b>{_html_escape(gm_byline)}</b> "
+        f"in TableGnostic during {current_year}. © {current_year} {_html_escape(gm_byline)}. "
+        f"All Aurea original content © Table-Gnostic contributors.",
         legal_style,
     ))
+    # Publisher's required attribution — printed verbatim, prominently.
+    if required_footer:
+        flow.append(Spacer(1, 0.15 * inch))
+        flow.append(Paragraph("Publisher's Required Attribution", chapter_label))
+        flow.append(Paragraph(
+            _html_escape(required_footer),
+            ParagraphStyle("required-quote", parent=legal_style,
+                            fontSize=9.5, leading=14,
+                            textColor=ink, leftIndent=14, rightIndent=14,
+                            borderColor=callout_border, borderWidth=0.5,
+                            borderPadding=10, backColor=callout_bg,
+                            spaceBefore=4, spaceAfter=12),
+        ))
+    # Compliance summary — strip markdown markers so the prose reads
+    # cleanly on the printed page.
+    cleaned_summary = _strip_markdown(legal_text)
+    if cleaned_summary:
+        flow.append(Paragraph("Compliance Summary", chapter_label))
+        for para in [pp.strip() for pp in cleaned_summary.split("\n\n") if pp.strip()]:
+            flow.append(Paragraph(_html_escape(para), legal_style))
 
     doc.build(flow)
     return buf.getvalue()
+
+
+def _chapter_label(n: int) -> str:
+    return f"CHAPTER&nbsp;&nbsp;{_roman(n)}"
+
+
+def _session_label(s: Dict[str, Any]) -> str:
+    """Extract 'Session N' from a title like 'Session 2 — The Faunamimic's Apology'."""
+    t = (s.get("title") or "").lower()
+    for i in range(0, 30):
+        if f"session {i}" in t:
+            return f"SESSION&nbsp;&nbsp;{i}"
+    return ""
+
+
+def _roman(n: int) -> str:
+    if n <= 0:
+        return str(n)
+    table = [
+        (1000, "M"), (900, "CM"), (500, "D"), (400, "CD"),
+        (100, "C"), (90, "XC"), (50, "L"), (40, "XL"),
+        (10, "X"), (9, "IX"), (5, "V"), (4, "IV"), (1, "I"),
+    ]
+    out = []
+    for value, sym in table:
+        while n >= value:
+            out.append(sym)
+            n -= value
+    return "".join(out)
+
+
+def _wrap_lines(text: str, width: int) -> List[str]:
+    """Soft word-wrap for canvas-drawn legal text (no Paragraph available
+    inside the cover_page callback)."""
+    out: List[str] = []
+    for raw in text.split("\n"):
+        words = raw.split()
+        if not words:
+            out.append("")
+            continue
+        line = words[0]
+        for w in words[1:]:
+            if len(line) + 1 + len(w) > width:
+                out.append(line)
+                line = w
+            else:
+                line = line + " " + w
+        out.append(line)
+    return out
+
+
+def _strip_markdown(text: str) -> str:
+    """Strip markdown markers so the printed legal page reads as prose.
+    Removes ** bold markers, leading * / - / > bullets, and collapses
+    consecutive blank lines."""
+    import re
+    lines: List[str] = []
+    for raw in text.split("\n"):
+        ln = raw
+        # Strip blockquote and bullet markers at start of line.
+        ln = re.sub(r"^[\s>*\-]+", "", ln).strip()
+        # Convert markdown bold/italic ** → drop, * (single) → drop.
+        ln = ln.replace("**", "")
+        ln = ln.replace("`", "")
+        if ln:
+            lines.append(ln)
+    return "\n\n".join(lines)
+
+
+def _legal_block(system_id: str) -> str:
+    """Short cover-footer legal — first 3-4 sentences from the per-system
+    excerpt in LEGAL_COMPLIANCE.md, condensed to fit the bottom bar."""
+    full = _legal_excerpt(system_id)
+    # Strip markdown blockquote markers and bullets.
+    cleaned = []
+    for ln in full.split("\n"):
+        s = ln.lstrip(" >*-").strip()
+        if s:
+            cleaned.append(s)
+    cleaned_text = " ".join(cleaned)
+    # Cap at ~520 chars for the cover bar.
+    if len(cleaned_text) > 520:
+        cleaned_text = cleaned_text[:510].rsplit(" ", 1)[0] + "…"
+    return cleaned_text or full
 
 
 def _thin_rule(color):
@@ -524,7 +828,11 @@ async def export_pdf(cid: str, user: dict = Depends(get_current_user)):
             narrative, journals = await _session_prose(s, cid)
             s["_narrative"] = narrative
             s["_journals"] = journals
-    pdf_bytes = _build_pdf(camp, chapters_data, profile)
+    # Look up the campaign's GM user (preferred byline_name, fall back to
+    # name) so the cover + page footer can credit a real human.
+    gm_user = await db.users.find_one({"id": camp.get("gm_id")},
+                                       {"_id": 0, "byline_name": 1, "name": 1, "email": 1})
+    pdf_bytes = _build_pdf(camp, chapters_data, profile, gm_user)
     # Header values must be latin-1 safe; strip non-ASCII from filename.
     raw_name = (camp.get("name") or "campaign").replace(" ", "_")
     safe = "".join(ch if ord(ch) < 128 and ch not in '"\\' else "_" for ch in raw_name)

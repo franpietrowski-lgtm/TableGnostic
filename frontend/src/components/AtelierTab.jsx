@@ -384,10 +384,36 @@ function ChipList({ label, items, setItems, placeholder, testid, compact }) {
 }
 
 /** ExportPdfBtn — downloads a system-branded PDF chronicle.
- *  Uses fetch with the bearer token because <a download> can't carry headers. */
+ *  Uses fetch with the bearer token because <a download> can't carry headers.
+ *  Inline byline editor — the cover page credits the GM by name, so we make
+ *  setting the byline a one-click affordance right where the export lives. */
 function ExportPdfBtn({ campId }) {
   const [busy, setBusy] = useState(false);
-  const handle = async () => {
+  const [open, setOpen] = useState(false);
+  const [byline, setByline] = useState("");
+  const [me, setMe] = useState(null);
+  const [savedTick, setSavedTick] = useState(false);
+
+  React.useEffect(() => {
+    if (!open) return;
+    api.get("/auth/me").then(({ data }) => {
+      setMe(data);
+      setByline(data.byline_name || data.name || "");
+    }).catch(() => {});
+  }, [open]);
+
+  const saveByline = async () => {
+    try {
+      const { data } = await api.patch("/auth/me", { byline_name: byline });
+      setMe(data);
+      setSavedTick(true);
+      setTimeout(() => setSavedTick(false), 1500);
+    } catch (e) {
+      window.alert("Could not save byline: " + (e.response?.data?.detail || e.message));
+    }
+  };
+
+  const download = async () => {
     setBusy(true);
     try {
       const token = localStorage.getItem("tg_token");
@@ -408,17 +434,49 @@ function ExportPdfBtn({ campId }) {
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
+      setOpen(false);
     } catch (e) {
       window.alert("PDF export failed: " + e.message);
     } finally {
       setBusy(false);
     }
   };
+
   return (
-    <button onClick={handle} disabled={busy}
-            className="btn btn-ghost text-xs" data-testid="atelier-export-pdf-btn"
-            title="Download a DriveThruRPG-ready, system-branded PDF chronicle of every session.">
-      <FileDown className="w-3 h-3"/> {busy ? "Rendering…" : "Export PDF"}
-    </button>
+    <div className="relative">
+      <button onClick={() => setOpen(!open)} disabled={busy}
+              className="btn btn-ghost text-xs" data-testid="atelier-export-pdf-btn"
+              title="Download a DriveThruRPG-ready, system-branded PDF chronicle.">
+        <FileDown className="w-3 h-3"/> {busy ? "Rendering…" : "Export PDF"}
+      </button>
+      {open && (
+        <div className="absolute right-0 mt-2 z-30 card-mystic p-4 w-[320px] shadow-xl"
+             data-testid="atelier-export-pdf-popover">
+          <div className="label-ref mb-2">PDF cover byline</div>
+          <div className="text-[10px] text-mist/70 italic mb-2">
+            Your full name will appear on the cover and page footers as
+            "by ___ · Weaved in TableGnostic". Stored on your profile so
+            every export uses the same byline.
+          </div>
+          <input className="input text-sm mb-2"
+                 value={byline}
+                 onChange={(e) => setByline(e.target.value)}
+                 placeholder="First Last"
+                 data-testid="atelier-export-byline-input"/>
+          <div className="flex items-center justify-between gap-2 mb-3">
+            <button onClick={saveByline} className="btn btn-ghost text-xs"
+                    data-testid="atelier-export-byline-save">
+              {savedTick ? "Saved ✓" : "Save byline"}
+            </button>
+            <span className="text-[10px] text-mist/60 font-ui">{me?.email || ""}</span>
+          </div>
+          <button onClick={download} disabled={busy}
+                  className="btn btn-primary text-xs w-full"
+                  data-testid="atelier-export-pdf-download">
+            <FileDown className="w-3 h-3"/> {busy ? "Rendering…" : "Download chronicle"}
+          </button>
+        </div>
+      )}
+    </div>
   );
 }

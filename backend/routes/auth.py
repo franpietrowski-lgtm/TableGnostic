@@ -5,6 +5,7 @@ Cookies + Bearer header both accepted; token type is checked.
 """
 from datetime import datetime, timedelta, timezone
 import secrets
+from typing import Dict
 
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
@@ -12,7 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from core.config import JWT_SECRET, JWT_ALGORITHM, FRONTEND_PUBLIC_URL
 from core.db import db, new_id, now_iso, sanitize
 from core.email import send_password_reset_email
-from core.models import ForgotIn, LoginIn, RegisterIn, ResetIn
+from core.models import ForgotIn, LoginIn, ProfilePatchIn, RegisterIn, ResetIn
 from core.security import (
     create_access_token, create_refresh_token, get_current_user,
     hash_password, set_auth_cookies, verify_password,
@@ -82,6 +83,19 @@ async def logout(response: Response):
 @router.get("/me")
 async def me(user: dict = Depends(get_current_user)):
     return sanitize(user)
+
+
+@router.patch("/me")
+async def patch_me(body: ProfilePatchIn,
+                   user: dict = Depends(get_current_user)):
+    """Self-edit: currently just the byline_name used on PDF chronicle covers."""
+    update: Dict = {}
+    if body.byline_name is not None:
+        update["byline_name"] = body.byline_name.strip() or None
+    if update:
+        await db.users.update_one({"id": user["id"]}, {"$set": update})
+    fresh = await db.users.find_one({"id": user["id"]}, {"_id": 0})
+    return sanitize(fresh)
 
 
 @router.post("/refresh")

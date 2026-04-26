@@ -32,6 +32,12 @@ class UserOut(BaseModel):
     email: str
     name: str
     role: str
+    byline_name: Optional[str] = None  # full name as it should appear on PDF exports
+
+
+class ProfilePatchIn(BaseModel):
+    """Self-edit via PATCH /api/auth/me — currently just byline name."""
+    byline_name: Optional[str] = Field(default=None, max_length=120)
 
 
 # -------- Campaign --------

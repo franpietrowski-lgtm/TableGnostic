@@ -65,8 +65,13 @@ export function AuthProvider({ children }) {
     localStorage.removeItem("tg_token");
     setUser(false);
   };
+  const updateProfile = async (patch) => {
+    const { data } = await api.patch("/auth/me", patch);
+    setUser(data);
+    return data;
+  };
   return (
-    <AuthCtx.Provider value={{ user, login, register, logout, loading }}>
+    <AuthCtx.Provider value={{ user, login, register, logout, loading, updateProfile }}>
       {children}
     </AuthCtx.Provider>
   );
