@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from core.config import EMERGENT_LLM_KEY
 from core.db import db, new_id, now_iso, sanitize
-from core.models import RecapIn
+from core.models import FinalizeIn, RecapIn
 from core.security import get_current_user
 
 router = APIRouter(prefix="/api", tags=["recap"])
@@ -137,19 +137,13 @@ async def generate_recap(sid: str, body: RecapIn,
 
 
 @router.post("/sessions/{sid}/finalize")
-async def finalize_session_chronicle(sid: str, body: dict,
+async def finalize_session_chronicle(sid: str, body: FinalizeIn,
                                      user: dict = Depends(get_current_user)):
     """Weave a final session chronicle: GM provides a list of player-journal
     node ids + a base recap, Claude composes a unified third-person narrative
     that incorporates each character's voice/perception. The result is
     persisted as a finalised `session_record` node and (when the entire
     campaign is finalised) becomes a chapter of the campaign chronicle PDF.
-
-    Body: {
-        "journal_node_ids": [str, ...],   # ordered — chapter sequence
-        "recap_node_id":    str,          # the GM's chosen base recap
-        "tone":             "lyrical" | "terse" | "in-character",
-    }
 
     GM/admin only.
     """
@@ -164,13 +158,9 @@ async def finalize_session_chronicle(sid: str, body: dict,
     if not EMERGENT_LLM_KEY:
         raise HTTPException(503, "LLM key not configured")
 
-    journal_ids = body.get("journal_node_ids") or []
-    recap_node_id = body.get("recap_node_id")
-    tone = body.get("tone", "lyrical")
-    if tone not in ("lyrical", "terse", "in-character"):
-        raise HTTPException(400, "tone must be one of: lyrical / terse / in-character")
-    if not recap_node_id:
-        raise HTTPException(400, "recap_node_id is required")
+    journal_ids = body.journal_node_ids
+    recap_node_id = body.recap_node_id
+    tone = body.tone
 
     recap_node = await db.nodes.find_one(
         {"id": recap_node_id, "campaign_id": s["campaign_id"]}, {"_id": 0})

@@ -208,7 +208,47 @@ Each attribute row shows `×Level` and, when limiters/enhancements shift it, an 
 
 **5. Reference page (V4.1, recap)** — three tab-groups (Core · Combat & Play · Custom · Aurea), pinned BESM 4E cost-rule note, 7 new sections (actions / companions / race templates / size modifiers / weapons / items / armour), Aurea custom catalogue (8 attributes, 5 power packs, 5 skill groups).
 
-### V4.2 — Tested (iter_13)
+### V4.3 — Demo retire · Codex sharability · Player-journal-to-Codex · Chronicle weave · Legal audit (this iteration — 2026-04-26)
+
+**1. Demo accounts retired**
+`core/startup.py` now actively REMOVES `admin@tablegnostic.com` / `gm@tablegnostic.com` / `player@tablegnostic.com` (plus their lingering `login_attempts` and `password_reset_tokens` rows) on every backend boot. **GMFran is the sole seeded account** (`franpietrowski@gmail.com` / `PieGod08!!`, role `admin`). The Auth.jsx login page no longer shows the "Demo GM / Demo Player" buttons.
+
+**2. World-Codex card click & bidirectional visibility**
+- Cards in the codex grid are now full-tile click targets (also keyboard-accessible — `Enter`/`Space`). Click opens a `NodeDetail` panel under the grid showing the entire write-up, structured fields, tags, and visibility badge.
+- New `PUT /api/nodes/{nid}/visibility` endpoint (GM-only) accepts `gm_only` / `shared` / `revealed` and clears `revealed_to` on a flip back to `gm_only`. The card and detail panel both expose a 3-state visibility selector (the previous one-way "Reveal" button is gone).
+- New `POST /api/campaigns/{cid}/nodes/bulk-visibility` for the GM's "Reveal all to players" / "Hide all (GM-only)" one-click affordances on the codex header.
+
+**3. Player journal → Codex (Sessions tab)**
+- `POST /api/characters/{cid}/journal` now ALSO creates a `player_journal` node in the campaign's World Codex with `visibility="gm_only"`. The player retains their folio.journal copy (so their personal record is untouched), but the GM gets the colour + voice they need to weave a chronicle. Response now includes `codex_node_id`.
+- `POST /api/sessions/{sid}/recap` likewise mirrors the recap into the codex as a `session_record` node (`gm_only`, `fields.is_finalized=false`).
+- Two new node types declared in `nodeTemplates.js`: `session_record` (teal #3da89a) and `player_journal` (violet #9d6dd0).
+
+**4. Chronicle finalisation (Sessions workshop)**
+- `SessionsTab.jsx` rewritten as the workshop. Each session row shows the recap (the spine), every linked player journal (collapsible), and a `Finalize chronicle` button with a tone selector (`lyrical` / `terse` / `in-character`).
+- Backend: new `POST /api/sessions/{sid}/finalize` endpoint takes `FinalizeIn { recap_node_id, journal_node_ids[], tone }`, calls Claude Sonnet 4.5 via `emergentintegrations` with a system-aware prompt that honours the campaign's tone/genre/power-level, and rewrites the `session_record` node's content with the woven chronicle. The original recap is preserved at `fields.original_recap` for the audit trail; `fields.is_finalized` flips true.
+- The chronicle is what the upcoming DriveThruRPG-export pipeline will compose into the campaign-PDF chapters (one chapter per session).
+
+**5. Legal compliance audit (`/app/memory/LEGAL_COMPLIANCE.md`)**
+Per-system audit covering all 13 systems in the selector. Status table:
+- ✅ Compliant: BESM 4E (Tri-Stat Emporium), Cypher (Cypher System Creator), Fate Condensed (CC-BY 3.0), Blades in the Dark (FitD SRD), Mothership (3PL), D&D 5E (CC-BY SRD 5.1/5.2 only), PF2e (ORC).
+- 🟡 Pending content: Anime 5E (Tri-Stat), Call of Cthulhu (Miskatonic Repository), Savage Worlds (Pinnacle).
+- ⚠️ Constrained: Cyberpunk RED (mechanics-only — no commercial branded export), V5 (Storytellers Vault rules apply), Shadowrun 6E (non-commercial only — no public CC programme).
+- Per-system PDF export footer text drafted for the future DriveThruRPG pipeline.
+- Trademark policy table — branded marks NEVER displayed in UI without permission.
+- Distribution-model section explaining what GMFran can/can't ship for money under the current state.
+
+### V4.3 — Tested
+- iter_14 = **22/22 PASS** (`test_iter14_v43.py`). Cumulative across iter9 + iter10 + iter11 + iter12 + iter13 + iter14 = **100 PASS / 28 SKIP / 0 FAIL**.
+- All test files updated to register transient `@example.com` accounts on module setup (the retired demo accounts are gone).
+- Verified live: demo logins return 401, GMFran 200; journal entry creates `player_journal` codex node; recap creates `session_record` codex node; bulk visibility flips 21 nodes in one shot; bidirectional visibility PUT works.
+
+### V4.3 — Deferred
+- Iter_14 noted ergonomic wins (now applied):
+  - `FinalizeIn` Pydantic schema replacing the dict body (✅ applied; route docstring tightened).
+  - Bulk-visibility 400 message (mentions `gm_only` and `shared` explicitly — already done).
+- Branded DriveThruRPG PDF generation pipeline (reportlab + per-system footer + cover page + chapter-per-session) — V4.4.
+- Anime 5E + Cypher full content extraction from the uploaded PDFs — V4.4 / V4.5.
+- Knowledge Web file ingestion (Claude diff-review) — V4.4.
 - **18/18 new tests PASS** (`test_iter13_v42.py`). Cumulative across iter9 + iter10 + iter11 + iter12 + iter13 = **82 PASS / 28 SKIP / 0 FAIL**.
 - Test fixture stability: switched all iter11 mongo helpers from `motor` (asyncio loop flake) to sync `pymongo` so test order no longer matters.
 - iter_10 marked superseded (Cyma-based seed assertions can't be re-baselined cleanly against the new Eli/Laryk/Roney seed).
@@ -296,11 +336,10 @@ Each attribute row shows `×Level` and, when limiters/enhancements shift it, an 
 
 ## 5. Next Tasks
 
-1. **Anime 5E full content** (5 PDFs uploaded earlier) — extract attribute/skill/defect/template content, expose via the system selector
-2. **Cypher full content** (today's 5 Cypher / Numenera / Godforsaken PDFs + the 2 from earlier) — same as Anime 5E
-3. **Knowledge Web file ingestion** — GM uploads PDF/MD/TXT → Claude Sonnet diff-review → suggested nodes (requires `integration_playbook_expert_v2` for Claude integration)
-4. **Bulk reveal/hide** Knowledge Web buttons (per-node already exists; one-click "Reveal all" / "Reset all")
-5. **CharacterBuilder** cost-preview update — backend is now authoritative on V4.1 cost rule; the in-builder live preview still uses the old formula in places
-6. **WS handshake polish** — `/api/openapi.json` alias for external tooling
-7. **Primer change-request alerts** + GM live-edit mid-campaign
-8. **Later VIP**: DriveThruRPG export · 8-session Evereantha demo
+1. **DriveThruRPG export pipeline** — reportlab-driven branded PDF (cover + chapter-per-session + per-system legal footer from `LEGAL_COMPLIANCE.md`). Each finalised `session_record` becomes one chapter in tone-order.
+2. **Anime 5E full content** — extract attribute/skill/defect/template content from the 5 uploaded PDFs into `besm_data.py`, wire to the `anime-5e` system.
+3. **Cypher full content** — extract from the 5 Cypher / Numenera / Godforsaken PDFs into the Cypher selector. Compliance-checked per `LEGAL_COMPLIANCE.md` §5.
+4. **Knowledge Web file ingestion** — GM uploads PDF/MD/TXT → Claude Sonnet diff-review → suggested nodes. Reuses the same `emergentintegrations` integration the chronicle weaver already uses.
+5. **CharacterBuilder** in-builder live cost-preview update to V4.1 rule (backend already authoritative).
+6. **Primer change-request alerts** + GM live-edit mid-campaign.
+7. **8-session Evereantha demo** — pre-seeded chronicle that ships out of the box.

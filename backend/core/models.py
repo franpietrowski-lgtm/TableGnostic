@@ -239,6 +239,12 @@ class RecapIn(BaseModel):
     style: Literal["narrative", "bullet", "in-character"] = "narrative"
 
 
+class FinalizeIn(BaseModel):
+    recap_node_id: str
+    journal_node_ids: List[str] = Field(default_factory=list)
+    tone: Literal["lyrical", "terse", "in-character"] = "lyrical"
+
+
 # -------- Custom rules + Genesis --------
 
 class CustomAttributeIn(BaseModel):

@@ -19,6 +19,11 @@ import uuid
 
 import pytest
 import requests
+from dotenv import load_dotenv
+
+# Load /app/backend/.env so REACT_APP_BACKEND_URL / MONGO_URL are visible.
+load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
+load_dotenv(os.path.join(os.path.dirname(__file__), "..", "..", "frontend", ".env"))
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "").rstrip("/")
 assert BASE_URL, "REACT_APP_BACKEND_URL must be set"
@@ -341,7 +346,9 @@ class TestRecapAndFinalize:
                           headers=_h(gm_tok),
                           json={"journal_node_ids": [], "tone": "lyrical"},
                           timeout=15)
-        assert r.status_code == 400, r.text
+        # FinalizeIn (Pydantic) now rejects missing recap_node_id at the
+        # schema layer → 422; pre-V4.3 the handler returned 400. Either fine.
+        assert r.status_code in (400, 422), r.text
 
     def test_finalize_invalid_tone_400(
             self, gm_tok, session_id, session_record_node):
@@ -351,7 +358,8 @@ class TestRecapAndFinalize:
                                 "journal_node_ids": [],
                                 "tone": "epic"},
                           timeout=15)
-        assert r.status_code == 400, r.text
+        # Pydantic Literal['lyrical','terse','in-character'] → 422.
+        assert r.status_code in (400, 422), r.text
 
     def test_finalize_cross_campaign_recap_404(
             self, gmfran_tok, gm_tok, session_id, campaign_id):
