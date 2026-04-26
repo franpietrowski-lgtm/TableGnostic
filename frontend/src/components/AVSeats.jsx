@@ -233,7 +233,10 @@ export default function AVSeats({ subscribe, send, sessionTitle, characters = []
         video: { width: { ideal: 480 }, height: { ideal: 360 }, facingMode: "user" },
       });
       localStreamRef.current = stream;
-      if (localVideoRef.current) localVideoRef.current.srcObject = stream;
+      // NOTE: do NOT attach srcObject here — the self <Tile>/<video> only
+      // mounts AFTER setJoined(true) re-renders, so localVideoRef.current
+      // is null at this moment. The useEffect below handles attachment
+      // once the element is in the DOM (fixes "black square" bug).
       setJoined(true);
       // dial existing peers we're the offerer for
       const myId = meRef.current?.conn_id;
@@ -303,6 +306,23 @@ export default function AVSeats({ subscribe, send, sessionTitle, characters = []
     setCamOn(next);
     broadcastAvState({ mic: micOn, cam: next, in_call: true });
   };
+
+  // Attach the local stream to the self <video> once the element has mounted.
+  // The self Tile is conditionally rendered on `joined`, so the ref is null at
+  // the moment getUserMedia resolves — this effect re-runs after the render
+  // commit and binds srcObject + kicks off play() to defeat browsers that
+  // ignore the autoplay attribute when srcObject is set imperatively.
+  useEffect(() => {
+    const v = localVideoRef.current;
+    const s = localStreamRef.current;
+    if (joined && v && s && v.srcObject !== s) {
+      v.srcObject = s;
+      // Some browsers (Safari, older Chromium) need an explicit play() when
+      // the element gains srcObject after mount. Muted+playsInline guarantees
+      // it will succeed without an extra user gesture.
+      v.play().catch(() => {});
+    }
+  }, [joined, camOn]);
 
   // cleanup on unmount
   useEffect(() => {
@@ -504,8 +524,16 @@ export default function AVSeats({ subscribe, send, sessionTitle, characters = []
 function PeerTile({ peer, characterName, tokenColor, isActive, enlarged, onToggleEnlarge }) {
   const ref = useRef(null);
   useEffect(() => {
-    if (ref.current) ref.current.srcObject = peer.stream || null;
-  }, [peer.stream]);
+    const v = ref.current;
+    if (!v) return;
+    if (v.srcObject !== (peer.stream || null)) {
+      v.srcObject = peer.stream || null;
+    }
+    // Defeat autoplay quirks once the user has already gestured (Join voice).
+    // Without this, some Chromium builds + Safari hold the element on the
+    // first frame and present a black tile until a manual click.
+    if (peer.stream) v.play().catch(() => {});
+  }, [peer.stream, peer.camOn]);
   return (
     <Tile
       name={characterName || peer.name}
