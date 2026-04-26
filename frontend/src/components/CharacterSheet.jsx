@@ -15,14 +15,19 @@ export default function CharacterSheet() {
   const [rollTarget, setRollTarget] = useState("");
   const [lastRoll, setLastRoll] = useState(null);
   const [selectedSession, setSelectedSession] = useState("");
+  const [pbpChannelId, setPbpChannelId] = useState(null);
 
   const load = async () => {
     try {
       const data = await api.get(`/characters/${id}`).then((r) => r.data);
       setCh(data);
-      const s = await api.get(`/campaigns/${data.campaign_id}/sessions`).then((r) => r.data);
+      const [s, channels] = await Promise.all([
+        api.get(`/campaigns/${data.campaign_id}/sessions`).then((r) => r.data),
+        api.get(`/campaigns/${data.campaign_id}/channels`).then((r) => r.data).catch(() => []),
+      ]);
       setSessions(s);
       if (s.length) setSelectedSession(s[0].id);
+      if (channels.length) setPbpChannelId(channels[0].id);
     } catch (e) { setErr(formatApiErrorDetail(e.response?.data?.detail) || e.message); }
   };
   useEffect(() => { load(); }, [id]);
@@ -30,16 +35,41 @@ export default function CharacterSheet() {
   if (err) return <div className="p-10 text-ember">{err}</div>;
   if (!ch) return <div className="p-10 text-mist">Summoning…</div>;
 
+  // Sheet roll = always posts a /roll line into the campaign's first PBP
+  // channel (the "macro chat") so the table sees it immediately. If a live
+  // session is selected, ALSO posts to the live /api/dice altar so the
+  // session log + spotlight still light up.
   const roll = async (notation = rollNotation, label = rollLabel) => {
-    if (!selectedSession) { setLastRoll({ error: "Start a session first to roll dice." }); return; }
-    const payload = {
-      session_id: selectedSession, notation, label,
-      target: rollTarget ? +rollTarget : null, character_id: ch.id,
-    };
-    try {
-      const { data } = await api.post("/dice", payload);
-      setLastRoll(data);
-    } catch (e) { setLastRoll({ error: formatApiErrorDetail(e.response?.data?.detail) || e.message }); }
+    let posted = false;
+    if (pbpChannelId) {
+      const body = label
+        ? `/roll ${notation}     # ${ch.name} · ${label}`
+        : `/roll ${notation}     # ${ch.name}`;
+      try {
+        await api.post(`/channels/${pbpChannelId}/messages`, { body });
+        posted = true;
+      } catch {}
+    }
+    if (selectedSession) {
+      try {
+        const { data } = await api.post("/dice", {
+          session_id: selectedSession, notation, label,
+          target: rollTarget ? +rollTarget : null, character_id: ch.id,
+        });
+        setLastRoll(data);
+        posted = true;
+      } catch (e) { setLastRoll({ error: formatApiErrorDetail(e.response?.data?.detail) || e.message }); }
+    } else if (posted) {
+      setLastRoll({ pbp_only: true, label: label || notation });
+    } else {
+      setLastRoll({ error: "Start a session or open a channel first to roll dice." });
+    }
+  };
+
+  // Macro: post a narrative emote into the PBP channel (no dice).
+  const emote = async (text) => {
+    if (!pbpChannelId) return;
+    try { await api.post(`/channels/${pbpChannelId}/messages`, { body: `/me ${text}` }); } catch {}
   };
 
   const quickRolls = [
@@ -95,10 +125,15 @@ export default function CharacterSheet() {
           <div className="label-ref">Core Stats</div>
           <div className="mt-3 grid grid-cols-3 gap-2 text-center">
             {["body", "mind", "soul"].map((s) => (
-              <div key={s} className="border border-gold/15 rounded-sm py-3" data-testid={`sheet-stat-${s}`}>
+              <button key={s} type="button"
+                      onClick={() => roll(`2d6-${s}`, `${ch.name} · ${s} check`)}
+                      className="border border-gold/15 rounded-sm py-3 hover:border-gold/40 hover:bg-gold/5 transition-colors group"
+                      data-testid={`sheet-stat-${s}`}
+                      title={`Roll 2d6-${s} (BESM roll-under)`}>
                 <div className="label-ref">{s}</div>
                 <div className="font-display text-3xl text-gold">{ch.stats[s]}</div>
-              </div>
+                <div className="text-[9px] font-ui uppercase tracking-widest text-mist/50 group-hover:text-gold-bright">2d6-{s}</div>
+              </button>
             ))}
           </div>
           <div className="divider-sigil my-4"/>

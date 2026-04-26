@@ -1,11 +1,13 @@
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import { Link, useParams } from "react-router-dom";
-import { api, API } from "../lib/api";
-import { Dice6, Send, Plus, X, Swords, Heart, Zap, Skull, Shield, ChevronRight, Sparkles, ScrollText, Users, MessageSquare } from "lucide-react";
+import { api, API, useAuth } from "../lib/api";
+import { Dice6, Send, Plus, X, Swords, Heart, Zap, Skull, Shield, ChevronRight, Sparkles, ScrollText, Users, MessageSquare, Map as MapIcon } from "lucide-react";
 import AVSeats from "./AVSeats";
+import Battlemap from "./Battlemap";
 
 export default function SessionView() {
   const { id } = useParams();
+  const { user } = useAuth();
   const [session, setSession] = useState(null);
   const [chat, setChat] = useState([]);
   const [dice, setDice] = useState([]);
@@ -22,6 +24,7 @@ export default function SessionView() {
   const [recapBusy, setRecapBusy] = useState(false);
   const [recapStyle, setRecapStyle] = useState("narrative");
   const [mobilePane, setMobilePane] = useState("chat"); // chat | init | dice (mobile only)
+  const [mapOpen, setMapOpen] = useState(false);
   const chatEnd = useRef(null);
   const wsRef = useRef(null);
   const subsRef = useRef([]); // AVSeats subscribers
@@ -267,6 +270,10 @@ export default function SessionView() {
             <h1 className="font-display text-2xl tracking-wide text-parchment">{session.title}</h1>
           </div>
           <div className="flex items-center gap-2">
+            <button onClick={() => setMapOpen(true)} className="btn btn-ghost text-xs"
+                    data-testid="open-battlemap-btn" title="Open the battlemap">
+              <MapIcon className="w-3 h-3"/> Map
+            </button>
             <select className="select w-auto text-xs" value={recapStyle}
                     onChange={(e) => setRecapStyle(e.target.value)} data-testid="recap-style">
               <option value="narrative">Narrative</option>
@@ -314,8 +321,7 @@ export default function SessionView() {
       </div>
 
       {recap && (
-        <div className="fixed inset-0 z-50 bg-void/80 backdrop-blur-sm flex items-start justify-center p-6 overflow-auto" data-testid="recap-modal">
-          <div className="card-mystic sigil-ring w-full max-w-2xl p-7 my-10">
+        <div className="fixed inset-0 z-50 bg-void/80 backdrop-blur-sm flex items-start justify-center p-6 overflow-auto" data-testid="recap-modal">          <div className="card-mystic sigil-ring w-full max-w-2xl p-7 my-10">
             <div className="flex items-center justify-between mb-3">
               <div>
                 <div className="label-ref flex items-center gap-2"><Sparkles className="w-3 h-3"/> Loremaster's recap</div>
@@ -383,6 +389,24 @@ export default function SessionView() {
         </div>
       </div>
       </div>
+
+      {/* Battlemap overlay — full-screen when toggled by the map button */}
+      {mapOpen && (
+        <div className="fixed inset-0 z-40 bg-void/90 backdrop-blur-sm flex items-stretch justify-center p-3 md:p-6 overflow-auto"
+             data-testid="battlemap-overlay">
+          <div className="w-full max-w-6xl">
+            <Battlemap
+              sessionId={id}
+              campaign={campaign}
+              characters={characters}
+              initiative={init}
+              user={user}
+              subscribe={wsSubscribe}
+              onClose={() => setMapOpen(false)}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

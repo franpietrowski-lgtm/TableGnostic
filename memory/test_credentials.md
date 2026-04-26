@@ -38,5 +38,11 @@ Brute-force protection: 5 failed login attempts per (ip, email) = HTTP 423 lock 
 
 | Field            | Value                                          |
 |------------------|------------------------------------------------|
-| GM-owned camp    | `8dcab411-212f-48f8-8170-7b4a2583f0ac` (TEST Campaign E2E) |
-| Test session     | `6e63d81b-f2ee-4870-a1c8-da296c6e504e`        |
+| Evereantha demo  | `b554f58a21524773acafa713fb0395bd` (Evereantha — The Maiden Adventure) |
+| GM/owner         | admin@tablegnostic.com (also acts as GM)       |
+| PCs (3)          | Eli (Apocophae), Laryk (Ferrilith), Roney (Techgnostic) |
+| World Codex      | 20 nodes — 5 locations, 2 factions, 6 NPCs, 1 creature, 2 lore, 4 quests |
+| Atelier/Genesis  | All 7 phases pre-filled. Nemesis: Order of the Darkening Star |
+
+Re-seed at any time: `POST /api/admin/reset-to-evereantha` (admin role only).
+This wipes campaigns/characters/sessions/chat/dice/initiative/effects/nodes/edges/recaps/custom_attributes/genesis (preserves users) and recreates the canonical Evereantha demo table.

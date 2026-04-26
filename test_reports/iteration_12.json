@@ -1,0 +1,44 @@
+{
+  "summary": "Iteration 12 / V4.0 backend testing — admin reset-to-evereantha, battlemap (CRUD + fog + walls + tokens + WS), and Discord-style channels (slash commands, threads, reactions, pin, edit/delete). All 33 new tests pass (33/33). Found and fixed one ObjectId leak in channels auto-create; flagged iter11 regression that needs updating after V4.0 surface expansion.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/campaigns/{cid}/channels (auto-create branch)", "issue": "Auto-created tavern channel returned raw insert dict containing motor-injected '_id' ObjectId, causing 500 on jsonable_encoder. FIXED in this run by wrapping default in sanitize() before return."},
+      {"endpoint": "PUT /api/characters/{ch_id}", "issue": "owner_id is hard-pinned to original on update; no API path exists to transfer ownership of a character (admin/GM cannot reassign). Test bypassed via direct mongo write. Consider exposing an admin/GM-only ownership-transfer endpoint."},
+      {"endpoint": "Iter11 regression test_openapi_has_8_tags_57_ops", "issue": "Hardcoded 57-op / 8-tag assertion is now stale — V4.0 added tags admin/battlemap/channels and ~22 ops. iter11 + iter10 regression tests also rely on data the new admin-reset wipes (genesis/seed/sessions/journal). They are not failures of V4.0 logic; they need to be re-baselined for the V4.0 surface."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter12_v40.py",
+    "/app/test_reports/pytest/iter12_v40.xml"
+  ],
+  "action_items": [
+    "Re-baseline /app/backend/tests/test_refactor_iter11.py — TestHealthAndOpenAPI::test_openapi_has_8_tags_57_ops now stale (expected 11 tags / ~79 ops after V4.0).",
+    "Iter11 + iter10 regression suites depend on residual seed data that the new /api/admin/reset-to-evereantha wipes; they need fixtures that re-seed their own campaign/session before assertions, or run before reset-to-evereantha.",
+    "Optional: expose an admin/GM-only PUT /api/characters/{id}/owner endpoint so character ownership can be reassigned without raw mongo edits (currently the V3.9 route freezes owner_id on every update)."
+  ],
+  "critical_code_review_comments": [
+    "channels.py list_channels auto-create path leaked Mongo _id (FIXED). Pattern: any code that returns a freshly-inserted doc must wrap it in sanitize() — motor mutates the dict in place to inject _id.",
+    "battlemap.py _is_member treats admin as a regular outsider unless they are GM of the campaign. _is_gm allows admin globally. Consistent with existing convention but worth documenting.",
+    "channels.py post_message imports routes.sessions.roll_dice inside the handler (cycle-avoidance) — fine, but consider hoisting roll_dice into core/dice.py to avoid the cycle entirely and let both routes import freely.",
+    "admin.py reset-to-evereantha is destructive and irreversible; consider gating it behind a query-param confirm=true or a request body with `confirm=\"WIPE\"` to avoid accidental triggers from automated tooling.",
+    "channels.py uses `_camp_room(cid)` for broadcast but no WebSocket route currently subscribes to that room — channel:msg events are emitted but never delivered. Either add a /api/ws/campaign/{cid} endpoint or redirect campaign-scoped broadcasts onto the existing session bus.",
+    "PUT /api/characters/{ch_id} silently discards owner_id changes; if a client posts a transfer it will appear to succeed (200) without any state change. Consider a 400 or a documented note in the OpenAPI description."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter12_v40.py",
+    "/app/backend/routes/channels.py"
+  ],
+  "success_rate": {"backend": "100% (33/33 new tests)", "frontend": "skipped (backend-only round)"},
+  "test_credentials": "Used /app/memory/test_credentials.md as-is. admin@tablegnostic.com / admin123 confirmed working.",
+  "seed_data_creation": "Ran POST /api/admin/reset-to-evereantha as admin at the start of the run — table is now in canonical Evereantha state with 1 campaign, 20 nodes, 1 genesis (phase 7), 3 PCs (Eli/Laryk/Roney). One throwaway 'outsider' user is created during the non-member battlemap test.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "iter11 + iter10 regression suites now fail because (a) hardcoded openapi shape is stale and (b) they depend on data that admin-reset wipes. Either run iter12 LAST or re-baseline iter11/iter10 to seed their own scaffolding. The new test_iter12_v40.py is fully self-contained: it calls reset-to-evereantha, then validates seed integrity, then exercises battlemap + channels end-to-end including a WebSocket map-event subscription. Channels auto-create-tavern bug was fixed in this run (sanitize wrap). One minor design gap noted: campaign-scoped channel broadcasts go to a 'campaign:{cid}' room with no current WS subscriber.",
+  "rca of the issue": "ObjectId leak in /api/campaigns/{cid}/channels auto-create branch: motor's insert_one mutates the input dict to add an _id ObjectId. Returning the same dict directly causes jsonable_encoder to choke (TypeError: 'ObjectId' object is not iterable). Mitigated by wrapping the default-tavern dict in sanitize() before returning it as the rows list. Reproduction: as admin, hit GET /api/campaigns/{evereantha_cid}/channels on a campaign with no channels — was 500, now 200 with one tavern row."
+}

@@ -4,10 +4,13 @@ import { api, formatApiErrorDetail } from "../lib/api";
 import * as Tabs from "@radix-ui/react-tabs";
 import { Users, Plus, UserPlus2, ArrowRight, Trash2, Sparkles, Eye, EyeOff, Link as LinkIcon, Wand2, Shield, Copy, RefreshCw, Check, Save, Network, ListTree, Lightbulb, X, BookOpen } from "lucide-react";
 import KnowledgeGraph from "./KnowledgeGraph";
+import ChannelsPanel from "./ChannelsPanel";
+import { useAuth } from "../lib/api";
 import { NODE_TYPES, NODE_TEMPLATES, colorForType, labelForType } from "../lib/nodeTemplates";
 
 export default function CampaignDetail() {
   const { id } = useParams();
+  const { user } = useAuth();
   const [camp, setCamp] = useState(null);
   const [characters, setCharacters] = useState([]);
   const [nodes, setNodes] = useState([]);
@@ -87,6 +90,7 @@ export default function CampaignDetail() {
         <Tabs.List className="flex gap-2 border-b border-gold/10 pb-3 flex-wrap">
           {[
             ["characters", "Characters"],
+            ["channels", "Channels"],
             ["knowledge", "Knowledge Web"],
             ["sessions", "Sessions"],
             ["primer", "Player Primer"],
@@ -103,6 +107,9 @@ export default function CampaignDetail() {
 
         <Tabs.Content value="characters" className="pt-6">
           <CharactersTab camp={camp} characters={characters} onRefresh={load} />
+        </Tabs.Content>
+        <Tabs.Content value="channels" className="pt-6">
+          <ChannelsPanel campaign={camp} user={user}/>
         </Tabs.Content>
         <Tabs.Content value="knowledge" className="pt-6">
           <KnowledgeTab camp={camp} nodes={nodes} edges={edges} onRefresh={load} />

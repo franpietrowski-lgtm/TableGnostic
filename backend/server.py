@@ -22,6 +22,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from core.config import ALLOW_ORIGINS, ALLOW_ORIGIN_REGEX
 from core.startup import run_startup
 from routes import auth, besm, campaigns, characters, nodes, recap, seed, sessions
+from routes import admin as admin_routes
+from routes import battlemap as battlemap_routes
+from routes import channels as channels_routes
 
 app = FastAPI(title="Table-Gnostic API")
 
@@ -63,3 +66,6 @@ app.include_router(seed.router)
 app.include_router(sessions.router)
 app.include_router(sessions.ws_router)  # WebSocket — no prefix, declares its own path
 app.include_router(recap.router)
+app.include_router(admin_routes.router)
+app.include_router(battlemap_routes.router)
+app.include_router(channels_routes.router)
