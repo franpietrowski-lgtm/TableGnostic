@@ -105,6 +105,7 @@ class CharacterDefect(BaseModel):
     category: str
     page: Optional[int] = None
     note: Optional[str] = ""
+    display_name: Optional[str] = ""
 
 
 class CharacterAttribute(BaseModel):
@@ -116,6 +117,7 @@ class CharacterAttribute(BaseModel):
     custom_attribute_id: Optional[str] = None
     page: Optional[int] = None
     note: Optional[str] = ""
+    display_name: Optional[str] = ""
     # Item / Weapon-class Attributes may carry their own Defects.
     defects: List[CharacterDefect] = []
     # Optional Size template — "" means inherit the character's size.
@@ -134,6 +136,7 @@ class CharacterSkill(BaseModel):
     cost_per_level: int
     page: Optional[int] = None
     note: str = ""
+    display_name: Optional[str] = ""
     components: List[CharacterSkillComponent] = []
 
 

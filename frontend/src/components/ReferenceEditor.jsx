@@ -15,8 +15,13 @@ import { Plus, X, BookOpen, AlertCircle, Edit3, Save } from "lucide-react";
 const KIND_LABELS = {
   weapon: "Weapons", armor: "Armor", item: "Items",
   companion: "Companions", custom: "Custom Rules",
+  attribute: "Attributes", skill: "Skills", defect: "Defects",
 };
 const KIND_KEYS = Object.keys(KIND_LABELS);
+// Kinds that flow back into the Character Builder's pickers — they expose
+// extra structured inputs (cost_per_level / points_per_rank / category) so
+// players can select them when forging a sheet.
+const PLAYABLE_KINDS = new Set(["attribute", "skill", "defect"]);
 
 export default function ReferenceEditor({ campaignId, isGm, systemId }) {
   const [tab, setTab] = useState("weapon");
@@ -124,6 +129,44 @@ function Row({ row, onChange, onSave, onCancel, busy, systemId, editing, onEdit,
                   value={row.summary}
                   onChange={(e) => onChange({ ...row, summary: e.target.value })}
                   data-testid="reference-input-summary"/>
+        {PLAYABLE_KINDS.has(row.kind) && (
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 border border-gold/15 rounded-sm p-2 bg-gold/5"
+               data-testid="reference-playable-fields">
+            {row.kind !== "defect" && (
+              <input className="input" type="number" step="0.5" min={0}
+                     placeholder="Cost / Level (e.g. 4)"
+                     value={(row.fields?.cost_per_level ?? "")}
+                     onChange={(e) => onChange({ ...row,
+                       fields: { ...(row.fields || {}),
+                                 cost_per_level: e.target.value === "" ? "" : Number(e.target.value) } })}
+                     data-testid="reference-input-cost-per-level"/>
+            )}
+            {row.kind === "defect" && (
+              <input className="input" type="number" min={1}
+                     placeholder="Points / Rank (e.g. 1 or 2)"
+                     value={(row.fields?.points_per_rank ?? "")}
+                     onChange={(e) => onChange({ ...row,
+                       fields: { ...(row.fields || {}),
+                                 points_per_rank: e.target.value === "" ? "" : Number(e.target.value) } })}
+                     data-testid="reference-input-points-per-rank"/>
+            )}
+            {row.kind === "defect" && (
+              <select className="select" value={row.fields?.category || "Lesser"}
+                      onChange={(e) => onChange({ ...row,
+                        fields: { ...(row.fields || {}), category: e.target.value } })}
+                      data-testid="reference-input-defect-category">
+                <option value="Lesser">Lesser</option>
+                <option value="Greater">Greater</option>
+                <option value="Custom">Custom</option>
+              </select>
+            )}
+            <input className="input" placeholder="Description / GM note (optional)"
+                   value={row.fields?.description || ""}
+                   onChange={(e) => onChange({ ...row,
+                     fields: { ...(row.fields || {}), description: e.target.value } })}
+                   data-testid="reference-input-description"/>
+          </div>
+        )}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
           <input className="input" placeholder="Page" type="number" min={1} max={999}
                  value={row.page} onChange={(e) => onChange({ ...row, page: e.target.value })}

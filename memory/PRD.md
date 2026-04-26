@@ -351,7 +351,44 @@ Per-system audit covering all 13 systems in the selector. Status table:
 11. **Style-profile theming for D&D 5E + Cypher + Numenera** PDF exports.
 12. **Ingestion preview** — show the GM the parsed text excerpt before committing the Claude call (so the GM can verify the parse caught the right pages).
 
-## V4.4 — Bug-fix Sweep + Map Upload + Demo Chronicle (2026-04-26)
+## V4.4 Phase K — Customizable Names & Campaign-Reference Attributes/Skills/Defects (2026-04-26)
+
+**User pain:** Once an Attribute/Skill/Defect was selected on a sheet, there was no way to customize its on-sheet name or descriptive flavour. Only the level / enhancements / limiters were editable. The Reference Editor in the Atelier covered Weapons / Armor / Items / Companions / Custom Rules but couldn't curate Attributes / Skills / Defects for the table to use during character creation.
+
+**Backend (`/app/backend/routes/reference_editor.py`, `/app/backend/core/models.py`)**
+- `REFERENCE_KINDS` extended from 5 → 8: now also includes `attribute`, `skill`, `defect`. The `Literal` type on `ReferenceItemIn.kind` updated to match — `POST /api/campaigns/{cid}/reference` validates the new kinds with the same page-validation pipeline that already powers the other kinds.
+- `CharacterAttribute`, `CharacterDefect`, `CharacterSkill` models gained `display_name: Optional[str] = ""`. The existing `note` field is repurposed as the player's freeform description. Both round-trip through `PUT /api/characters/{id}` (curl-verified).
+
+**Frontend — Reference Editor (`/app/frontend/src/components/ReferenceEditor.jsx`)**
+- 3 new tabs in the Atelier reference-editor: **Attributes**, **Skills**, **Defects** (`reference-tab-attribute|skill|defect`). 
+- When the GM is creating/editing one of the **playable kinds**, an extra structured-fields panel (`reference-playable-fields`) appears with:
+  - `cost_per_level` (numeric, attribute & skill) — `data-testid="reference-input-cost-per-level"`
+  - `points_per_rank` (numeric, defect) — `data-testid="reference-input-points-per-rank"`
+  - `category` selector (defect: Lesser / Greater / Custom) — `data-testid="reference-input-defect-category"`
+  - `description` (long-form GM note shown to players in the picker) — `data-testid="reference-input-description"`
+- Existing kinds (weapon/armor/item/companion/custom) keep the original simpler form — no regression.
+
+**Frontend — Character Builder (`/app/frontend/src/components/CharacterBuilder.jsx`)**
+- On mount, also fetches `GET /api/campaigns/{cid}/reference` and merges any `attribute` / `skill` / `defect` rows into the picker as **"Campaign Reference"** options (alongside BESM 4E core + Custom (GM)). Defects auto-negate `points_per_rank` so the refund is correct. Attributes default to `open_mods=true` so any enhancement/limiter can apply (the GM-curated entry is presumed permissive).
+- AttributeRow / DefectRow / SkillRow each now expose a **"Customise"** toggle that opens a small inline editor with two inputs: 
+  1. **Custom display name** (`attr|defect|skill-display-name-{idx}`) — overrides the on-sheet label while keeping the underlying mechanic name in brackets (so the GM can always see what it really is).
+  2. **Description / how it works at this table** (`attr|defect|skill-note-{idx}`) — long-form flavour persisted as `note`.
+- AttributeRow already had a `Customise` panel for enhancements/limiters/item-defects — the rename inputs slot above the existing controls. Defect/Skill rows gain their own toggle (`defect-cust-{idx}` / `skill-cust-{idx}`) to keep the row compact when not editing.
+
+**Frontend — Character Sheet (`/app/frontend/src/components/CharacterSheet.jsx`)**
+- When a row has a `display_name`, it renders as a bold parchment header *above* the `BesmTerm` mechanic line. The mechanic name and rule-link still appear directly below it, so a click still pops the BESM 4E reference. Testids: `attr-display-{i}` / `defect-display-{i}` / `skill-display-{i}`.
+
+**Workflow this enables (the GM scenario you described):**
+1. During Session 0 (A/V or Threads PBP), the GM opens **Atelier → Reference Tables → Attributes** and adds setting-flavoured Attributes (e.g. *Apothecary Tincture* with `cost_per_level=4`, page 196 BESM 4E, description "Channels Aurean reagents into healing draughts"). Same for Skills and Defects.
+2. The page-validation guard rails still apply — out-of-range page citations save with a warning.
+3. When players open the Character Builder, the new entries appear in the picker tagged **"Campaign Reference"**. They select one, and on the row they can hit **Customise** to set their personal display name and a short description.
+4. The mechanic resolution (cost, dice rolls, derived stats) all key off the underlying name — so renames are pure flavour and never break the engine.
+
+**Verification (this iteration)**
+- Backend round-trip via curl: `franpietrowski@gmail.com` GM-created an *attribute* / *skill* / *defect* reference row, listed them back, then PUT a character with `display_name` + `note` on attribute[0] / defect[0] — both fields persisted intact in the response.
+- All ESLint + Ruff lints pass on the 5 modified files.
+- No new endpoints — extends the existing `/api/campaigns/{cid}/reference` surface area (no migration needed).
+
 
 ### P0 Bug Fixes
 - **CharacterSheet stat dice math (BESM 4E meet/beat)**: Stat-tile clicks and quick-roll buttons now post `2d6+body|mind|soul` (not `2d6-stat`). Initiative is `1d6+mind`. Tooltip text updated. (`/app/frontend/src/components/CharacterSheet.jsx`)

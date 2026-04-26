@@ -31,7 +31,8 @@ KNOWN_BOOK_RANGES: Dict[str, Dict[str, Any]] = {
     "_default": {"min": 1, "max": 999, "title": "Custom"},
 }
 
-REFERENCE_KINDS = {"weapon", "armor", "item", "companion", "custom"}
+REFERENCE_KINDS = {"weapon", "armor", "item", "companion", "custom",
+                   "attribute", "skill", "defect"}
 
 router = APIRouter(prefix="/api", tags=["reference-editor"])
 
@@ -39,7 +40,8 @@ router = APIRouter(prefix="/api", tags=["reference-editor"])
 # ─────── Pydantic ───────
 
 class ReferenceItemIn(BaseModel):
-    kind: Literal["weapon", "armor", "item", "companion", "custom"]
+    kind: Literal["weapon", "armor", "item", "companion", "custom",
+                  "attribute", "skill", "defect"]
     name: str = Field(min_length=1, max_length=120)
     summary: str = Field(default="", max_length=500)
     page: Optional[int] = None  # cited rulebook page

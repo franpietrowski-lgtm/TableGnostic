@@ -24,6 +24,7 @@ export default function CharacterBuilder() {
 
   const [ref, setRef] = useState(null);
   const [customs, setCustoms] = useState([]);
+  const [refRows, setRefRows] = useState([]);
   const [ch, setCh] = useState(null);
   const [campaign, setCampaign] = useState(null);
   const [err, setErr] = useState("");
@@ -40,11 +41,12 @@ export default function CharacterBuilder() {
       } else {
         setCh(emptyChar(campaignIdFromUrl));
       }
-      const [cu, camp] = await Promise.all([
+      const [cu, camp, refs] = await Promise.all([
         api.get(`/campaigns/${campaignId}/custom`).then((x) => x.data).catch(() => []),
         api.get(`/campaigns/${campaignId}`).then((x) => x.data).catch(() => null),
+        api.get(`/campaigns/${campaignId}/reference`).then((x) => x.data).catch(() => []),
       ]);
-      setCustoms(cu); setCampaign(camp);
+      setCustoms(cu); setCampaign(camp); setRefRows(refs);
       // Pre-set power_level + total_points from campaign if new character
       if (!charId && camp) {
         const pts = (r.power_levels.find(p => p.name === camp.power_level) || {}).points || 120;
@@ -166,6 +168,36 @@ export default function CharacterBuilder() {
   const customDefects = customs.filter((c) => c.kind === "defect");
   const customSkills = customs.filter((c) => c.kind === "skill");
 
+  // Campaign Reference Editor entries (Atelier → Reference Tables → Attributes/Skills/Defects).
+  // Mapped to the same picker shape so the GM can curate per-campaign options
+  // (e.g. setting-flavoured Attributes the table approves during Session 0)
+  // and players see them right alongside the BESM 4E core list.
+  const refAttrRows = refRows.filter((r) => r.kind === "attribute").map((r) => ({
+    name: r.name,
+    cost_per_level: Number(r.fields?.cost_per_level) || 0,
+    page: r.page,
+    blurb: r.summary || r.fields?.description || "",
+    note: r.fields?.description || "",
+    open_mods: true, // permissive — GM authored, allow any enh/lim
+    allowed_enhancements: [], allowed_limiters: [],
+    _group: "Campaign Reference",
+  }));
+  const refSkillRows = refRows.filter((r) => r.kind === "skill").map((r) => ({
+    name: r.name,
+    cost_per_level: Number(r.fields?.cost_per_level) || 1,
+    page: r.page,
+    blurb: r.summary || "",
+    _group: "Campaign Reference",
+  }));
+  const refDefectRows = refRows.filter((r) => r.kind === "defect").map((r) => ({
+    name: r.name,
+    points_per_rank: -Math.abs(Number(r.fields?.points_per_rank) || 1),
+    category: r.fields?.category || "Custom",
+    page: r.page,
+    blurb: r.summary || "",
+    _group: "Campaign Reference",
+  }));
+
   // Campaign filters
   const allow = (list, name) => !list || list.length === 0 || list.includes(name);
   const prohib = (list, name) => list && list.includes(name);
@@ -174,6 +206,7 @@ export default function CharacterBuilder() {
   const filteredAttrOpts = [
     ...filterBy(ref.attributes, campaign?.allowed_attributes, campaign?.prohibited_attributes).map((a) => ({ ...a, _group: "BESM 4E" })),
     ...customAttrs.map((c) => ({ ...c, _group: "Custom (GM)" })),
+    ...refAttrRows,
   ];
   const filteredDefectOpts = [
     ...filterBy(ref.defects, campaign?.allowed_defects, campaign?.prohibited_defects).map((d) => ({ ...d, _group: d.category })),
@@ -181,10 +214,12 @@ export default function CharacterBuilder() {
       ...c, _group: "Custom (GM)",
       points_per_rank: -Math.abs(+c.cost_per_level || 1), category: c.category || "Custom",
     })),
+    ...refDefectRows,
   ];
   const filteredSkillOpts = [
     ...filterBy(ref.skill_groups, campaign?.allowed_skill_groups, campaign?.prohibited_skill_groups),
     ...customSkills.map((c) => ({ ...c, _group: "Custom (GM)" })),
+    ...refSkillRows,
   ];
 
   return (
@@ -774,7 +809,10 @@ function AttributeRow({ idx, a, reference, onUpdate, onRemove, maxRank = 0 }) {
     <div className={`border ${overCap ? "border-ember/60" : "border-gold/15"} rounded-sm p-3`} data-testid={`attr-row-${idx}`}>
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div>
-          <div className="text-sm text-parchment font-ui">{a.name}</div>
+          <div className="text-sm text-parchment font-ui">
+            {a.display_name || a.name}
+            {a.display_name && <span className="text-mist/60 text-[10px] ml-2">[{a.name}]</span>}
+          </div>
           <div className="text-[10px] font-ui text-mist uppercase tracking-widest flex items-center gap-1">
             <BookOpen className="w-3 h-3"/> {a.page ? `p.${a.page} BESM 4E` : "Custom"}
             {a.note && <span className="ml-1 text-gold/70">({a.note})</span>}
@@ -809,6 +847,22 @@ function AttributeRow({ idx, a, reference, onUpdate, onRemove, maxRank = 0 }) {
       </div>
       {openCust && (
         <div className="mt-2 space-y-3">
+          <div className="border border-gold/15 rounded-sm p-2 bg-gold/5 space-y-1.5"
+               data-testid={`attr-rename-${idx}`}>
+            <input className="input text-sm"
+                   placeholder={`Custom display name (default: ${a.name})`}
+                   value={a.display_name || ""}
+                   onChange={(e) => onUpdate({ ...a, display_name: e.target.value })}
+                   data-testid={`attr-display-name-${idx}`}/>
+            <textarea className="input text-sm min-h-[44px]"
+                      placeholder="In-character description / how it works at this table"
+                      value={a.note || ""}
+                      onChange={(e) => onUpdate({ ...a, note: e.target.value })}
+                      data-testid={`attr-note-${idx}`}/>
+            <div className="text-[10px] text-mist/70 italic">
+              Renames stay tied to the underlying mechanic ({a.name}) — costs and dice still resolve correctly.
+            </div>
+          </div>
           <div className="grid md:grid-cols-2 gap-3">
             <div>
               <div className="label-ref mb-1">Enhancements (eff. lvl −1 each, no cost change) · p.145</div>
@@ -900,45 +954,95 @@ function AttributeRow({ idx, a, reference, onUpdate, onRemove, maxRank = 0 }) {
 
 function DefectRow({ idx, d, onUpdate, onRemove }) {
   const pts = d.points_per_rank * d.rank;
+  const [openCust, setOpenCust] = useState(false);
   return (
-    <div className="border border-gold/15 rounded-sm p-3 flex items-center justify-between gap-2 flex-wrap"
+    <div className="border border-gold/15 rounded-sm p-3 flex flex-col gap-2"
          data-testid={`defect-row-${idx}`}>
-      <div>
-        <div className="text-sm text-parchment font-ui">{d.name}</div>
-        <div className="text-[10px] font-ui text-mist uppercase tracking-widest flex items-center gap-1">
-          <BookOpen className="w-3 h-3"/> {d.page ? `p.${d.page} BESM 4E` : "Custom"} · {d.category}
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div>
+          <div className="text-sm text-parchment font-ui">
+            {d.display_name || d.name}
+            {d.display_name && <span className="text-mist/60 text-[10px] ml-2">[{d.name}]</span>}
+          </div>
+          <div className="text-[10px] font-ui text-mist uppercase tracking-widest flex items-center gap-1">
+            <BookOpen className="w-3 h-3"/> {d.page ? `p.${d.page} BESM 4E` : "Custom"} · {d.category}
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="label-ref">RANK</label>
+          <input type="number" min={1} max={3} className="input w-20 text-center"
+                 value={d.rank} onChange={(e) => onUpdate({ ...d, rank: +e.target.value })}
+                 data-testid={`defect-rank-${idx}`}/>
+          <span className="text-ember font-display">{pts} pts</span>
+          <button onClick={() => setOpenCust(!openCust)} className="btn btn-ghost text-[10px] py-1"
+                  data-testid={`defect-cust-${idx}`}>
+            {openCust ? "Hide" : "Customise"}
+          </button>
+          <button onClick={onRemove} className="text-ember/70 hover:text-ember"><X className="w-4 h-4"/></button>
         </div>
       </div>
-      <div className="flex items-center gap-2">
-        <label className="label-ref">RANK</label>
-        <input type="number" min={1} max={3} className="input w-20 text-center"
-               value={d.rank} onChange={(e) => onUpdate({ ...d, rank: +e.target.value })}
-               data-testid={`defect-rank-${idx}`}/>
-        <span className="text-ember font-display">{pts} pts</span>
-        <button onClick={onRemove} className="text-ember/70 hover:text-ember"><X className="w-4 h-4"/></button>
-      </div>
+      {openCust && (
+        <div className="border border-gold/15 rounded-sm p-2 bg-gold/5 space-y-1.5"
+             data-testid={`defect-rename-${idx}`}>
+          <input className="input text-sm"
+                 placeholder={`Custom display name (default: ${d.name})`}
+                 value={d.display_name || ""}
+                 onChange={(e) => onUpdate({ ...d, display_name: e.target.value })}
+                 data-testid={`defect-display-name-${idx}`}/>
+          <textarea className="input text-sm min-h-[44px]"
+                    placeholder="How this Defect manifests for your character"
+                    value={d.note || ""}
+                    onChange={(e) => onUpdate({ ...d, note: e.target.value })}
+                    data-testid={`defect-note-${idx}`}/>
+        </div>
+      )}
     </div>
   );
 }
 
 function SkillRow({ idx, s, onUpdate, onRemove }) {
+  const [openCust, setOpenCust] = useState(false);
   return (
-    <div className="border border-gold/15 rounded-sm p-3 flex items-center justify-between gap-2 flex-wrap"
+    <div className="border border-gold/15 rounded-sm p-3 flex flex-col gap-2"
          data-testid={`skill-row-${idx}`}>
-      <div>
-        <div className="text-sm text-parchment font-ui">{s.group}</div>
-        <div className="text-[10px] font-ui text-mist uppercase tracking-widest flex items-center gap-1">
-          <BookOpen className="w-3 h-3"/> {s.page ? `p.${s.page} BESM 4E` : "Custom"} · {s.cost_per_level} pts/lvl
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div>
+          <div className="text-sm text-parchment font-ui">
+            {s.display_name || s.group}
+            {s.display_name && <span className="text-mist/60 text-[10px] ml-2">[{s.group}]</span>}
+          </div>
+          <div className="text-[10px] font-ui text-mist uppercase tracking-widest flex items-center gap-1">
+            <BookOpen className="w-3 h-3"/> {s.page ? `p.${s.page} BESM 4E` : "Custom"} · {s.cost_per_level} pts/lvl
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="label-ref">LVL</label>
+          <input type="number" min={1} max={6} className="input w-20 text-center"
+                 value={s.level} onChange={(e) => onUpdate({ ...s, level: +e.target.value })}
+                 data-testid={`skill-level-${idx}`}/>
+          <span className="text-gold font-display">{s.cost_per_level * s.level} pts</span>
+          <button onClick={() => setOpenCust(!openCust)} className="btn btn-ghost text-[10px] py-1"
+                  data-testid={`skill-cust-${idx}`}>
+            {openCust ? "Hide" : "Customise"}
+          </button>
+          <button onClick={onRemove} className="text-ember/70 hover:text-ember"><X className="w-4 h-4"/></button>
         </div>
       </div>
-      <div className="flex items-center gap-2">
-        <label className="label-ref">LVL</label>
-        <input type="number" min={1} max={6} className="input w-20 text-center"
-               value={s.level} onChange={(e) => onUpdate({ ...s, level: +e.target.value })}
-               data-testid={`skill-level-${idx}`}/>
-        <span className="text-gold font-display">{s.cost_per_level * s.level} pts</span>
-        <button onClick={onRemove} className="text-ember/70 hover:text-ember"><X className="w-4 h-4"/></button>
-      </div>
+      {openCust && (
+        <div className="border border-gold/15 rounded-sm p-2 bg-gold/5 space-y-1.5"
+             data-testid={`skill-rename-${idx}`}>
+          <input className="input text-sm"
+                 placeholder={`Custom display name (default: ${s.group})`}
+                 value={s.display_name || ""}
+                 onChange={(e) => onUpdate({ ...s, display_name: e.target.value })}
+                 data-testid={`skill-display-name-${idx}`}/>
+          <textarea className="input text-sm min-h-[44px]"
+                    placeholder="What this skill represents for your character"
+                    value={s.note || ""}
+                    onChange={(e) => onUpdate({ ...s, note: e.target.value })}
+                    data-testid={`skill-note-${idx}`}/>
+        </div>
+      )}
     </div>
   );
 }

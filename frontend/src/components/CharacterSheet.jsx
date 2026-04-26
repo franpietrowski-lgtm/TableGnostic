@@ -203,6 +203,10 @@ export default function CharacterSheet() {
                 return (
                 <div key={i} className="border border-gold/10 rounded-sm p-3 flex items-start justify-between flex-wrap gap-2">
                   <div className="min-w-0 flex-1">
+                    {a.display_name && (
+                      <div className="text-sm text-parchment font-ui font-semibold mb-0.5"
+                           data-testid={`attr-display-${i}`}>{a.display_name}</div>
+                    )}
                     <div className="text-sm font-ui">
                       <BesmTerm name={a.name} cost={`${a.cost_per_level} pts/level`}
                                 page={a.page} note={a.note}
@@ -263,6 +267,10 @@ export default function CharacterSheet() {
               {ch.defects.map((d, i) => (
                 <div key={i} className="border border-gold/10 rounded-sm p-3 flex items-start justify-between flex-wrap gap-2">
                   <div className="min-w-0 flex-1">
+                    {d.display_name && (
+                      <div className="text-sm text-parchment font-ui font-semibold mb-0.5"
+                           data-testid={`defect-display-${i}`}>{d.display_name}</div>
+                    )}
                     <div className="text-sm font-ui">
                       <BesmTerm name={d.name} cost={`${d.points_per_rank} pts/rank`}
                                 page={d.page} note={d.note} category={d.category}
@@ -298,6 +306,10 @@ export default function CharacterSheet() {
                 return (
                 <div key={i} className="border border-gold/10 rounded-sm p-3 flex items-start justify-between flex-wrap gap-2">
                   <div className="min-w-0 flex-1">
+                    {s.display_name && (
+                      <div className="text-sm text-parchment font-ui font-semibold mb-0.5"
+                           data-testid={`skill-display-${i}`}>{s.display_name}</div>
+                    )}
                     <div className="text-sm text-parchment font-ui">
                       {s.group} <span className="text-gold" title="Group Level">×{s.level}</span>
                       <span className="text-gold/50 text-[10px] ml-1 font-ui">assigned</span>
