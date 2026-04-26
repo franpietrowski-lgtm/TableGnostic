@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { api, formatApiErrorDetail } from "../lib/api";
-import { Plus, X, AlertTriangle, CheckCircle2, Save, Layers, ListTree, ScrollText } from "lucide-react";
+import { Plus, X, AlertTriangle, CheckCircle2, Save, Layers, ListTree, ScrollText, FileDown } from "lucide-react";
+import IngestPanel from "./IngestPanel";
 
 /**
  * AtelierTab — V4.4 dynamic-scaling tiers.
@@ -128,12 +129,16 @@ export default function AtelierTab({ campId, camp }) {
                   className="btn btn-ghost text-xs" data-testid="atelier-continuity-btn">
             <AlertTriangle className="w-3 h-3"/> Continuity check
           </button>
+          <ExportPdfBtn campId={campId}/>
           <button onClick={saveAll} disabled={busy}
                   className="btn btn-primary text-xs" data-testid="atelier-save-btn">
             <Save className="w-3 h-3"/> {busy ? "Saving…" : "Save"}
           </button>
         </div>
       </div>
+
+      {/* ---------- Knowledge Web ingestion ---------- */}
+      <IngestPanel campId={campId}/>
 
       {/* ---------- Session 0 ---------- */}
       <SessionZeroPanel sz={state.session_zero || {}} setSZ={setSZ}/>
@@ -375,5 +380,45 @@ function ChipList({ label, items, setItems, placeholder, testid, compact }) {
         <button onClick={add} type="button" className="btn btn-ghost"><Plus className="w-3 h-3"/></button>
       </div>
     </div>
+  );
+}
+
+/** ExportPdfBtn — downloads a system-branded PDF chronicle.
+ *  Uses fetch with the bearer token because <a download> can't carry headers. */
+function ExportPdfBtn({ campId }) {
+  const [busy, setBusy] = useState(false);
+  const handle = async () => {
+    setBusy(true);
+    try {
+      const token = localStorage.getItem("tg_token");
+      const apiBase = process.env.REACT_APP_BACKEND_URL || "";
+      const r = await fetch(`${apiBase}/api/campaigns/${campId}/export.pdf`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!r.ok) {
+        const txt = await r.text();
+        throw new Error(txt || `HTTP ${r.status}`);
+      }
+      const blob = await r.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "chronicle.pdf";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      window.alert("PDF export failed: " + e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <button onClick={handle} disabled={busy}
+            className="btn btn-ghost text-xs" data-testid="atelier-export-pdf-btn"
+            title="Download a DriveThruRPG-ready, system-branded PDF chronicle of every session.">
+      <FileDown className="w-3 h-3"/> {busy ? "Rendering…" : "Export PDF"}
+    </button>
   );
 }

@@ -1,0 +1,41 @@
+{
+  "summary": "V4.4 Phase C+E (iter17) — Knowledge Web ingestion (Claude Sonnet 4.5) + DriveThruRPG-ready PDF export. Backend pytest 13/13 PASS in 14.4s. Frontend smoke verified end-to-end on the live preview against fresh Evereantha demo: Atelier tab renders ingest-panel + ingest-upload-btn + ingest-file-input + atelier-export-pdf-btn; clicking Export PDF triggered a real GET /api/campaigns/{cid}/export.pdf returning 200; history empty-state ('No ingestions yet.') renders correctly after a reset.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter17_v44_phase_ce.py",
+    "/app/test_reports/pytest/iter17_v44_phase_ce.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "routes/ingest.py: Claude prompt is well-constrained — explicit 'NEVER reproduce rulebook prose', strict JSON, valid kinds enumerated, 60-suggestion cap. Defensive JSON extraction handles ```json fences and sloppy LLM output via regex {...} fallback. _truncate_for_llm caps input at 60k chars (head 60% + tail 40%) — sane LLM-spend control.",
+    "routes/ingest.py accept_suggestions: idempotency guard missing — if the GM clicks accept twice for the same index, two duplicate node/custom_attribute rows are created (the function only flips suggestions[idx].accepted=True after the insert, but it does NOT short-circuit when sugs[idx].accepted is already True). Recommend: 'if sugs[idx].get(\"accepted\"): continue' at the top of the loop. Not a blocker for V4.4 sign-off; flag for V4.5.",
+    "routes/ingest.py: file content-type sniff falls back to extension cleanly (good). MAX_BYTES=24MB matches user spec. Empty-file 400 + oversize 413 + unsupported-type 400 + non-GM 403 all verified.",
+    "routes/pdf_export.py _group_sessions_into_chapters: correctly produces Ch1=S0+S1+S2 then pairs (Ch2=S3+S4, Ch3=S5+S6, Ch4=S7+S8) when 'Session N' appears in titles; falls back to insertion order otherwise. Verified in PDF text extraction (BESM 4E header + Chapter 1/2/3/4 ToC).",
+    "routes/pdf_export.py: latin-1-safe Content-Disposition is correctly stripping non-ASCII (em-dash) from 'Evereantha — The Maiden Adventure' filename — header.encode('latin-1') round-trip succeeds in test.",
+    "routes/pdf_export.py: 437KB expected size confirmed (test asserts >50KB); reportlab cover_page draws palette bars + logo + title + subtitle + decorative rule + DriveThruRPG-ready footer per system profile.",
+    "routes/admin.py _GAME_COLLECTIONS: confirmed includes 'ingestions' + 'atelier' + 'battlemaps' + 'channels' + 'channel_messages' (resolves the iter16 minor-issue note). Reset wipe verified by TestResetWipesIngestions."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter17_v44_phase_ce.py",
+    "/app/test_reports/iteration_17.json",
+    "/app/test_reports/pytest/iter17_v44_phase_ce.xml"
+  ],
+  "success_rate": {
+    "backend": "100% (13/13 V4.4 Phase C+E pytest pass)",
+    "frontend": "100% on selectors verified (ingest-panel, ingest-upload-btn, ingest-file-input, atelier-export-pdf-btn). PDF download fetch returned HTTP 200 via Playwright network interception."
+  },
+  "test_credentials": "/app/memory/test_credentials.md verified — franpietrowski@gmail.com / PieGod08!! (admin) used for all auth flows; player fixture registers TEST_iter17_player@example.com / Pp123456!! at runtime (gmail/example.com domains required — *.test domain rejected by EmailStr validator).",
+  "seed_data_creation": "Module-scoped reset-to-evereantha?confirm=WIPE runs at the start of the suite. Backend test creates ONE Claude ingest (~$0.01-0.05 LLM spend) on a 917-byte sample_lore.md and reuses the ingest_id across list/get/accept/delete tests. test_pdf_no_sessions_400 creates+deletes a TEST_empty_iter17 throwaway campaign. test_reset_clears_ingestions runs an additional reset at the end so the demo state is clean for downstream UI testing.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Cumulative pytest: iter9+11+12+13+14+15+16+17 should be 137 PASS. iter17 is destructive (calls reset twice). Frontend selectors confirmed: ingest-panel, ingest-upload-btn, ingest-file-input, ingest-row-{id}, ingest-detail, ingest-tab-{kind}, ingest-tab-all, ingest-sug-{idx}, ingest-sug-{idx}-mark, ingest-accept-marked, ingest-mark-all-tab, ingest-delete-{id}, atelier-export-pdf-btn. Note for UI ingest-detail tests: after running iter17, ingestion history is empty — to exercise the detail panel UI, either re-run a single backend ingest (use POST /api/campaigns/{cid}/ingest with sample_lore.md) or upload via the UI itself (will hit real Claude). The empty-state 'No ingestions yet.' is correct.",
+  "rca of the issue": "No bugs. The single optional V4.5 follow-up is making /api/ingestions/{id}/accept idempotent — currently re-accepting the same index would duplicate the created node/custom_attribute. Not a blocker for sign-off; the UI removes accepted suggestions from the active list after first accept, so it is not user-reachable in the happy path."
+}

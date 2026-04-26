@@ -27,7 +27,7 @@ router = APIRouter(prefix="/api/admin", tags=["admin"])
 _GAME_COLLECTIONS = (
     "campaigns", "characters", "sessions", "chat_logs", "dice_rolls",
     "initiative", "effects", "nodes", "edges", "recaps",
-    "custom_attributes", "genesis", "atelier",
+    "custom_attributes", "genesis", "atelier", "ingestions",
     "battlemaps", "channels", "channel_messages",
 )
 
