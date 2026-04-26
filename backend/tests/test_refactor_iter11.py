@@ -23,9 +23,26 @@ from motor.motor_asyncio import AsyncIOMotorClient
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://rules-forge.preview.emergentagent.com").rstrip("/")
 API = f"{BASE_URL}/api"
 
-ADMIN = ("admin@tablegnostic.com", "admin123")
-GM = ("gm@tablegnostic.com", "gm123456")
-PLAYER = ("player@tablegnostic.com", "player12345")
+ADMIN = ("franpietrowski@gmail.com", "PieGod08!!")  # GMFran — V4.3 sole seeded account
+import time as _time
+_SUFFIX = str(int(_time.time() * 1000))
+GM = (f"t11gm_{_SUFFIX}@example.com", "t11gmpass!!")
+PLAYER = (f"t11pl_{_SUFFIX}@example.com", "t11plpass!!")
+
+
+def _register_test_account(email, password, role):
+    try:
+        r = requests.post(f"{API}/auth/register",
+                          json={"email": email, "password": password,
+                                "name": f"T11 {role}", "role": role}, timeout=15)
+        if r.status_code in (200, 201, 409):
+            return
+    except Exception:
+        pass
+
+
+_register_test_account(GM[0], GM[1], "gm")
+_register_test_account(PLAYER[0], PLAYER[1], "player")
 
 CAMP_ID = "8dcab411-212f-48f8-8170-7b4a2583f0ac"
 SESS_ID = "6e63d81b-f2ee-4870-a1c8-da296c6e504e"

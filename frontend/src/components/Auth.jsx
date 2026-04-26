@@ -26,11 +26,6 @@ export default function Auth() {
     } finally { setBusy(false); }
   };
 
-  const fillDemo = (role) => {
-    if (role === "gm") setForm({ ...form, email: "gm@tablegnostic.com", password: "gm123456" });
-    if (role === "player") setForm({ ...form, email: "player@tablegnostic.com", password: "player12345" });
-  };
-
   return (
     <div className="min-h-screen flex items-center justify-center relative px-4">
       <div className="relative z-10 w-full max-w-md page">
@@ -122,13 +117,6 @@ export default function Auth() {
             )}
           </div>
 
-          <div className="mt-6">
-            <div className="label-ref mb-2">Try a demo identity</div>
-            <div className="flex gap-2">
-              <button type="button" onClick={() => fillDemo("gm")} className="btn btn-ghost text-xs flex-1" data-testid="demo-gm-btn">Demo GM</button>
-              <button type="button" onClick={() => fillDemo("player")} className="btn btn-ghost text-xs flex-1" data-testid="demo-player-btn">Demo Player</button>
-            </div>
-          </div>
         </div>
       </div>
     </div>

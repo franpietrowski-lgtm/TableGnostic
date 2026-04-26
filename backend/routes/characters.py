@@ -124,9 +124,11 @@ async def transfer_character(ch_id: str, new_owner_id: str,
 @router.post("/characters/{cid}/journal")
 async def add_journal_entry(cid: str, body: JournalEntryIn,
                             user: dict = Depends(get_current_user)):
-    """Append a journal entry to a character's Folio. The entry is timestamped
-    and (optionally) echoed as a journal-tagged chat line into the session so
-    the recap LLM can pick it up alongside everything else that happened.
+    """Append a journal entry to a character's Folio. The entry is timestamped,
+    optionally echoed as a journal-tagged chat line into the session, AND
+    auto-uploaded to the campaign's World Codex as a `player_journal` node
+    (visibility=gm_only) so the GM can collect every player's perspective for
+    end-of-session weaving. The player retains their folio copy.
     Only the character's owner OR the campaign GM may journal as that PC.
     """
     ch = await db.characters.find_one({"id": cid}, {"_id": 0})
@@ -145,8 +147,9 @@ async def add_journal_entry(cid: str, body: JournalEntryIn,
     # Defensive: legacy seeds stored journal as a string. Keep arrays only.
     if not isinstance(journal, list):
         journal = []
+    entry_id = new_id()
     entry = {
-        "id": new_id(),
+        "id": entry_id,
         "text": body.text.strip(),
         "by_uid": user["id"],
         "by_name": user["name"],
@@ -170,4 +173,32 @@ async def add_journal_entry(cid: str, body: JournalEntryIn,
             await db.chat_logs.insert_one(log_doc)
             await broadcast(body.session_id, {"type": "chat", "data": sanitize(log_doc)})
 
-    return {"ok": True, "entry": entry, "count": len(journal)}
+    # Auto-upload to the campaign's World Codex as a `player_journal` node —
+    # GM-only, so players can't read each other's perspectives. The end-of-
+    # session weaver pulls these in to compose the final chronicle.
+    journal_node_id = new_id()
+    await db.nodes.insert_one({
+        "id": journal_node_id,
+        "campaign_id": ch["campaign_id"],
+        "type": "player_journal",
+        "title": f"{ch.get('name','?')} — {entry['created_at'][:10]}",
+        "content": body.text.strip(),
+        "tags": ["journal", ch.get("name", "").lower()],
+        "visibility": "gm_only",
+        "revealed_to": [],
+        "links": [],
+        "fields": {
+            "character_id": cid,
+            "character_name": ch.get("name", ""),
+            "session_id": body.session_id or "",
+            "by_uid": user["id"],
+            "by_name": user["name"],
+            "folio_entry_id": entry_id,
+        },
+        "author_id": user["id"],
+        "author_name": user["name"],
+        "created_at": now_iso(),
+    })
+
+    return {"ok": True, "entry": entry, "count": len(journal),
+            "codex_node_id": journal_node_id}

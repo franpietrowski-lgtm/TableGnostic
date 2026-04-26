@@ -1,0 +1,59 @@
+{
+  "summary": "Iteration 14 / V4.3 backend regression — focused on the V4.3 deltas: retired demo accounts, GMFran sole admin, bidirectional node visibility (gm_only/shared/revealed) with revealed_to clear, bulk visibility, player_journal codex auto-upload, session_record codex mirror on recap, and the new POST /api/sessions/{sid}/finalize chronicle weaver (Claude Sonnet 4.5 via emergentintegrations). 18/18 new iter14 tests pass — including both LLM-backed positive paths (recap + finalize). Cumulative iter9 + iter11 + iter12 + iter13 + iter14 = 100 PASS / 18 SKIP / 0 FAIL (baseline was 82/28/0 + 18 new = 100; some legacy LLM-gated tests now run because EMERGENT_LLM_KEY is configured).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "POST /api/sessions/{sid}/finalize",
+        "issue": "Body is parsed as a free-form dict (not a Pydantic model). Unknown keys are silently ignored and there's no schema in /openapi.json for tooling. Functionally fine — the four contract checks (recap_node_id required, tone whitelist, recap node must belong to this campaign, GM/admin only) all return correct status codes — but consider adding a FinalizeIn(BaseModel) for parity with the rest of the API."
+      },
+      {
+        "endpoint": "POST /api/characters/{cid}/journal",
+        "issue": "Player can journal as their own character even if they're not seated at this campaign's session — character ownership is the only gate. Journal entry is still posted into chat for any session_id that belongs to the same campaign (regardless of whether that session is active). Acceptable per V4.3 spec, but worth documenting."
+      },
+      {
+        "endpoint": "POST /api/campaigns/{cid}/nodes/bulk-visibility",
+        "issue": "Endpoint accepts only gm_only/shared (not revealed) — this is by design (per docstring: 'Reveal-all-to-players / Reset-all-to-GM') but the 400 message 'Bulk visibility supports gm_only or shared only' could be clearer that 'revealed' must be done per-node via /reveal."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter14_v43.py",
+    "/app/test_reports/pytest/iter14_v43.xml",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "(Optional) Promote the finalize body to a Pydantic FinalizeIn model for OpenAPI visibility.",
+    "(Optional, pre-existing) Mount /api/openapi.json alias so external tooling can fetch the spec from the public preview URL (current /openapi.json only serves SPA via ingress).",
+    "(Optional, pre-existing) backend/tests/backend_test.py errors at collection without REACT_APP_BACKEND_URL preloaded — add load_dotenv at top, or keep ignoring it via --ignore=tests/backend_test.py."
+  ],
+  "critical_code_review_comments": [
+    "core/startup.py _RETIRED_DEMO_EMAILS deletion runs on EVERY boot — verified: admin@/gm@/player@tablegnostic.com all return 401 even after a manual /register attempt with those emails would be wiped on next supervisor restart. Good defensive hygiene.",
+    "routes/nodes.py PUT /nodes/{nid}/visibility: when flipping back to gm_only, code correctly sets revealed_to=[] in the same $set update. Verified end-to-end: revealed→gm_only fully clears the revealed_to array. Permission gate accepts admin role too (good, parity with /finalize).",
+    "routes/nodes.py POST /campaigns/{cid}/nodes/bulk-visibility uses update_many and returns res.modified_count — correct. Admin-bypass path is also wired.",
+    "routes/characters.py /journal: response now carries codex_node_id (V4.3). The new node has visibility='gm_only', type='player_journal', fields.character_id, fields.session_id, fields.folio_entry_id and content matches body.text.strip(). Player cannot read their own gm_only journal nodes back — confirmed via /campaigns/{cid}/nodes from the player's token (they're filtered by visible_to()). Good.",
+    "routes/recap.py /recap: session_record node insertion happens AFTER the LLM call and AFTER db.recaps.insert_one — so a 502 on the LLM correctly aborts before any node is created. Cooldown timestamp is set BEFORE the node insert, meaning a retry within 30s will 429 even though the prior try did succeed in mirroring; this is intentional per the cooldown comment but worth flagging.",
+    "routes/recap.py /finalize: GM/admin gate is correct. The recap node lookup is scoped by {id, campaign_id} so a cross-campaign recap_node_id correctly 404s. is_finalized=True, tone, journal_ids, finalized_at, finalized_by, AND original_recap (preserved) all written. Title is rewritten to 'Chronicle — ...'. tags get 'chronicle' + 'finalized' + tone added (deduped via set()). Verified end-to-end with Claude Sonnet 4.5 — actual chronicle text returned ~250 words.",
+    "core/models.py JournalEntryIn caps text at 2000 chars (good — prevents giant codex node bloat from a runaway journal entry).",
+    "Player-journal node visibility default is hardcoded to 'gm_only' inside /journal handler (NOT inherited from a default in NodeIn) — correct. Same for session_record in /recap. Both paths bypass the NodeIn 'players-create-shared-only' override because they create the doc directly, not via POST /nodes."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter14_v43.py",
+    "/app/test_reports/iteration_14.json"
+  ],
+  "success_rate": {
+    "backend": "100% (18/18 new tests; 100/100 cumulative across iter9+11+12+13+14, 18 skipped, 0 failed)",
+    "frontend": "skipped (backend-only round per request)"
+  },
+  "test_credentials": "/app/memory/test_credentials.md verified accurate. ONLY franpietrowski@gmail.com / PieGod08!! works as the seeded admin. The retired generic demos (admin@/gm@/player@tablegnostic.com) are wiped on every backend boot by core/startup.py and now correctly 401 on /login. Tests register their own transient gm/player via /api/auth/register using @example.com (EmailStr accepts it; @test.local is rejected).",
+  "seed_data_creation": "Module does NOT call /admin/reset-to-evereantha (per main agent's note about not wiping in-flight state). Instead it creates its own throwaway campaign 'V43-Iter14-{suffix}' owned by a freshly-registered transient GM, with a freshly-registered transient player joined via /invites/{token}/accept. Throwaway test users (t14gm_*@example.com, t14pl_*@example.com) are left in the users collection — they don't conflict with anything. The test campaign + its session + ~6 nodes + 1 character + recap + chronicle remain in the DB after the run; cleanup is handled by reset-to-evereantha when other tests need a clean slate.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "iter14_v43.py is fully self-contained and does NOT call reset-to-evereantha — safe to interleave with other iter modules in any order. Module setup time is ~1s (just registers two @example.com users via /auth/register). Total runtime: ~26s solo, ~56s cumulative with iter9/11/12/13. The two LLM-positive tests (test_recap_creates_session_record_node, test_finalize_positive_path) call Claude Sonnet 4.5 via emergentintegrations and self-skip on 503/429/502 — they took ~10–18s each on this run. EMERGENT_LLM_KEY in /app/backend/.env is currently working (sk-emergent-38947E7C0F3EbCcCbC); if that key rotates the LLM tests will skip gracefully. Cumulative count is now 100 PASS / 18 SKIP / 0 FAIL (was 82/28/0). The drop in skips from 28→18 is because some pre-existing iter9/11/12/13 LLM-gated cases now execute since the key is wired — NOT a regression.",
+  "rca of the issue": "No bugs found in V4.3 backend. All 7 requested V4.3 features verified end-to-end including the two Claude Sonnet 4.5 LLM paths. The /finalize endpoint correctly enforces (1) 400 on missing recap_node_id, (2) 400 on tone not in {lyrical, terse, in-character}, (3) 404 on cross-campaign recap_node_id, (4) 403 on non-GM/non-admin, (5) 503 if EMERGENT_LLM_KEY missing (tested by spec, not exercised — key was present this run), (6) 200 with is_finalized=True, tone, journal_ids, original_recap preserved, title 'Chronicle — …'. Reproduction (positive case): POST /api/auth/login GMFran → POST /api/campaigns → POST /api/invites/{token}/accept (player) → POST /api/sessions → POST /api/characters → POST /api/characters/{cid}/journal (returns codex_node_id with visibility='gm_only', type='player_journal') → POST /api/chat → POST /api/sessions/{sid}/recap (returns codex_node_id pointing at type='session_record', is_finalized=False) → POST /api/sessions/{sid}/finalize {recap_node_id, journal_node_ids, tone:'terse'} → returns the same node with is_finalized=True, tone='terse', journal_ids=[…], original_recap preserved."
+}

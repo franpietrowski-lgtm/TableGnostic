@@ -15,10 +15,25 @@ if not BASE_URL:
                 BASE_URL = line.split("=", 1)[1].strip().rstrip("/")
 API = f"{BASE_URL}/api"
 
-GM_EMAIL = "gm@tablegnostic.com"
-GM_PASS = "gm123456"
-PLAYER_EMAIL = "player@tablegnostic.com"
-PLAYER_PASS = "player12345"
+import time as _time
+_SUFFIX = str(int(_time.time() * 1000))
+GM_EMAIL = f"t9gm_{_SUFFIX}@example.com"
+GM_PASS = "t9gmpass!!"
+PLAYER_EMAIL = f"t9pl_{_SUFFIX}@example.com"
+PLAYER_PASS = "t9plpass!!"
+
+
+def _bootstrap_test_users():
+    for email, pw, role in ((GM_EMAIL, GM_PASS, "gm"), (PLAYER_EMAIL, PLAYER_PASS, "player")):
+        try:
+            requests.post(f"{API}/auth/register",
+                          json={"email": email, "password": pw,
+                                "name": f"T9 {role}", "role": role}, timeout=15)
+        except Exception:
+            pass
+
+
+_bootstrap_test_users()
 
 
 def h(tok):

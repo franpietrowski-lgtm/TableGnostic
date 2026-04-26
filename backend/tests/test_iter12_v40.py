@@ -24,9 +24,28 @@ BASE_URL = os.environ.get("REACT_APP_BACKEND_URL",
                           "https://rules-forge.preview.emergentagent.com").rstrip("/")
 API = f"{BASE_URL}/api"
 
-ADMIN = ("admin@tablegnostic.com", "admin123")
-GM = ("gm@tablegnostic.com", "gm123456")
-PLAYER = ("player@tablegnostic.com", "player12345")
+ADMIN = ("franpietrowski@gmail.com", "PieGod08!!")  # GMFran — the only seeded account in V4.3
+# GM and PLAYER auto-registered at module setup so the retired generic demo
+# accounts don't have to exist anymore (V4.3).
+import time as _time
+_SUFFIX = str(int(_time.time() * 1000))
+GM = (f"t12gm_{_SUFFIX}@example.com", "t12gmpass!!")
+PLAYER = (f"t12pl_{_SUFFIX}@example.com", "t12plpass!!")
+
+
+def _register(email, password, role):
+    r = requests.post(f"{API}/auth/register",
+                      json={"email": email, "password": password,
+                            "name": f"T12 {role}", "role": role},
+                      timeout=15)
+    if r.status_code == 409:
+        return  # already exists from a prior run
+    assert r.status_code in (200, 201), f"register failed for {email}: {r.status_code} {r.text}"
+
+
+# Register the transient test accounts before fixtures need them.
+_register(GM[0], GM[1], "gm")
+_register(PLAYER[0], PLAYER[1], "player")
 
 
 def _login(email, password):
@@ -400,8 +419,8 @@ class TestChannels:
         assert r2.json()["slash_meta"]["kind"] == "whisper"
 
     def test_mention_resolves_to_uid(self, admin_tok):
-        # admin email handle is "admin"
-        body = {"body": "Heads up @admin — check this."}
+        # GMFran's email handle is "franpietrowski"; name "GMFran" → "gmfran".
+        body = {"body": "Heads up @gmfran — check this."}
         r = requests.post(f"{API}/channels/{pytest.tavern_id}/messages",
                           headers=_h(admin_tok), json=body, timeout=15)
         assert r.status_code == 200

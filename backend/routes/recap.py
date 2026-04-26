@@ -105,7 +105,150 @@ async def generate_recap(sid: str, body: RecapIn,
         "by_user_name": user["name"], "created_at": now_iso(),
     }
     await db.recaps.insert_one(doc)
-    return sanitize(doc)
+
+    # Mirror the recap into the World Codex as a `session_record` node so it
+    # collects alongside player journals on the Codex Sessions tab. GM-only
+    # by default; the GM can flip to "shared" when the woven chronicle is
+    # ready for the table.
+    record_node_id = new_id()
+    await db.nodes.insert_one({
+        "id": record_node_id,
+        "campaign_id": s["campaign_id"],
+        "type": "session_record",
+        "title": f"Recap — {s.get('title','Session')} ({doc['created_at'][:10]})",
+        "content": recap_text,
+        "tags": ["session", "recap", body.style],
+        "visibility": "gm_only",
+        "revealed_to": [],
+        "links": [],
+        "fields": {
+            "session_id": sid,
+            "session_title": s.get("title", ""),
+            "round": s.get("round", 0),
+            "style": body.style,
+            "recap_id": doc["id"],
+            "is_finalized": False,
+        },
+        "author_id": user["id"],
+        "author_name": user["name"],
+        "created_at": now_iso(),
+    })
+    return sanitize({**doc, "codex_node_id": record_node_id})
+
+
+@router.post("/sessions/{sid}/finalize")
+async def finalize_session_chronicle(sid: str, body: dict,
+                                     user: dict = Depends(get_current_user)):
+    """Weave a final session chronicle: GM provides a list of player-journal
+    node ids + a base recap, Claude composes a unified third-person narrative
+    that incorporates each character's voice/perception. The result is
+    persisted as a finalised `session_record` node and (when the entire
+    campaign is finalised) becomes a chapter of the campaign chronicle PDF.
+
+    Body: {
+        "journal_node_ids": [str, ...],   # ordered — chapter sequence
+        "recap_node_id":    str,          # the GM's chosen base recap
+        "tone":             "lyrical" | "terse" | "in-character",
+    }
+
+    GM/admin only.
+    """
+    s = await db.sessions.find_one({"id": sid}, {"_id": 0})
+    if not s:
+        raise HTTPException(404, "Session not found")
+    camp = await db.campaigns.find_one({"id": s["campaign_id"]}, {"_id": 0})
+    if not camp:
+        raise HTTPException(404, "Campaign not found")
+    if user["id"] != camp["gm_id"] and user.get("role") != "admin":
+        raise HTTPException(403, "Only GM/admin can finalize a session chronicle.")
+    if not EMERGENT_LLM_KEY:
+        raise HTTPException(503, "LLM key not configured")
+
+    journal_ids = body.get("journal_node_ids") or []
+    recap_node_id = body.get("recap_node_id")
+    tone = body.get("tone", "lyrical")
+    if tone not in ("lyrical", "terse", "in-character"):
+        raise HTTPException(400, "tone must be one of: lyrical / terse / in-character")
+    if not recap_node_id:
+        raise HTTPException(400, "recap_node_id is required")
+
+    recap_node = await db.nodes.find_one(
+        {"id": recap_node_id, "campaign_id": s["campaign_id"]}, {"_id": 0})
+    if not recap_node or recap_node.get("type") != "session_record":
+        raise HTTPException(404, "Recap node not found in this campaign")
+
+    journals = []
+    for jid in journal_ids:
+        jn = await db.nodes.find_one(
+            {"id": jid, "campaign_id": s["campaign_id"], "type": "player_journal"},
+            {"_id": 0})
+        if jn:
+            journals.append(jn)
+
+    journal_block = "\n\n".join(
+        f"### {j.get('fields', {}).get('character_name','?')} — {j.get('created_at','')[:16]}\n"
+        f"{j.get('content','').strip()}"
+        for j in journals
+    ) or "  (no player journals yet)"
+
+    style_instruction = {
+        "lyrical": "Write a lyrical, third-person narrative chronicle (~250–350 words). "
+                   "Weave each character's perspective into the broader event flow. "
+                   "Honour the GM's recap as the spine; treat journals as colour and inner voice.",
+        "terse": "Write a tight, present-tense chronicle. Group beats by what happened, "
+                 "who acted, what changed, what's left open. Use journal lines as direct "
+                 "quotations only when they add fact (not feeling).",
+        "in-character": "Write the chronicle as a many-voiced campfire retelling — each "
+                        "character speaks one paragraph in their own voice, the GM's recap "
+                        "frames the cold-open and outro. Roughly 400 words.",
+    }[tone]
+
+    system_prompt = (
+        f"You are the Loremaster of \"{camp['name']}\" "
+        f"({camp.get('system','BESM 4E')}, {camp.get('power_level','Heroic')} tier). "
+        f"Your task: weave the GM's recap and the players' journal entries into the "
+        f"definitive chronicle of this session. Honour every voice. Never invent "
+        f"details that aren't in either source. Tone: {camp.get('tone') or 'unspecified'}. "
+        f"Genre: {camp.get('genre') or 'unspecified'}. {style_instruction}"
+    )
+    user_prompt = (
+        f"# Session: {s.get('title','Untitled')} (round {s.get('round',0)})\n\n"
+        f"## GM Recap (the spine)\n{recap_node.get('content','').strip()}\n\n"
+        f"## Player Journals (colour + voice)\n{journal_block}\n\n"
+        f"Now compose the chronicle."
+    )
+
+    try:
+        from emergentintegrations.llm.chat import LlmChat, UserMessage
+        chat_client = LlmChat(
+            api_key=EMERGENT_LLM_KEY,
+            session_id=f"chronicle-{sid}",
+            system_message=system_prompt,
+        ).with_model("anthropic", "claude-sonnet-4-5-20250929")
+        chronicle_text = await chat_client.send_message(UserMessage(text=user_prompt))
+    except Exception as e:
+        print(f"[finalize:error] session={sid} -> {e}")
+        raise HTTPException(502, "Chronicle weaving failed — try again in a moment.")
+
+    # Update the session_record node with the woven chronicle.
+    fields = {**(recap_node.get("fields") or {}),
+              "is_finalized": True,
+              "tone": tone,
+              "journal_ids": journal_ids,
+              "finalized_at": now_iso(),
+              "finalized_by": user["name"],
+              "original_recap": recap_node.get("content", "")}
+    await db.nodes.update_one(
+        {"id": recap_node_id},
+        {"$set": {
+            "content": chronicle_text,
+            "title": f"Chronicle — {s.get('title','Session')} ({now_iso()[:10]})",
+            "tags": list(set([*(recap_node.get("tags") or []), "chronicle", "finalized", tone])),
+            "fields": fields,
+            "updated_at": now_iso(),
+        }})
+    fresh = await db.nodes.find_one({"id": recap_node_id}, {"_id": 0})
+    return sanitize(fresh)
 
 
 @router.get("/sessions/{sid}/recaps")

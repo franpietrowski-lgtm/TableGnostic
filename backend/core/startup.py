@@ -3,8 +3,8 @@
 Runs on every backend boot:
 - ensures all collection indexes exist
 - backfills legacy 'user' role accounts → 'gm'
-- seeds the three demo accounts (admin / gm / player) with authoritative
-  password+role pinning every boot, so manual edits don't drift
+- seeds the GMFran admin account (the only authoritative app account)
+- removes any stale generic-demo users from earlier seeds
 - backfills invite tokens on legacy campaigns
 
 Kept here (not in routes/) because nothing here is HTTP-facing; everything
@@ -14,6 +14,16 @@ import secrets
 
 from .db import db, new_id, now_iso
 from .security import hash_password, verify_password
+
+
+# Stale demo accounts that earlier startups seeded. We REMOVE them on every
+# boot so the only remaining authoritative account is GMFran. Listed by email
+# so a manual /register collision is also tidied up automatically.
+_RETIRED_DEMO_EMAILS = (
+    "admin@tablegnostic.com",
+    "gm@tablegnostic.com",
+    "player@tablegnostic.com",
+)
 
 
 async def ensure_indexes():
@@ -55,10 +65,14 @@ async def run_startup():
     await ensure_indexes()
     # Legacy "user" role → "gm" so existing creators keep working.
     await db.users.update_many({"role": "user"}, {"$set": {"role": "gm"}})
-    await seed_user("admin@tablegnostic.com", "admin123", "Admin", "admin")
-    await seed_user("gm@tablegnostic.com", "gm123456", "Game Master", "gm")
-    await seed_user("player@tablegnostic.com", "player12345", "Player", "player")
-    # GMFran — primary admin/GM testing account (also runs the Evereantha demo).
+    # Retire the old generic-demo accounts: drop their users + any leftover
+    # login_attempts / password_reset rows. Anything those accounts authored
+    # (campaigns, characters, nodes…) stays intact so GMFran can claim it.
+    for email in _RETIRED_DEMO_EMAILS:
+        await db.users.delete_one({"email": email})
+        await db.login_attempts.delete_many({"key": {"$regex": f":{email}$"}})
+        await db.password_reset_tokens.delete_many({"email": email})
+    # GMFran — sole authoritative account (admin/GM testing identity).
     await seed_user("franpietrowski@gmail.com", "PieGod08!!", "GMFran", "admin")
     # Backfill invite tokens for legacy campaigns.
     async for c in db.campaigns.find({"invite_token": {"$exists": False}}, {"_id": 0, "id": 1}):

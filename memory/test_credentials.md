@@ -36,16 +36,17 @@ Brute-force protection: 5 failed login attempts per (ip, email) = HTTP 423 lock 
 
 # Test credentials
 
+> Updated 2026-04-26 (V4.3) — generic demo accounts retired. Only GMFran remains.
+
 ## Demo accounts
 
 | Email                          | Password       | Role     | Notes                                    |
 |--------------------------------|----------------|----------|------------------------------------------|
-| **franpietrowski@gmail.com**   | **PieGod08!!** | admin    | **GMFran** — primary testing account     |
-| admin@tablegnostic.com         | admin123       | admin    | Generic Admin                            |
-| gm@tablegnostic.com            | gm123456       | gm       | Demo GM                                  |
-| player@tablegnostic.com        | player12345    | player   | Demo Player                              |
+| **franpietrowski@gmail.com**   | **PieGod08!!** | admin    | **GMFran** — sole authoritative account  |
 
-All accounts are seeded idempotently from `core/startup.py` on every backend boot — manual edits get overwritten.
+The previous generic-demo accounts (admin@tablegnostic.com / gm@tablegnostic.com / player@tablegnostic.com) have been **retired in V4.3**. `core/startup.py` actively removes them from the DB on every backend boot.
+
+If a new player needs access during testing, register them via `POST /api/auth/register` (player or gm role), then GMFran can transfer characters to them via `POST /api/characters/{id}/transfer?new_owner_id=...`.
 
 ## Test campaigns
 

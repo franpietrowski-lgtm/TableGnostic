@@ -10,6 +10,9 @@ export const NODE_TYPES = [
   { key: "item",      label: "Item / Artifact", color: "#d4af37" },
   { key: "lore",      label: "Lore / Concept",  color: "#a9a3b8" },
   { key: "quest",     label: "Quest / Hook",    color: "#e5c370" },
+  // V4.3 — sessions tab. Both auto-generated.
+  { key: "session_record", label: "Session Recap",   color: "#3da89a" },
+  { key: "player_journal", label: "Player Journal",  color: "#9d6dd0" },
 ];
 
 const f = (key, label, opts = {}) => ({ key, label, ...opts });

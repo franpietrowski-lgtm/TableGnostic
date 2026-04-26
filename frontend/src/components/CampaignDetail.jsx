@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import { api, formatApiErrorDetail } from "../lib/api";
 import * as Tabs from "@radix-ui/react-tabs";
-import { Users, Plus, UserPlus2, ArrowRight, Trash2, Sparkles, Eye, EyeOff, Link as LinkIcon, Wand2, Shield, Copy, RefreshCw, Check, Save, Network, ListTree, Lightbulb, X, BookOpen } from "lucide-react";
+import { Users, Plus, UserPlus2, ArrowRight, Trash2, Sparkles, Eye, EyeOff, Link as LinkIcon, Wand2, Shield, Copy, RefreshCw, Check, Save, Network, ListTree, Lightbulb, X, BookOpen, ChevronDown, ChevronRight, ScrollText } from "lucide-react";
 import KnowledgeGraph from "./KnowledgeGraph";
 import ChannelsPanel from "./ChannelsPanel";
 import { useAuth } from "../lib/api";
@@ -128,7 +128,8 @@ export default function CampaignDetail() {
           <KnowledgeTab camp={camp} nodes={nodes} edges={edges} onRefresh={load} />
         </Tabs.Content>
         <Tabs.Content value="sessions" className="pt-6">
-          <SessionsTab camp={camp} sessions={sessions} onStart={() => setShowStart(true)} />
+          <SessionsTab camp={camp} sessions={sessions} nodes={nodes}
+                       onStart={() => setShowStart(true)} onRefresh={load}/>
         </Tabs.Content>
         <Tabs.Content value="primer" className="pt-6">
           <PrimerTab camp={camp} onRefresh={load} />
@@ -333,9 +334,16 @@ function KnowledgeTab({ camp, nodes, edges, onRefresh }) {
 
   const filtered = filterType === "all" ? nodes : nodes.filter((n) => n.type === filterType);
 
-  const reveal = async (n) => {
-    if (!window.confirm(`Reveal "${n.title}" to all seated players?`)) return;
-    await api.post(`/nodes/${n.id}/reveal`, { user_ids: camp.member_ids });
+  const setVisibility = async (n, visibility) => {
+    // Bidirectional visibility flip — GM can move a node between gm_only /
+    // shared / revealed without forgetting it. "shared" makes it visible
+    // to every member of the campaign; "revealed" only to the listed uids
+    // (legacy alias — defaults to all members like the existing reveal flow).
+    if (visibility === "revealed") {
+      await api.post(`/nodes/${n.id}/reveal`, { user_ids: camp.member_ids });
+    } else {
+      await api.put(`/nodes/${n.id}/visibility`, { visibility });
+    }
     onRefresh();
   };
   const remove = async (n) => {
@@ -369,6 +377,26 @@ function KnowledgeTab({ camp, nodes, edges, onRefresh }) {
                   className="btn btn-ghost text-xs" data-testid="toggle-view-btn">
             {view === "list" ? <><Network className="w-3 h-3"/> Graph view</> : <><ListTree className="w-3 h-3"/> List view</>}
           </button>
+          {camp.is_gm && (
+            <>
+              <button onClick={async () => {
+                if (!window.confirm("Reveal EVERY codex entry to all players?")) return;
+                await api.post(`/campaigns/${camp.id}/nodes/bulk-visibility`, { visibility: "shared" });
+                onRefresh();
+              }} className="btn btn-ghost text-xs" data-testid="bulk-reveal-btn"
+                title="GM: make every codex entry visible to all players">
+                <Eye className="w-3 h-3"/> Reveal all
+              </button>
+              <button onClick={async () => {
+                if (!window.confirm("Hide EVERY codex entry from players (set GM-only)?")) return;
+                await api.post(`/campaigns/${camp.id}/nodes/bulk-visibility`, { visibility: "gm_only" });
+                onRefresh();
+              }} className="btn btn-ghost text-xs" data-testid="bulk-hide-btn"
+                title="GM: pull every codex entry back to GM-only">
+                <EyeOff className="w-3 h-3"/> Hide all
+              </button>
+            </>
+          )}
           <button onClick={linkNodes} className="btn btn-ghost text-xs" data-testid="link-nodes-btn">
             <LinkIcon className="w-3 h-3"/> Link
           </button>
@@ -405,39 +433,64 @@ function KnowledgeTab({ camp, nodes, edges, onRefresh }) {
           {selectedNode && (
             <NodeDetail node={selectedNode} camp={camp}
                         onClose={() => setSelectedNode(null)}
-                        onReveal={() => reveal(selectedNode)}
+                        onSetVisibility={(v) => setVisibility(selectedNode, v)}
                         onRemove={() => { remove(selectedNode); setSelectedNode(null); }}/>
           )}
         </div>
       ) : filtered.length === 0 ? (
         <div className="text-mist italic font-body text-sm">No nodes of this kind yet.</div>
       ) : (
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filtered.map((n) => <NodeCard key={n.id} n={n} camp={camp}
-                                          onReveal={() => reveal(n)} onRemove={() => remove(n)}
-                                          onClick={() => setSelectedNode(n)}/>)}
+        <div>
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {filtered.map((n) => <NodeCard key={n.id} n={n} camp={camp}
+                                            isSelected={selectedNode?.id === n.id}
+                                            onSetVisibility={(v) => setVisibility(n, v)}
+                                            onRemove={() => remove(n)}
+                                            onClick={() => setSelectedNode(n)}/>)}
+          </div>
+          {/* Detail panel ALWAYS appears in card-grid mode when a node is selected.
+              Previously only rendered in graph mode — cards looked unresponsive. */}
+          {selectedNode && (
+            <NodeDetail node={selectedNode} camp={camp}
+                        onClose={() => setSelectedNode(null)}
+                        onSetVisibility={(v) => setVisibility(selectedNode, v)}
+                        onRemove={() => { remove(selectedNode); setSelectedNode(null); }}/>
+          )}
         </div>
       )}
     </div>
   );
 }
 
-function NodeCard({ n, camp, onReveal, onRemove, onClick }) {
+function NodeCard({ n, camp, isSelected, onSetVisibility, onRemove, onClick }) {
+  const visBadge = {
+    "gm_only":  { label: "GM-only", cls: "border-ember/40 text-ember", Icon: EyeOff },
+    "shared":   { label: "Shared",  cls: "border-arcane/50 text-arcane-light", Icon: Eye },
+    "revealed": { label: "Revealed", cls: "border-gold/60 text-gold-bright", Icon: Eye },
+  }[n.visibility] || { label: n.visibility, cls: "border-mist/30 text-mist", Icon: Eye };
+  const VisIcon = visBadge.Icon;
   return (
-    <div className="card-mystic p-4" data-testid={`node-${n.id}`}>
-      <div className="flex items-center justify-between">
+    <div className={`card-mystic p-4 cursor-pointer transition-all ${
+                     isSelected ? "border-gold ring-1 ring-gold/40" : "hover:border-gold/40"}`}
+         onClick={onClick}
+         role="button" tabIndex={0}
+         onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); } }}
+         data-testid={`node-${n.id}`}
+         aria-label={`Open codex card: ${n.title}`}>
+      <div className="flex items-center justify-between gap-2">
         <span className="tag uppercase" style={{ borderColor: colorForType(n.type) + "55", color: colorForType(n.type) }}>
           {labelForType(n.type)}
         </span>
-        <span className="text-[10px] text-gold/60 font-ui uppercase tracking-widest flex items-center gap-1">
-          {n.visibility === "gm_only" ? <EyeOff className="w-3 h-3"/> : <Eye className="w-3 h-3"/>}
-          {n.visibility}
+        <span className={`tag uppercase ${visBadge.cls} flex items-center gap-1`}>
+          <VisIcon className="w-3 h-3"/>{visBadge.label}
         </span>
       </div>
-      <button onClick={onClick} className="text-left w-full mt-2">
-        <div className="font-display text-base text-parchment hover:text-gold-bright transition">{n.title}</div>
+      <div className="text-left w-full mt-2">
+        <div className="font-display text-base text-parchment hover:text-gold-bright transition">
+          {n.title}
+        </div>
         {n.content && <div className="text-xs text-mist mt-1 line-clamp-2 whitespace-pre-wrap font-body">{n.content}</div>}
-      </button>
+      </div>
       {Object.keys(n.fields || {}).length > 0 && (
         <div className="mt-2 text-[10px] text-mist/70 font-ui italic">
           {Object.keys(n.fields).length} structured field{Object.keys(n.fields).length === 1 ? "" : "s"}
@@ -446,14 +499,23 @@ function NodeCard({ n, camp, onReveal, onRemove, onClick }) {
       <div className="flex flex-wrap gap-1 mt-2">
         {(n.tags || []).map((t, i) => <span key={i} className="tag">{t}</span>)}
       </div>
+      <div className="text-[10px] font-ui uppercase tracking-widest text-gold/60 mt-3 italic">
+        Click for full entry
+      </div>
       {camp.is_gm && (
-        <div className="mt-3 flex gap-2">
-          {n.visibility !== "revealed" && (
-            <button onClick={onReveal} className="btn btn-ghost text-[11px]" data-testid={`reveal-${n.id}`}>
-              <Eye className="w-3 h-3"/> Reveal
-            </button>
-          )}
-          <button onClick={onRemove} className="btn btn-danger text-[11px]">
+        <div className="mt-3 flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+          <select
+            className="select text-[11px] w-auto py-1 px-2"
+            value={n.visibility}
+            onChange={(e) => onSetVisibility(e.target.value)}
+            data-testid={`vis-select-${n.id}`}
+            title="Change visibility (GM)">
+            <option value="gm_only">GM-only</option>
+            <option value="shared">Shared</option>
+            <option value="revealed">Revealed</option>
+          </select>
+          <button onClick={onRemove} className="btn btn-danger text-[11px] ml-auto"
+                  data-testid={`forget-${n.id}`}>
             <Trash2 className="w-3 h-3"/>
           </button>
         </div>
@@ -462,7 +524,7 @@ function NodeCard({ n, camp, onReveal, onRemove, onClick }) {
   );
 }
 
-function NodeDetail({ node, camp, onClose, onReveal, onRemove }) {
+function NodeDetail({ node, camp, onClose, onSetVisibility, onRemove }) {
   const tmpl = NODE_TEMPLATES[node.type];
   const visBadge = {
     "gm_only":  { label: "GM-only", cls: "border-ember/50 text-ember" },
@@ -518,11 +580,22 @@ function NodeDetail({ node, camp, onClose, onReveal, onRemove }) {
         </>
       )}
       {camp.is_gm && (
-        <div className="mt-5 pt-4 border-t border-gold/10 flex gap-2">
-          {node.visibility !== "revealed" && (
-            <button onClick={onReveal} className="btn btn-ghost text-xs"><Eye className="w-3 h-3"/> Reveal to players</button>
-          )}
-          <button onClick={onRemove} className="btn btn-danger text-xs"><Trash2 className="w-3 h-3"/> Forget</button>
+        <div className="mt-5 pt-4 border-t border-gold/10 flex flex-wrap items-center gap-2"
+             data-testid="node-detail-gm-tools">
+          <div className="label-ref text-[10px] mr-1">Visibility</div>
+          <select
+            className="select text-xs w-auto"
+            value={node.visibility}
+            onChange={(e) => onSetVisibility(e.target.value)}
+            data-testid="node-detail-vis-select">
+            <option value="gm_only">GM-only</option>
+            <option value="shared">Shared with players</option>
+            <option value="revealed">Revealed (legacy)</option>
+          </select>
+          <button onClick={onRemove} className="btn btn-danger text-xs ml-auto"
+                  data-testid="node-detail-forget">
+            <Trash2 className="w-3 h-3"/> Forget
+          </button>
         </div>
       )}
     </div>
@@ -666,31 +739,187 @@ function NodeEditor({ camp, onClose, onSaved }) {
   );
 }
 
-function SessionsTab({ camp, sessions, onStart }) {
+function SessionsTab({ camp, sessions, nodes, onStart, onRefresh }) {
+  const journalNodes = nodes.filter((n) => n.type === "player_journal");
+  const recordNodes = nodes.filter((n) => n.type === "session_record");
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <h3 className="h-arcane text-sm">Sessions</h3>
+        <div className="min-w-0">
+          <h3 className="h-arcane text-sm">Sessions</h3>
+          <div className="text-[11px] text-mist font-body italic mt-1">
+            Live tables · player journals · GM recaps · finalize the chronicle when the dust settles.
+          </div>
+        </div>
         {camp.is_gm && <button onClick={onStart} className="btn btn-primary text-xs" data-testid="new-session-btn">
           <Plus className="w-3 h-3"/> Start session
         </button>}
       </div>
-      {sessions.length === 0 ? (
+      <div className="divider-sigil my-3"/>
+
+      {sessions.length === 0 && journalNodes.length === 0 ? (
         <div className="text-mist italic font-body text-sm">No sessions have been run.</div>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-4">
           {sessions.map((s) => (
-            <Link key={s.id} to={`/app/sessions/${s.id}`} className="card-mystic p-4 flex items-center justify-between"
-                  data-testid={`session-${s.id}`}>
-              <div>
-                <div className="font-display text-base text-parchment">{s.title}</div>
-                <div className="text-xs text-mist font-ui uppercase tracking-widest">
-                  Round {s.round || 0} · {s.status}
+            <SessionRow key={s.id} session={s} camp={camp}
+                        recordNodes={recordNodes.filter((r) => r.fields?.session_id === s.id)}
+                        journalNodes={journalNodes.filter((j) => j.fields?.session_id === s.id)}
+                        onRefresh={onRefresh}/>
+          ))}
+          {/* Orphan player journals — entered without an active session id. */}
+          {(() => {
+            const orphans = journalNodes.filter((j) => !sessions.find((s) => s.id === j.fields?.session_id));
+            if (!orphans.length || !camp.is_gm) return null;
+            return (
+              <div className="card-mystic p-4 border-arcane/30" data-testid="session-orphan-journals">
+                <div className="label-ref">Orphaned player journals</div>
+                <div className="text-[11px] text-mist mt-1 font-body italic">
+                  Entries written without an open session. The GM can review and re-link them.
+                </div>
+                <div className="mt-3 space-y-2">
+                  {orphans.map((j) => (
+                    <JournalRow key={j.id} j={j} onRefresh={onRefresh}/>
+                  ))}
                 </div>
               </div>
-              <ArrowRight className="w-4 h-4 text-gold/70"/>
-            </Link>
-          ))}
+            );
+          })()}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+function SessionRow({ session, camp, recordNodes, journalNodes, onRefresh }) {
+  const [open, setOpen] = useState(false);
+  const [tone, setTone] = useState("lyrical");
+  const [busy, setBusy] = useState(false);
+  // The newest recap node for the session; finalisation rewrites it in place.
+  const recap = (recordNodes || []).slice().sort((a, b) =>
+    (b.created_at || "").localeCompare(a.created_at || ""))[0];
+  const finalized = !!(recap?.fields?.is_finalized);
+
+  const finalize = async () => {
+    if (!recap) {
+      alert("Generate a recap inside the live SessionView first — that's the spine the chronicle is woven onto.");
+      return;
+    }
+    if (!journalNodes.length) {
+      if (!window.confirm("No player journals are linked to this session. Weave the chronicle from the recap alone?")) return;
+    }
+    setBusy(true);
+    try {
+      await api.post(`/sessions/${session.id}/finalize`, {
+        recap_node_id: recap.id,
+        journal_node_ids: journalNodes.map((j) => j.id),
+        tone,
+      });
+      onRefresh();
+    } catch (e) {
+      alert(formatApiErrorDetail(e.response?.data?.detail) || e.message);
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <div className="card-mystic p-4" data-testid={`sessionrow-${session.id}`}>
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <Link to={`/app/sessions/${session.id}`} className="min-w-0">
+          <div className="font-display text-lg text-parchment hover:text-gold-bright transition">
+            {session.title}
+          </div>
+          <div className="text-[10px] text-mist font-ui uppercase tracking-widest mt-1">
+            Round {session.round || 0} · {session.status}
+            {finalized && <span className="ml-2 text-gold-bright">· chronicle finalised</span>}
+          </div>
+        </Link>
+        <div className="flex items-center gap-2">
+          <span className="tag uppercase border-arcane/40 text-arcane-light">
+            {journalNodes.length} journal{journalNodes.length === 1 ? "" : "s"}
+          </span>
+          <span className={`tag uppercase ${recap ? "border-gold/60 text-gold-bright" : "border-mist/30 text-mist/60"}`}>
+            {recap ? "recap ready" : "no recap"}
+          </span>
+          <button onClick={() => setOpen(!open)} className="btn btn-ghost text-xs"
+                  data-testid={`sessionrow-toggle-${session.id}`}>
+            {open ? <ChevronDown className="w-3 h-3"/> : <ChevronRight className="w-3 h-3"/>}
+          </button>
+        </div>
+      </div>
+
+      {open && (
+        <div className="mt-3 pt-3 border-t border-gold/10 space-y-3">
+          {recap ? (
+            <div data-testid={`sessionrow-recap-${session.id}`}>
+              <div className="label-ref text-[10px] mb-1">
+                {finalized ? "Finalised chronicle" : "GM recap (the spine)"}
+              </div>
+              <div className="text-sm text-parchment/95 whitespace-pre-wrap font-body leading-relaxed">
+                {recap.content}
+              </div>
+            </div>
+          ) : (
+            <div className="text-[12px] text-mist italic font-body">
+              No recap node yet — open the live SessionView and click "Generate Recap" to add one.
+            </div>
+          )}
+
+          {journalNodes.length > 0 && (
+            <div data-testid={`sessionrow-journals-${session.id}`}>
+              <div className="label-ref text-[10px] mb-1">Player journals (colour + voice)</div>
+              <div className="space-y-2">
+                {journalNodes.map((j) => <JournalRow key={j.id} j={j} onRefresh={onRefresh}/>)}
+              </div>
+            </div>
+          )}
+
+          {camp.is_gm && (
+            <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-gold/10"
+                 data-testid={`sessionrow-finalize-${session.id}`}>
+              <div className="label-ref text-[10px]">Tone</div>
+              <select className="select w-auto text-xs" value={tone}
+                      onChange={(e) => setTone(e.target.value)}>
+                <option value="lyrical">Lyrical (default)</option>
+                <option value="terse">Terse / journal style</option>
+                <option value="in-character">In-character campfire</option>
+              </select>
+              <button onClick={finalize} disabled={busy || !recap}
+                      className="btn btn-primary text-xs"
+                      data-testid={`sessionrow-finalize-btn-${session.id}`}
+                      title="Weave recap + linked journals into the definitive chronicle.">
+                <ScrollText className="w-3 h-3"/>
+                {busy ? "Weaving…" : finalized ? "Re-weave chronicle" : "Finalize chronicle"}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+function JournalRow({ j, onRefresh }) {
+  const [open, setOpen] = useState(false);
+  const cname = j.fields?.character_name || "?";
+  const when = (j.created_at || "").replace("T", " ").slice(0, 16);
+  return (
+    <div className="border border-arcane/25 bg-arcane/5 rounded-sm p-2"
+         data-testid={`journal-${j.id}`}>
+      <button type="button" onClick={() => setOpen(!open)}
+              className="w-full text-left flex items-center justify-between gap-2">
+        <div className="min-w-0 truncate">
+          <span className="text-arcane-light font-ui text-[11px] uppercase tracking-widest mr-2">
+            {cname}
+          </span>
+          <span className="text-mist/70 text-xs">{when}</span>
+        </div>
+        {open ? <ChevronDown className="w-3 h-3 text-arcane-light"/> : <ChevronRight className="w-3 h-3 text-arcane-light"/>}
+      </button>
+      {open && (
+        <div className="mt-2 pt-2 border-t border-arcane/15 text-sm text-parchment/95 whitespace-pre-wrap font-body leading-relaxed">
+          {j.content}
         </div>
       )}
     </div>
