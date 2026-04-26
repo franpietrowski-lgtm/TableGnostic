@@ -336,10 +336,36 @@ Per-system audit covering all 13 systems in the selector. Status table:
 
 ## 5. Next Tasks
 
+> Items 5 and 7 below were completed in **V4.4 (2026-04-26)** — see §V4.4 changelog.
+
 1. **DriveThruRPG export pipeline** — reportlab-driven branded PDF (cover + chapter-per-session + per-system legal footer from `LEGAL_COMPLIANCE.md`). Each finalised `session_record` becomes one chapter in tone-order.
 2. **Anime 5E full content** — extract attribute/skill/defect/template content from the 5 uploaded PDFs into `besm_data.py`, wire to the `anime-5e` system.
 3. **Cypher full content** — extract from the 5 Cypher / Numenera / Godforsaken PDFs into the Cypher selector. Compliance-checked per `LEGAL_COMPLIANCE.md` §5.
 4. **Knowledge Web file ingestion** — GM uploads PDF/MD/TXT → Claude Sonnet diff-review → suggested nodes. Reuses the same `emergentintegrations` integration the chronicle weaver already uses.
-5. **CharacterBuilder** in-builder live cost-preview update to V4.1 rule (backend already authoritative).
+5. ~~**CharacterBuilder** in-builder live cost-preview update to V4.1 rule~~ — **DONE (V4.4)**.
 6. **Primer change-request alerts** + GM live-edit mid-campaign.
-7. **8-session Evereantha demo** — pre-seeded chronicle that ships out of the box.
+7. ~~**8-session Evereantha demo** — pre-seeded chronicle that ships out of the box.~~ — **DONE (V4.4)**.
+8. **Atelier dynamic scaling** — Session 0/1 vs Arc vs Master Plot tiers with continuity checks for the GM.
+9. **System-native macro library expansion** — wire BESM/Cypher/Anime 5E core macros (skill-component picker, action-preset menu, GM-roll templates) so each system's table feels native, not generic.
+
+## V4.4 — Bug-fix Sweep + Map Upload + Demo Chronicle (2026-04-26)
+
+### P0 Bug Fixes
+- **CharacterSheet stat dice math (BESM 4E meet/beat)**: Stat-tile clicks and quick-roll buttons now post `2d6+body|mind|soul` (not `2d6-stat`). Initiative is `1d6+mind`. Tooltip text updated. (`/app/frontend/src/components/CharacterSheet.jsx`)
+- **CharacterBuilder cost preview (V4.1 rule mirrored client-side)**: Enhancements/Limiters no longer adjust point cost; cost stays at `cost_per_level × level` (minus nested Item/Weapon defect refunds, floored at 0). A new **`eff. ×N`** badge (`data-testid="attr-eff-level-builder-{idx}"`) appears next to LVL whenever the effective level differs — `effective = level + #limiters − #enhancements`, floored at 1. (`/app/frontend/src/components/CharacterBuilder.jsx`)
+- **Knowledge Web NodeDetail truncation**: `KnowledgeTab` now scrolls the detail panel into view on every node click via `detailRef + scrollIntoView({behavior:"smooth"})`. Admin reset (`/api/admin/reset-to-evereantha`) now copies seed `node["fields"]` into Mongo so `NodeDetail` renders structured fields (geography, government, biology, abilities, …) — not just the short content blurb. Aurea, Eagles Nest, Nyaulis, and Lancing Andrewsarchus now ship with full structured metadata. (`/app/frontend/src/components/CampaignDetail.jsx`, `/app/backend/routes/admin.py`, `/app/backend/seed_evereantha.py`)
+
+### P0 Content Seed
+- **8-Session Evereantha Chronicle** (`EVEREANTHA_SESSIONS` in `seed_evereantha.py`): 8 sequential sessions with chat dialogue, dice rolls, GM narration, and per-session `gm_notes`. Nyaulis joins the party in **Session 2** (Faunamimic's Apology). Cliffhanger at **Session 8 — Master's Pass**: Roney's harness sigil flares, he vanishes mid-line, and a parchment in the Mayor's hand reads "You will not bring him home. — M." Reset endpoint now seeds 8 sessions + 130 chat lines + 22 dice rolls. Sessions 1–7 are `closed`; Session 8 is `open` so a GM can jump straight in.
+
+### P0.5 Map Upload Pipeline (user-requested enhancement)
+- **Direct image upload + grid scaling**. New backend route `POST /api/uploads/map` (multipart/form-data, GM/admin only, 12 MB cap, PNG/JPEG/WEBP whitelist). Files are written to `/app/backend/uploads/maps/<id>.<ext>` and served via a new `StaticFiles` mount at `/api/uploads`. Pillow reads pixel dimensions; the response payload `{url, width, height, bytes, content_type}` lets the frontend auto-recommend a grid scale. (`/app/backend/routes/uploads.py`, `/app/backend/server.py`)
+- **Battlemap GM toolbar overhaul**: replaced the URL-prompt-only `Image` button with an `Upload Map` file picker (`data-testid="map-bg-upload-btn"`) plus a fallback `URL` button (`data-testid="map-bg-url-btn"`) for legacy share-links. New `⊞ Npx` cell-size button (`data-testid="map-cell-btn"`) lets GMs scale the grid pixel size 12–256. After a successful upload the GM is offered a one-click auto-grid (cols/rows derived from `image.width / cellPx`). Maps from Inkarnate, DungeonCraft, Talespire, RPGEngine all drop in directly — no public hosting required. (`/app/frontend/src/components/Battlemap.jsx`)
+
+### Testing
+- `/app/test_reports/iteration_15.json` — backend 12/12 new pytest cases pass; frontend Bug 1 + Bug 2 verified end-to-end (POST /api/dice payload intercepted, builder cost preview confirmed); Bug 3 self-verified by main agent (NodeDetail panel renders Type/Geography/Government/Economy/Notable Landmarks/History/Inhabitants for the Aurea node and auto-scrolls into view).
+- Cumulative regression: 112 PASS / 18 SKIP / 0 FAIL.
+
+### Legal compliance reaffirmed
+- Per `LEGAL_COMPLIANCE.md` (Tri-Stat Emporium licence): page references and mechanic names only — never reproduce rulebook prose, stat-block descriptions, lore, or examples. The new Evereantha Chronicle dialogue uses **only user-provided "Artisan's Tale" original setting material** with mechanic-only references back to BESM 4E (page numbers + attribute names). The `besm_data.py` Cypher/Anime 5E entries continue to cite mechanics + page numbers without reproducing flavour text.
+
