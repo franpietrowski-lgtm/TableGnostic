@@ -184,10 +184,42 @@ New `custom` block on `/api/besm/reference` showing how to build a setting's mag
 **7. CharacterSheet — effective level surface**
 Each attribute row shows `×Level` and, when limiters/enhancements shift it, an italic `(eff. ×N)` chip in arcane-light with a tooltip explaining the BESM rule.
 
-### V4.1 — Tested
-- Backend: **33/33** iter_12 tests STILL PASS (admin reset · seed integrity · battlemap · channels · regression). Verified `effective_level` decoration, GMFran login, campaign clone (20 nodes / 0 edges / 3 chars / Genesis copied), reference endpoint returns all 7 new sections + Aurea custom block.
-- iter_11 — pre-iter12 tests now skip cleanly when their hard-coded `8dcab411…` test campaign is gone (autouse `_skip_when_camp_missing` fixture on TestCharacters / TestSeed / TestKnowledgeWeb / TestSessionRoom / TestInitiativeAndEffects / TestRecap / TestWebSocketAuth). Result: 47 PASS / 18 SKIP / 0 FAIL when run in pipeline with iter_12.
-- Cost engine spot-checked on Eli/Laryk/Roney via curl — Heavy Armour L2 cost stayed at 2×2=4 (was capped at max(1,2−1)×2=2 under old formula); now shows effective L3 (limiter raises). Hammer & Forge Special Attack cost dropped from 5 to 4 (one enhancement no longer adds cost).
+### V4.2 — Theming · Battlemap V2 · Channels V2 · Quick Wins (this iteration — 2026-04-26)
+
+**1. Quick wins**
+- **Brute-force lock IP-key fix** — `routes/auth.py` now reads `X-Forwarded-For` first hop with fallback to `request.client.host`. Behind the K8s ingress the lock now reliably engages (verified by an iter_13 test that pins XFF and asserts a 423 within 12 attempts).
+- **`?confirm=WIPE` gate** on `POST /api/admin/reset-to-evereantha`. Without the param: 400 ("This endpoint is destructive"). Defends against stray UI/automation calls.
+- **Character ownership transfer** — `POST /api/characters/{id}/transfer?new_owner_id=…` (GM/admin). Updates owner_id+owner_name, auto-adds the new owner to `campaign.member_ids`, returns the freshly-decorated character (with `effective_level`).
+- **`prefers-reduced-motion`** — global CSS gate disables AV pulse, page-fade, hush-sigil ripple and trims any other animation/transition durations to 0.001ms when the OS pref is set.
+- **WebSocket close codes wire-visible** — `ws_session` and `ws_campaign` now `ws.accept()` BEFORE `ws.close(code=44xx)` so client libraries can read the policy reason instead of seeing a generic HTTP-handshake rejection. `bus.join(... , accepted=True)` skips the double-accept.
+
+**2. System theming layer**
+`/app/frontend/src/index.css` ships a `[data-system="…"]` selector tree with CSS variables for **13 game systems**: `besm-4e` · `anime-5e` · `dnd-5e` · `pf2e` · `cypher` · `coc-7e` · `savage-worlds` · `fate-condensed` · `cyberpunk-red` · `v5` · `blades-in-the-dark` · `mothership` · `shadowrun-6e`. Variables flow into `.card-mystic` / `.btn` / `.label-ref` / `.tag` / `.divider-sigil` so inner surfaces re-tint without leaving the dark-mystic shell. `CampaignDetail.jsx` and `SessionView.jsx` now stamp `data-system={camp.system_id}` on their roots.
+
+**3. Battlemap V2 (`Battlemap.jsx`)**
+- **Line-of-sight raycast** — for each token we run a 2-segment intersection test against every wall from the active-actor's token; tokens behind walls are hidden from non-GM players. GM sees through walls. Player toggle lets them disable LoS for testing.
+- **Distance-measure ruler** — new `measure` mode; click+drag draws a gold dashed line with a label showing chebyshev cells + metres (2 m / cell default).
+- **Token-status binding to `/api/effects`** — Battlemap now pulls the live effects list on mount, subscribes to `effect` / `effect_remove` WS events, and renders effect names as ember-coloured rings on the matching token (alongside any manual `t.status` rings). `EffectIn.target_character_id: Optional[str]` added to the model.
+
+**4. Channels V2 (`ChannelsPanel.jsx` + `routes/sessions.py`)**
+- **`/api/ws/campaign/{cid}` real-time** — new ws_router endpoint joins the bus room `campaign:{cid}` so existing channel REST broadcasts (msg / msg-delete / reaction / pin / thread) deliver in real time. Frontend connects + falls back to 8 s polling when disconnected. WS-state pip ("● live" vs "○ polling") in the composer footer.
+- **`@mention` autocomplete** — typing `@` + a partial opens a member picker driven by `GET /api/campaigns/{cid}/members` (new endpoint returning `id / name / handle / is_gm / role`). Arrow keys navigate, Tab/Enter inserts, Esc closes. Mention resolution server-side already in place.
+- **Image / file attachments by URL** — composer attach button prompts for a public URL + display name, inserts as `![name](url)` (image) or `[name](url)` (link). Frontend renders inline images (max 64 px tall, gold-bordered). Skips a full upload pipeline so it works today; CDN-hosted media works fine.
+
+**5. Reference page (V4.1, recap)** — three tab-groups (Core · Combat & Play · Custom · Aurea), pinned BESM 4E cost-rule note, 7 new sections (actions / companions / race templates / size modifiers / weapons / items / armour), Aurea custom catalogue (8 attributes, 5 power packs, 5 skill groups).
+
+### V4.2 — Tested (iter_13)
+- **18/18 new tests PASS** (`test_iter13_v42.py`). Cumulative across iter9 + iter10 + iter11 + iter12 + iter13 = **82 PASS / 28 SKIP / 0 FAIL**.
+- Test fixture stability: switched all iter11 mongo helpers from `motor` (asyncio loop flake) to sync `pymongo` so test order no longer matters.
+- iter_10 marked superseded (Cyma-based seed assertions can't be re-baselined cleanly against the new Eli/Laryk/Roney seed).
+- iter_9 V3.5 clamp test rewritten to assert the *correct* BESM 4E rule (cost stays at base × level; effective level rises with limiters).
+- iter_13 `test_brute_force_lock_kicks_in` now asserts 423 fires reliably with a stable XFF (was previously documented-but-broken).
+- iter_13 verified live WS fan-out: REST POST to `/channels/{chid}/messages` → connected campaign-WS subscribers received `channel:msg` event in <1s.
+
+### V4.2 — Code-review notes (deferred)
+- Public `/openapi.json` URL still returns the SPA HTML (K8s ingress only routes `/api/*`). A `/api/openapi.json` alias would help external tooling — low priority.
+- Channel `body` field name (vs `text` elsewhere) creates a per-route convention split. Cosmetic, defer.
+- `legacy backend/tests/backend_test.py` errors at collection without dotenv. Add `load_dotenv` at the top or `--ignore` it in CI.
 - Backend: **46/46 tests PASS** — 36 new (`test_refactor_iter11.py`) + 10 carry-over
   (`test_iter10_v38.py`). Coverage: auth (incl. brute-force semantics), reference,
   campaigns + invites + custom + genesis, characters + access gates, seed, knowledge
@@ -264,13 +296,11 @@ Each attribute row shows `×Level` and, when limiters/enhancements shift it, an 
 
 ## 5. Next Tasks
 
-1. **System theming layer** (Dyskami / D&D / Cypher palettes)
-2. **Anime 5E full content**
-3. **Cypher full content**
-4. **Knowledge Web file ingestion** (Claude Sonnet diff-review)
-5. **Primer change-request alerts** + GM live-edit
-6. **Battlemap V2** — line-of-sight raycast against walls + measure tool + per-token status-effect binding to `/api/effects`
-7. **Channels V2** — `/api/ws/campaign/{cid}` for real-time + file/image attachment uploads + `@mention` autocomplete
-8. **Brute-force lock IP-key fix** (pre-existing security finding from iter_11)
-9. **`POST /api/admin/reset-to-evereantha` confirmation gate** (`?confirm=WIPE`)
-10. **Later VIP**: DriveThruRPG export + 8-session Evereantha demo
+1. **Anime 5E full content** (5 PDFs uploaded earlier) — extract attribute/skill/defect/template content, expose via the system selector
+2. **Cypher full content** (today's 5 Cypher / Numenera / Godforsaken PDFs + the 2 from earlier) — same as Anime 5E
+3. **Knowledge Web file ingestion** — GM uploads PDF/MD/TXT → Claude Sonnet diff-review → suggested nodes (requires `integration_playbook_expert_v2` for Claude integration)
+4. **Bulk reveal/hide** Knowledge Web buttons (per-node already exists; one-click "Reveal all" / "Reset all")
+5. **CharacterBuilder** cost-preview update — backend is now authoritative on V4.1 cost rule; the in-builder live preview still uses the old formula in places
+6. **WS handshake polish** — `/api/openapi.json` alias for external tooling
+7. **Primer change-request alerts** + GM live-edit mid-campaign
+8. **Later VIP**: DriveThruRPG export · 8-session Evereantha demo

@@ -31,8 +31,13 @@ class Bus:
     def __init__(self):
         self.rooms: Dict[str, List[Peer]] = {}
 
-    async def join(self, sid: str, ws: WebSocket, uid: str, name: str) -> Peer:
-        await ws.accept()
+    async def join(self, sid: str, ws: WebSocket, uid: str, name: str,
+                   accepted: bool = False) -> Peer:
+        # Callers that already accepted the WS (so they could close with a
+        # custom 4xxx code on auth failure) pass accepted=True to skip the
+        # double-accept which would 500 the connection.
+        if not accepted:
+            await ws.accept()
         peer = Peer(ws=ws, uid=uid, name=name, conn_id=secrets.token_urlsafe(8))
         self.rooms.setdefault(sid, []).append(peer)
         return peer

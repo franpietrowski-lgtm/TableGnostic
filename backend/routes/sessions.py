@@ -307,7 +307,12 @@ async def ws_session(ws: WebSocket, sid: str, token: str = None):
     (targeted relay to a specific peer via `to: conn_id`).
     Chat / dice / initiative are pushed via REST endpoints — they broadcast
     over the same bus, but the WS itself ignores inbound chat-shaped messages.
+
+    Auth/lookup checks ACCEPT the socket before closing so client libraries
+    can read the policy code (4401 / 4404 / 4403) rather than an HTTP-level
+    handshake rejection.
     """
+    await ws.accept()
     if not token:
         await ws.close(code=4401)
         return
@@ -335,7 +340,7 @@ async def ws_session(ws: WebSocket, sid: str, token: str = None):
     name = user.get("name") or user.get("email") or "Adventurer"
     is_gm = (camp.get("gm_id") == uid)
 
-    me = await bus.join(sid, ws, uid, name)
+    me = await bus.join(sid, ws, uid, name, accepted=True)
 
     # 1. Tell the joiner who's already in the room.
     others = [
@@ -398,7 +403,10 @@ async def ws_campaign(ws: WebSocket, cid: str, token: str = None):
     arrive in real time. Inbound payloads are NO-OP — clients only
     listen here; channel writes still go through REST so server-side
     slash-command parsing + persistence happen exactly once.
+
+    Accept-then-close pattern so 4401/4404/4403 codes are wire-visible.
     """
+    await ws.accept()
     if not token:
         await ws.close(code=4401)
         return
@@ -424,7 +432,7 @@ async def ws_campaign(ws: WebSocket, cid: str, token: str = None):
     user = await db.users.find_one({"id": uid}, {"_id": 0}) or {}
     name = user.get("name") or user.get("email") or "Adventurer"
     room = f"campaign:{cid}"
-    await bus.join(room, ws, uid, name)  # subscribe-only; we don't reuse the peer
+    await bus.join(room, ws, uid, name, accepted=True)  # subscribe-only
 
     try:
         while True:
