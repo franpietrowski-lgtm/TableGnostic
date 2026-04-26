@@ -119,7 +119,7 @@ class TestAuth:
         d = r.json()
         assert d["role"] == "player" and d["access_token"]
         # cleanup
-        asyncio.get_event_loop().run_until_complete(self._del_user(d["id"]))
+        self._del_user(d["id"])
 
     def test_register_gm_role(self):
         suffix = str(int(time.time() * 1000) + 1)
@@ -129,7 +129,7 @@ class TestAuth:
         }, timeout=15)
         assert r.status_code == 200, r.text
         assert r.json()["role"] == "gm"
-        asyncio.get_event_loop().run_until_complete(self._del_user(r.json()["id"]))
+        self._del_user(r.json()["id"])
 
     def test_register_duplicate_400(self):
         r = requests.post(f"{API}/auth/register", json={
@@ -151,29 +151,27 @@ class TestAuth:
                           json={"email": bad_email, "password": "wrong"}, timeout=10)
         assert r.status_code == 401
         # cleanup the login_attempts row we just created
-        asyncio.get_event_loop().run_until_complete(self._clear_attempts(bad_email))
+        self._clear_attempts(bad_email)
 
     def test_brute_force_lock_kicks_in(self):
         """Spec: 5 failed attempts → 423.
-        Observed: behind the K8s ingress `request.client.host` rotates between
-        upstream pod IPs (10.79.131.85, 10.79.131.86…), so the attempt count
-        gets split across keys. Lock effectively does NOT engage from external
-        traffic. We try 12 attempts and accept *either* the spec behaviour OR
-        the documented broken state — failure here would mean a brand-new
-        regression. See iter11 report → action_items for the X-Forwarded-For
-        fix recommendation."""
+        V4.2 fix: backend now reads X-Forwarded-For first hop so the lock
+        engages reliably behind the K8s ingress. We assert 423 actually fires
+        within 12 attempts (with X-Forwarded-For pinned to a single IP)."""
         suffix = str(int(time.time() * 1000))
         bad_email = f"TEST_lock_{suffix}@x.io"
+        # Clear any leftover attempts from previous test runs.
+        self._clear_attempts(bad_email)
         codes = []
+        # Pin a stable XFF so the V4.2 lock keys to one IP.
+        h = {"X-Forwarded-For": "203.0.113.42"}
         for _ in range(12):
-            r = requests.post(f"{API}/auth/login",
+            r = requests.post(f"{API}/auth/login", headers=h,
                               json={"email": bad_email, "password": "wrong"}, timeout=10)
             codes.append(r.status_code)
         assert all(c in (401, 423) for c in codes), f"unexpected status: {codes}"
-        # If 423 ever fires we're good; if not, log it (don't fail) — known issue.
-        if 423 not in codes:
-            print(f"[KNOWN ISSUE] brute-force lock never engaged in 12 attempts: {codes}")
-        asyncio.get_event_loop().run_until_complete(self._clear_attempts(bad_email))
+        assert 423 in codes, f"V4.2: brute-force lock should engage within 12 attempts, got {codes}"
+        self._clear_attempts(bad_email)
 
     def test_logout(self, gm_tok):
         r = requests.post(f"{API}/auth/logout", headers=_h(gm_tok), timeout=10)
@@ -195,15 +193,18 @@ class TestAuth:
 
     # --- helpers ---
     @staticmethod
-    async def _del_user(uid):
-        c = AsyncIOMotorClient(MONGO_URL)
-        try: await c[DB_NAME].users.delete_one({"id": uid})
+    def _del_user(uid):
+        # Sync pymongo (no asyncio loop dependency — survives test ordering).
+        from pymongo import MongoClient
+        c = MongoClient(MONGO_URL)
+        try: c[DB_NAME].users.delete_one({"id": uid})
         finally: c.close()
 
     @staticmethod
-    async def _clear_attempts(email):
-        c = AsyncIOMotorClient(MONGO_URL)
-        try: await c[DB_NAME].login_attempts.delete_many({"key": {"$regex": email}})
+    def _clear_attempts(email):
+        from pymongo import MongoClient
+        c = MongoClient(MONGO_URL)
+        try: c[DB_NAME].login_attempts.delete_many({"key": {"$regex": email}})
         finally: c.close()
 
 

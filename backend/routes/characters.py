@@ -88,6 +88,39 @@ async def delete_character(ch_id: str, user: dict = Depends(get_current_user)):
     return {"ok": True}
 
 
+@router.post("/characters/{ch_id}/transfer")
+async def transfer_character(ch_id: str, new_owner_id: str,
+                             user: dict = Depends(get_current_user)):
+    """Reassign a character to a different player. GM/admin only.
+
+    Use case: cloning a campaign carries published PCs as the cloner-GM's
+    characters; transfer hands them off to the actual players. Body is just
+    a query-param `new_owner_id` to keep the call simple.
+    """
+    ch = await db.characters.find_one({"id": ch_id}, {"_id": 0})
+    if not ch:
+        raise HTTPException(404, "Not found")
+    camp = await db.campaigns.find_one({"id": ch["campaign_id"]}, {"_id": 0})
+    if camp["gm_id"] != user["id"] and user.get("role") != "admin":
+        raise HTTPException(403, "Only the GM/admin may transfer characters")
+    new_owner = await db.users.find_one({"id": new_owner_id}, {"_id": 0})
+    if not new_owner:
+        raise HTTPException(404, "New owner not found")
+    # Auto-add transferred-to player as a campaign member if they aren't one
+    if (new_owner_id != camp["gm_id"]
+            and new_owner_id not in camp.get("member_ids", [])):
+        await db.campaigns.update_one({"id": ch["campaign_id"]},
+                                      {"$addToSet": {"member_ids": new_owner_id}})
+    await db.characters.update_one(
+        {"id": ch_id},
+        {"$set": {"owner_id": new_owner_id,
+                  "owner_name": new_owner.get("name") or new_owner.get("email", "?"),
+                  "updated_at": now_iso()}},
+    )
+    fresh = await db.characters.find_one({"id": ch_id}, {"_id": 0})
+    return _decorate(fresh)
+
+
 @router.post("/characters/{cid}/journal")
 async def add_journal_entry(cid: str, body: JournalEntryIn,
                             user: dict = Depends(get_current_user)):

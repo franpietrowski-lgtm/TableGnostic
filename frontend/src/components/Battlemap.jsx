@@ -1,8 +1,8 @@
-import React, { useEffect, useRef, useState, useCallback } from "react";
+import React, { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { api } from "../lib/api";
 import {
   Map as MapIcon, Image as ImageIcon, Eye, EyeOff, Plus, X,
-  Hammer, Hand, MousePointer2, Trash2,
+  Hammer, Hand, MousePointer2, Trash2, Ruler, Sparkles,
 } from "lucide-react";
 
 /**
@@ -12,21 +12,20 @@ import {
  *   select  — click/drag to move tokens (player can move own; GM moves any)
  *   fog     — GM only: paint cells to hide; shift-click to reveal
  *   wall    — GM only: click + drag to draw a wall segment
+ *   measure — anyone: click + drag to draw a ruler; cells, metres, +Mod
  *
- * Real-time:
- *   Re-uses the SessionView WS bridge via subscribe()/send() props
- *   (same surface AVSeats uses). Listens for map:* events and updates
- *   local state without a refetch.
+ * V2 additions (this round):
+ *   * Line-of-sight raycast — for each token, we raycast from active-uid's
+ *     token to it and hide the destination if any wall segment intersects
+ *     the ray. Active-actor tokens stay visible to themselves; GM sees
+ *     everything regardless.
+ *   * Distance-measure tool — temporary ruler line (chebyshev cells +
+ *     metric metres, derived from grid scale 2m/cell).
+ *   * Status-effect binding — pulls live effects from /api/effects on
+ *     mount + every WS effect/effect_remove event so token rings reflect
+ *     current battle state without a manual refresh.
  *
- * Token drag protocol:
- *   onMouseDown over a token enters a drag; onMouseUp commits the new
- *   (x, y) cell coordinate via POST /api/sessions/{sid}/map/tokens.
- *   Every mid-drag cell change is local-only — the network sees the
- *   final position only.
- *
- * Initiative spotlight:
- *   When `activeUid` is set (from initiative top-of-order), the matching
- *   character's token gets a gold ring + slow pulse.
+ * Real-time: re-uses the SessionView WS bridge via subscribe() prop.
  */
 export default function Battlemap({
   sessionId,
@@ -40,18 +39,27 @@ export default function Battlemap({
   const isGm = !!campaign && (campaign.gm_id === user?.id || user?.role === "admin");
 
   const [state, setState] = useState(null);   // { grid, image, tokens, walls, fog, ... }
+  const [effects, setEffects] = useState([]); // live /api/effects rows
   const [mode, setMode] = useState(isGm ? "select" : "select");
   const [draggingId, setDraggingId] = useState(null);
   const [dragPos, setDragPos] = useState(null); // {x, y} grid-cell coords, mid-drag
   const [wallStart, setWallStart] = useState(null);
+  const [measureStart, setMeasureStart] = useState(null);
+  const [measureEnd, setMeasureEnd] = useState(null);
+  const [losEnabled, setLosEnabled] = useState(true);
   const canvasRef = useRef(null);
 
-  // ─── load + WS subscribe ───
+  // ─── load map + effects ───
   useEffect(() => {
     if (!sessionId) return;
     let mounted = true;
-    api.get(`/sessions/${sessionId}/map`).then((r) => {
-      if (mounted) setState(r.data);
+    Promise.all([
+      api.get(`/sessions/${sessionId}/map`),
+      api.get(`/sessions/${sessionId}/effects`).catch(() => ({ data: [] })),
+    ]).then(([mapResp, effResp]) => {
+      if (!mounted) return;
+      setState(mapResp.data);
+      setEffects(effResp.data || []);
     }).catch(() => {});
     return () => { mounted = false; };
   }, [sessionId]);
@@ -59,20 +67,22 @@ export default function Battlemap({
   useEffect(() => {
     if (!subscribe) return;
     const off = subscribe((evt) => {
-      if (!evt || !evt.type || !state) return;
+      if (!evt || !evt.type) return;
       const { type, data } = evt;
       if (type === "map:state") setState(data);
       else if (type === "map:token") {
         setState((s) => {
+          if (!s) return s;
           const tokens = s.tokens.filter((t) => t.id !== data.id);
           return { ...s, tokens: [...tokens, data] };
         });
       }
       else if (type === "map:token-remove") {
-        setState((s) => ({ ...s, tokens: s.tokens.filter((t) => t.id !== data.id) }));
+        setState((s) => s ? { ...s, tokens: s.tokens.filter((t) => t.id !== data.id) } : s);
       }
       else if (type === "map:fog") {
         setState((s) => {
+          if (!s) return s;
           const cur = new Set(s.fog.map((c) => `${c.x},${c.y}`));
           (data.hide || []).forEach((c) => cur.add(`${c.x},${c.y}`));
           (data.reveal || []).forEach((c) => cur.delete(`${c.x},${c.y}`));
@@ -84,15 +94,26 @@ export default function Battlemap({
       }
       else if (type === "map:wall") {
         setState((s) => {
+          if (!s) return s;
           let walls = s.walls;
           if (data.added) walls = [...walls, data.added];
           if (data.removed) walls = walls.filter((w) => w.id !== data.removed);
           return { ...s, walls };
         });
       }
+      // Live effects → re-derive token status rings.
+      else if (type === "effect") {
+        setEffects((prev) => {
+          const others = prev.filter((e) => e.id !== data.id);
+          return [...others, data];
+        });
+      }
+      else if (type === "effect_remove") {
+        setEffects((prev) => prev.filter((e) => e.id !== data.id));
+      }
     });
     return () => { try { off && off(); } catch {} };
-  }, [subscribe, state]);
+  }, [subscribe]);
 
   // Active uid (initiative top of order) → matching character → token highlight
   const activeUid = (initiative && initiative.length > 0)
@@ -103,6 +124,18 @@ export default function Battlemap({
   const activeCharIds = characters
     .filter((c) => c.owner_id === activeUid)
     .map((c) => c.id);
+
+  // Map character_id → list of effect names so PeerTile rings reflect /effects.
+  const effectsByCharacter = useMemo(() => {
+    const map = {};
+    for (const e of effects) {
+      if (!e.active) continue;
+      const cid = e.target_character_id;
+      if (!cid) continue;
+      (map[cid] = map[cid] || []).push(e.name || e.kind || "FX");
+    }
+    return map;
+  }, [effects]);
 
   // ─── helpers ───
   const cellSize = state?.grid?.size_px || 48;
@@ -129,6 +162,43 @@ export default function Battlemap({
     return ch && ch.owner_id === user?.id;
   };
 
+  // ─── LINE-OF-SIGHT RAYCAST (V2) ───
+  // Pure 2-segment intersection test — for each pair (origin, target) we
+  // walk every wall and ask "does origin→target intersect this segment?"
+  // If yes for any wall, the target is occluded. Origin = active actor's
+  // token (initiative top of order); falls back to the player's own token.
+  const segmentsIntersect = (p1, p2, p3, p4) => {
+    const d = (p2.x - p1.x) * (p4.y - p3.y) - (p2.y - p1.y) * (p4.x - p3.x);
+    if (Math.abs(d) < 1e-9) return false;
+    const t = ((p3.x - p1.x) * (p4.y - p3.y) - (p3.y - p1.y) * (p4.x - p3.x)) / d;
+    const u = ((p3.x - p1.x) * (p2.y - p1.y) - (p3.y - p1.y) * (p2.x - p1.x)) / d;
+    return t > 0.001 && t < 0.999 && u > 0.001 && u < 0.999;
+  };
+
+  const losOriginToken = useMemo(() => {
+    if (!state) return null;
+    if (isGm) return null;  // GM sees everything; don't bother
+    // Prefer the current active-actor token if it's mine; else my own
+    // first owned token.
+    const myCharIds = characters.filter((c) => c.owner_id === user?.id).map((c) => c.id);
+    const own = state.tokens.find((t) => myCharIds.includes(t.character_id));
+    return own || null;
+  }, [state, characters, user?.id, isGm]);
+
+  const isOccluded = useCallback((target) => {
+    if (!losEnabled || isGm) return false;
+    if (!losOriginToken || !state?.walls?.length) return false;
+    if (target.id === losOriginToken.id) return false;
+    const o = { x: losOriginToken.x, y: losOriginToken.y };
+    const t = { x: target.x, y: target.y };
+    for (const w of state.walls) {
+      if (segmentsIntersect(o, t, { x: w.x1, y: w.y1 }, { x: w.x2, y: w.y2 })) {
+        return true;
+      }
+    }
+    return false;
+  }, [losOriginToken, state, isGm, losEnabled]);
+
   // ─── canvas interaction ───
   const onMouseDown = (ev) => {
     if (!state) return;
@@ -144,6 +214,11 @@ export default function Battlemap({
       setWallStart(cell);
       return;
     }
+    if (mode === "measure") {
+      setMeasureStart(cell);
+      setMeasureEnd(cell);
+      return;
+    }
     // select mode — find a token under the click
     const hit = [...state.tokens].reverse().find((t) => {
       const dx = cell.x - t.x, dy = cell.y - t.y;
@@ -155,8 +230,10 @@ export default function Battlemap({
     }
   };
   const onMouseMove = (ev) => {
-    if (!draggingId || !state) return;
+    if (!state) return;
     const cell = eventToCell(ev);
+    if (measureStart) setMeasureEnd(cell);
+    if (!draggingId) return;
     setDragPos({ x: cell.x, y: cell.y });
   };
   const onMouseUp = (ev) => {
@@ -169,6 +246,11 @@ export default function Battlemap({
       setWallStart(null);
       return;
     }
+    if (mode === "measure" && measureStart) {
+      // Ruler is a transient overlay — releasing freezes the line for a
+      // beat then clears on next mode change. Nothing networked.
+      return;
+    }
     if (draggingId && dragPos) {
       const t = state.tokens.find((x) => x.id === draggingId);
       if (t) {
@@ -178,6 +260,11 @@ export default function Battlemap({
     setDraggingId(null);
     setDragPos(null);
   };
+
+  // Clear the ruler when leaving measure mode.
+  useEffect(() => {
+    if (mode !== "measure") { setMeasureStart(null); setMeasureEnd(null); }
+  }, [mode]);
 
   // ─── GM controls ───
   const setBgImage = async () => {
@@ -278,6 +365,19 @@ export default function Battlemap({
               <Hammer className="w-3.5 h-3.5"/>
             </button>
           )}
+          <button onClick={() => setMode("measure")}
+                  className={`btn ${mode === "measure" ? "btn-primary" : "btn-ghost"} text-xs px-2`}
+                  data-testid="map-mode-measure" title="Measure distance">
+            <Ruler className="w-3.5 h-3.5"/>
+          </button>
+          {!isGm && (
+            <button onClick={() => setLosEnabled((v) => !v)}
+                    className={`btn btn-ghost text-xs px-2 ${losEnabled ? "border-arcane/60 text-arcane-light" : ""}`}
+                    data-testid="map-los-toggle"
+                    title={losEnabled ? "Line-of-sight: ON (walls hide tokens)" : "Line-of-sight: OFF (see all)"}>
+              <Sparkles className="w-3.5 h-3.5"/>
+            </button>
+          )}
           {onClose && (
             <button onClick={onClose} className="btn btn-ghost text-xs px-2" data-testid="map-close" title="Close map">
               <X className="w-3.5 h-3.5"/>
@@ -353,6 +453,41 @@ export default function Battlemap({
                   onClick={isGm ? (e) => { e.stopPropagation(); removeWall(w.id); } : undefined}
                   data-testid={`map-wall-${w.id}`}/>
           ))}
+          {/* Wall preview while dragging */}
+          {wallStart && measureEnd === null && (
+            <line x1={wallStart.x * cellSize} y1={wallStart.y * cellSize}
+                  x2={(dragPos?.x ?? wallStart.x) * cellSize}
+                  y2={(dragPos?.y ?? wallStart.y) * cellSize}
+                  stroke="#c8a34a" strokeWidth="2" strokeDasharray="6,3"
+                  opacity="0.6"/>
+          )}
+          {/* Measure ruler */}
+          {measureStart && measureEnd && (() => {
+            const dx = measureEnd.x - measureStart.x;
+            const dy = measureEnd.y - measureStart.y;
+            // Chebyshev distance (D&D-style — diagonals count 1) plus metric
+            const cells = Math.round(Math.max(Math.abs(dx), Math.abs(dy)) * 10) / 10;
+            const metres = cells * 2;  // BESM-friendly default scale: 2m / cell
+            const midX = (measureStart.x + measureEnd.x) / 2 * cellSize;
+            const midY = (measureStart.y + measureEnd.y) / 2 * cellSize;
+            return (
+              <g data-testid="map-measure-ruler">
+                <line x1={measureStart.x * cellSize} y1={measureStart.y * cellSize}
+                      x2={measureEnd.x * cellSize} y2={measureEnd.y * cellSize}
+                      stroke="#f1d775" strokeWidth="2" strokeDasharray="4,2"/>
+                <circle cx={measureStart.x * cellSize} cy={measureStart.y * cellSize}
+                        r="4" fill="#f1d775"/>
+                <circle cx={measureEnd.x * cellSize} cy={measureEnd.y * cellSize}
+                        r="4" fill="#f1d775"/>
+                <rect x={midX - 38} y={midY - 14} width="76" height="22"
+                      rx="2" fill="rgba(7,6,10,0.8)" stroke="#f1d775"/>
+                <text x={midX} y={midY + 1} fontSize="11" textAnchor="middle"
+                      fill="#f1d775" fontFamily="ui-monospace, Menlo, monospace">
+                  {cells} cell{cells === 1 ? "" : "s"} · {metres}m
+                </text>
+              </g>
+            );
+          })()}
         </svg>
 
         {/* Fog */}
@@ -382,6 +517,12 @@ export default function Battlemap({
           const isActive = t.character_id && activeCharIds.includes(t.character_id);
           const ch = characters.find((c) => c.id === t.character_id);
           const initials = (t.label || ch?.name || "?").trim().charAt(0).toUpperCase();
+          // V2: live status rings driven by /api/effects (target_character_id)
+          const liveStatus = (t.character_id && effectsByCharacter[t.character_id]) || [];
+          const allStatus = [...(t.status || []), ...liveStatus].slice(0, 4);
+          // V2: line-of-sight occlusion — players don't see tokens behind walls.
+          const occluded = isOccluded(t);
+          if (occluded) return null;
           return (
             <button
               key={t.id}
@@ -403,7 +544,7 @@ export default function Battlemap({
               data-testid={`map-token-${t.id}`}
               data-active={isActive ? "true" : "false"}
               aria-label={t.label || ch?.name || "token"}
-              title={`${t.label || ch?.name || ""}${isActive ? " · ACTIVE" : ""} ${isGm ? "· right-click to remove" : ""}`}
+              title={`${t.label || ch?.name || ""}${isActive ? " · ACTIVE" : ""}${liveStatus.length ? " · " + liveStatus.join(", ") : ""} ${isGm ? "· right-click to remove" : ""}`}
             >
               {initials}
               {/* HP bar */}
@@ -413,11 +554,14 @@ export default function Battlemap({
                        style={{ width: `${Math.max(0, Math.min(100, t.hp_pct))}%` }}/>
                 </div>
               )}
-              {/* Status rings */}
-              {(t.status || []).slice(0, 3).map((s, i) => (
-                <span key={i}
-                      className="absolute -top-1 -right-1 px-1 py-[1px] text-[8px] uppercase
-                                 tracking-widest bg-arcane text-parchment rounded-sm border border-arcane"
+              {/* Status rings — manual + live effects */}
+              {allStatus.map((s, i) => (
+                <span key={`${s}-${i}`}
+                      className={`absolute -top-1 -right-1 px-1 py-[1px] text-[8px] uppercase
+                                 tracking-widest rounded-sm border
+                                 ${i < (t.status || []).length
+                                   ? "bg-arcane text-parchment border-arcane"
+                                   : "bg-ember/90 text-parchment border-ember"}`}
                       style={{ transform: `translateY(${i * 10}px)` }}
                       data-testid={`map-token-${t.id}-status-${i}`}>
                   {s}
@@ -430,8 +574,8 @@ export default function Battlemap({
 
       <div className="text-[10px] font-ui uppercase tracking-widest text-mist/60 mt-2">
         {isGm
-          ? "GM · select to move tokens · fog: click hide / shift-click reveal · wall: click+drag · right-click token to remove"
-          : "Drag tokens you own. Tokens with the gold ring are on the active turn."}
+          ? "GM · select to move tokens · fog: click hide / shift-click reveal · wall: click+drag · ruler: click+drag · right-click token to remove"
+          : `Drag tokens you own. Gold ring = active turn. ${losEnabled ? "Walls block your line of sight." : "Line-of-sight off — seeing all."}`}
       </div>
     </div>
   );

@@ -54,7 +54,8 @@ export default function CampaignDetail() {
   };
 
   return (
-    <div className="px-8 md:px-12 py-10">
+    <div className="px-8 md:px-12 py-10" data-system={camp.system_id || "besm-4e"}
+         data-testid="campaign-root">
       <Link to="/app/campaigns" className="text-xs font-ui uppercase tracking-widest text-gold/70 hover:text-gold-bright"
             data-testid="back-to-campaigns">← Campaigns</Link>
       <div className="mt-4 flex items-start justify-between flex-wrap gap-4">

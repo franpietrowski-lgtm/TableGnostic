@@ -152,7 +152,8 @@ export default function SessionView() {
   };
 
   return (
-    <div className="px-4 md:px-10 py-4 md:py-6 md:h-screen md:flex md:flex-col md:overflow-hidden">
+    <div className="px-4 md:px-10 py-4 md:py-6 md:h-screen md:flex md:flex-col md:overflow-hidden"
+         data-system={campaign?.system_id || "besm-4e"} data-testid="session-root">
       {/* AV Seats — voice/video strip above session panes */}
       <div className="mb-3 md:mb-4">
         <AVSeats

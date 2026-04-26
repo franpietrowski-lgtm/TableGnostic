@@ -71,7 +71,11 @@ class TestAdminResetEvereantha:
         assert r.status_code == 403
 
     def test_reset_succeeds_for_admin(self, admin_tok):
-        r = requests.post(f"{API}/admin/reset-to-evereantha", headers=_h(admin_tok), timeout=60)
+        # NEW V4.2: requires ?confirm=WIPE gate. First confirm the gate trips.
+        r0 = requests.post(f"{API}/admin/reset-to-evereantha", headers=_h(admin_tok), timeout=10)
+        assert r0.status_code == 400, f"reset without confirm should 400, got {r0.status_code}"
+        r = requests.post(f"{API}/admin/reset-to-evereantha?confirm=WIPE",
+                          headers=_h(admin_tok), timeout=60)
         assert r.status_code == 200, r.text
         d = r.json()
         assert d["ok"] is True

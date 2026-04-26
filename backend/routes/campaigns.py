@@ -179,6 +179,38 @@ async def regenerate_invite(cid: str, user: dict = Depends(get_current_user)):
     return {"invite_token": new_token}
 
 
+@router.get("/campaigns/{cid}/members")
+async def list_campaign_members(cid: str, user: dict = Depends(get_current_user)):
+    """Member list for the @mention autocomplete picker. Returns id, name, and
+    a kebab-handle (lowercased name with spaces → underscores; falls back to
+    the email's local part). Anyone seated at the table can read this."""
+    camp = await db.campaigns.find_one({"id": cid}, {"_id": 0})
+    if not camp:
+        raise HTTPException(404, "Campaign not found")
+    if (camp["gm_id"] != user["id"]
+            and user["id"] not in camp.get("member_ids", [])
+            and user.get("role") != "admin"):
+        raise HTTPException(403, "Not seated at this table")
+    member_ids = list({camp["gm_id"], *camp.get("member_ids", [])})
+    rows = await db.users.find(
+        {"id": {"$in": member_ids}},
+        {"_id": 0, "id": 1, "name": 1, "email": 1, "role": 1},
+    ).to_list(50)
+    out = []
+    for u in rows:
+        nm = (u.get("name") or "").lower().replace(" ", "_")
+        if not nm:
+            nm = (u.get("email") or "").split("@")[0].lower()
+        out.append({
+            "id": u["id"],
+            "name": u.get("name") or u.get("email", ""),
+            "handle": nm,
+            "is_gm": u["id"] == camp["gm_id"],
+            "role": u.get("role", "player"),
+        })
+    return out
+
+
 @router.get("/invites/{token}")
 async def get_invite(token: str):
     """Public invite lookup (no auth) — minimal summary for onboarding."""

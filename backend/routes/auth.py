@@ -42,7 +42,13 @@ async def register(body: RegisterIn, response: Response):
 @router.post("/login")
 async def login(body: LoginIn, request: Request, response: Response):
     email = body.email.lower()
-    ip = request.client.host if request.client else "?"
+    # Resolve client IP through the K8s ingress: trust the LEFTMOST entry in
+    # X-Forwarded-For (the original client). request.client.host points at the
+    # immediate upstream pod which rotates per-request, so without this fix
+    # the brute-force lock never trips reliably behind ingress.
+    xff = request.headers.get("x-forwarded-for", "")
+    ip = (xff.split(",")[0].strip() if xff else
+          (request.client.host if request.client else "?"))
     key = f"{ip}:{email}"
     attempt = await db.login_attempts.find_one({"key": key})
     if attempt and attempt.get("count", 0) >= 5:

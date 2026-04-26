@@ -1,31 +1,23 @@
 import React, { useEffect, useRef, useState, useCallback } from "react";
-import { api } from "../lib/api";
+import { api, API } from "../lib/api";
 import {
   Hash, Send, Plus, Pin, PinOff, MessageSquare, Smile,
-  Trash2, X, Dice6, ChevronRight, AtSign,
+  Trash2, X, Dice6, ChevronRight, AtSign, Image as ImageIcon, Paperclip,
 } from "lucide-react";
 
 /**
  * Discord-style PBP channels for a campaign.
  *
- * Layout:
- *   ┌──────────────┬─────────────────────────────────┐
- *   │ #channels    │   message stream                 │
- *   │ list         │   composer (markdown + slash)    │
- *   │              │   thread drawer (right slide-in) │
- *   └──────────────┴─────────────────────────────────┘
- *
- * Slash commands (parsed server-side):
- *   /roll 2d6+Body                 → dice message with computed total
- *   /me steps into the firelight    → emote
- *   /w @handle private aside        → whisper (still posted; rendered private)
- *
- * Real-time: V1 uses 4-second polling on the active channel; the backend
- * already broadcasts on a campaign room, ready for a WS upgrade in V1.5.
+ * V2 additions:
+ *   * Real-time over /api/ws/campaign/{cid} — falls back to 4 s polling.
+ *   * @mention autocomplete picker — typing "@" opens a member list driven
+ *     by GET /api/campaigns/{cid}/members; arrow keys + Tab/Enter to insert.
+ *   * URL-based image attachments — the Image button accepts a public URL
+ *     (avoids needing an upload pipeline; the user can paste any CDN link).
  */
 
 const QUICK_REACTIONS = ["👍", "🎲", "✨", "🔥", "⚔️", "❤️"];
-const POLL_MS = 4000;
+const POLL_MS = 8000;  // slow fallback poll; the WS handles real-time
 
 export default function ChannelsPanel({ campaign, user }) {
   const isGm = !!campaign && (campaign.gm_id === user?.id || user?.role === "admin");
@@ -38,6 +30,12 @@ export default function ChannelsPanel({ campaign, user }) {
   const [threadDraft, setThreadDraft] = useState("");
   const [threadMsgs, setThreadMsgs] = useState([]);
   const [emojiFor, setEmojiFor] = useState(null); // msg id under the picker
+  // V2 — @mention autocomplete + WS state
+  const [members, setMembers] = useState([]);
+  const [mention, setMention] = useState(null); // { matches, index } when @ active
+  const wsRef = useRef(null);
+  const wsConnectedRef = useRef(false);
+  const inputRef = useRef(null);
   const endRef = useRef(null);
 
   // ─── load + poll ───
@@ -57,9 +55,65 @@ export default function ChannelsPanel({ campaign, user }) {
   useEffect(() => { loadChannels(); }, [loadChannels]);
   useEffect(() => { loadMessages(); }, [loadMessages]);
 
+  // ─── V2: members for @mention autocomplete ───
+  useEffect(() => {
+    if (!campaign?.id) return;
+    api.get(`/campaigns/${campaign.id}/members`)
+      .then((r) => setMembers(r.data))
+      .catch(() => setMembers([]));
+  }, [campaign?.id]);
+
+  // ─── V2: campaign WebSocket for real-time channel updates ───
+  useEffect(() => {
+    if (!campaign?.id) return;
+    const token = (document.cookie.match(/access=([^;]+)/) || [])[1]
+                  || localStorage.getItem("access_token");
+    if (!token) return;  // still falls back to polling
+    const wsUrl = `${API.replace(/^http/, "ws")}/ws/campaign/${campaign.id}?token=${encodeURIComponent(token)}`;
+    let ws;
+    try { ws = new WebSocket(wsUrl); } catch { return; }
+    wsRef.current = ws;
+    ws.onopen = () => { wsConnectedRef.current = true; };
+    ws.onclose = () => { wsConnectedRef.current = false; };
+    ws.onerror = () => { wsConnectedRef.current = false; };
+    ws.onmessage = (ev) => {
+      let evt; try { evt = JSON.parse(ev.data); } catch { return; }
+      const { type, data } = evt || {};
+      if (type === "channel:msg") {
+        // Insert or replace (covers edits)
+        setMessages((prev) => {
+          if (data.channel_id !== activeId) return prev;
+          if (data.thread_id) return prev;  // root only; thread shown in drawer
+          const others = prev.filter((m) => m.id !== data.id);
+          return [...others, data].sort((a, b) => a.created_at.localeCompare(b.created_at));
+        });
+        // Thread updates
+        setThreadMsgs((prev) => {
+          if (!openThreadFor || data.thread_id !== openThreadFor._thread_id) return prev;
+          const others = prev.filter((m) => m.id !== data.id);
+          return [...others, data].sort((a, b) => a.created_at.localeCompare(b.created_at));
+        });
+      }
+      else if (type === "channel:msg-delete") {
+        setMessages((prev) => prev.filter((m) => m.id !== data.id));
+        setThreadMsgs((prev) => prev.filter((m) => m.id !== data.id));
+      }
+      else if (type === "channel:reaction") {
+        setMessages((prev) => prev.map((m) => m.id === data.msg_id ? { ...m, reactions: data.reactions } : m));
+        setThreadMsgs((prev) => prev.map((m) => m.id === data.msg_id ? { ...m, reactions: data.reactions } : m));
+      }
+      else if (type === "channel:pin") {
+        setMessages((prev) => prev.map((m) => m.id === data.msg_id ? { ...m, pinned: data.pinned } : m));
+      }
+    };
+    return () => { try { ws.close(); } catch {} };
+  }, [campaign?.id, activeId, openThreadFor]);
+
   useEffect(() => {
     if (!activeId) return;
-    const t = setInterval(loadMessages, POLL_MS);
+    // Slow polling as a WS fallback / catch-up. WS handles realtime; this
+    // only matters when the WS dropped or was never opened.
+    const t = setInterval(() => { if (!wsConnectedRef.current) loadMessages(); }, POLL_MS);
     return () => clearInterval(t);
   }, [activeId, loadMessages]);
 
@@ -73,15 +127,94 @@ export default function ChannelsPanel({ campaign, user }) {
     setBusy(true);
     try {
       const { data } = await api.post(`/channels/${activeId}/messages`, { body: draft });
-      setMessages((prev) => [...prev, data]);
+      // The WS will deliver this to all subscribers (including us) — but to
+      // make composing feel snappy on flaky networks, we still optimistically
+      // append. A duplicate would be dedup'd by the WS handler (replaces by id).
+      setMessages((prev) => {
+        if (prev.find((m) => m.id === data.id)) return prev;
+        return [...prev, data];
+      });
       setDraft("");
+      setMention(null);
     } finally { setBusy(false); }
   };
+
+  // ─── V2: @mention autocomplete ───
+  // Detect a "@partial" right before the cursor; render a picker; arrow keys
+  // navigate it; Tab/Enter inserts the matched handle.
+  const updateMentionState = (value, caret) => {
+    const sub = value.slice(0, caret);
+    const m = sub.match(/(?:^|\s)@([A-Za-z0-9_-]*)$/);
+    if (!m) { setMention(null); return; }
+    const partial = m[1].toLowerCase();
+    const matches = members.filter((mb) =>
+      mb.handle.startsWith(partial) || mb.name.toLowerCase().includes(partial),
+    ).slice(0, 6);
+    if (!matches.length) { setMention(null); return; }
+    setMention({ matches, index: 0, partial, caret });
+  };
+  const insertMention = (m) => {
+    const ta = inputRef.current;
+    if (!ta) return;
+    const caret = ta.selectionStart || draft.length;
+    const sub = draft.slice(0, caret);
+    const replaced = sub.replace(/@[A-Za-z0-9_-]*$/, `@${m.handle} `);
+    const next = replaced + draft.slice(caret);
+    setDraft(next);
+    setMention(null);
+    setTimeout(() => {
+      ta.focus();
+      const pos = replaced.length;
+      ta.setSelectionRange(pos, pos);
+    }, 0);
+  };
+
   const onKey = (e) => {
+    // Mention picker steers Up/Down/Enter/Tab/Esc when active.
+    if (mention) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        setMention((m) => ({ ...m, index: (m.index + 1) % m.matches.length }));
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setMention((m) => ({ ...m, index: (m.index - 1 + m.matches.length) % m.matches.length }));
+        return;
+      }
+      if (e.key === "Enter" || e.key === "Tab") {
+        e.preventDefault();
+        insertMention(mention.matches[mention.index]);
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setMention(null);
+        return;
+      }
+    }
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       send();
     }
+  };
+
+  const onComposerChange = (e) => {
+    const v = e.target.value;
+    setDraft(v);
+    updateMentionState(v, e.target.selectionStart);
+  };
+
+  // Image attachment — paste a public URL. Skips a full upload pipeline so
+  // it works today; user can use any CDN link (Imgur, Discord cdn, etc.).
+  const attachImage = async () => {
+    const url = window.prompt("Paste a public image URL (or any file URL):");
+    if (!url) return;
+    const name = window.prompt("Display name?", url.split("/").pop()) || "attachment";
+    const isImg = /\.(png|jpe?g|webp|gif|avif)(\?|$)/i.test(url);
+    const body = isImg ? `![${name}](${url})` : `[${name}](${url})`;
+    setDraft((d) => d + (d ? " " : "") + body);
+    setTimeout(() => inputRef.current?.focus(), 0);
   };
 
   const newChannel = async () => {
@@ -138,6 +271,36 @@ export default function ChannelsPanel({ campaign, user }) {
   };
 
   // ─── render helpers ───
+  // Light markdown — renders ![name](url) as <img> and [name](url) as a link.
+  // Plain text otherwise; preserves newlines.
+  const renderText = (text) => {
+    if (!text) return null;
+    const parts = [];
+    const re = /(!?\[([^\]]+)\]\(([^)\s]+)\))/g;
+    let lastIdx = 0, m, key = 0;
+    while ((m = re.exec(text)) !== null) {
+      if (m.index > lastIdx) parts.push(text.slice(lastIdx, m.index));
+      const isImg = m[0].startsWith("!");
+      const name = m[2];
+      const url = m[3];
+      if (isImg) {
+        parts.push(
+          <img key={`a${key++}`} src={url} alt={name}
+               className="my-2 max-h-64 rounded border border-gold/30"
+               loading="lazy"/>,
+        );
+      } else {
+        parts.push(
+          <a key={`a${key++}`} href={url} target="_blank" rel="noopener noreferrer"
+             className="text-arcane-light underline">{name}</a>,
+        );
+      }
+      lastIdx = m.index + m[0].length;
+    }
+    if (lastIdx < text.length) parts.push(text.slice(lastIdx));
+    return <span className="whitespace-pre-wrap">{parts}</span>;
+  };
+
   const renderBody = (m) => {
     if (m.kind === "roll" && m.slash_meta?.result) {
       const r = m.slash_meta.result;
@@ -166,7 +329,7 @@ export default function ChannelsPanel({ campaign, user }) {
         </div>
       );
     }
-    return <span className="whitespace-pre-wrap">{m.body}</span>;
+    return renderText(m.body);
   };
 
   const isMine = (m) => m.author_id === user?.id;
@@ -304,13 +467,38 @@ export default function ChannelsPanel({ campaign, user }) {
           <div ref={endRef}/>
         </div>
 
-        <div className="border-t border-gold/10 pt-2 mt-2">
+        <div className="border-t border-gold/10 pt-2 mt-2 relative">
+          {/* @mention autocomplete picker */}
+          {mention && (
+            <div className="absolute left-0 right-0 -top-1 -translate-y-full bg-void border border-gold/40 rounded-sm shadow-lg z-30"
+                 data-testid="channel-mention-picker">
+              {mention.matches.map((m, i) => (
+                <button key={m.id}
+                        type="button"
+                        onMouseDown={(e) => { e.preventDefault(); insertMention(m); }}
+                        className={`w-full text-left px-3 py-1.5 text-sm font-ui flex items-center gap-2
+                          ${i === mention.index ? "bg-gold/20 text-gold-bright" : "text-parchment hover:bg-gold/10"}`}
+                        data-testid={`channel-mention-${m.handle}`}>
+                  <AtSign className="w-3 h-3 text-gold/70"/>
+                  <span>{m.handle}</span>
+                  <span className="text-mist/60 text-[11px] ml-1">{m.name}</span>
+                  {m.is_gm && <span className="ml-auto text-[10px] text-gold/60 uppercase tracking-widest">GM</span>}
+                </button>
+              ))}
+            </div>
+          )}
           <div className="flex gap-2">
+            <button onClick={attachImage} className="btn btn-ghost px-2"
+                    title="Attach an image or file by URL"
+                    data-testid="channel-attach-btn">
+              <ImageIcon className="w-4 h-4"/>
+            </button>
             <input
+              ref={inputRef}
               className="input flex-1"
-              placeholder='Speak. Try /roll 2d6+Body or /me steps forward'
+              placeholder='Speak. Try /roll 2d6+Body or @handle to mention'
               value={draft}
-              onChange={(e) => setDraft(e.target.value)}
+              onChange={onComposerChange}
               onKeyDown={onKey}
               data-testid="channel-composer-input"
             />
@@ -319,10 +507,11 @@ export default function ChannelsPanel({ campaign, user }) {
               <Send className="w-4 h-4"/>
             </button>
           </div>
-          <div className="text-[10px] font-ui text-mist/50 uppercase tracking-widest mt-1">
-            /roll <span className="text-gold/60">notation</span> ·
-            /me <span className="text-gold/60">action</span> ·
-            /w @<span className="text-gold/60">handle</span> message
+          <div className="text-[10px] font-ui text-mist/50 uppercase tracking-widest mt-1 flex items-center gap-2">
+            <span>/roll <span className="text-gold/60">notation</span></span>
+            <span>/me <span className="text-gold/60">action</span></span>
+            <span>/w @<span className="text-gold/60">handle</span> message</span>
+            <span className="ml-auto">{wsConnectedRef.current ? "● live" : "○ polling"}</span>
           </div>
         </div>
       </section>

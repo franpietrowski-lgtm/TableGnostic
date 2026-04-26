@@ -28,8 +28,11 @@ _GAME_COLLECTIONS = (
 
 
 @router.post("/reset-to-evereantha")
-async def reset_to_evereantha(user: dict = Depends(get_current_user)):
+async def reset_to_evereantha(confirm: str = "", user: dict = Depends(get_current_user)):
     """Admin-only. Wipes all game content and seeds the Evereantha demo table.
+
+    DESTRUCTIVE — must pass `?confirm=WIPE` query param. Without it returns 400
+    so a stray POST from automation or a UI typo can't nuke the table.
 
     Preserves: users, login_attempts, password_reset_tokens.
     Wipes:     campaigns, characters, sessions, chat, dice, initiative,
@@ -37,6 +40,9 @@ async def reset_to_evereantha(user: dict = Depends(get_current_user)):
     """
     if user.get("role") != "admin":
         raise HTTPException(403, "Admin only")
+    if confirm != "WIPE":
+        raise HTTPException(400, "This endpoint is destructive. "
+                                  "Pass ?confirm=WIPE to proceed.")
 
     # ---- 1. wipe ----
     wiped = {}

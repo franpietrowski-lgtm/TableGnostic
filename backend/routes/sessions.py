@@ -386,3 +386,48 @@ async def ws_session(ws: WebSocket, sid: str, token: str = None):
                 "type": "presence:leave",
                 "data": {"conn_id": gone.conn_id, "uid": gone.uid, "name": gone.name},
             })
+
+
+
+# -------- Campaign-room WebSocket (channels real-time, V4.2) --------
+
+@ws_router.websocket("/api/ws/campaign/{cid}")
+async def ws_campaign(ws: WebSocket, cid: str, token: str = None):
+    """Token-authed campaign-room WebSocket. Joins the bus room
+    `campaign:{cid}` so REST channel routes' `broadcast(...)` deliveries
+    arrive in real time. Inbound payloads are NO-OP — clients only
+    listen here; channel writes still go through REST so server-side
+    slash-command parsing + persistence happen exactly once.
+    """
+    if not token:
+        await ws.close(code=4401)
+        return
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        if payload.get("type") != "access":
+            await ws.close(code=4401)
+            return
+    except jwt.PyJWTError:
+        await ws.close(code=4401)
+        return
+    camp = await db.campaigns.find_one({"id": cid}, {"_id": 0})
+    if not camp:
+        await ws.close(code=4404)
+        return
+    uid = payload.get("sub")
+    if (camp["gm_id"] != uid
+            and uid not in camp.get("member_ids", [])
+            and camp.get("visibility") != "public"):
+        await ws.close(code=4403)
+        return
+
+    user = await db.users.find_one({"id": uid}, {"_id": 0}) or {}
+    name = user.get("name") or user.get("email") or "Adventurer"
+    room = f"campaign:{cid}"
+    await bus.join(room, ws, uid, name)  # subscribe-only; we don't reuse the peer
+
+    try:
+        while True:
+            await ws.receive_text()  # ignore inbound; subscriber-only socket
+    except WebSocketDisconnect:
+        bus.leave(room, ws)

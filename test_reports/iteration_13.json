@@ -1,0 +1,59 @@
+{
+  "summary": "Iteration 13 / V4.2 backend testing — focused on the V4.2 deltas: ?confirm=WIPE gate, X-Forwarded-For-pinned brute-force lock, character /transfer (auto member-add + effective_level decoration), GET /campaigns/{cid}/members, EffectIn.target_character_id, /api/ws/campaign/{cid} room WS with channel:msg fan-out. 18/18 new tests pass. Whole-suite (iter9 + iter10 + iter11 + iter12 + iter13) = 82 PASS / 28 SKIP / 0 FAIL — matches the prior 64/28/0 baseline + 18 new.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "WS /api/ws/campaign/{cid}",
+        "issue": "Server calls `await ws.close(code=44xx)` BEFORE `await ws.accept()` for invalid-token / 4404 / non-member paths. Behind Starlette this surfaces to the websockets client as an HTTP rejection during the handshake (e.g. HTTP 403 / InvalidStatus) rather than a normal close frame carrying the custom 4xxx code. Functionally fine — connection is rejected — but a strict client cannot read the policy reason. Same pattern lives in /api/ws/session/{sid} (pre-existing). Fix would be to `await ws.accept(); await ws.close(code=4xxx)` if the spec wants the custom codes wire-visible."
+      },
+      {
+        "endpoint": "GET /openapi.json",
+        "issue": "K8s ingress only routes /api/* to the backend, so the public preview URL serves the SPA at /openapi.json. The spec is only fetchable via the internal http://localhost:8001/openapi.json (consistent with iter11/iter12 tests). Consider adding a `/api/openapi.json` alias for external tooling."
+      },
+      {
+        "endpoint": "GET /api/auth/login (XFF)",
+        "issue": "Lock keys on the LEFT-most X-Forwarded-For entry. K8s ingress prepends its own hop, so a deployed client's real IP is no longer first — but this is still strictly more reliable than `request.client.host` (which rotates per-pod). Acceptable trade-off; document that the lock is per-(client-XFF, email)."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter13_v42.py",
+    "/app/test_reports/pytest/iter13_v42.xml",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "(Optional) Switch ws_session / ws_campaign to `await ws.accept()` BEFORE `await ws.close(code=4xxx)` so callers can read the policy reason on rejection.",
+    "(Optional) Mount openapi.json under /api/openapi.json for external tooling — current path is unreachable from the public preview URL.",
+    "(Optional, pre-existing) /app/backend/tests/backend_test.py errors at collection if REACT_APP_BACKEND_URL isn't already in the env (no dotenv load). Add a load_dotenv at top of that file or replace os.environ[..] with os.environ.get(.., default).",
+    "Frontend (V2 features) was not covered this round — user is smoke-testing Battlemap LoS / measure / ring-binding and Channels @mention / image attachments / WS realtime in the browser."
+  ],
+  "critical_code_review_comments": [
+    "characters.py /transfer correctly auto-adds the new owner to campaign.member_ids and re-decorates effective_level on the response. Good.",
+    "campaigns.py /members returns id/name/handle/is_gm/role and 403s non-members. Note: admin role bypass is added for /members but NOT for the legacy /api/campaigns/{cid} GET — minor inconsistency, low priority.",
+    "EffectIn.target_character_id is correctly Optional[str] = None. Old clients that omit it still 200 (no 422 regression). The value is persisted and returned by GET /sessions/{sid}/effects.",
+    "auth.py XFF parsing: `request.headers.get('x-forwarded-for', '').split(',')[0].strip()` — correctly takes the LEFT-most hop. Falls back to request.client.host when no XFF. Brute-force lock now reliably trips behind the ingress (verified with stable XFF '203.0.113.42').",
+    "admin.py reset gate: ?confirm=WIPE check is exact string match. Player still 403, GM still 403, admin without confirm 400, admin with confirm 200. All four branches verified.",
+    "sessions.py ws_campaign closes before accept on 4401/4404/4403 — same pattern as ws_session. Consider accept-then-close so custom codes are wire-visible.",
+    "channels.py post_message body field is `body` (not `text`). Frontend ChannelsPanel.jsx must match. WS fan-out via `campaign:{cid}` room confirmed working — admin subscriber received `channel:msg` event for a REST POST in <1s."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter13_v42.py",
+    "/app/backend/tests/conftest.py"
+  ],
+  "success_rate": {
+    "backend": "100% (18/18 new tests, 82/82 cumulative across iter9+10+11+12+13)",
+    "frontend": "skipped (backend-only round per request)"
+  },
+  "test_credentials": "/app/memory/test_credentials.md verified working: admin@tablegnostic.com/admin123 (used as primary admin), gm@tablegnostic.com/gm123456, player@tablegnostic.com/player12345. franpietrowski@gmail.com/PieGod08!! also verified loginable but not used in iter13 tests (admin@tablegnostic.com is sufficient for admin-only paths).",
+  "seed_data_creation": "Each module run calls POST /api/admin/reset-to-evereantha?confirm=WIPE as admin. Throwaway brute-force-lock test users (locktest_*@example.com, locktest2_*@example.com), throwaway outsider users (outsider_*@example.com, wsout_*@example.com) are created via /auth/register and left in the users collection (not cleaned up — they don't affect any other tests).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "iter13_v42.py is fully self-contained. It calls reset-to-evereantha at module setup so it MUST run after iter9/10/11/12 if those depend on extra seed data — but in practice iter9/10/11/12 already each reset their own scaffolding, so order doesn't matter. WS tests use python-websockets and require pytest-asyncio (auto-installed by this round). The asyncio mode is set globally via --asyncio-mode=auto on the pytest command line; iter13 conftest also pins it. backend/tests/backend_test.py is a pre-existing legacy file that errors at collection (no dotenv load) — ignore it via --ignore=backend/tests/backend_test.py. Channels message field is `body` (not `text`) — easy to miss. Op count for openapi.json is exactly 80 in V4.2; 11 tags total.",
+  "rca of the issue": "No bugs found in V4.2 backend. All 8 V4.2 features verified end-to-end. Pre-existing minor: WS close-before-accept pattern means custom 4xxx close codes are not wire-visible — clients see HTTP-handshake-level rejection instead. Reproduction: any websockets-client connecting with a bad token to /api/ws/campaign/{cid} sees `InvalidStatus: HTTP 403` rather than `ConnectionClosed code=4401`. Mitigation already applied in test (accept either rejection mode). Permanent fix: `await ws.accept(); await ws.close(code=4xxx)` in sessions.py."
+}

@@ -174,3 +174,233 @@
     to   { transform: rotate(360deg); }
   }
 }
+
+
+/* ──────────────────────────────────────────────────────────────────────
+   System theming layer (V4.2)
+
+   Inner surfaces re-skin per game system without leaving the dark-mystic
+   shell. Trigger by setting `data-system="<id>"` on any container — the
+   nearest [data-system] ancestor wins. CSS variables flow inward, so any
+   `.card-mystic`, `.btn`, `.label-ref`, `.tag` inside picks up the system
+   accent without further code.
+
+   Defaults below match the global gold/violet aesthetic so unscoped pages
+   are unchanged. Each system overrides --system-accent / --system-accent-soft
+   / --system-accent-text + a couple of mood gradients.
+
+   Recognised system ids today:
+     besm-4e          (Dyskami gold + violet — same as the unscoped default)
+     anime-5e         (Dyskami violet-pink — anime-flavoured)
+     dnd-5e           (D&D house rouge / parchment)
+     pf2e             (Paizo paladin sun + slate)
+     cypher           (Cypher / Numenera teal, cyan-on-rust)
+     coc-7e           (Call of Cthulhu sea-green ink)
+     savage-worlds    (Savage red wax)
+     fate-condensed   (Fate clean ice-blue)
+     cyberpunk-red    (CPR neon magenta + electric yellow)
+     v5               (V5 blood + ash)
+     blades-in-the-dark (Blades industrial green)
+     mothership       (sci-fi horror crimson + steel)
+     shadowrun-6e     (Shadowrun electric blue + chrome)
+   ────────────────────────────────────────────────────────────────────── */
+
+[data-system] {
+  /* defaults — un-scoped pages and BESM 4E share these */
+  --system-accent: #c8a34a;        /* gold */
+  --system-accent-soft: rgba(200, 163, 74, 0.30);
+  --system-accent-text: #f1d775;
+  --system-secondary: #6d4a9e;     /* violet */
+  --system-mood: rgba(109, 74, 158, 0.12);
+  --system-card-edge: rgba(200, 163, 74, 0.20);
+}
+
+/* Dyskami house style — BESM 4E (same as default) */
+[data-system="besm-4e"] {
+  --system-accent: #c8a34a;
+  --system-accent-soft: rgba(200, 163, 74, 0.30);
+  --system-accent-text: #f1d775;
+  --system-secondary: #6d4a9e;
+  --system-mood: rgba(109, 74, 158, 0.12);
+  --system-card-edge: rgba(200, 163, 74, 0.20);
+}
+
+/* Anime 5E — Dyskami pink-violet sister palette */
+[data-system="anime-5e"] {
+  --system-accent: #d96eb6;
+  --system-accent-soft: rgba(217, 110, 182, 0.28);
+  --system-accent-text: #f4a8d6;
+  --system-secondary: #b86dd9;
+  --system-mood: rgba(217, 110, 182, 0.12);
+  --system-card-edge: rgba(217, 110, 182, 0.22);
+}
+
+/* D&D 5E — house rouge + parchment */
+[data-system="dnd-5e"] {
+  --system-accent: #c1542d;
+  --system-accent-soft: rgba(193, 84, 45, 0.28);
+  --system-accent-text: #f0a37a;
+  --system-secondary: #8a6a2c;
+  --system-mood: rgba(193, 84, 45, 0.10);
+  --system-card-edge: rgba(193, 84, 45, 0.22);
+}
+
+/* Pathfinder 2E — paladin sun + slate */
+[data-system="pf2e"] {
+  --system-accent: #d6a44d;
+  --system-accent-soft: rgba(214, 164, 77, 0.28);
+  --system-accent-text: #f3c977;
+  --system-secondary: #5d6c80;
+  --system-mood: rgba(214, 164, 77, 0.10);
+  --system-card-edge: rgba(214, 164, 77, 0.22);
+}
+
+/* Cypher / Numenera — teal + cyan-on-rust voice */
+[data-system="cypher"] {
+  --system-accent: #2fbfb0;
+  --system-accent-soft: rgba(47, 191, 176, 0.28);
+  --system-accent-text: #6ce6d8;
+  --system-secondary: #c25c2c;
+  --system-mood: rgba(47, 191, 176, 0.12);
+  --system-card-edge: rgba(47, 191, 176, 0.22);
+}
+
+/* Call of Cthulhu 7E — sea-green ink */
+[data-system="coc-7e"] {
+  --system-accent: #5b8f6a;
+  --system-accent-soft: rgba(91, 143, 106, 0.28);
+  --system-accent-text: #93c19f;
+  --system-secondary: #3a4f48;
+  --system-mood: rgba(91, 143, 106, 0.10);
+  --system-card-edge: rgba(91, 143, 106, 0.22);
+}
+
+/* Savage Worlds — red wax */
+[data-system="savage-worlds"] {
+  --system-accent: #c83434;
+  --system-accent-soft: rgba(200, 52, 52, 0.28);
+  --system-accent-text: #ef7c7c;
+  --system-secondary: #6e2222;
+  --system-mood: rgba(200, 52, 52, 0.10);
+  --system-card-edge: rgba(200, 52, 52, 0.22);
+}
+
+/* Fate Condensed — clean ice-blue */
+[data-system="fate-condensed"] {
+  --system-accent: #5fa9d9;
+  --system-accent-soft: rgba(95, 169, 217, 0.28);
+  --system-accent-text: #95c8e8;
+  --system-secondary: #7d6da8;
+  --system-mood: rgba(95, 169, 217, 0.10);
+  --system-card-edge: rgba(95, 169, 217, 0.22);
+}
+
+/* Cyberpunk RED — neon magenta + electric yellow */
+[data-system="cyberpunk-red"] {
+  --system-accent: #ff2c8a;
+  --system-accent-soft: rgba(255, 44, 138, 0.28);
+  --system-accent-text: #ff7cb8;
+  --system-secondary: #f4e23a;
+  --system-mood: rgba(255, 44, 138, 0.12);
+  --system-card-edge: rgba(255, 44, 138, 0.25);
+}
+
+/* V5 — blood + ash */
+[data-system="v5"] {
+  --system-accent: #8a1f1f;
+  --system-accent-soft: rgba(138, 31, 31, 0.30);
+  --system-accent-text: #d76b6b;
+  --system-secondary: #5a4f4a;
+  --system-mood: rgba(138, 31, 31, 0.10);
+  --system-card-edge: rgba(138, 31, 31, 0.25);
+}
+
+/* Blades in the Dark — industrial green */
+[data-system="blades-in-the-dark"] {
+  --system-accent: #5a8f5a;
+  --system-accent-soft: rgba(90, 143, 90, 0.28);
+  --system-accent-text: #92c197;
+  --system-secondary: #6e6e6e;
+  --system-mood: rgba(90, 143, 90, 0.10);
+  --system-card-edge: rgba(90, 143, 90, 0.22);
+}
+
+/* Mothership — sci-fi horror crimson + steel */
+[data-system="mothership"] {
+  --system-accent: #c43d3d;
+  --system-accent-soft: rgba(196, 61, 61, 0.30);
+  --system-accent-text: #ef8585;
+  --system-secondary: #4d525a;
+  --system-mood: rgba(196, 61, 61, 0.12);
+  --system-card-edge: rgba(196, 61, 61, 0.22);
+}
+
+/* Shadowrun 6E — electric blue + chrome */
+[data-system="shadowrun-6e"] {
+  --system-accent: #2da6e6;
+  --system-accent-soft: rgba(45, 166, 230, 0.28);
+  --system-accent-text: #76c7f1;
+  --system-secondary: #b0b3b8;
+  --system-mood: rgba(45, 166, 230, 0.12);
+  --system-card-edge: rgba(45, 166, 230, 0.25);
+}
+
+/* Apply the system accent to inner surfaces. The shell stays gold; only
+   inner cards / buttons / labels / tags / dividers re-tint. This keeps the
+   dark-mystic feel coherent across the app while letting each campaign
+   feel "voiced" for its system. */
+[data-system] .card-mystic {
+  border-color: var(--system-card-edge);
+}
+[data-system] .card-mystic::before {
+  /* mood wash */
+  content: "";
+  position: absolute; inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at 0% 0%, var(--system-mood), transparent 60%);
+  border-radius: inherit;
+  opacity: 0.7;
+}
+[data-system] .label-ref {
+  color: var(--system-accent-text);
+  opacity: 0.85;
+}
+[data-system] .divider-sigil {
+  background: linear-gradient(to right, transparent, var(--system-accent-soft), transparent);
+}
+[data-system] .tag {
+  border-color: var(--system-card-edge);
+  color: var(--system-accent-text);
+}
+[data-system] .btn:hover {
+  border-color: var(--system-accent);
+  color: var(--system-accent-text);
+}
+[data-system] .btn-primary {
+  background: var(--system-accent);
+  border-color: var(--system-accent);
+  color: #07060a;
+}
+[data-system] .btn-primary:hover {
+  background: var(--system-accent-text);
+  border-color: var(--system-accent-text);
+  color: #07060a;
+}
+[data-system] .input:focus {
+  border-color: var(--system-accent);
+  box-shadow: 0 0 0 1px var(--system-accent-soft);
+}
+
+/* Reduced motion — respect OS preference. */
+@media (prefers-reduced-motion: reduce) {
+  body::before { animation: none !important; }
+  .av-tile--speaking { animation: none !important; }
+  .av-stage--hush .av-tile__hush-sigil { animation: none !important; opacity: 0.5 !important; }
+  .page { animation: none !important; }
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}

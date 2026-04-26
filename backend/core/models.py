@@ -222,6 +222,7 @@ class InitiativeEntryIn(BaseModel):
 class EffectIn(BaseModel):
     session_id: str
     target_name: str
+    target_character_id: Optional[str] = None  # Battlemap binding (V4.2)
     name: str
     duration_rounds: int = 1
     note: str = ""

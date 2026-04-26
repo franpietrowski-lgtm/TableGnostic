@@ -113,16 +113,24 @@ class TestCostEngineClamp:
         assert r.status_code == 200, r.text
         return r.json()
 
-    def test_clamp_floors_per_level_at_1(self, gm_token, v35_campaign):
-        # Tunnelling level=2, cpl=2, no enh, 2 limiters → max(1, 2-2)*2 = 2
+    def test_cost_unchanged_by_limiters_v41(self, gm_token, v35_campaign):
+        # V4.1 rule fix: cost is base × level, NEVER changed by limiters
+        # or enhancements. The old clamp behaviour (max(1, base+enh-lim))
+        # was reversed/incorrect per the BESM 4E primer.
+        # Tunnelling level=2, cpl=2, no enh, 2 limiters →
+        #   cost = 2 × 2 = 4 (regardless of limiters)
+        #   effective_level = 2 + 2 − 0 = 4 (limiters raise effective)
         ch = self._create(gm_token, v35_campaign["id"], [
             {"name": "Tunnelling", "level": 2, "cost_per_level": 2,
              "enhancements": [], "limiters": ["Concentration", "Delay"]}
         ])
-        assert ch["spent"]["attribute_cost"] == 2
-        # GET round-trip
+        assert ch["spent"]["attribute_cost"] == 4, ch["spent"]
+        # GET round-trip should also stamp effective_level on the attribute.
         g = requests.get(f"{API}/characters/{ch['id']}", headers=h(gm_token)).json()
-        assert g["spent"]["attribute_cost"] == 2
+        assert g["spent"]["attribute_cost"] == 4
+        attr = g["attributes"][0]
+        assert attr.get("effective_level") == 4, \
+            f"V4.1 effective_level should be 4 (level 2 + 2 limiters), got {attr.get('effective_level')}"
         requests.delete(f"{API}/characters/{ch['id']}", headers=h(gm_token))
 
     def test_clamp_extreme_negative_still_floors(self, gm_token, v35_campaign):
@@ -190,7 +198,7 @@ class TestCampaignBenchmarks:
             "max_players": v35_campaign["max_players"],
             "genre": "Cosmic Horror",
             "time_period": "Modern",
-            "size_scale": "Personal",
+            "default_character_size": "Medium",  # V3.7 replaced size_scale (per-entity templates)
             "damage_rating_baseline": 7,
         }
         r = requests.put(f"{API}/campaigns/{v35_campaign['id']}",
@@ -199,7 +207,7 @@ class TestCampaignBenchmarks:
         d = r.json()
         assert d["genre"] == "Cosmic Horror"
         assert d["time_period"] == "Modern"
-        assert d["size_scale"] == "Personal"
+        assert d["default_character_size"] == "Medium"
         assert d["damage_rating_baseline"] == 7
 
         # GET round-trip
@@ -207,7 +215,7 @@ class TestCampaignBenchmarks:
                          headers=h(gm_token)).json()
         assert g["genre"] == "Cosmic Horror"
         assert g["time_period"] == "Modern"
-        assert g["size_scale"] == "Personal"
+        assert g["default_character_size"] == "Medium"
         assert g["damage_rating_baseline"] == 7
 
     def test_character_uses_campaign_dm_baseline(self, gm_token, v35_campaign):
