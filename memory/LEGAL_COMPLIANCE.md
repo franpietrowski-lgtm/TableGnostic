@@ -102,23 +102,40 @@ must not include non-SRD WotC IP (Forgotten Realms, etc.)
 > Pathfinder is a trademark of Paizo Inc.; this product is not endorsed
 > by Paizo Inc.
 
-### 5. Cypher System / Numenera — Monte Cook Games
+### 5. Cypher System — Monte Cook Games (Cypher System Creator)
 
-**Programme:** Cypher System Creator licence (free; brand-controlled)
-**Status:** ✅ Compliant — already enforced in V3 with footer + sigil
+**Programme:** Cypher System Creator licence (community content)
+**Status:** ✅ Compliant per V4.5 — verbatim cover & legal text embedded in PDF exports
+
+**Settings the Creator licence EXPLICITLY allows full content for:**
+Godforsaken · Gods of the Fall · Masters of the Night · Predation · The Heartwood · The Revel · Unmasked
+
+**Settings Creators may CITE for compatibility but NOT duplicate:**
+Claim the Sky · First Responders · Stay Alive! · The Origin · The Stars Are Fire · We Are All Mad Here
+
+**Settings the licence FORBIDS use of (NEVER referenced as content sources in TableGnostic):**
+Numenera · The Strange · No Thank You, Evil!
+
 **What we store / serve:**
-* Type / Descriptor / Focus names; tier costs; intrusion / cypher /
-  artefact mechanic references; page numbers
-* Numenera + Godforsaken setting node templates (names only, no fiction)
-**What we MUST NOT do:**
-* Reproduce Cypher rulebook prose
-* Use the official Cypher logo on commercial products without paying the
-  Creator licence fee (free for non-commercial use; tiered for commercial)
-**Required PDF footer (campaign export):**
+* Type / Focus / Descriptor names; tier costs; cypher / artifact / GM
+  Intrusion mechanic references with short stat lines; page numbers
+* Compatibility-mode citations for the cite-only setting list above
 
-> Compatible with the Cypher System. Cypher System and the Cypher System
-> logo are trademarks of Monte Cook Games, LLC. Used with permission.
-> This product is not affiliated with Monte Cook Games, LLC.
+**What we MUST NOT do:**
+* Reproduce Cypher rulebook prose, lore paragraphs, or stat-block descriptions
+* Copy art from Monte Cook Games publications (only Cypher System Creator
+  art-pack content is permitted, with required artist credit)
+* Use the Cypher System Rulebook trade dress, Monte Cook Games logo, or
+  the Cypher System logo (only the **Cypher System Creator** logo)
+* Generate content for Numenera / The Strange / No Thank You, Evil!
+
+**Required cover-page text (per the Creator licence):**
+
+> Requires the Cypher System Rulebook from Monte Cook Games. Distributed through the Cypher System Creator™ at DriveThruRPG.
+
+**Required PDF footer (campaign export, verbatim copyright text per the Creator licence):**
+
+> This product was created under license. CYPHER SYSTEM and its logo, and CYPHER SYSTEM CREATOR and its logo, are trademarks of Monte Cook Games, LLC in the U.S.A. and other countries. All Monte Cook Games characters and character names, and the distinctive likenesses thereof, are trademarks of Monte Cook Games, LLC. www.montecookgames.com. This work contains material that is copyright Monte Cook Games, LLC and/or other authors. Such material is used with permission under the Community Content Agreement for Cypher System Creator. All other original material in this work is copyright by the GM listed on the cover and published under the Community Content Agreement for Cypher System Creator.
 
 ### 6. Call of Cthulhu 7E — Chaosium
 

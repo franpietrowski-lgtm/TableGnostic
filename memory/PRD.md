@@ -388,6 +388,64 @@ Per-system audit covering all 13 systems in the selector. Status table:
 
 ## V4.5 — Multi-System Content & Card Decks (2026-04-26)
 
+The biggest content drop since V4.0. **Reference data extracted for D&D 5E (CC-BY SRD 5.1), Anime 5E (Tri-Stat OGL), Cypher (Cypher System Creator)** as `/app/backend/system_data/` package — 12 D&D classes / 9 races / 18 SRD skills / 17 spells with dice / 13 weapons / 7 armor / 14 conditions / 11 actions; 5 Anime classes / 8 heritages / 9 point-buy attributes (hybrid 5E + Tri-Stat); 6 Cypher types / 16 descriptors / 18 foci / 23 skills / 12 cyphers / 6 artifacts / GM Intrusion / 6 tiers. New `GET /api/systems/{system_id}/reference` endpoint serves all. **Card decks system** (`routes/cards.py` + `system_data/decks.py`) — Deck of Many Things (22 SRD-restated cards), Cypher Draw, Anime 5E Genre Shift Deck, TableGnostic Mood Deck (universal opt-in for BESM). 7 endpoints (decks/instances/draw/shuffle/mode/delete/preview) + WS broadcasts. Frontend `<CardDeckPanel>` in CampaignDetail's new **Decks** tab. **System-aware ingestion** — Claude prompt branches per `campaign.system_id`. **Per-system PDF themes** — `STYLE_PROFILES` extended with dnd-5e (heraldic crimson) and cypher (cyber-cobalt). **`<SystemBadge>`** overlay in CampaignDetail header carries per-system rights-holder attribution. **Reference page system tabs** — switchable rendering with adaptive `<SystemReferenceView>`.
+
+## V4.6 — Cypher Compliance Hardening · System Builders · Logos (2026-04-26)
+
+User uploaded the **Cypher Creator System logo** + the **Anime 5E and Tri-Stat Emporium logo (300dpi)**, plus the verbatim Cypher System Creator licence text. This phase applies the licence requirements end-to-end and ships first-pass system-shaped character builders for D&D 5E and Cypher.
+
+### A. Logos placed
+- `/app/frontend/public/system-logos/cypher.png` — official **Cypher System Creator** logo (900×364 RGBA). This is the mark required to appear on PDF covers per the Creator licence — NOT the Cypher System logo (which Creators are forbidden from using).
+- `/app/frontend/public/system-logos/anime5e-tristat-emporium.png` — refreshed at 1500×785 (300 dpi version).
+- D&D 5E logo intentionally **not added** — Wizards-trademarked artwork can't be redistributed. SystemBadge falls back to a sigil-less labelled card for that system.
+
+### B. Cypher System Creator compliance hardening
+The Creator licence has **strict** rules about settings, trade dress, and required cover/legal text. All applied:
+
+**`/app/backend/system_data/cypher_data.py`** — replaced loose `compatible_settings` list with three structured lists driven by the licence:
+- `creator_full_settings` (7) — Godforsaken · Gods of the Fall · Masters of the Night · Predation · The Heartwood · The Revel · Unmasked. Creators may make full content for these.
+- `creator_compat_only` (6) — Claim the Sky · First Responders · Stay Alive! · The Origin · The Stars Are Fire · We Are All Mad Here. Creators may CITE compatibility but NOT duplicate.
+- `forbidden_settings` (3) — Numenera · The Strange · No Thank You, Evil!. **Removed** from the system data (was previously in `compatible_settings` — corrected).
+- `required_cover_line` and `required_product_desc_line` — verbatim licence-required text, served via the `/api/systems/cypher/reference` endpoint so the frontend has the canonical strings.
+- Backend curl-verified: no Numenera leak in any approved-settings list.
+
+**`/app/memory/LEGAL_COMPLIANCE.md`** — Cypher section rewritten with the verbatim Creator licence cover line and the verbatim Creator legal copyright paragraph. Section title updated from "Cypher System / Numenera" to **"Cypher System — Monte Cook Games (Cypher System Creator)"** since Numenera is forbidden.
+
+**`/app/backend/routes/pdf_export.py`** — `cover_page()` bottom rounded bar is now system-aware. When `system_id == "cypher"`:
+- The required cover line *"Requires the Cypher System Rulebook from Monte Cook Games. Distributed through the Cypher System Creator™ at DriveThruRPG."* is printed verbatim.
+- The trademark line *"CYPHER SYSTEM and CYPHER SYSTEM CREATOR are trademarks of Monte Cook Games, LLC"* is printed verbatim.
+- The right-corner trade-dress logo is the **Cypher System Creator** logo (`cypher.png`), not the Cypher System logo or the Tri-Stat Emporium mark.
+- Same per-system branching also produces D&D-CC-BY-SRD attribution and the Anime 5E Tri-Stat OGL line on their respective covers.
+
+**`/app/frontend/src/components/SystemBadge.jsx`** — Cypher notice rewritten to enumerate full-settings / cite-only-settings / forbidden-settings explicitly, plus the "Requires the Cypher System Rulebook" reminder. No more vague "Numenera · The Strange" claim.
+
+### C. System-shaped character builders (`/app/frontend/src/components/SystemCharacterBuilders.jsx`)
+
+New 460-line module exporting `<Dnd5eBuilder>` and `<CypherBuilder>` with a `<SystemBuilderLoader>` wrapper that fetches `/api/systems/{id}/reference` and routes by id.
+
+**Architecture decision: zero backend model change.** Both builders persist their distinctive shape into `character.folio.dnd_state` / `character.folio.cypher_state` — `folio` is already `Dict[str, Any]` so this is free. The required `CharacterIn` fields (`name`, `stats`, `attributes`, `published`) keep neutral defaults (stats=4/4/4) so the BESM derived-stat engine doesn't fight us. Round-trip curl-verified — `cypher_state` (type/focus/descriptor/pools/edge/effort/cyphers/sentence) all persisted intact through `POST /api/characters` + `GET /api/characters/{id}`.
+
+**`<Dnd5eBuilder>`** — class+slot shape. Class picker (12 SRD classes), level (1–20), race (9 races), background (free text), 6 ability scores with auto-computed modifiers and saving-throw chips, 18 SRD skill proficiency toggles, derived HP / AC / proficiency bonus / initiative, inventory + spells-known free-list inputs (spells only show for casting classes), GM-notes textarea. Wraps in `data-system="dnd-5e"` so the heraldic-crimson palette flows.
+
+**`<CypherBuilder>`** — type-focus-descriptor shape. Live "I am a [Descriptor] [Type] who [focus]." sentence builder at the top in gold-bright italic. Three pools (Might / Speed / Intellect) + Edge per pool + Effort cap, tier (1–6), 23-skill training toggles, cyphers-carried + abilities free-lists, GM Intrusion notes textarea. Wraps in `data-system="cypher"` for the cyber-cobalt palette.
+
+**`<CharacterBuilder>` routing** — checks `campaign.system_id` after data load; if it's `dnd-5e` or `cypher`, renders `<SystemBuilderLoader>` with the appropriate id. BESM 4E continues to use the deep point-buy builder unchanged. Anime 5E intentionally still uses the BESM-shape builder (Anime 5E IS Tri-Stat — keeping the more distinctive engine as default; class+slot mode can be added later as a Primer toggle).
+
+### Verification
+- ESLint + Ruff: all green on the 5 modified files.
+- Curl: `/api/systems/cypher/reference` returns the new compliance fields with NO Numenera / Strange leak.
+- Curl: Cypher PC creation + retrieval round-trips `folio.cypher_state` cleanly (type=Adept · focus=Bears a Halo of Fire · descriptor=Mystical · pools={M:7,S:11,I:13} · cyphers=[Force Shield, Spatial Warp] · sentence preserved).
+- All Python lints + JS lints clean.
+
+### Pending (carried to next phase)
+- D&D logo PNG — Wizards trademark, can't redistribute. SystemBadge falls back gracefully.
+- D&D character sheet display view + dice macros for spell rolls / weapon rolls.
+- Cypher character sheet display view + difficulty-tracker / Effort-spend macros.
+- D&D / Cypher character → PDF export per-PC sheets (currently formatted for BESM stat blocks).
+- Anime 5E hybrid Primer toggle (class+slot vs Tri-Stat point-buy).
+
+
+
 The biggest content drop since V4.0. Three new systems get real reference data (not just scaffolds), card decks land system-wide, ingestion goes system-aware, PDF themes expand, and CampaignDetail gets a per-system legal/logo overlay.
 
 ### A. System-aware reference data (`/app/backend/system_data/`)

@@ -577,34 +577,66 @@ def _build_pdf(camp: Dict[str, Any], chapters_data: List[Dict[str, Any]],
         canv.drawCentredString(pw / 2, credits_y - 2.10 * inch,
                                 "Dyskami Publishing Company with Japanime Games")
 
-        # Bottom rounded blue bar — Tri-Stat trademark line + URL.
+        # Bottom rounded blue bar — system-specific trademark line + URL.
         bar_h = 1.35 * inch
         canv.setFillColor(secondary)
         canv.roundRect(margin / 2, 0.4 * inch, pw - margin, bar_h,
                         radius=14, fill=1, stroke=0)
         canv.setFillColor(HexColor("#FFFFFF"))
         canv.setFont(f["body"], 8)
-        ttext_lines = [
-            "Tri-Stat System and BESM are trademarks of Paradox Interactive Group, used under licence.",
-            "BESM Fourth Edition mechanics © Mark MacKinnon, published by Dyskami Publishing Company.",
-            f"This chronicle was weaved in TableGnostic by {gm_byline} · © {current_year} {gm_byline}.",
-            "All Aurea original content © Table-Gnostic contributors. All other rights reserved.",
-            "http://BESM4.life",
-        ]
+        sys_id = camp.get("system_id") or "besm-4e"
+        if sys_id == "cypher":
+            ttext_lines = [
+                # Required cover line per the Cypher System Creator licence.
+                "Requires the Cypher System Rulebook from Monte Cook Games.",
+                "Distributed through the Cypher System Creator™ at DriveThruRPG.",
+                "CYPHER SYSTEM and CYPHER SYSTEM CREATOR are trademarks of Monte Cook Games, LLC.",
+                f"This chronicle was weaved in TableGnostic by {gm_byline} · © {current_year} {gm_byline}.",
+                "www.montecookgames.com",
+            ]
+        elif sys_id == "dnd-5e":
+            ttext_lines = [
+                "Mechanics drawn from the System Reference Document 5.1, licensed under CC-BY-4.0.",
+                "© Wizards of the Coast LLC. The trademark D&D and Dungeons & Dragons are NOT used.",
+                f"This chronicle was weaved in TableGnostic by {gm_byline} · © {current_year} {gm_byline}.",
+                "All original adventure content © Table-Gnostic contributors. All other rights reserved.",
+                "https://dnd.wizards.com/resources/systems-reference-document",
+            ]
+        elif sys_id == "anime-5e":
+            ttext_lines = [
+                "Anime 5E is a Tri-Stat Emporium system © Mark MacKinnon, published by Dyskami Publishing Company.",
+                "Tri-Stat System trademarks are used under licence; OGL components per Anime 5E SRD.",
+                f"This chronicle was weaved in TableGnostic by {gm_byline} · © {current_year} {gm_byline}.",
+                "All original adventure content © Table-Gnostic contributors. All other rights reserved.",
+                "http://BESM4.life",
+            ]
+        else:
+            ttext_lines = [
+                "Tri-Stat System and BESM are trademarks of Paradox Interactive Group, used under licence.",
+                "BESM Fourth Edition mechanics © Mark MacKinnon, published by Dyskami Publishing Company.",
+                f"This chronicle was weaved in TableGnostic by {gm_byline} · © {current_year} {gm_byline}.",
+                "All Aurea original content © Table-Gnostic contributors. All other rights reserved.",
+                "http://BESM4.life",
+            ]
         ly = 0.4 * inch + bar_h - 0.25 * inch
         for ln in ttext_lines:
             canv.drawCentredString(pw / 2, ly, ln)
             ly -= 0.18 * inch
-        # Tri-Stat Emporium logo bottom-right (Anime5E/Tri-Stat is the Emporium mark)
-        emporium_path = LOGO_DIR / "anime5e-tristat-emporium.png"
-        if emporium_path.exists():
+        # Right-side trade-dress logo. For Cypher we MUST use the Cypher
+        # System Creator logo (not the Cypher System logo). For BESM/Anime
+        # we use the Tri-Stat Emporium mark.
+        if sys_id == "cypher":
+            corner_logo = LOGO_DIR / "cypher.png"
+        else:
+            corner_logo = LOGO_DIR / "anime5e-tristat-emporium.png"
+        if corner_logo.exists():
             try:
                 from PIL import Image as PILImage
-                with PILImage.open(emporium_path) as im:
+                with PILImage.open(corner_logo) as im:
                     iw, ih = im.size
                 em_h = 0.8 * inch
                 em_w = (iw / ih) * em_h
-                canv.drawImage(str(emporium_path),
+                canv.drawImage(str(corner_logo),
                                 pw - margin - em_w - 0.1 * inch,
                                 0.5 * inch,
                                 width=em_w, height=em_h,

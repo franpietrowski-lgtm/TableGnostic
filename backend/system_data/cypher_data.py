@@ -8,13 +8,30 @@ Difficulty 1-10. Effort, Edge, and Skills lower difficulty by 1 step each.
 """
 
 BOOK = {
-    "title": "Cypher System Reference Document (Cypher System Creator)",
+    "title": "Cypher System Reference (Cypher System Creator programme)",
     "publisher": "Monte Cook Games, LLC",
     "license": "Cypher System Creator — community content licence",
     "page_range_max": 400,
-    "compatible_settings": ["Numenera", "The Strange", "Predation",
-                             "Godforsaken", "Stay Alive!", "Claim the Sky",
-                             "Old Gods of Appalachia", "Rust & Redemption"],
+    # Settings the Creator licence EXPLICITLY allows full content for.
+    "creator_full_settings": [
+        "Godforsaken", "Gods of the Fall", "Masters of the Night",
+        "Predation", "The Heartwood", "The Revel", "Unmasked",
+    ],
+    # Settings that Creators may CITE for compatibility but NOT duplicate.
+    "creator_compat_only": [
+        "Claim the Sky", "First Responders", "Stay Alive!", "The Origin",
+        "The Stars Are Fire", "We Are All Mad Here",
+    ],
+    # Settings explicitly FORBIDDEN under the Creator licence.
+    "forbidden_settings": ["Numenera", "The Strange", "No Thank You, Evil!"],
+    # Required cover text + product-description text per the licence.
+    "required_cover_line": (
+        "Requires the Cypher System Rulebook from Monte Cook Games. "
+        "Distributed through the Cypher System Creator™ at DriveThruRPG."
+    ),
+    "required_product_desc_line": (
+        "Requires the Cypher System Rulebook from Monte Cook Games."
+    ),
 }
 
 # Three core stat pools — the Cypher engine.

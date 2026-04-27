@@ -40,9 +40,13 @@ const PROFILES = {
   "cypher": {
     label: "Cypher System (Cypher System Creator)",
     licence: "Monte Cook Games, LLC · Cypher System Creator programme",
-    notice: "Cypher System mechanics displayed under the Cypher System Creator licence. " +
-            "Compatible settings: Numenera · The Strange · Predation · Godforsaken. " +
-            "© Monte Cook Games.",
+    notice: "Requires the Cypher System Rulebook from Monte Cook Games. " +
+            "Cypher System Creator licensed settings: Godforsaken · Gods of the Fall · " +
+            "Masters of the Night · Predation · The Heartwood · The Revel · Unmasked. " +
+            "Compatibility-only citations: Claim the Sky · Stay Alive! · The Origin · " +
+            "The Stars Are Fire · We Are All Mad Here. Numenera / The Strange / " +
+            "No Thank You, Evil! are NOT permitted under the Creator licence. " +
+            "© Monte Cook Games, LLC.",
     accent: "#0F2540",
   },
   "_default": {

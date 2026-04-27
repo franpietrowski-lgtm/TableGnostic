@@ -2,6 +2,11 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import { api, formatApiErrorDetail } from "../lib/api";
 import { Plus, X, Save, Trash2, BookOpen } from "lucide-react";
+import SystemBuilderLoader from "./SystemCharacterBuilders";
+
+// Systems that have a dedicated builder shape — anything else falls through
+// to the BESM-shape (point-buy) builder below.
+const SYSTEM_SPECIFIC_BUILDERS = new Set(["dnd-5e", "cypher"]);
 
 const emptyChar = (campaign_id) => ({
   campaign_id, name: "", concept: "", power_level: "Heroic", total_points: 120,
@@ -99,6 +104,14 @@ export default function CharacterBuilder() {
   }, [ch]);
 
   if (!ch || !ref) return <div className="p-10 text-mist">Summoning the forge…</div>;
+
+  // Route to system-specific builders when the campaign uses a non-BESM
+  // ruleset that has its own character shape. Anime-5E supports BOTH
+  // shapes (hybrid) — we keep the BESM-shape Tri-Stat builder by default
+  // since Anime 5E's point-buy half is the more distinctive engine.
+  if (campaign && SYSTEM_SPECIFIC_BUILDERS.has(campaign.system_id)) {
+    return <SystemBuilderLoader systemId={campaign.system_id}/>;
+  }
 
   const remaining = ch.total_points - spent.total_spent;
 
