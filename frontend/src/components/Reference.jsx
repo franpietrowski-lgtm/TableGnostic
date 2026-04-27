@@ -241,7 +241,7 @@ export default function Reference() {
 
       {/* Instructions tab — short how-to guide for players (and GMs see extra). */}
       {tab === "instructions" && (
-        <InstructionsPanel isGm={false}/>
+        <InstructionsPanel isGm={false} systemId={systemId}/>
       )}
 
       {/* Card grid */}

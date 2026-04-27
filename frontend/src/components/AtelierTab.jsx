@@ -148,8 +148,8 @@ export default function AtelierTab({ campId, camp }) {
       {/* ---------- Campaign Reference Tables (GM-editable) ---------- */}
       <ReferenceEditor campaignId={campId} isGm systemId={camp?.system_id}/>
 
-      {/* ---------- GM Instructions ---------- */}
-      <InstructionsPanel isGm={true}/>
+      {/* ---------- GM Instructions (system-aware) ---------- */}
+      <InstructionsPanel isGm={true} systemId={camp?.system_id}/>
 
       {/* ---------- Session 0 ---------- */}
       <SessionZeroPanel sz={state.session_zero || {}} setSZ={setSZ}/>

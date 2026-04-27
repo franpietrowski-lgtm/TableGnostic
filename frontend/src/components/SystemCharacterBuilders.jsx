@@ -282,6 +282,16 @@ export function CypherBuilder({ campaign, ref_, charId }) {
   const nav = useNavigate();
   const [ch, setCh] = useState(emptyCypher(campaign?.id));
   const [err, setErr] = useState("");
+  // GM-curated Cypher reference rows for THIS campaign — Atelier → Reference Tables
+  // entries with kind=attribute (Types) / companion (Foci) / defect (Cyphers) / item / custom (Intrusions).
+  const [refRows, setRefRows] = useState([]);
+  useEffect(() => {
+    if (campaign?.id) {
+      api.get(`/campaigns/${campaign.id}/reference`)
+        .then((r) => setRefRows(r.data || []))
+        .catch(() => setRefRows([]));
+    }
+  }, [campaign?.id]);
 
   useEffect(() => {
     if (charId) {
@@ -348,21 +358,48 @@ export function CypherBuilder({ campaign, ref_, charId }) {
             <label className="label-ref">Descriptor</label>
             <select className="select" value={c.descriptor} onChange={(e) => setC({ descriptor: e.target.value })}
                     data-testid="cypher-descriptor">
-              {ref_.descriptors.map((d) => <option key={d} value={d}>{d}</option>)}
+              <optgroup label="Cypher SRD">
+                {ref_.descriptors.map((d) => <option key={d} value={d}>{d}</option>)}
+              </optgroup>
+              {refRows.filter((r) => r.kind === "skill").length > 0 && (
+                <optgroup label="Campaign Reference">
+                  {refRows.filter((r) => r.kind === "skill").map((r) => (
+                    <option key={r.id} value={r.name}>{r.name}</option>
+                  ))}
+                </optgroup>
+              )}
             </select>
           </div>
           <div>
             <label className="label-ref">Type</label>
             <select className="select" value={c.type} onChange={(e) => setC({ type: e.target.value })}
                     data-testid="cypher-type">
-              {ref_.types.map((t) => <option key={t.name} value={t.name}>{t.name}</option>)}
+              <optgroup label="Cypher SRD">
+                {ref_.types.map((t) => <option key={t.name} value={t.name}>{t.name}</option>)}
+              </optgroup>
+              {refRows.filter((r) => r.kind === "attribute").length > 0 && (
+                <optgroup label="Campaign Reference">
+                  {refRows.filter((r) => r.kind === "attribute").map((r) => (
+                    <option key={r.id} value={r.name}>{r.name}</option>
+                  ))}
+                </optgroup>
+              )}
             </select>
           </div>
           <div>
             <label className="label-ref">Focus</label>
             <select className="select" value={c.focus} onChange={(e) => setC({ focus: e.target.value })}
                     data-testid="cypher-focus">
-              {ref_.foci.map((f) => <option key={f.name} value={f.name}>{f.name}</option>)}
+              <optgroup label="Cypher SRD">
+                {ref_.foci.map((f) => <option key={f.name} value={f.name}>{f.name}</option>)}
+              </optgroup>
+              {refRows.filter((r) => r.kind === "companion").length > 0 && (
+                <optgroup label="Campaign Reference">
+                  {refRows.filter((r) => r.kind === "companion").map((r) => (
+                    <option key={r.id} value={r.name}>{r.name}</option>
+                  ))}
+                </optgroup>
+              )}
             </select>
           </div>
         </div>
@@ -502,8 +539,16 @@ function FreeList({ title, placeholder, values, onChange, testidPrefix }) {
 // Loader wrapper — fetches /api/systems/{id}/reference and routes.
 export default function SystemBuilderLoader({ systemId }) {
   const params = useParams();
-  const campaignIdFromUrl = params.id;
-  const charId = params.id && window.location.pathname.includes("/characters/") ? params.id : null;
+  // Two route shapes:
+  //   /app/campaigns/:id/characters/new  → params.id is the CAMPAIGN id
+  //   /app/characters/:id/edit           → params.id is the CHARACTER id
+  // Distinguish by whether the URL path STARTS with /app/characters/ —
+  // pathname.includes("/characters/") is also true for the campaign-scoped
+  // /new route, which (until this fix) made the loader try
+  // GET /characters/{campaign_id} and 404 every Anime/Cypher new-character forge.
+  const isEdit = /\/characters\/[^/]+\/edit$/.test(window.location.pathname);
+  const charId = isEdit ? params.id : null;
+  const campaignIdFromUrl = isEdit ? null : params.id;
   const [ref_, setRef] = useState(null);
   const [campaign, setCampaign] = useState(null);
 

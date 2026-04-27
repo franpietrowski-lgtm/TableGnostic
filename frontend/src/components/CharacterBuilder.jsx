@@ -25,7 +25,7 @@ export default function CharacterBuilder() {
   const params = useParams();
   const nav = useNavigate();
   const campaignIdFromUrl = params.id; // for /campaigns/:id/characters/new
-  const charId = params.id && window.location.pathname.includes("/characters/") ? params.id : null;
+  const charId = /\/characters\/[^/]+\/edit$/.test(window.location.pathname) ? params.id : null;
 
   const [ref, setRef] = useState(null);
   const [customs, setCustoms] = useState([]);

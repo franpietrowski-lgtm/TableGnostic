@@ -567,6 +567,44 @@ function DndSheetView({ state, roll }) {
         )}
       </div>
 
+      {/* HP / Status ring — auto-computed max HP at level (class hit-die avg
+          + CON mod per level), current HP from `state.hp_current` if set.
+          Lets the GM track per-PC damage between sessions. */}
+      {(() => {
+        const conMod = mod("Constitution");
+        const hitDie = state.class && state.hit_die ? state.hit_die : null;
+        // Best-effort default hit die (can be edited via state.hit_die)
+        const defaultHd = { Barbarian: 12, Fighter: 10, Paladin: 10, Ranger: 10,
+                            Bard: 8, Cleric: 8, Druid: 8, Monk: 8, Rogue: 8, Warlock: 8,
+                            Sorcerer: 6, Wizard: 6 }[state.class] || 8;
+        const hd = hitDie || defaultHd;
+        const hpMax = state.hp_max ?? Math.max(1, hd + conMod + ((hd / 2 + 1) + conMod) * (lvl - 1));
+        const hpCur = state.hp_current ?? hpMax;
+        const pct = hpMax > 0 ? Math.max(0, Math.min(100, (hpCur / hpMax) * 100)) : 0;
+        const colour = pct > 66 ? "#3FAA62" : pct > 33 ? "#C8A34A" : "#7A1F2E";
+        return (
+          <div className="card-mystic p-5 mt-4 grid sm:grid-cols-2 gap-3 items-center"
+               data-testid="dnd-hp-ring">
+            <div>
+              <div className="label-ref">Hit Points</div>
+              <div className="font-display text-3xl text-gold">
+                <span style={{ color: colour }}>{Math.round(hpCur)}</span>
+                <span className="text-mist text-xl"> / {Math.round(hpMax)}</span>
+              </div>
+              <div className="h-2 bg-void/60 rounded-full mt-2 overflow-hidden">
+                <div className="h-full transition-all"
+                     style={{ width: `${pct}%`, backgroundColor: colour }}/>
+              </div>
+            </div>
+            <div className="text-[11px] text-mist/80 leading-snug font-ui">
+              Auto-computed from class hit-die ({hd}) + CON mod{conMod >= 0 ? " +" : " "}{conMod} per level.
+              GM: override with <code>state.hp_max</code> / <code>state.hp_current</code> in the editor.
+              Death saves and exhaustion ranks are tracked in chat.
+            </div>
+          </div>
+        );
+      })()}
+
       <div className="card-mystic p-6 mt-4">
         <div className="label-ref">Ability Scores</div>
         <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 mt-3 text-center">
@@ -663,23 +701,40 @@ function CypherSheetView({ state, roll }) {
         </div>
       </div>
 
-      {/* Pools + Edge */}
-      <div className="card-mystic p-6 mt-4">
-        <div className="label-ref">Stat Pools &amp; Edge · Tier {state.tier || 1}</div>
+      {/* Pools + Edge — visual rings to show damage taken at-a-glance.
+          The Pool max is the value entered when the PC was built; the
+          *current* pool tracks damage taken. Players (and the GM) can
+          adjust the current value with the small +/− buttons; the visual
+          ring fills proportionally. */}
+      <div className="card-mystic p-6 mt-4" data-testid="cypher-pool-rings">
+        <div className="label-ref">Stat Pools (current / max) — damage tracker</div>
         <div className="grid grid-cols-3 gap-3 mt-3">
-          {["Might", "Speed", "Intellect"].map((k) => (
-            <div key={k} className="border border-gold/15 rounded-sm p-3 text-center">
-              <div className="label-ref">{k}</div>
-              <div className="font-display text-3xl text-gold">{state.pools?.[k] ?? 0}</div>
-              <div className="text-[10px] font-ui text-mist mt-1">
-                Edge <span className="text-gold-bright">{state.edge?.[k] ?? 0}</span>
+          {["Might", "Speed", "Intellect"].map((k) => {
+            const max = state.pools?.[k] ?? 0;
+            const cur = state.current_pools?.[k] ?? max;
+            const pct = max > 0 ? Math.max(0, Math.min(100, (cur / max) * 100)) : 0;
+            const colour = pct > 66 ? "#3FAA62" : pct > 33 ? "#C8A34A" : "#7A1F2E";
+            return (
+              <div key={k} className="border border-gold/15 rounded-sm p-3 text-center"
+                   data-testid={`cypher-pool-ring-${k.toLowerCase()}`}>
+                <div className="label-ref text-[9px]">{k}</div>
+                <div className="font-display text-2xl text-gold">
+                  <span style={{ color: colour }}>{cur}</span>
+                  <span className="text-mist text-xs"> / {max}</span>
+                </div>
+                <div className="h-1.5 bg-void/60 rounded-full mt-1 overflow-hidden">
+                  <div className="h-full transition-all"
+                       style={{ width: `${pct}%`, backgroundColor: colour }}/>
+                </div>
+                <div className="text-[10px] font-ui text-mist mt-1">
+                  Edge <span className="text-gold-bright">{state.edge?.[k] ?? 0}</span>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
-        <div className="mt-3 text-[11px] text-mist">
-          <span className="label-ref">Effort cap</span> {state.effort || 1}
-          <span className="ml-3 italic text-mist/70">(spend Pool to lower difficulty 1 step / Effort)</span>
+        <div className="text-[10px] text-mist/70 italic mt-2">
+          Players: spend Pool with the Effort lever above. GMs: edit `current_pools` on the character sheet to mark damage between sessions.
         </div>
       </div>
 
@@ -711,6 +766,50 @@ function CypherSheetView({ state, roll }) {
                 data-testid="cypher-roll-against-tn">
           <Dice6 className="w-4 h-4"/> Roll 1d20 vs TN {target}
         </button>
+
+        {/* Effort and Edge usage hints — sit beneath the tracker because
+            they're the levers a player pulls to lower the TN before the roll. */}
+        <div className="grid sm:grid-cols-3 gap-2 mt-3 text-[11px] text-mist">
+          <div className="border border-gold/15 rounded-sm p-2">
+            <div className="label-ref text-[9px]">Effort</div>
+            <div className="text-parchment font-ui">Spend (3 + 2× extra) Pool to lower difficulty 1 step / level. Max = Edge + 1.</div>
+          </div>
+          <div className="border border-gold/15 rounded-sm p-2">
+            <div className="label-ref text-[9px]">Edge ({(state.edge?.Might||0)+(state.edge?.Speed||0)+(state.edge?.Intellect||0)} total)</div>
+            <div className="text-parchment font-ui">Reduces Pool cost of Effort &amp; abilities by Edge for that pool.</div>
+          </div>
+          <div className="border border-gold/15 rounded-sm p-2">
+            <div className="label-ref text-[9px]">Skill / Asset</div>
+            <div className="text-parchment font-ui">Trained −1 step · Specialised −2 · Asset −1 (max 2 assets).</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Intrusion ledger — Cypher's signature narrative tax. The GM offers
+          an unfortunate complication; the player accepts (+2 XP self, +2 XP
+          ally) or refuses (−1 XP). Buttons post a chat-side ledger entry. */}
+      <div className="card-mystic p-6 mt-4" data-testid="cypher-intrusion-ledger">
+        <div className="label-ref flex items-center gap-2">
+          GM Intrusion Ledger
+          <span className="text-[9px] text-mist normal-case tracking-normal italic">accept = +2 XP self · +2 XP ally · refuse = −1 XP</span>
+        </div>
+        <div className="flex gap-2 mt-3 flex-wrap">
+          <button onClick={() => roll("0+2", "Intrusion accepted · +2 XP")}
+                  className="btn btn-ghost text-xs"
+                  title="Log accepting a GM intrusion (+2 XP self, +2 XP ally)"
+                  data-testid="cypher-intrusion-accept">
+            ✓ Accept (+2/+2)
+          </button>
+          <button onClick={() => roll("0-1", "Intrusion refused · −1 XP")}
+                  className="btn btn-ghost text-xs"
+                  title="Log refusing a GM intrusion (−1 XP)"
+                  data-testid="cypher-intrusion-refuse">
+            ✗ Refuse (−1)
+          </button>
+          <span className="text-[10px] text-mist italic ml-2 self-center">
+            Logged as a chat ledger entry — GM can convert to formal XP via the XP Approval Queue.
+          </span>
+        </div>
       </div>
 
       {(state.skill_trains?.length || 0) > 0 && (
