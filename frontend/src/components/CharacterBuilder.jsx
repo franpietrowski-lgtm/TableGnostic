@@ -6,7 +6,7 @@ import SystemBuilderLoader from "./SystemCharacterBuilders";
 
 // Systems that have a dedicated builder shape — anything else falls through
 // to the BESM-shape (point-buy) builder below.
-const SYSTEM_SPECIFIC_BUILDERS = new Set(["dnd-5e", "cypher"]);
+const SYSTEM_SPECIFIC_BUILDERS = new Set(["dnd-5e", "cypher", "anime-5e"]);
 
 const emptyChar = (campaign_id) => ({
   campaign_id, name: "", concept: "", power_level: "Heroic", total_points: 120,

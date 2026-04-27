@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { api, formatApiErrorDetail } from "../lib/api";
 import { Spade, RefreshCw, Eye, EyeOff, Plus, Trash2, Sparkles } from "lucide-react";
+import CustomCardEditor from "./CustomCardEditor";
 
 /**
  * CardDeckPanel — system-aware card drawing.
@@ -31,12 +32,16 @@ export default function CardDeckPanel({ campaignId, systemId, sessionId, isGm })
     } catch (e) { setErr(formatApiErrorDetail(e.response?.data?.detail) || e.message); }
   };
 
+  const reloadCatalogue = async () => {
+    try {
+      const { data } = await api.get(`/cards/decks/${systemId || "besm-4e"}?campaign_id=${campaignId}`);
+      setCatalogue(data.decks || []);
+    } catch (e) { setErr(formatApiErrorDetail(e.response?.data?.detail) || e.message); }
+  };
+
   useEffect(() => {
     (async () => {
-      try {
-        const { data } = await api.get(`/cards/decks/${systemId || "besm-4e"}`);
-        setCatalogue(data.decks || []);
-      } catch (e) { setErr(formatApiErrorDetail(e.response?.data?.detail) || e.message); }
+      await reloadCatalogue();
       await reloadInstances();
     })();
     // eslint-disable-next-line
@@ -235,6 +240,12 @@ export default function CardDeckPanel({ campaignId, systemId, sessionId, isGm })
         <div className="text-mist italic text-xs">
           {isGm ? "No decks created yet — pick one from the catalogue above." : "The GM hasn't put any decks on the table yet."}
         </div>
+      )}
+
+      {/* GM-only Custom Card Editor — author your own decks for this campaign */}
+      {isGm && (
+        <CustomCardEditor campaignId={campaignId} systemId={systemId}
+                           onChange={reloadCatalogue}/>
       )}
     </div>
   );

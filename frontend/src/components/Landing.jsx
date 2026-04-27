@@ -50,7 +50,7 @@ export default function Landing() {
 
       {/* HERO */}
       <section className="relative z-10 px-6 md:px-10 pt-10 md:pt-20 pb-28 max-w-6xl mx-auto">
-        <div className="label-ref mb-6 flex items-center gap-2"><Sparkles className="w-3 h-3" /> A BESM 4E aware platform</div>
+        <div className="label-ref mb-6 flex items-center gap-2"><Sparkles className="w-3 h-3" /> An all-system-aware tabletop platform</div>
         <h1 className="font-display text-5xl md:text-7xl leading-[1.02] text-parchment">
           Not the system.
           <br />
@@ -82,7 +82,7 @@ export default function Landing() {
           {[
             { icon: <Scroll className="w-5 h-5" />, t: "Guided Worlds", d: "Structured worldbuilding workflows that shape tone, factions, and threads into publishable campaigns." },
             { icon: <Dice6 className="w-5 h-5" />, t: "Live Sessions", d: "Initiative, dice, chat, effects, and round-ticks running at the table in real time." },
-            { icon: <Users className="w-5 h-5" />, t: "Character Forge", d: "BESM 4E attributes, defects, and skills with automatic derived values — every choice cites its source." },
+            { icon: <Users className="w-5 h-5" />, t: "Character Forge", d: "Tri-Stat point-buy, D&D class+slot, and Cypher type/focus/descriptor all in one builder — every choice cites its source." },
             { icon: <Network className="w-5 h-5" />, t: "Knowledge Web", d: "Role-gated nodes that reveal themselves only when the tale permits it." },
           ].map((p, i) => (
             <div key={i} className="card-mystic p-5 transition-transform duration-500 hover:-translate-y-1" data-testid={`pillar-${i}`}>
@@ -105,7 +105,42 @@ export default function Landing() {
           itself as the primary engine of play."
         </blockquote>
         <div className="mt-10 text-xs font-ui uppercase tracking-[0.3em] text-gold/60">
-          BESM 4E mechanics · source-referenced · never reproduced
+          BESM 4E · Anime 5E · D&amp;D 5E · Cypher System · source-referenced · never reproduced
+        </div>
+      </section>
+
+      {/* SYSTEM SHOWCASE */}
+      <section className="relative z-10 px-6 md:px-10 pb-24 max-w-5xl mx-auto" data-testid="landing-systems">
+        <div className="label-ref mb-3 text-center">Systems Currently Supported</div>
+        <div className="text-mist text-sm font-body italic text-center mb-8">
+          Mechanic-aware integration for these rule-sets — full reference, character forging, dice macros, and PDF chronicle exports for each.
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-6 items-center justify-items-center">
+          {[
+            { id: "besm-4e",  label: "BESM Fourth Edition",       img: "/system-logos/besm-4e.png" },
+            { id: "anime-5e", label: "Anime 5E (Tri-Stat OGL)",   img: "/system-logos/anime5e-tristat-emporium.png" },
+            { id: "dnd-5e",   label: "D&D 5E (CC-BY SRD 5.1)",    img: null },
+            { id: "cypher",   label: "Cypher System Creator",     img: "/system-logos/cypher.png" },
+          ].map((s) => (
+            <div key={s.id} className="flex flex-col items-center gap-2 opacity-90 hover:opacity-100 transition-opacity"
+                 data-testid={`landing-system-${s.id}`}>
+              {s.img ? (
+                <img src={s.img} alt={s.label}
+                     className="h-14 w-auto max-w-[140px] object-contain"
+                     onError={(e) => { e.currentTarget.style.display = "none"; }}/>
+              ) : (
+                <div className="h-14 w-[140px] flex items-center justify-center border border-gold/30 rounded-sm bg-void/40">
+                  <span className="font-display text-2xl text-gold tracking-widest">D&amp;D</span>
+                </div>
+              )}
+              <div className="text-[10px] font-ui uppercase tracking-widest text-mist/80 text-center leading-snug">
+                {s.label}
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="mt-8 text-[10px] text-mist/60 italic text-center font-body max-w-3xl mx-auto leading-snug">
+          Trademarks belong to their respective rights-holders. Tri-Stat Emporium · Dyskami Publishing · Wizards of the Coast · Monte Cook Games. TableGnostic displays only mechanic names and page references — never reproduced rulebook prose, lore, or art.
         </div>
       </section>
 

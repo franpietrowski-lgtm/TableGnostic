@@ -17,6 +17,46 @@ const KIND_LABELS = {
   companion: "Companions", custom: "Custom Rules",
   attribute: "Attributes", skill: "Skills", defect: "Defects",
 };
+// System-aware label & ordering overrides. The backend kind enum stays the
+// same (8 universal kinds), but we re-label them per active system so the
+// GM sees rule-set-native vocabulary instead of always-Tri-Stat headings.
+//
+// E.g. "Defects" → "Cyphers" for Cypher campaigns (cyphers ARE one-shot
+// hindrances/boons in mechanic terms), "Attributes" → "Type Abilities",
+// "Companions" → "Foci". For D&D the same reuse pattern: "Attributes" →
+// "Class Features", "Defects" → "Drawbacks", "Companions" → "Followers".
+//
+// This is purely cosmetic — it doesn't fork the data shape, so a PC
+// migrating between systems doesn't break.
+const SYSTEM_KIND_LABELS = {
+  "cypher": {
+    weapon: "Weapons", armor: "Armor", item: "Items / Equipment",
+    companion: "Foci",          // Cypher characters PICK a focus, not a companion
+    custom: "GM Intrusions / House Rules",
+    attribute: "Types",          // The 6 Cypher Types (Warrior / Adept / …)
+    skill: "Skills (Trained)",
+    defect: "Cyphers",          // Single-use mechanic items
+  },
+  "dnd-5e": {
+    weapon: "Weapons", armor: "Armor", item: "Adventuring Gear / Magic Items",
+    companion: "Followers / Mounts",
+    custom: "House Rules",
+    attribute: "Class Features", // Mechanical features players can select
+    skill: "Skills", defect: "Drawbacks / Backgrounds",
+  },
+  "anime-5e": {
+    weapon: "Weapons", armor: "Armor", item: "Items / Cards",
+    companion: "Companions / Mounts",
+    custom: "House Rules",
+    attribute: "Tri-Stat Attributes",
+    skill: "Skills", defect: "Defects",
+  },
+  "besm-4e": {
+    weapon: "Weapons", armor: "Armor", item: "Items",
+    companion: "Companions", custom: "Custom Rules",
+    attribute: "Attributes", skill: "Skills", defect: "Defects",
+  },
+};
 const KIND_KEYS = Object.keys(KIND_LABELS);
 // Kinds that flow back into the Character Builder's pickers — they expose
 // extra structured inputs (cost_per_level / points_per_rank / category) so
@@ -67,20 +107,29 @@ export default function ReferenceEditor({ campaignId, isGm, systemId }) {
     await refresh();
   };
 
+  // Per-system label resolution — reuse the universal kinds but show
+  // system-native vocabulary on the tabs and the "Add X" button.
+  const labels = SYSTEM_KIND_LABELS[systemId] || SYSTEM_KIND_LABELS["besm-4e"];
+  const labelOf = (k) => labels[k] || KIND_LABELS[k];
+
   return (
-    <div className="card-mystic p-4" data-testid="reference-editor">
+    <div className="card-mystic p-4" data-testid="reference-editor"
+         data-system={systemId}>
       <div className="flex items-baseline justify-between mb-3 flex-wrap gap-2">
         <div>
           <div className="label-ref flex items-center gap-2"><BookOpen className="w-3 h-3"/> Reference Tables</div>
           <div className="text-[10px] text-mist/70 italic">
-            Per-campaign Weapons / Armor / Items / Companions / Custom rules.
-            Page citations are validated against the system book range.
+            {systemId === "cypher"
+              ? "Per-campaign Cyphers · Foci · Types · Skills · Items · House Rules. Mechanic-only, page-cited."
+              : systemId === "dnd-5e"
+              ? "Per-campaign Class Features · Backgrounds · Items · Followers · House Rules. Mechanic-only, page-cited."
+              : "Per-campaign Tri-Stat references — Attributes / Defects / Items / Companions / House Rules."}
           </div>
         </div>
         {isGm && !draft && (
           <button onClick={() => setDraft(blank())} className="btn btn-primary text-xs"
                   data-testid="reference-add-btn">
-            <Plus className="w-3 h-3"/> Add {KIND_LABELS[tab].slice(0, -1)}
+            <Plus className="w-3 h-3"/> Add {String(labelOf(tab)).split(" ")[0]}
           </button>
         )}
       </div>
@@ -90,7 +139,7 @@ export default function ReferenceEditor({ campaignId, isGm, systemId }) {
           <button key={k} onClick={() => setTab(k)}
                   className={`text-[10px] px-2 py-1 rounded-sm font-ui uppercase tracking-widest transition-colors ${tab === k ? "bg-gold/15 text-gold-bright border border-gold/30" : "text-mist hover:bg-gold/5"}`}
                   data-testid={`reference-tab-${k}`}>
-            {KIND_LABELS[k]}
+            {labelOf(k)}
           </button>
         ))}
       </div>
@@ -99,7 +148,7 @@ export default function ReferenceEditor({ campaignId, isGm, systemId }) {
         <Row row={draft} onChange={setDraft} onSave={save} onCancel={() => setDraft(null)}
              busy={busy} systemId={systemId} editing/>
       )}
-      {rows.length === 0 && !draft && <div className="text-mist italic text-xs">No {KIND_LABELS[tab].toLowerCase()} yet.</div>}
+      {rows.length === 0 && !draft && <div className="text-mist italic text-xs">No {String(labelOf(tab)).toLowerCase()} yet.</div>}
       <div className="space-y-2">
         {rows.map((r) => (
           <Row key={r.id} row={r} onChange={() => {}}
@@ -178,7 +227,10 @@ function Row({ row, onChange, onSave, onCancel, busy, systemId, editing, onEdit,
           <select className="select" value={row.kind}
                   onChange={(e) => onChange({ ...row, kind: e.target.value })}
                   data-testid="reference-input-kind">
-            {KIND_KEYS.map((k) => <option key={k} value={k}>{KIND_LABELS[k]}</option>)}
+            {KIND_KEYS.map((k) => {
+              const sysLabels = SYSTEM_KIND_LABELS[systemId] || SYSTEM_KIND_LABELS["besm-4e"];
+              return <option key={k} value={k}>{sysLabels[k] || KIND_LABELS[k]}</option>;
+            })}
           </select>
         </div>
         <div className="flex justify-end gap-2">

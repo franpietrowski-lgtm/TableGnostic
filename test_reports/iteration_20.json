@@ -1,0 +1,49 @@
+{
+  "summary": "V5.0 system-independence sweep — frontend testing BLOCKED by a compile-time React Rules-of-Hooks violation in /app/frontend/src/components/SystemCharacterBuilders.jsx (line 310). The webpack-dev-server error overlay (iframe id='webpack-dev-server-client-overlay') covers the entire viewport and intercepts ALL pointer events — login button is unclickable, modals can't be opened, and no V5.0 surface can be exercised through the live preview. Landing page (logged out) was the only thing partially testable: the four system-showcase badges (besm-4e, anime-5e, dnd-5e, cypher) at data-testid='landing-systems' are correctly mounted in the DOM. The hero strapline 'An all-system-aware tabletop platform' is present in source (Landing.jsx:53) but not visually verifiable due to the overlay. The agent-context-note's claim that 'all 8 modified files lint clean' is FALSE — this iteration's own SystemCharacterBuilders.jsx ships with a hooks-rules violation that breaks the app at compile time.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "SystemCharacterBuilders.jsx (CypherBuilder)",
+        "issue": "CRITICAL COMPILE ERROR: React Hook 'useMemo' is called conditionally (after the early return on line 301: `if (!ch || !ref_) return <div>Summoning…</div>;`). useMemo is invoked on line 310 — this violates the react-hooks/rules-of-hooks ESLint rule and CRA treats it as a build-blocking error. The webpack-dev-server error overlay covers every page in the app, blocking all clicks (login button, create-campaign modal, every nav button). Fix: move the `const sentence = useMemo(...)` block ABOVE the `if (!ch || !ref_) return ...` early return on line 301, so the hook is always called in the same order. Same pattern likely applies to any other hooks added below the early return in this file (audit lines 290-330 and the Anime5e builder section).",
+        "selector": "iframe#webpack-dev-server-client-overlay",
+        "priority": "CRITICAL"
+      }
+    ],
+    "integration_issues": [
+      {
+        "flow": "ALL V5.0 flows (campaign create, primer gates, reference editor, decks CRUD, anime5e hybrid)",
+        "issue": "Cannot be exercised — the dev-server compile-error overlay sits over the app and intercepts every click. Login itself fails (Submit button click intercepted by overlay).",
+        "affected_selectors": ["[data-testid=\"create-campaign-modal\"]", "[data-testid=\"create-power\"]", "[data-testid=\"primer-cypher-note\"]", "[data-testid=\"primer-dnd-note\"]", "[data-testid=\"custom-deck-new-btn\"]", "[data-testid=\"anime5e-hybrid-supplement\"]"]
+      }
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [
+    "URGENT: Fix the Rules-of-Hooks violation in /app/frontend/src/components/SystemCharacterBuilders.jsx. Move `const sentence = useMemo(...)` (currently line 310) to BEFORE the `if (!ch || !ref_) return <div...>Summoning…</div>;` early return on line 301. After moving, ensure the useMemo dependency array still references valid values (you'll need to handle `c` being potentially undefined — guard with `c?.descriptor ?? ''` etc., or compute the sentence inside the JSX after the guard).",
+    "Audit the rest of SystemCharacterBuilders.jsx (685 lines) for any other hooks called after early returns — including Anime5eBuilder and Anime5eHybridSupplement sections. Run `yarn build` or `yarn lint` locally to surface any other react-hooks/rules-of-hooks failures BEFORE handing off — the agent-context-note's 'all 8 modified files lint clean' claim was demonstrably wrong.",
+    "Re-test V5.0 surfaces (1-8) AFTER the hooks fix. The blocking overlay must be gone and the GMFran login must succeed before any V5.0 system-independence assertion can be made.",
+    "Consider adding a CI gate (yarn lint || exit 1) so a hooks-rules violation never reaches the preview environment again."
+  ],
+  "critical_code_review_comments": [
+    "SystemCharacterBuilders.jsx:301-313 — Classic Rules-of-Hooks anti-pattern: early return on line 301, then useMemo on 310. CRA's react-hooks/rules-of-hooks rule is set to 'error' in the default eslint config and will fail the dev build. This file was clearly NOT linted before the V5.0 commit was pushed.",
+    "Landing.jsx:53,113-141 — Hero strapline 'An all-system-aware tabletop platform' and the four-badge System Showcase at data-testid='landing-systems' are correctly authored. besm-4e / anime-5e / cypher use real PNG assets with onError fallback (good), dnd-5e shows the 'D&D' text placeholder as designed.",
+    "Campaigns.jsx:185-215 — Power-level field correctly switches label and option set on system_id ('Starting Tier' for cypher, 'Starting Level' for dnd-5e/anime-5e, 'Power level' for besm-4e). Implementation looks correct on inspection; could not verify live due to the overlay block.",
+    "Recommend the main agent set up a pre-handoff smoke check: `cd /app/frontend && yarn lint --max-warnings 0` should pass before any UI testing iteration starts. This 5-second check would have caught this in the previous iteration."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "not tested (frontend-only request)",
+    "frontend": "0% — compile error blocks all interactive testing. Only DOM-query-level inspection of the logged-out landing page succeeded (4/4 system badges present)."
+  },
+  "test_credentials": "franpietrowski@gmail.com / PieGod08!! (admin GM) — could not be exercised due to the overlay block.",
+  "seed_data_creation": "None. No campaigns were created (modal couldn't be opened).",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Once the SystemCharacterBuilders.jsx hooks fix lands, re-run a Playwright sweep covering: (1) Landing — verify visible strapline + 4 badges; (2) Login GMFran; (3) Create modal — toggle system between besm-4e/dnd-5e/anime-5e/cypher and assert create-power label/options match the spec; (4-6) Create one campaign per system, open Atelier→Player Primer, verify primer-cypher-note (cypher), primer-dnd-note (dnd-5e), and Tri-Stat sections only on besm-4e; (7) Reference Editor — verify tab labels Cyphers/Foci/Types (cypher) and Drawbacks/Followers/Class Features (dnd-5e); (8) Decks tab — full CRUD on a custom Cypher deck via [data-testid=custom-deck-new-btn]; (9) Anime 5E — new character should show dnd-style ability scores PLUS [data-testid=anime5e-hybrid-supplement] with [data-testid=anime5e-point-budget] and [data-testid=anime5e-add-attribute] dropdown listing the 9 Tri-Stat attributes. Cleanup: DELETE /api/campaigns/{id} for all TEST_V5_* campaigns at end. Do NOT trust the main agent's lint claims — always run `yarn lint` first.",
+  "rca of the issue": "Root cause: in /app/frontend/src/components/SystemCharacterBuilders.jsx the CypherBuilder component places an early return guard `if (!ch || !ref_) return <div>Summoning…</div>;` on line 301 before calling `useMemo` on line 310. React's Rules of Hooks require all hooks to be invoked in the exact same order on every render — calling useMemo only after a guard return means on the first render (when ch is null) useMemo is skipped, and on later renders it runs, which the eslint-plugin-react-hooks rule flags as an error. CRA's default webpack config promotes ESLint errors to compile failures and renders the red error overlay (iframe#webpack-dev-server-client-overlay) on top of every page in the app. That overlay is z-index ~9999 and intercepts pointer events, which is why every Playwright click times out with 'iframe id=webpack-dev-server-client-overlay intercepts pointer events'. Reproduction: 1) navigate to https://rules-forge.preview.emergentagent.com/auth?mode=login 2) observe the overlay containing the eslint message about 'React Hook useMemo is called conditionally' at SystemCharacterBuilders.jsx:310:20 3) any click attempt is intercepted. Mitigation: hoist the useMemo call (and any other hooks below the early return) to the top of the component body, before the guard return; if the memoised value depends on `c` which is only defined after `ch` is loaded, use optional chaining inside the memo body and let it return an empty sentence when ch is null."
+}

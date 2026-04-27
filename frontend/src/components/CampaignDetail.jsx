@@ -1152,41 +1152,51 @@ function PrimerTab({ camp, onRefresh }) {
                 {["Stone Age","Bronze Age","Iron Age","Classical","Medieval","Renaissance","Industrial","Victorian","Modern","Near Future","Far Future","Post-Apocalyptic","Mixed / Anachronistic"].map((p) => <option key={p} value={p}>{p}</option>)}
               </select>
             </div>
-            <div>
-              <label className="label-ref block mb-1">Default Character Size</label>
-              <select className="select" value={defaultSize}
-                      onChange={(e) => setDefaultSize(e.target.value)}
-                      data-testid="primer-size">
-                {[["Diminutive","Diminutive — sprite / fairy / pixie"],
-                  ["Small","Small — halfling / goblin / housecat"],
-                  ["Medium","Medium — standard humanoid (default)"],
-                  ["Large","Large — ogre / horse / war-bear"],
-                  ["Huge","Huge — giant / wagon / small mecha"],
-                  ["Gargantuan","Gargantuan — dragon / mecha / siege engine"],
-                  ["Massive","Massive — kaiju / capital ship / fortress"]].map(([v,l]) => <option key={v} value={v}>{l}</option>)}
-              </select>
-              <div className="text-[10px] text-mist/70 italic mt-1">
-                Per-entity template; players can override on their sheet.
-              </div>
-            </div>
-            <div>
-              <label className="label-ref block mb-1">Damage Rating</label>
-              <input className="input" type="number" min={1} max={20}
-                     value={damageRating}
-                     onChange={(e) => setDamageRating(e.target.value)}
-                     data-testid="primer-dr"/>
-              <div className="text-[10px] text-mist/70 italic mt-1">
-                Baseline 5 (BESM default) · grittier = lower · cinematic = higher
-              </div>
-            </div>
+            {/* BESM-shaped sizing & damage. The Tri-Stat damage equation
+                doesn't exist in D&D 5E (HP+AC) or Cypher (Pools+Effort);
+                hide the controls for those systems to reduce confusion. */}
+            {(camp.system_id === "besm-4e" || camp.system_id === "anime-5e") && (
+              <>
+                <div data-testid="primer-besm-size-block">
+                  <label className="label-ref block mb-1">Default Character Size</label>
+                  <select className="select" value={defaultSize}
+                          onChange={(e) => setDefaultSize(e.target.value)}
+                          data-testid="primer-size">
+                    {[["Diminutive","Diminutive — sprite / fairy / pixie"],
+                      ["Small","Small — halfling / goblin / housecat"],
+                      ["Medium","Medium — standard humanoid (default)"],
+                      ["Large","Large — ogre / horse / war-bear"],
+                      ["Huge","Huge — giant / wagon / small mecha"],
+                      ["Gargantuan","Gargantuan — dragon / mecha / siege engine"],
+                      ["Massive","Massive — kaiju / capital ship / fortress"]].map(([v,l]) => <option key={v} value={v}>{l}</option>)}
+                  </select>
+                  <div className="text-[10px] text-mist/70 italic mt-1">
+                    Per-entity Tri-Stat template; players can override on their sheet.
+                  </div>
+                </div>
+                <div data-testid="primer-besm-dr-block">
+                  <label className="label-ref block mb-1">Damage Rating (Tri-Stat)</label>
+                  <input className="input" type="number" min={1} max={20}
+                         value={damageRating}
+                         onChange={(e) => setDamageRating(e.target.value)}
+                         data-testid="primer-dr"/>
+                  <div className="text-[10px] text-mist/70 italic mt-1">
+                    Baseline 5 (BESM default) · grittier = lower · cinematic = higher
+                  </div>
+                </div>
+              </>
+            )}
           </div>
 
+          {/* Tri-Stat point-buy caps — irrelevant outside BESM / Anime 5E.
+              D&D uses class+level; Cypher uses tier-driven pools. */}
+          {(camp.system_id === "besm-4e" || camp.system_id === "anime-5e") && (<>
           <div className="divider-sigil my-6"/>
           <div className="label-ref mb-2 flex items-center gap-2">Character-Point Caps <Shield className="w-3 h-3"/></div>
           <p className="text-xs text-mist font-body mb-4 italic">
             Override the Power Level's default budget for this table. Useful for session-0 starts
             ("Heroic, but begin at 90") or floor enforcement ("nobody under 70"). Set to <b>0</b> to
-            inherit the Power Level's default.
+            inherit the Power Level's default. <span className="text-mist/70">(BESM 4E / Anime 5E point-buy mode only.)</span>
           </p>
           <div className="grid md:grid-cols-3 gap-3" data-testid="primer-caps">
             <div>
@@ -1217,6 +1227,7 @@ function PrimerTab({ camp, onRefresh }) {
           <p className="text-xs text-mist font-body mb-4 italic">
             Leave <b>Allowed</b> empty to permit everything, or list names to restrict the character forge
             to only those entries. <b>Prohibited</b> items are always hidden from the player picker.
+            <span className="text-mist/70"> (Tri-Stat Attribute / Defect / Skill Group names — BESM 4E / Anime 5E.)</span>
           </p>
           <div className="grid md:grid-cols-2 gap-4">
             <ListField label="Allowed Attributes" value={allowedA} setValue={setAllowedA} testid="allowed-attrs"
@@ -1230,6 +1241,30 @@ function PrimerTab({ camp, onRefresh }) {
             <ListField label="Allowed Skill Groups" value={allowedS} setValue={setAllowedS} testid="allowed-skills"/>
             <ListField label="Prohibited Skill Groups" value={prohibS} setValue={setProhibS} testid="prohibited-skills"/>
           </div>
+          </>)}
+          {(camp.system_id === "dnd-5e") && (
+            <div className="card-mystic p-4 mt-6" data-testid="primer-dnd-note">
+              <div className="label-ref mb-1">D&amp;D 5E note</div>
+              <div className="text-xs text-parchment/85 leading-snug font-body">
+                D&amp;D 5E uses class + level + slot mechanics, not point-buy. Use the
+                <b> Atelier → Reference Tables</b> tab to authorise / restrict classes,
+                races, spells, and items per campaign. The character forge will pull
+                Campaign-Reference entries alongside the SRD core.
+              </div>
+            </div>
+          )}
+          {(camp.system_id === "cypher") && (
+            <div className="card-mystic p-4 mt-6" data-testid="primer-cypher-note">
+              <div className="label-ref mb-1">Cypher System note</div>
+              <div className="text-xs text-parchment/85 leading-snug font-body">
+                Cypher uses Tier (1-6) + Type/Focus/Descriptor + Pools (Might/Speed/
+                Intellect) + Edge + Effort. There are no point-buy caps; players
+                customise via Edge allocation and Skills trained at each Tier.
+                Use the <b>Atelier → Reference Tables</b> tab to seed campaign-specific
+                cyphers, artifacts, types, foci, and descriptors.
+              </div>
+            </div>
+          )}
           {err && <div className="mt-3 text-ember text-sm">{err}</div>}
         </>
       )}

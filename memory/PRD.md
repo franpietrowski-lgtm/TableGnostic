@@ -602,7 +602,85 @@ New package: 4 modules + `__init__.py`. All entries are mechanic-only — page r
 ### Legal compliance reaffirmed
 - Per `LEGAL_COMPLIANCE.md` (Tri-Stat Emporium licence): page references and mechanic names only — never reproduce rulebook prose, stat-block descriptions, lore, or examples. The new Evereantha Chronicle dialogue uses **only user-provided "Artisan's Tale" original setting material** with mechanic-only references back to BESM 4E (page numbers + attribute names). The `besm_data.py` Cypher/Anime 5E entries continue to cite mechanics + page numbers without reproducing flavour text.
 
+## V5.0 — System-Independence Sweep · Card CRUD · Anime 5E Hybrid (2026-04-27)
+
+User asked to make every page/card/section campaign-system independent so a GM picking D&D, Cypher, BESM, or Anime 5E never sees fields that don't apply to their ruleset. Plus card CRUD, Anime 5E in its real hybrid shape (5E + Tri-Stat point-buy), and a landing-page rebrand from "BESM 4E aware" to all-system-aware.
+
+### A. Campaign creation — Power Level vs Level vs Tier (`Campaigns.jsx`)
+
+The "Power level" dropdown was BESM-shaped (Mundane / Adventurous / Heroic / Epic / Mythic). Made it system-aware:
+- **D&D 5E / Anime 5E** → "Starting Level" picker: Level 1 / 3 / 5 / 8 / 11 / 15 / 17 / 20 (5E common starts).
+- **Cypher** → "Starting Tier" picker: Tier 1 Apprentice → Tier 6 Mythic.
+- **BESM 4E** (and any other system) keeps the original Power Level enum.
+- The label itself updates so the GM never sees "Power Level" on a system that doesn't use one.
+
+### B. Player Primer system independence (`CampaignDetail.jsx`)
+
+Hid the Tri-Stat-only fields when the campaign isn't BESM/Anime:
+- **Default Character Size** (BESM size templates) — gated behind `besm-4e || anime-5e`.
+- **Damage Rating baseline** (Tri-Stat DM formula) — same gate.
+- **Character-Point Caps** (min/max points + max attribute level) — same gate. Helper text now reads "BESM 4E / Anime 5E point-buy mode only."
+- **Allow / Prohibit Lists** for Tri-Stat Attributes / Defects / Skill Groups — same gate.
+- **D&D 5E** campaigns now see a small explanatory card pointing them at the Atelier Reference Tables tab for class/race/spell/item curation.
+- **Cypher** campaigns see the equivalent: a card explaining that Cypher uses Tier + Type/Focus/Descriptor + Pools/Edge/Effort and pointing at the Reference Tables tab for cyphers/artifacts/types/foci/descriptors.
+
+### C. Reference Editor — system-aware vocabulary (`ReferenceEditor.jsx`)
+
+The 8 universal kinds (weapon/armor/item/companion/custom/attribute/skill/defect) keep the same backend storage but get **system-native labels**:
+- **Cypher**: companion → "Foci" · attribute → "Types" · defect → "Cyphers" · custom → "GM Intrusions / House Rules"
+- **D&D 5E**: companion → "Followers / Mounts" · attribute → "Class Features" · defect → "Drawbacks / Backgrounds" · item → "Adventuring Gear / Magic Items"
+- **Anime 5E**: defect → "Defects" · item → "Items / Cards" · attribute → "Tri-Stat Attributes"
+- **BESM 4E**: original labels preserved
+- Tab strip and "Add X" button + the Row's kind dropdown all use the system-native label. Helper text under the title also branches per system. The data shape doesn't fork — a GM migrating between systems doesn't break.
+
+### D. Custom Card decks — full CRUD (`backend/routes/cards.py` + `frontend/CustomCardEditor.jsx`)
+
+GMs can now author their own decks per campaign. New collection `db.custom_decks`. 4 endpoints:
+- `GET /api/cards/custom-decks?campaign_id=…` — list
+- `POST /api/cards/custom-decks` — create with name + kind + cards[]
+- `PATCH /api/cards/custom-decks/{id}` — rename, change kind, replace cards (preserves card ids by name+effect match)
+- `DELETE /api/cards/custom-decks/{id}` — cascade-deletes any instances spawned from this deck
+
+The catalogue endpoint `GET /api/cards/decks/{system_id}?campaign_id=…` now merges built-in + custom decks (custom decks tagged `is_custom: true`, deck_id format `custom:{uuid}`). All existing draw / shuffle / preview / instance endpoints transparently resolve `custom:UUID` deck ids via a new `_resolve_cards()` helper.
+
+Card schema: `{id, name, suit?, rank?, effect}` — same shape as built-in cards so the UI doesn't have to branch. Kind options are `character / npc / cypher / weapon / item / generic`. The kind dropdown auto-sorts by system: Cypher campaigns see "Cyphers" first, D&D sees "Items" first, BESM sees "Generic" first.
+
+`<CustomCardEditor>` renders inside CardDeckPanel below the spawn list (GM-only). Lists existing custom decks with edit/delete buttons. The editor inline-renders all cards (max-h-96 scroll) with name + suit/group + rank/level inputs and a textarea for the effect; placeholder text branches per kind ("Form (Patch / Vial …)" for Cypher, "Suit / Group" otherwise).
+
+**Curl-verified full round-trip** on a Cypher campaign: created "Aurean Reagent Cyphers" (3 cards), confirmed catalogue shows 2 built-in + 1 custom, spawned an instance from `custom:UUID`, drew Sungrass Tincture · Vial · 1d6+2, PATCHed to add a 4th card, DELETEd and confirmed cascade removed the live instance.
+
+### E. Anime 5E hybrid character builder (`SystemCharacterBuilders.jsx`)
+
+Anime 5E campaigns now route to a true hybrid builder. Architecture:
+- Renders the full **D&D 5E builder** as the base — Class (5 Anime-flavoured: Adept / Champion / Idol / Pilot / Tinker) + Level (1-20) + Heritage (8 options) + 6 ability scores + saving-throw + skill profs + inventory + spells.
+- Mounts an **`<Anime5eHybridSupplement>`** card directly underneath, with its own Tri-Stat point budget (default 50) and a dropdown of all 9 Anime 5E point-buy attributes (Combat Mastery, Heightened Sense, Massive Damage, Mind Control, Personal Gear, Ranged Attack, Special Movement, Tough, Wealth).
+- Each point-buy entry has a level picker (1-6); cost auto-multiplies. Live `remaining` budget readout in the top-right of the supplement card.
+- Persistence: the d20 sheet goes into `folio.dnd_state` (same shape as a pure D&D PC), the Tri-Stat layer goes into `folio.anime5e_state` (`{point_budget, point_buys[]}`). Both round-trip cleanly.
+- Curl-verified: Kira Hoshino · Idol 5 Faerie · CHA 18 (d20 sheet) + 3 point-buys (Combat Mastery ×3, Heightened Sense ×2, Personal Gear ×4 = 12 of 50 spent) all persist intact.
+
+### F. Landing page rebrand (`Landing.jsx`)
+
+- Hero strapline: "A BESM 4E aware platform" → **"An all-system-aware tabletop platform"**.
+- Feature card: "BESM 4E attributes, defects, and skills…" → "Tri-Stat point-buy, D&D class+slot, and Cypher type/focus/descriptor all in one builder…"
+- Bottom credit strip lists all four supported systems.
+- **New System Showcase section** below the hero — 2×2 grid (mobile) / 1×4 (desktop) of system logo badges (BESM 4E + Anime 5E + D&D 5E + Cypher) with per-system labels and a graceful typographic fallback for D&D (no Wizards-redistributable artwork). Trade-dress disclaimer line below the badges naming all four rights-holders. Testid `landing-systems`.
+
+### G. System-id consolidation continued (`besm_data.py`)
+
+- Already harmonized in V4.7 (`cypher-system` → `cypher`).
+
+### Verification this iteration
+- ESLint + Ruff: all green on the 8 modified files.
+- End-to-end curl matrix: custom deck create / list / catalogue merge / spawn instance / draw / patch / delete-cascade ALL pass; Anime 5E hybrid PC create / get / verify both `dnd_state` + `anime5e_state` ALL pass.
+
+### Pending follow-ups
+- **Demo-content seeding** for D&D + Cypher Evereantha/Artisan-Tale variants — needs significant authored material (Aurean classes, mechanics, NPCs, location nodes, etc.). Track as a dedicated content-authoring batch.
+- D&D / Cypher per-PC PDF chapter layouts (currently each system has a generic appendix block — could be made richer).
+- Cypher-shaped CharacterBuilder Reference picker integration (already wired; just needs the Atelier Reference Editor populated for showcase).
+- "Difficulty Tracker" pattern from Cypher view ported to D&D (DC tracker) and BESM (TN tracker) for unified dice surface.
+
 ## V4.7 — System-Aware Sheets · Per-PC PDF Layouts · Setting-Licence Gate (2026-04-27)
+
 
 User asked for three things: D&D/Cypher character display sheets with system-specific dice macros, system-shaped per-PC PDF appendices, and an export-time gate that blocks PDFs whose campaign settings violate the active system's content licence (with the verbatim disclaimer surfaced to the GM). All three shipped and curl-verified end-to-end.
 

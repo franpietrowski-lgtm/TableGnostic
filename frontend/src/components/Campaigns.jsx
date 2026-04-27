@@ -183,12 +183,35 @@ function CreateModal({ onClose, onCreated }) {
                    onChange={(e) => setForm({ ...form, schedule: e.target.value })} data-testid="create-schedule"/>
           </div>
           <div>
-            <label className="label-ref block mb-1">Power level</label>
-            <select className="select" value={form.power_level}
-                    onChange={(e) => setForm({ ...form, power_level: e.target.value })} data-testid="create-power">
-              <option>Mundane</option><option>Adventurous</option><option>Heroic</option>
-              <option>Epic</option><option>Mythic</option>
-            </select>
+            <label className="label-ref block mb-1">
+              {form.system_id === "cypher" ? "Starting Tier"
+               : form.system_id === "dnd-5e" || form.system_id === "anime-5e"
+                  ? "Starting Level" : "Power level"}
+            </label>
+            {form.system_id === "cypher" ? (
+              <select className="select" value={form.power_level || "Tier 1"}
+                      onChange={(e) => setForm({ ...form, power_level: e.target.value })} data-testid="create-power">
+                <option value="Tier 1">Tier 1 — Apprentice</option>
+                <option value="Tier 2">Tier 2 — Established</option>
+                <option value="Tier 3">Tier 3 — Veteran</option>
+                <option value="Tier 4">Tier 4 — Master</option>
+                <option value="Tier 5">Tier 5 — Legend</option>
+                <option value="Tier 6">Tier 6 — Mythic</option>
+              </select>
+            ) : (form.system_id === "dnd-5e" || form.system_id === "anime-5e") ? (
+              <select className="select" value={form.power_level || "Level 5"}
+                      onChange={(e) => setForm({ ...form, power_level: e.target.value })} data-testid="create-power">
+                <option>Level 1</option><option>Level 3</option><option>Level 5</option>
+                <option>Level 8</option><option>Level 11</option><option>Level 15</option>
+                <option>Level 17</option><option>Level 20</option>
+              </select>
+            ) : (
+              <select className="select" value={form.power_level}
+                      onChange={(e) => setForm({ ...form, power_level: e.target.value })} data-testid="create-power">
+                <option>Mundane</option><option>Adventurous</option><option>Heroic</option>
+                <option>Epic</option><option>Mythic</option>
+              </select>
+            )}
           </div>
           <div>
             <label className="label-ref block mb-1">Max players</label>
