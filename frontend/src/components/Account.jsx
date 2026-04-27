@@ -159,7 +159,7 @@ export default function Account() {
           {tick === "avatar-saved" && <span className="text-[10px] text-arcane-light">Saved ✓</span>}
         </div>
         <div className="space-y-2">
-          <div className="grid sm:grid-cols-2 gap-x-6 gap-y-1.5 text-sm">
+          <div className="grid sm:grid-cols-2 gap-x-8 gap-y-2 text-sm">
             <Row label="Email" v={me.email}/>
             <Row label="Role" v={me.role}/>
             <Row label="Display name" v={me.name || "—"}/>
@@ -245,9 +245,9 @@ export default function Account() {
 
 function Row({ label, v, mono }) {
   return (
-    <div className="flex items-baseline gap-2">
-      <span className="label-ref shrink-0 w-32">{label}</span>
-      <span className={`text-parchment ${mono ? "font-mono text-xs" : ""}`}>{v}</span>
+    <div className="flex items-baseline gap-3 min-w-0">
+      <span className="label-ref shrink-0 w-28">{label}</span>
+      <span className={`text-parchment min-w-0 truncate ${mono ? "font-mono text-xs" : ""}`}>{v}</span>
     </div>
   );
 }

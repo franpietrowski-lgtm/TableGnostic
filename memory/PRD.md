@@ -20,7 +20,51 @@
 ### V4.3 Compliance
 - Cypher System Creator licence — cover-line + trade-dress + forbidden-setting (Numenera/Strange/NTYE) PDF-export gate (HTTP 451) + verbatim required-text strings served via `/api/systems/cypher/reference`.
 
-### V5.1 — Atelier "Epic Campaign" 8th-phase tab (this iteration — 2026-04-27)
+### V5.1 — Atelier "Epic Campaign" 8th-phase tab (2026-04-27)
+**Trigger:** GMFran uploaded Guy Sclanders' follow-up book *Epic Campaigns: Digital Edition* (146 pp) and asked for a new tab inside the **"Forge the Master Plot"** Atelier page. The two planes (the existing 7-phase Genesis and the new Epic Campaign) are intentionally INDEPENDENT — usable in tandem, separately, or one-or-the-other; pure GM brainstorming kit. Implemented as `phase === 7` panel inside `CampaignGenesis.jsx`, alongside the existing seven phases. Backend: new `db.epic_campaigns` collection + `routes/epic_campaign.py` (GET/PUT/seed-codex). Frontend: new `EpicCampaignPanel.jsx` (11 sections — Plan/Constraints, Theme, Sentence, OGAS Nemesis, Villains, Expanding Goal, Milestones, Adventures, Seeds, Beginning, Climax — plus Tie-ins picker). The "Sync to Codex" action pushes the Nemesis + each Villain + each Seed into the World Codex as gm-only knowledge nodes; idempotent on re-run.
+
+### V5.1.2 — Cypher derived stats + system-aware Characters list + Account page + Seat-character + Narrative PDF (this iteration — 2026-04-27)
+
+**Big batch in one pass.** Highest-leverage items from the user's list shipped, with the rest logged as P1 backlog.
+
+**Backend**
+- `system_data/cypher_data.py` — every `TYPES` entry now ships `pool_offsets`, `starting_edge`, `starting_cypher_limit`. New top-level `POOL_BASELINE = 7` and `TIER_DERIVED` (`recoveries_per_day` / `recovery_die`) — referenced both by the React builder for auto-fill and by the sheet for derived display.
+- `routes/auth.py` — new `POST /api/auth/change-password` (verifies current password against fresh DB hash, rotates to new). `PATCH /api/auth/me` extended with `avatar_url` and `bio`.
+- `routes/uploads.py` — new `POST /api/uploads/avatar` for any authenticated user. 4 MB cap. Persists `avatar_url` on the user record. Sibling-extension cleanup on re-upload (no stale PNG/JPEG/WEBP stacking).
+- `routes/sessions.py` — new `POST /api/sessions/{sid}/seat-character?character_id=X` (player seats own char, GM/admin can seat any) + `POST /api/sessions/{sid}/assign-character` (GM override) + WS broadcast `seating:update`.
+- `routes/pdf_export.py` — new `?mode=narrative` query param. Bypasses the per-licence forbidden-setting 451 gate (Cypher Numenera/Strange/NTYE etc.) since narrative output is, by definition, not a sellable supplement. Switches to a new `_narrative_profile()` (no system trade dress, neutral parchment, narrative-only banner). `mode=campaign` (default) keeps every existing licence guarantee.
+
+**Frontend**
+- `Account.jsx` (new, ~250 lines) — avatar upload with file picker, profile patch (byline + bio), in-app password change, game stats aggregate (campaigns GM'd / seated, character count, XP earned / unspent across all owned characters). Wired into `App.js` `/app/account` route + `Shell.jsx` sidebar `nav-account`.
+- `CharacterSheet.jsx` — `CypherSheetView` now renders a 4-up derived block (Armor / Cypher Limit / Recoveries-remaining / Effort cap) directly under the pool rings. Recovery die computes from tier (1d6+tier). New `Anime5eSupplementView` renders the Tri-Stat point-buy supplement read-only on the d20 chassis when `folio.anime5e_state.point_buys[]` exists.
+- `SystemCharacterBuilders.jsx` (Cypher) — `setType()` auto-fills pools (`baseline + pool_offsets`), starting edge, and cypher limit from the chosen Type. New editable Armor / Cypher Limit / Recoveries-max / Recovery-die row.
+- `CampaignDetail.jsx` — replaced the BESM-shape Body/Mind/Soul card strip with `CharacterCardPreview` (system-aware): D&D shows class+level / AC / HP / Prof; Cypher shows Tier/Descriptor/Type + Pools + Armor + Cypher×limit; Anime 5E hybrid shows D&D + tri-stat ×N badge; BESM unchanged.
+- `SessionView.jsx` — new `take-seat-section` listing the user's own characters with seat/release toggle (calls `/sessions/{sid}/seat-character`). Seated state highlights gold; other players' seats show in a `seating-summary` strip. WS `seating:update` patches the in-page state. Compact `systemBlurb()` helper used by both the seat picker and the existing "Add to Initiative" list — no more BESM Body/Mind leak for D&D / Cypher characters.
+- `AtelierTab.jsx` — `ExportPdfBtn` popover gains a Mode toggle (Campaign · branded vs Narrative · story). Narrative mode is recommended in the helper text for forbidden-setting campaigns.
+
+**Verification**
+- `iteration_22.json`: 13/13 backend pytest cases PASS in `/app/backend/tests/test_iter22_v512.py`. Frontend Playwright sweep confirmed Account page renders + avatar upload round-trip + system-aware Characters list testid `card-system-{id}` present. The narrative-PDF empty-state response (400 "No sessions to export.") on the Forbidden-Test campaign is documented as correct, not a bug.
+- One cosmetic finding fixed in this turn (Account identity-card column overlap on 1920w viewports — widened gap and added truncation).
+
+**Remaining from the user's V5.1.2 wishlist (P1 backlog — next iteration):**
+- Anime 5E full content extraction — races / classes / backgrounds / ancestries / items / spell slots / cantrips list with toggleable pickers.
+- D&D backgrounds + ancestries content seeding (CC-BY SRD).
+- Cypher genre-gating — filter Descriptors/Foci/Types/Equipment by campaign setting; deepen Effort/Edge/Intrusions in flow.
+- Anime 5E Challenge Rating / Encounter design tools.
+- Character sheets in all systems: Journal section, Backgrounds (D&D + Anime 5E), Ancestries, Spell Slots / Cantrips picker.
+- XP point pool counter visible during creation; XP loading-bar animation when earning.
+- Custom-rules tab fields system-and-mechanic specific.
+- Reference Editor: hide BESM "cost/level" labels for non-BESM kinds; show appropriate Cypher Tier requirement / D&D level requirement.
+- Move Reference Editor + Quickstart Instructions onto the Genesis page (new phase tab); leave only what remains in the in-campaign Atelier card.
+- Player Primer system-specific (level min / XP cap / suggested tier / prohibited lists / house rules / setting / description).
+- Editable card fields + deck composition (GM, sometimes player).
+- Anime 5E Reference content — ensure non-BESM systems don't show Body/Mind/Soul as the literal "stats" strip on system reference pages.
+- Evereantha + Artisan's Tale demo seeding across all systems (campaigns, codex, atelier, sessions, references, custom rules).
+- Robust content injection for D&D / Cypher / Anime 5E (cyphers, relics, items/equipment, foci, descriptors, types, flavors, races, classes, backgrounds).
+- Code refactor pass — split `SystemCharacterBuilders.jsx` into `builders/{Dnd5e,Cypher,Anime5e}.jsx`.
+- PDF export options expansion — per-system theme variants surfaced in the popover.
+- One-page-design philosophy assessment on the main dashboard.
+- Mobile-friendly review (especially session running page — responsive video tiles, chat overflow, dice roller, character sheet quick-references).
 **Trigger:** GMFran uploaded Guy Sclanders' follow-up book *Epic Campaigns: Digital Edition* (146 pp) and asked for a new tab inside the **"Forge the Master Plot"** Atelier page. The two planes (the existing 7-phase Genesis and the new Epic Campaign) are intentionally INDEPENDENT — usable in tandem, separately, or one-or-the-other; pure GM brainstorming kit.
 
 **Initial mis-placement (corrected):** First pass put the new framework as a sub-tab inside `AtelierTab` (the in-tab Session-0/Arcs/Master-Plot stack). Per user clarification, the user actually meant the standalone `/app/campaigns/:id/genesis` route ("Forge the Master Plot" — 7-phase guided form) reached via the **Atelier** button on the Campaign header. AtelierTab reverted to original; Epic framework moved to a new `phase === 7` panel inside `CampaignGenesis.jsx`, alongside the existing Sentence / Theme & Tone / Nemesis Design / Master Plot / Adventure Outlines / Supporting Cast / Beginning & Ending. The progress bar now reads `0/8 phases`.
