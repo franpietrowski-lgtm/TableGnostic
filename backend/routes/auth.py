@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from core.config import JWT_SECRET, JWT_ALGORITHM, FRONTEND_PUBLIC_URL
 from core.db import db, new_id, now_iso, sanitize
 from core.email import send_password_reset_email
-from core.models import ForgotIn, LoginIn, ProfilePatchIn, RegisterIn, ResetIn
+from core.models import ForgotIn, LoginIn, PasswordChangeIn, ProfilePatchIn, RegisterIn, ResetIn
 from core.security import (
     create_access_token, create_refresh_token, get_current_user,
     hash_password, set_auth_cookies, verify_password,
@@ -88,14 +88,32 @@ async def me(user: dict = Depends(get_current_user)):
 @router.patch("/me")
 async def patch_me(body: ProfilePatchIn,
                    user: dict = Depends(get_current_user)):
-    """Self-edit: currently just the byline_name used on PDF chronicle covers."""
+    """Self-edit: byline (PDF cover), avatar URL (token fallback), bio."""
     update: Dict = {}
     if body.byline_name is not None:
         update["byline_name"] = body.byline_name.strip() or None
+    if body.avatar_url is not None:
+        update["avatar_url"] = body.avatar_url.strip() or None
+    if body.bio is not None:
+        update["bio"] = body.bio.strip() or None
     if update:
         await db.users.update_one({"id": user["id"]}, {"$set": update})
     fresh = await db.users.find_one({"id": user["id"]}, {"_id": 0})
     return sanitize(fresh)
+
+
+@router.post("/change-password")
+async def change_password(body: PasswordChangeIn,
+                          user: dict = Depends(get_current_user)):
+    """In-app password change. Verifies current password, rotates to new."""
+    fresh = await db.users.find_one({"id": user["id"]}, {"_id": 1, "password_hash": 1})
+    if not fresh or not verify_password(body.current_password, fresh.get("password_hash", "")):
+        raise HTTPException(403, "Current password is incorrect.")
+    await db.users.update_one(
+        {"id": user["id"]},
+        {"$set": {"password_hash": hash_password(body.new_password)}}
+    )
+    return {"ok": True}
 
 
 @router.post("/refresh")

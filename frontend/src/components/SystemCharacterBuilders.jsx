@@ -327,6 +327,27 @@ export function CypherBuilder({ campaign, ref_, charId }) {
   const toggleSkill = (sk) => setC({ skill_trains:
     c.skill_trains.includes(sk) ? c.skill_trains.filter((x) => x !== sk) : [...c.skill_trains, sk] });
 
+  // Auto-fill pools / edge / cypher-limit when the Type changes — ties to
+  // the SRD `pool_offsets` / `starting_edge` / `starting_cypher_limit` we
+  // ship in `cypher_data.py`. Players can still override any value.
+  const setType = (typeName) => {
+    const baseline = ref_?.pool_baseline ?? 7;
+    const t = (ref_?.types || []).find((x) => x.name === typeName);
+    if (!t) { setC({ type: typeName }); return; }
+    const off = t.pool_offsets || { Might: 0, Speed: 0, Intellect: 0 };
+    setC({
+      type: typeName,
+      pools: {
+        Might: baseline + (off.Might || 0),
+        Speed: baseline + (off.Speed || 0),
+        Intellect: baseline + (off.Intellect || 0),
+      },
+      edge: t.starting_edge || { Might: 0, Speed: 0, Intellect: 0 },
+      starting_cypher_limit: t.starting_cypher_limit || 2,
+      cypher_limit: t.starting_cypher_limit || 2,
+    });
+  };
+
   const save = async () => {
     setErr("");
     try {
@@ -372,7 +393,7 @@ export function CypherBuilder({ campaign, ref_, charId }) {
           </div>
           <div>
             <label className="label-ref">Type</label>
-            <select className="select" value={c.type} onChange={(e) => setC({ type: e.target.value })}
+            <select className="select" value={c.type} onChange={(e) => setType(e.target.value)}
                     data-testid="cypher-type">
               <optgroup label="Cypher SRD">
                 {ref_.types.map((t) => <option key={t.name} value={t.name}>{t.name}</option>)}
@@ -448,6 +469,47 @@ export function CypherBuilder({ campaign, ref_, charId }) {
                  onChange={(e) => setC({ effort: Math.max(1, Math.min(6, +e.target.value)) })}
                  data-testid="cypher-effort"/>
           <span className="text-[10px] text-mist italic">spend per Pool to lower difficulty by 1 step / Effort</span>
+        </div>
+      </div>
+
+      {/* Cypher derived — Armor (damage soak), Cypher Limit (max carried),
+          Recoveries (per-day pool restore action). All editable so the GM
+          can tune for setting / power-level. */}
+      <div className="card-mystic p-5 mt-4">
+        <h3 className="h-arcane text-sm mb-3">Derived · Armor / Cypher Limit / Recoveries</h3>
+        <div className="grid sm:grid-cols-4 gap-3">
+          <div className="border border-gold/15 rounded-sm p-3">
+            <label className="label-ref">Armor</label>
+            <input className="input text-center" type="number" min={0} max={10}
+                   value={c.armor || 0}
+                   onChange={(e) => setC({ armor: Math.max(0, +e.target.value || 0) })}
+                   data-testid="cypher-armor"/>
+            <div className="text-[9px] text-mist italic mt-1">subtracted from each hit (Speed defense -1 step / 1 Armor)</div>
+          </div>
+          <div className="border border-gold/15 rounded-sm p-3">
+            <label className="label-ref">Cypher Limit</label>
+            <input className="input text-center" type="number" min={1} max={6}
+                   value={c.cypher_limit || c.starting_cypher_limit || 2}
+                   onChange={(e) => setC({ cypher_limit: Math.max(1, Math.min(6, +e.target.value || 2)) })}
+                   data-testid="cypher-limit"/>
+            <div className="text-[9px] text-mist italic mt-1">max cyphers carried</div>
+          </div>
+          <div className="border border-gold/15 rounded-sm p-3">
+            <label className="label-ref">Recoveries / day</label>
+            <input className="input text-center" type="number" min={1} max={8}
+                   value={c.recoveries_max || 4}
+                   onChange={(e) => setC({ recoveries_max: Math.max(1, Math.min(8, +e.target.value || 4)) })}
+                   data-testid="cypher-recoveries-max"/>
+            <div className="text-[9px] text-mist italic mt-1">action / 10m / 1h / 10h</div>
+          </div>
+          <div className="border border-gold/15 rounded-sm p-3">
+            <label className="label-ref">Recovery die</label>
+            <input className="input text-center text-xs"
+                   value={c.recovery_die || `1d6+${c.tier || 1}`}
+                   onChange={(e) => setC({ recovery_die: e.target.value })}
+                   data-testid="cypher-recovery-die"/>
+            <div className="text-[9px] text-mist italic mt-1">restored to a Pool</div>
+          </div>
         </div>
       </div>
 

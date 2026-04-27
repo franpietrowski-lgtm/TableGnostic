@@ -182,7 +182,7 @@ export default function CharacterSheet() {
 
       {/* System-shaped read view — D&D 5E / Cypher get their own block;
           BESM 4E (and Anime 5E by default) keep the original tri-stat layout. */}
-      {dndState && <DndSheetView state={dndState} roll={roll}/>}
+      {dndState && <DndSheetView state={dndState} folio={ch.folio} roll={roll}/>}
       {cypherState && <CypherSheetView state={cypherState} roll={roll}/>}
       {!dndState && !cypherState && (
       <div className="mt-8 grid lg:grid-cols-3 gap-6">
@@ -526,7 +526,7 @@ function DiceCard({ quickRolls, roll }) {
 }
 
 // ─── D&D 5E read view ─────────────────────────────────────────────────
-function DndSheetView({ state, roll }) {
+function DndSheetView({ state, folio, roll }) {
   const sc = state.ability_scores || {};
   const lvl = Math.max(1, +(state.level || 1));
   const profBonus = Math.max(2, 2 + Math.floor((lvl - 1) / 4));
@@ -661,6 +661,12 @@ function DndSheetView({ state, roll }) {
         </div>
       )}
 
+      {/* Anime 5E hybrid — render the Tri-Stat point-buy supplement read-only
+          if the character carries one. The supplement lives at
+          folio.anime5e_state.point_buys[]. We surface it so the GM and table
+          can see the genre-power layer alongside the d20 sheet. */}
+      <Anime5eSupplementView folio={folio}/>
+
       <DiceCard quickRolls={quickRolls} roll={roll}/>
     </div>
   );
@@ -677,6 +683,13 @@ function CypherSheetView({ state, roll }) {
   // Cypher target = (difficulty - steps_lowered) × 3, floor 0.
   const effectiveDiff = Math.max(0, diff - Math.max(0, extraSteps));
   const target = effectiveDiff * 3;
+  const tier = Math.max(1, +(state.tier || 1));
+  const cypherLimit = state.cypher_limit ?? (state.starting_cypher_limit || 2);
+  const armor = state.armor || 0;
+  const recoveriesMax = state.recoveries_max || 4;
+  const recoveriesUsed = state.recoveries_used || 0;
+  const recoveryDie = state.recovery_die
+    || `1d6+${Math.min(6, Math.max(1, tier))}`;
   const rollAtDifficulty = () => {
     const label = `Cypher roll · diff ${diff}${extraSteps ? ` (−${extraSteps} steps)` : ""} · TN ${target}`;
     roll("1d20", label);
@@ -684,7 +697,7 @@ function CypherSheetView({ state, roll }) {
   const quickRolls = [
     { label: "Cypher Roll (d20)", notation: "1d20",
       hint: "1d20 ≥ 3 × difficulty. Train/Specialise/Effort/Asset each lower difficulty 1 step." },
-    { label: "Recovery (1d6+1)", notation: "1d6+1", hint: "Cypher pool recovery roll." },
+    { label: `Recovery (${recoveryDie})`, notation: recoveryDie, hint: "Cypher pool recovery roll." },
     { label: "Light Cypher Damage", notation: "1d6", hint: "Single-target light damage die." },
   ];
   return (
@@ -735,6 +748,39 @@ function CypherSheetView({ state, roll }) {
         </div>
         <div className="text-[10px] text-mist/70 italic mt-2">
           Players: spend Pool with the Effort lever above. GMs: edit `current_pools` on the character sheet to mark damage between sessions.
+        </div>
+      </div>
+
+      {/* Cypher derived block — Armor (damage soak), Recovery rolls remaining,
+          Cypher carry limit (Tier-based), Effort cap. These are the canonical
+          Cypher derived values the table needs to see at a glance. */}
+      <div className="card-mystic p-5 mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3 text-center"
+           data-testid="cypher-derived-block">
+        <div className="border border-gold/15 rounded-sm py-2">
+          <div className="label-ref">Armor</div>
+          <div className="font-display text-2xl text-gold-bright"
+               data-testid="cypher-armor-value">{armor}</div>
+          <div className="text-[9px] text-mist">soak / hit</div>
+        </div>
+        <div className="border border-gold/15 rounded-sm py-2">
+          <div className="label-ref">Cypher Limit</div>
+          <div className="font-display text-2xl text-gold-bright"
+               data-testid="cypher-limit-value">{cypherLimit}</div>
+          <div className="text-[9px] text-mist">max carried</div>
+        </div>
+        <div className="border border-gold/15 rounded-sm py-2"
+             data-testid="cypher-recoveries-block">
+          <div className="label-ref">Recoveries</div>
+          <div className="font-display text-2xl text-gold-bright">
+            {Math.max(0, recoveriesMax - recoveriesUsed)}
+            <span className="text-mist text-xs"> / {recoveriesMax}</span>
+          </div>
+          <div className="text-[9px] text-mist">{recoveryDie}/day</div>
+        </div>
+        <div className="border border-gold/15 rounded-sm py-2">
+          <div className="label-ref">Effort</div>
+          <div className="font-display text-2xl text-gold-bright">{state.effort || 1}</div>
+          <div className="text-[9px] text-mist">max steps</div>
         </div>
       </div>
 
@@ -862,6 +908,49 @@ function SimpleListCard({ title, items, testid }) {
           <li key={i} className="text-sm text-parchment font-body">· {it}</li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+// Anime 5E hybrid supplement — read-only echo on the character sheet.
+// Displays the Tri-Stat point-buy attributes the player layered on top of
+// their d20 chassis (`folio.anime5e_state.point_buys[]`). Pure presentation.
+function Anime5eSupplementView({ folio }) {
+  const state = folio?.anime5e_state;
+  const buys = state?.point_buys || [];
+  if (!state || buys.length === 0) return null;
+  const totalSpent = buys.reduce(
+    (sum, b) => sum + ((b.cost_per_level || 0) * (b.level || 1)), 0);
+  return (
+    <div className="card-mystic p-6 mt-4 border-l-4"
+         style={{ borderLeftColor: "#E03A8E" }}
+         data-testid="anime5e-sheet-supplement">
+      <div className="flex items-baseline justify-between flex-wrap gap-2">
+        <div>
+          <div className="label-ref">Tri-Stat Supplement · Anime 5E hybrid</div>
+          <div className="text-[11px] text-mist/80 italic">
+            Genre-power layer over the d20 chassis. Tri-Stat OGL.
+          </div>
+        </div>
+        <div className="text-right">
+          <div className="font-display text-xl text-gold">{totalSpent}<span className="text-mist text-sm"> / {state.point_budget || 50}</span></div>
+          <div className="text-[10px] text-mist">pts spent</div>
+        </div>
+      </div>
+      <div className="mt-3 space-y-2">
+        {buys.map((b, i) => (
+          <div key={i} className="border border-gold/15 rounded-sm p-2 flex items-center justify-between gap-3"
+               data-testid={`anime5e-sheet-buy-${i}`}>
+            <div className="min-w-0 flex-1">
+              <div className="text-sm text-parchment font-ui"><b>{b.name}</b>
+                <span className="text-[10px] text-mist ml-2">×{b.level}</span>
+              </div>
+              {b.blurb_role && <div className="text-[11px] text-mist/70 italic">{b.blurb_role}</div>}
+            </div>
+            <span className="font-display text-gold">{(b.cost_per_level || 0) * (b.level || 1)} pts</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

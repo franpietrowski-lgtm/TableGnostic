@@ -44,6 +44,32 @@ export default function SessionView() {
     }
   }, []);
 
+  const takeSeat = useCallback(async (charId) => {
+    try {
+      const { data } = await api.post(
+        `/sessions/${id}/seat-character?character_id=${encodeURIComponent(charId || "")}`
+      );
+      // Optimistic local update — WS will arrive next anyway.
+      setSession((s) => s ? ({ ...s, character_assignments: data.character_assignments }) : s);
+    } catch (e) {
+      // surface but don't crash
+      console.warn("seat-character failed:", e?.response?.data?.detail || e.message);
+    }
+  }, [id]);
+
+  // Compact one-liner for a character card — system-aware so non-BESM
+  // sheets don't leak Body/Mind/Soul into the seat picker.
+  const systemBlurb = useCallback((c, systemId) => {
+    const dnd = c.folio?.dnd_state;
+    const cyph = c.folio?.cypher_state;
+    if (cyph) return `Cypher · T${cyph.tier || 1} · ${cyph.descriptor || "?"} ${cyph.type || "?"}`;
+    if (dnd) {
+      const isAnime = systemId === "anime-5e" || c.folio?.anime5e_state;
+      return `${isAnime ? "Anime 5E" : "D&D 5E"} · ${dnd.class || "?"} ${dnd.level || 1} · ${dnd.race || "?"}`;
+    }
+    return `Body ${c.stats?.body ?? "?"} · Mind ${c.stats?.mind ?? "?"} · Soul ${c.stats?.soul ?? "?"}`;
+  }, []);
+
   const loadAll = async () => {
     const s = await api.get(`/sessions/${id}`).then((r) => r.data);
     setSession(s);
@@ -82,6 +108,16 @@ export default function SessionView() {
         if (type === "effect") setEffects((p) => [...p, data]);
         if (type === "effect_remove") setEffects((p) => p.filter(x => x.id !== data.id));
         if (type === "round") setSession((s) => ({ ...s, round: data.round }));
+        if (type === "seating:update") {
+          // Patch our local session.character_assignments map.
+          setSession((s) => {
+            if (!s) return s;
+            const next = { ...(s.character_assignments || {}) };
+            if (evt.character_id) next[evt.user_id] = evt.character_id;
+            else delete next[evt.user_id];
+            return { ...s, character_assignments: next };
+          });
+        }
         // Fan out to AVSeats subscribers (presence + WebRTC signaling)
         subsRef.current.forEach((h) => { try { h(evt); } catch {} });
       };
@@ -221,14 +257,70 @@ export default function SessionView() {
         </div>
 
         <div className="divider-sigil my-3"/>
-        <div className="label-ref mb-2">Seat Characters</div>
+        <div className="label-ref mb-2">Take Seat · play this character</div>
+        <div className="space-y-1.5" data-testid="take-seat-section">
+          {(() => {
+            const mine = characters.filter((c) => c.owner_id === user?.id);
+            const seated = (session?.character_assignments || {})[user?.id];
+            if (mine.length === 0) {
+              return <div className="text-[10px] text-mist italic">No characters of yours in this campaign yet.</div>;
+            }
+            return (
+              <>
+                {mine.map((c) => {
+                  const isSeated = seated === c.id;
+                  return (
+                    <button key={c.id} onClick={() => takeSeat(isSeated ? "" : c.id)}
+                            className={`w-full text-left p-2 rounded-sm border ${
+                              isSeated ? "border-gold bg-gold/10" : "border-gold/10 hover:border-gold/40 hover:bg-gold/5"
+                            }`}
+                            data-testid={`take-seat-${c.id}`}>
+                      <div className="text-xs text-parchment font-ui flex items-center justify-between">
+                        <span className="truncate">{c.name}</span>
+                        {isSeated && <span className="text-[9px] text-gold-bright tracking-widest">SEATED</span>}
+                      </div>
+                      <div className="text-[9px] text-mist uppercase tracking-widest truncate">
+                        {systemBlurb(c, campaign?.system_id)}
+                      </div>
+                    </button>
+                  );
+                })}
+                {seated && (
+                  <button onClick={() => takeSeat("")}
+                          className="text-[10px] text-mist hover:text-ember w-full text-center mt-1"
+                          data-testid="release-seat-btn">
+                    Release seat
+                  </button>
+                )}
+              </>
+            );
+          })()}
+        </div>
+        {/* Who else is seated (read-only summary) */}
+        {Object.keys(session?.character_assignments || {}).length > 0 && (
+          <div className="text-[10px] text-mist mt-2" data-testid="seating-summary">
+            {Object.entries(session.character_assignments).map(([uid, cid]) => {
+              if (uid === user?.id) return null;
+              const ch = characters.find((x) => x.id === cid);
+              if (!ch) return null;
+              return (
+                <div key={uid} className="truncate">
+                  <span className="text-arcane-light">●</span> {ch.owner_name} → <span className="text-parchment">{ch.name}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        <div className="divider-sigil my-3"/>
+        <div className="label-ref mb-2">Add to Initiative</div>
         <div className="space-y-1.5">
           {characters.map((c) => (
             <button key={c.id} onClick={() => addInitFromChar(c)}
                     className="w-full text-left p-2 border border-gold/10 rounded-sm hover:border-gold/40 hover:bg-gold/5"
                     data-testid={`seat-char-${c.id}`}>
               <div className="text-xs text-parchment font-ui">{c.name}</div>
-              <div className="text-[9px] text-mist uppercase tracking-widest">Body {c.stats.body} · Mind {c.stats.mind}</div>
+              <div className="text-[9px] text-mist uppercase tracking-widest truncate">{systemBlurb(c, campaign?.system_id)}</div>
             </button>
           ))}
         </div>

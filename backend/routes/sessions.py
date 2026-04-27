@@ -82,6 +82,88 @@ async def get_session(sid: str, user: dict = Depends(get_current_user)):
     return s
 
 
+@router.post("/sessions/{sid}/seat-character")
+async def seat_character(sid: str, character_id: str = "",
+                          user: dict = Depends(get_current_user)):
+    """Assign a character to the calling user for a session ('seat-take').
+    Players may only seat one of their own characters; GM/admin may seat
+    any character to any user via the optional `target_user_id` query
+    (added below as an explicit override route). The session document
+    grows a `character_assignments: { user_id -> character_id }` map.
+    Pass `character_id=""` to UNSEAT (free the seat).
+    """
+    s = await db.sessions.find_one({"id": sid}, {"_id": 0})
+    if not s:
+        raise HTTPException(404, "Session not found")
+    camp = await db.campaigns.find_one({"id": s["campaign_id"]}, {"_id": 0})
+    if not camp:
+        raise HTTPException(404, "Campaign missing for session")
+    # Membership check — must be the GM or a member of the campaign.
+    if user["id"] != camp["gm_id"] and user["id"] not in (camp.get("member_ids") or []) \
+            and user.get("role") != "admin":
+        raise HTTPException(403, "Not a member of this campaign.")
+    if character_id:
+        ch = await db.characters.find_one({"id": character_id}, {"_id": 0})
+        if not ch or ch.get("campaign_id") != s["campaign_id"]:
+            raise HTTPException(404, "Character not in this campaign.")
+        # Players can only seat their own; GM/admin can seat any.
+        if ch.get("owner_id") != user["id"] and camp["gm_id"] != user["id"] \
+                and user.get("role") != "admin":
+            raise HTTPException(403, "You can only seat your own characters.")
+    assignments = dict(s.get("character_assignments") or {})
+    if character_id:
+        assignments[user["id"]] = character_id
+    else:
+        assignments.pop(user["id"], None)
+    await db.sessions.update_one(
+        {"id": sid},
+        {"$set": {"character_assignments": assignments}},
+    )
+    # Broadcast so all connected clients refresh their seating UI.
+    try:
+        await broadcast(f"session:{sid}", {
+            "type": "seating:update",
+            "user_id": user["id"],
+            "character_id": character_id or None,
+        })
+    except Exception:
+        pass
+    return {"ok": True, "character_assignments": assignments}
+
+
+@router.post("/sessions/{sid}/assign-character")
+async def gm_assign_character(sid: str, target_user_id: str, character_id: str,
+                               user: dict = Depends(get_current_user)):
+    """GM/admin override — assign any character to any campaign member
+    (e.g. a GM seating a guest player on a returning PC)."""
+    s = await db.sessions.find_one({"id": sid}, {"_id": 0})
+    if not s:
+        raise HTTPException(404, "Session not found")
+    camp = await db.campaigns.find_one({"id": s["campaign_id"]}, {"_id": 0})
+    if not camp:
+        raise HTTPException(404, "Campaign missing for session")
+    if camp["gm_id"] != user["id"] and user.get("role") != "admin":
+        raise HTTPException(403, "GM/admin only.")
+    ch = await db.characters.find_one({"id": character_id}, {"_id": 0})
+    if not ch or ch.get("campaign_id") != s["campaign_id"]:
+        raise HTTPException(404, "Character not in this campaign.")
+    assignments = dict(s.get("character_assignments") or {})
+    assignments[target_user_id] = character_id
+    await db.sessions.update_one(
+        {"id": sid},
+        {"$set": {"character_assignments": assignments}},
+    )
+    try:
+        await broadcast(f"session:{sid}", {
+            "type": "seating:update",
+            "user_id": target_user_id,
+            "character_id": character_id,
+        })
+    except Exception:
+        pass
+    return {"ok": True, "character_assignments": assignments}
+
+
 # -------- Chat --------
 
 @router.post("/chat")

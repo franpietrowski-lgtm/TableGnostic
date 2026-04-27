@@ -15,6 +15,7 @@ import CampaignGenesis from "./components/CampaignGenesis";
 import Discover from "./components/Discover";
 import Invite from "./components/Invite";
 import Reset from "./components/Reset";
+import Account from "./components/Account";
 
 function Protected({ children }) {
   const { user, loading } = useAuth();
@@ -53,6 +54,7 @@ export default function App() {
             <Route path="/app/characters/:id/edit" element={<CharacterBuilder />} />
             <Route path="/app/sessions/:id" element={<SessionView />} />
             <Route path="/app/reference" element={<Reference />} />
+            <Route path="/app/account" element={<Account />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

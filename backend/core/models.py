@@ -36,8 +36,16 @@ class UserOut(BaseModel):
 
 
 class ProfilePatchIn(BaseModel):
-    """Self-edit via PATCH /api/auth/me — currently just byline name."""
+    """Self-edit via PATCH /api/auth/me — byline + avatar + bio."""
     byline_name: Optional[str] = Field(default=None, max_length=120)
+    avatar_url: Optional[str] = Field(default=None, max_length=500)
+    bio: Optional[str] = Field(default=None, max_length=2000)
+
+
+class PasswordChangeIn(BaseModel):
+    """In-app password change — requires the current password."""
+    current_password: str = Field(min_length=1)
+    new_password: str = Field(min_length=8, max_length=200)
 
 
 # -------- Campaign --------

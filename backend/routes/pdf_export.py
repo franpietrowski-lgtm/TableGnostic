@@ -270,6 +270,24 @@ def _profile_for(system_id: Optional[str]) -> Dict[str, Any]:
     return STYLE_PROFILES.get(system_id, STYLE_PROFILES["_default"])
 
 
+def _narrative_profile(system_id: Optional[str]) -> Dict[str, Any]:
+    """Generic narrative-only profile used when a GM exports as a story (not
+    as a sellable supplement). Strips system trade-dress / logos and uses the
+    neutral parchment palette so no licensable mark appears on the cover."""
+    base = dict(STYLE_PROFILES["_default"])
+    base = {**base, "palette": dict(base["palette"]), "fonts": dict(base["fonts"])}
+    base["name"] = "Narrative Story"
+    base["logo_files"] = []
+    sys_label = (STYLE_PROFILES.get(system_id or "") or {}).get("name", "")
+    base["cover_subtitle"] = (
+        "A Narrative Chronicle · setting & system-influenced voicing"
+        + (f" · {sys_label}" if sys_label else "")
+    )
+    base["chapter_decoration"] = "rule"
+    base["narrative_only"] = True
+    return base
+
+
 def _resolve_logo(profile: Dict[str, Any]) -> Optional[Path]:
     for fn in profile["logo_files"]:
         p = LOGO_DIR / fn
@@ -1264,27 +1282,41 @@ _LICENCE_GATE_BLURBS: Dict[str, str] = {
 
 
 @router.get("/campaigns/{cid}/export.pdf")
-async def export_pdf(cid: str, user: dict = Depends(get_current_user)):
-    """GM/admin downloads a system-branded PDF chronicle."""
+async def export_pdf(cid: str, mode: str = "campaign",
+                     user: dict = Depends(get_current_user)):
+    """GM/admin downloads a chronicle PDF.
+
+    mode = "campaign"  (default) — branded chronicle. Subject to per-system
+                                   licence gating (Cypher forbidden-settings
+                                   block the export with HTTP 451).
+    mode = "narrative" — pure-prose narrative story export. Bypasses the
+                         licence gate (no system trade dress, no claim of
+                         publishable product). The PDF carries a verbatim
+                         "Narrative story only — not a licensable product"
+                         banner. Voice is omnipotent / setting-aware.
+    """
     camp = await db.campaigns.find_one({"id": cid}, {"_id": 0})
     if not camp:
         raise HTTPException(404, "Campaign not found")
     if camp["gm_id"] != user["id"] and user.get("role") != "admin":
         raise HTTPException(403, "GM/admin only.")
-    # Per-licence setting gate — block the export with the verbatim licence
-    # disclaimer if the campaign is tagged with a forbidden setting.
     sys_id = camp.get("system_id") or "besm-4e"
-    forbidden_match = _setting_violates_licence(sys_id, camp.get("setting_name") or "")
-    if forbidden_match:
-        blurb = _LICENCE_GATE_BLURBS.get(sys_id, "PDF export not permitted.").format(
-            setting=camp.get("setting_name", ""), forbidden=forbidden_match,
-        )
-        raise HTTPException(status_code=451, detail=blurb)
+    is_narrative = (mode or "").lower() == "narrative"
+    # Per-licence setting gate — only enforced in branded "campaign" mode.
+    # Narrative mode is by definition NOT a sellable product, so the
+    # forbidden-setting block does not apply.
+    if not is_narrative:
+        forbidden_match = _setting_violates_licence(sys_id, camp.get("setting_name") or "")
+        if forbidden_match:
+            blurb = _LICENCE_GATE_BLURBS.get(sys_id, "PDF export not permitted.").format(
+                setting=camp.get("setting_name", ""), forbidden=forbidden_match,
+            )
+            raise HTTPException(status_code=451, detail=blurb)
     sessions = await db.sessions.find({"campaign_id": cid}, {"_id": 0}) \
                                  .sort("created_at", 1).to_list(60)
     if not sessions:
         raise HTTPException(400, "No sessions to export.")
-    profile = _profile_for(camp.get("system_id"))
+    profile = _narrative_profile(sys_id) if is_narrative else _profile_for(camp.get("system_id"))
     chapters_data = _group_sessions_into_chapters(sessions)
     # Hydrate each session with its narrative + journals.
     for ch in chapters_data:

@@ -41,21 +41,42 @@ STAT_POOLS = [
     {"name": "Intellect",    "blurb_role": "Mental acuity · learning"},
 ]
 
-# Six SRD types — Cypher's "classes" — kept to mechanic-only descriptors.
+# Six SRD types — Cypher's "classes" — with structured starting pools so the
+# builder can auto-fill on Type change. The three numbers are the SRD "extra"
+# pool points the player ADDS to a baseline of 7 across all three pools (so
+# Warrior 8/8/2 = 15/15/9 starting pools).
 TYPES = [
     {"name": "Warrior",        "intrusion": "Combat",   "starting_pools": "Might+8 / Speed+8 / Intellect+2",
-     "edge_at_1": ["Might 1"]},
+     "pool_offsets": {"Might": 8, "Speed": 8, "Intellect": 2}, "edge_at_1": ["Might 1"],
+     "starting_edge": {"Might": 1, "Speed": 0, "Intellect": 0}, "starting_cypher_limit": 2},
     {"name": "Adept",          "intrusion": "Esoteric", "starting_pools": "Might+2 / Speed+8 / Intellect+8",
-     "edge_at_1": ["Intellect 1"]},
+     "pool_offsets": {"Might": 2, "Speed": 8, "Intellect": 8}, "edge_at_1": ["Intellect 1"],
+     "starting_edge": {"Might": 0, "Speed": 0, "Intellect": 1}, "starting_cypher_limit": 3},
     {"name": "Explorer",       "intrusion": "Recovery", "starting_pools": "Might+6 / Speed+6 / Intellect+6",
-     "edge_at_1": ["Might 1 OR Speed 1"]},
+     "pool_offsets": {"Might": 6, "Speed": 6, "Intellect": 6}, "edge_at_1": ["Might 1 OR Speed 1"],
+     "starting_edge": {"Might": 1, "Speed": 0, "Intellect": 0}, "starting_cypher_limit": 2},
     {"name": "Speaker",        "intrusion": "Social",   "starting_pools": "Might+4 / Speed+4 / Intellect+8",
-     "edge_at_1": ["Intellect 1"]},
+     "pool_offsets": {"Might": 4, "Speed": 4, "Intellect": 8}, "edge_at_1": ["Intellect 1"],
+     "starting_edge": {"Might": 0, "Speed": 0, "Intellect": 1}, "starting_cypher_limit": 2},
     {"name": "Wright",         "intrusion": "Crafting", "starting_pools": "Might+4 / Speed+8 / Intellect+8",
-     "edge_at_1": ["Speed 1 OR Intellect 1"]},
+     "pool_offsets": {"Might": 4, "Speed": 8, "Intellect": 8}, "edge_at_1": ["Speed 1 OR Intellect 1"],
+     "starting_edge": {"Might": 0, "Speed": 0, "Intellect": 1}, "starting_cypher_limit": 3},
     {"name": "Paradox",        "intrusion": "Reality",  "starting_pools": "Might+0 / Speed+8 / Intellect+12",
-     "edge_at_1": ["Intellect 2"]},
+     "pool_offsets": {"Might": 0, "Speed": 8, "Intellect": 12}, "edge_at_1": ["Intellect 2"],
+     "starting_edge": {"Might": 0, "Speed": 0, "Intellect": 2}, "starting_cypher_limit": 4},
 ]
+
+# Pool baseline added to every Type — SRD "every PC starts with 7 in each pool".
+POOL_BASELINE = 7
+
+# Tier-based mechanics — recovery rolls per day and cypher carry limit.
+# Recoveries: 1 action + 10 min + 1 hr + 10 hr per day at Tier 1; +1 step per
+# tier when modifier added by some types/foci. (SRD recovery rolls.)
+TIER_DERIVED = {
+    "recoveries_per_day": {1: 4, 2: 4, 3: 4, 4: 4, 5: 4, 6: 4},
+    "recovery_die": {1: "1d6+1", 2: "1d6+2", 3: "1d6+3",
+                      4: "1d6+4", 5: "1d6+5", 6: "1d6+6"},
+}
 
 # 16 SRD descriptors — flavour-flag for backstory + 1 Edge or Skill bonus.
 DESCRIPTORS = [
@@ -142,6 +163,8 @@ REFERENCE = {
     "kind": "type-focus-descriptor",
     "book": BOOK,
     "stat_pools": STAT_POOLS,
+    "pool_baseline": POOL_BASELINE,
+    "tier_derived": TIER_DERIVED,
     "types": TYPES,
     "descriptors": DESCRIPTORS,
     "foci": FOCI,

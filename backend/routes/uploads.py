@@ -33,6 +33,8 @@ router = APIRouter(prefix="/api/uploads", tags=["uploads"])
 UPLOAD_ROOT = Path(os.environ.get("UPLOAD_DIR", "/app/backend/uploads")).resolve()
 MAP_DIR = UPLOAD_ROOT / "maps"
 MAP_DIR.mkdir(parents=True, exist_ok=True)
+AVATAR_DIR = UPLOAD_ROOT / "avatars"
+AVATAR_DIR.mkdir(parents=True, exist_ok=True)
 
 ALLOWED_IMAGE_TYPES = {
     "image/png": ".png",
@@ -99,3 +101,48 @@ async def upload_map_image(
         "bytes": written,
         "content_type": ctype,
     }
+
+
+
+@router.post("/avatar")
+async def upload_avatar(
+    file: UploadFile = File(...),
+    user: dict = Depends(get_current_user),
+):
+    """Any authenticated user — upload a personal avatar / token-fallback
+    image. Used as the AV-tile placeholder when the user's camera is off
+    AND on PDF character-sheet exports. 4 MB cap (avatars don't need to
+    be 4K). Replaces any prior avatar by overwriting filename = user id."""
+    ctype = (file.content_type or "").lower()
+    ext = ALLOWED_IMAGE_TYPES.get(ctype)
+    if not ext:
+        raise HTTPException(400, f"Unsupported image type '{ctype}'. Use PNG, JPEG, or WEBP.")
+    AVATAR_MAX = 4 * 1024 * 1024
+    out = AVATAR_DIR / f"{user['id']}{ext}"
+    written = 0
+    with out.open("wb") as fh:
+        while True:
+            chunk = await file.read(512 * 1024)
+            if not chunk:
+                break
+            written += len(chunk)
+            if written > AVATAR_MAX:
+                fh.close()
+                try:
+                    out.unlink()
+                except OSError:
+                    pass
+                raise HTTPException(413, f"Avatar exceeds {AVATAR_MAX // (1024 * 1024)} MB cap.")
+            fh.write(chunk)
+    # Clear any prior avatar with a different extension so we never serve stale.
+    for sib in AVATAR_DIR.glob(f"{user['id']}.*"):
+        if sib.name != out.name:
+            try:
+                sib.unlink()
+            except OSError:
+                pass
+    url = f"/api/uploads/avatars/{user['id']}{ext}"
+    # Persist on the user record so /api/auth/me returns it directly.
+    from core.db import db as _db
+    await _db.users.update_one({"id": user["id"]}, {"$set": {"avatar_url": url}})
+    return {"url": url, "bytes": written, "content_type": ctype}

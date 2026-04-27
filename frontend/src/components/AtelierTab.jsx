@@ -404,6 +404,7 @@ function ExportPdfBtn({ campId }) {
   const [byline, setByline] = useState("");
   const [me, setMe] = useState(null);
   const [savedTick, setSavedTick] = useState(false);
+  const [mode, setMode] = useState("campaign");  // "campaign" | "narrative"
 
   React.useEffect(() => {
     if (!open) return;
@@ -431,13 +432,10 @@ function ExportPdfBtn({ campId }) {
     try {
       const token = localStorage.getItem("tg_token");
       const apiBase = process.env.REACT_APP_BACKEND_URL || "";
-      const r = await fetch(`${apiBase}/api/campaigns/${campId}/export.pdf`, {
+      const r = await fetch(`${apiBase}/api/campaigns/${campId}/export.pdf?mode=${encodeURIComponent(mode)}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!r.ok) {
-        // 451 Unavailable for Legal Reasons — surfaced when the campaign
-        // setting violates the active system's content licence (e.g. a
-        // Cypher campaign tagged "Numenera"). Show the verbatim disclaimer.
         let detail = "";
         try {
           const j = await r.json();
@@ -456,7 +454,7 @@ function ExportPdfBtn({ campId }) {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = "chronicle.pdf";
+      a.download = mode === "narrative" ? "narrative-chronicle.pdf" : "chronicle.pdf";
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -502,6 +500,34 @@ function ExportPdfBtn({ campId }) {
                   data-testid="atelier-export-pdf-download">
             <FileDown className="w-3 h-3"/> {busy ? "Rendering…" : "Download chronicle"}
           </button>
+
+          {/* Mode toggle — branded vs narrative-only. Narrative bypasses the
+              forbidden-setting gate because it's not a sellable supplement;
+              just a story export. */}
+          <div className="border-t border-gold/10 mt-3 pt-3" data-testid="export-mode-toggle">
+            <div className="label-ref mb-1.5">Output mode</div>
+            <div className="flex gap-1">
+              <button onClick={() => setMode("campaign")}
+                      className={`flex-1 px-2 py-1 text-[10px] font-ui uppercase tracking-widest border ${
+                        mode === "campaign" ? "border-gold text-gold-bright bg-gold/10" : "border-gold/20 text-mist hover:border-gold/40"
+                      }`}
+                      data-testid="export-mode-campaign">
+                Campaign · branded
+              </button>
+              <button onClick={() => setMode("narrative")}
+                      className={`flex-1 px-2 py-1 text-[10px] font-ui uppercase tracking-widest border ${
+                        mode === "narrative" ? "border-gold text-gold-bright bg-gold/10" : "border-gold/20 text-mist hover:border-gold/40"
+                      }`}
+                      data-testid="export-mode-narrative">
+                Narrative · story
+              </button>
+            </div>
+            <div className="text-[10px] text-mist/70 italic mt-1.5 leading-snug">
+              {mode === "narrative"
+                ? "Pure-prose chronicle — no system trade dress. Bypasses Cypher / OGL setting gates because it's not a sellable supplement."
+                : "Branded supplement-style — system trade dress + style profile applied. Subject to per-licence setting gates."}
+            </div>
+          </div>
           {gateMsg && (
             <div className="mt-3 border border-ember/40 bg-ember/10 rounded-sm p-3 text-[11px] text-ember whitespace-pre-wrap font-body leading-snug"
                  data-testid="atelier-export-licence-gate">

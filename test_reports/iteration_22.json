@@ -1,0 +1,47 @@
+{
+  "summary": "V5.1.2 iter22 backend + partial frontend validation. All 13 pytest cases in /app/backend/tests/test_iter22_v512.py PASS on the preview host: change-password rejects wrong current (403) and succeeds with correct (200) and is reverted to the original PieGod08!! credential; PATCH /api/auth/me round-trips byline_name/avatar_url/bio; POST /api/uploads/avatar accepts a 1x1 PNG (200) and rejects text/plain (400) and >4MB payload (413); GET /api/systems/cypher/reference ships pool_baseline=7 + tier_derived.{recoveries_per_day,recovery_die} + each TYPES entry carries pool_offsets/starting_edge/starting_cypher_limit; POST /api/sessions/{sid}/seat-character seats and releases the owner's Cypher character; POST /api/sessions/{sid}/assign-character GM-overrides for Fran and 403s a freshly-registered non-member player; GET /api/campaigns/{cid}/export.pdf?mode=narrative bypasses the Cypher forbidden-setting 451 gate on campaign 22ee28aa and returns the documented 400 'No sessions to export.' empty state (no sessions exist on that campaign) — NOT a bug per the request note. Frontend Playwright sweep confirms /app/account renders all sections with the correct testids (account-page, account-identity, account-avatar, account-avatar-input, account-avatar-upload-btn, account-stats + five stat cells, account-profile-patch, account-byline-input, account-bio-input, account-profile-save, account-password-card, account-pw-current/new/confirm, account-pw-save, nav-account, bottom-nav-account). End-to-end avatar upload via the UI succeeded — the returned URL (/api/uploads/avatars/<uid>.png) was persisted and the <img> refreshed on-page. Characters tab on the Cypher campaign renders card-system-{charId} = card-system-a129db2a8eb44e3b849de6fff876e9f5 as required (system-aware preview, no BESM leak).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "/app/account → account-identity card",
+        "issues": [
+          "The identity grid places the EMAIL value column immediately adjacent to the ROLE label and the two strings visually collide ('franpietrowski@gmail.comROLE' renders with no gap on a 1920-wide viewport). Likely a column-gap / grid-template-columns bump needed in Account.jsx's identity section."
+        ]
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter22_v512.py",
+    "/app/test_reports/pytest/iter22_results.xml"
+  ],
+  "action_items": [
+    "Cosmetic only — widen the gap (or switch to a 2-col gap-6 grid) in Account.jsx's account-identity card so EMAIL and ROLE values don't visually touch on desktop.",
+    "Character-sheet derived block (Armor / Cypher Limit / Recoveries / Effort) could not be reached via /app/campaigns/{cid}/characters/{char_id} in this sweep — URL pattern may differ; routing testid map did not include a sheet-level testid in the visited view. Confirm the canonical route for CharacterSheet.jsx + CypherSheetView so the next agent can assert sheet-armor / sheet-cypher-limit / sheet-recoveries / sheet-effort testids without guessing."
+  ],
+  "critical_code_review_comments": [
+    "avatar upload endpoint correctly persists avatar_url on the user record (uploads.py line 147) and the sibling-extension cleanup loop (lines 138-143) prevents stale PNG/JPEG/WEBP files from stacking up — good.",
+    "change-password endpoint uses the stored hash (not the possibly-stale cached user) when re-verifying (auth.py line 109 re-reads from db.users). Correct — prevents a classic stale-session bypass.",
+    "seat-character validates ownership before seating (sessions.py lines 106-112) and GM/admin override is gated on camp['gm_id'] == user['id'] or role=='admin' (line 145). Clean.",
+    "Narrative PDF gate: mode='narrative' short-circuits the _setting_violates_licence check (pdf_export.py line 1308) and substitutes _narrative_profile. Verified behaviour matches the spec.",
+    "Minor design: Account.jsx identity card uses a 4-col layout that causes the EMAIL value to run into the ROLE label. Non-blocking but worth a column-gap bump."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter22_v512.py (new — 13 tests, all passing)"
+  ],
+  "success_rate": {
+    "backend": "100% (13/13)",
+    "frontend": "Verified: account page renders all sections + avatar upload end-to-end + Characters tab card-system-{id} testid present. NOT exercised this run: character-sheet derived block (route unclear) and SessionView take-seat-section (no existing session on the target campaign; creation + navigation not driven through the UI this iteration, though the underlying seat-character/assign-character APIs are green via pytest)."
+  },
+  "test_credentials": "franpietrowski@gmail.com / PieGod08!! — VERIFIED still valid post-test (change-password test rotated and reverted, and a fresh login after the test succeeded with 200).",
+  "seed_data_creation": "Created 1 throwaway 'TEST V512 Player' user via /api/auth/register (random email test_v512_<hex>@example.com) to verify non-GM assign-character 403 — not cleaned up (no delete-user route exposed to normal auth). Created 1 throwaway session on campaign 22ee28aa titled 'TEST_V512 seating session' — best-effort DELETE /api/sessions/{sid} attempted after the test; if no DELETE route exists, a stray session may remain and should be cleaned up manually. Avatar on GMFran has been replaced with a 1x1 PNG (red pixel) — harmless but visible; main agent may want to re-upload a proper avatar.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend pytest file /app/backend/tests/test_iter22_v512.py is the regression harness for V5.1.2 surfaces (change-password, profile patch, avatar upload, cypher reference, session seating, narrative PDF). Use REACT_APP_BACKEND_URL env var when invoking pytest. The Cypher reference response structure ships `tier_derived` as stat-keyed-then-tier-keyed: {recoveries_per_day:{1:4,...}, recovery_die:{1:'1d6+1',...}} (not tier->{recoveries_per_day, recovery_die}) — assert accordingly. Campaign 22ee28aa 'Forbidden Test' has NO sessions at time of this run — narrative export returns 400 empty-state; to fully exercise the PDF narrative binary path, create at least one session on it first. Character-sheet route pattern was not confirmed this run — /app/campaigns/{cid}/characters/{cid} returned no sheet-scoped testids; likely the route is different (possibly /app/characters/{id} or via the Characters tab click). Before writing CharacterSheet Playwright selectors, click into a card from the Characters tab and read the URL.",
+  "rca of the issue": "n/a — no blocking bug. Only one cosmetic finding (account-identity column overlap) and one untested surface flagged for the next agent."
+}

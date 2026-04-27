@@ -318,24 +318,101 @@ function CharactersTab({ camp, characters, onRefresh }) {
         <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
           {characters.map((c) => (
             <Link key={c.id} to={`/app/characters/${c.id}`} className="card-mystic p-5" data-testid={`character-${c.id}`}>
-              <div className="label-ref">{c.power_level} · {c.total_points} pts</div>
-              <div className="font-display text-lg text-parchment mt-1">{c.name}</div>
-              <div className="text-xs text-mist mt-1 italic line-clamp-2">{c.concept || "—"}</div>
-              <div className="mt-4 grid grid-cols-3 gap-2 text-center">
-                {["body", "mind", "soul"].map((s) => (
-                  <div key={s} className="border border-gold/15 rounded-sm py-1">
-                    <div className="label-ref">{s}</div>
-                    <div className="font-display text-lg text-gold">{c.stats[s]}</div>
-                  </div>
-                ))}
-              </div>
-              <div className="mt-3 text-[10px] font-ui tracking-widest uppercase text-mist">
-                by {c.owner_name} · HP {c.derived?.health_points ?? "?"} · EP {c.derived?.energy_points ?? "?"}
-              </div>
+              <CharacterCardPreview c={c} systemId={camp.system_id || "besm-4e"}/>
             </Link>
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+/** System-aware character card preview — replaces the BESM-shape Body/Mind/Soul
+ *  strip with the right vital block for each system: D&D shows class+level,
+ *  AC, HP. Cypher shows tier, type, pools. Anime 5E hybrid shows class +
+ *  Tri-Stat point spend. BESM 4E unchanged. */
+function CharacterCardPreview({ c, systemId }) {
+  const dnd = c.folio?.dnd_state;
+  const cyph = c.folio?.cypher_state;
+  const anime = c.folio?.anime5e_state;
+  // D&D 5E (or Anime-5E hybrid which also stores dnd_state)
+  if (dnd) {
+    const isAnime = systemId === "anime-5e" || !!anime;
+    const sc = dnd.ability_scores || {};
+    const mod = (s) => Math.floor(((sc[s] | 0) - 10) / 2);
+    const lvl = Math.max(1, +(dnd.level || 1));
+    const pb = Math.max(2, 2 + Math.floor((lvl - 1) / 4));
+    const conMod = mod("Constitution");
+    const dexMod = mod("Dexterity");
+    const hd = ({ Barbarian: 12, Fighter: 10, Paladin: 10, Ranger: 10,
+                  Bard: 8, Cleric: 8, Druid: 8, Monk: 8, Rogue: 8, Warlock: 8,
+                  Sorcerer: 6, Wizard: 6 })[dnd.class] || 8;
+    const hpMax = dnd.hp_max ?? Math.max(1, hd + conMod + ((hd / 2 + 1) + conMod) * (lvl - 1));
+    const ac = 10 + dexMod;
+    return (
+      <>
+        <div className="label-ref" data-testid={`card-system-${c.id}`}>
+          {isAnime ? "Anime 5E" : "D&D 5E"} · {dnd.class || "Class"} {lvl} · {dnd.race || "Race"}
+        </div>
+        <div className="font-display text-lg text-parchment mt-1">{c.name}</div>
+        <div className="text-xs text-mist mt-1 italic line-clamp-2">{c.concept || dnd.background || "—"}</div>
+        <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+          <CardVital label="AC" v={ac}/>
+          <CardVital label="HP" v={hpMax}/>
+          <CardVital label="Prof" v={`+${pb}`}/>
+        </div>
+        <div className="mt-3 text-[10px] font-ui tracking-widest uppercase text-mist">
+          by {c.owner_name}
+          {isAnime && anime?.point_buys?.length ? (
+            <span className="ml-1 text-pink-300">· tri-stat ×{anime.point_buys.length}</span>
+          ) : null}
+        </div>
+      </>
+    );
+  }
+  // Cypher
+  if (cyph) {
+    return (
+      <>
+        <div className="label-ref" data-testid={`card-system-${c.id}`}>
+          Cypher · Tier {cyph.tier || 1} · {cyph.descriptor || "?"} {cyph.type || "?"}
+        </div>
+        <div className="font-display text-lg text-parchment mt-1">{c.name}</div>
+        <div className="text-xs text-mist mt-1 italic line-clamp-2">{cyph.focus ? `who ${(cyph.focus || "").toLowerCase()}` : (c.concept || "—")}</div>
+        <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+          <CardVital label="Might"     v={cyph.pools?.Might ?? 0}/>
+          <CardVital label="Speed"     v={cyph.pools?.Speed ?? 0}/>
+          <CardVital label="Intellect" v={cyph.pools?.Intellect ?? 0}/>
+        </div>
+        <div className="mt-3 text-[10px] font-ui tracking-widest uppercase text-mist">
+          by {c.owner_name} · Armor {cyph.armor || 0} · Cypher×{cyph.cypher_limit || cyph.starting_cypher_limit || 2}
+        </div>
+      </>
+    );
+  }
+  // Default — BESM 4E (Tri-Stat).
+  return (
+    <>
+      <div className="label-ref">{c.power_level} · {c.total_points} pts</div>
+      <div className="font-display text-lg text-parchment mt-1">{c.name}</div>
+      <div className="text-xs text-mist mt-1 italic line-clamp-2">{c.concept || "—"}</div>
+      <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+        {["body", "mind", "soul"].map((s) => (
+          <CardVital key={s} label={s} v={c.stats?.[s]}/>
+        ))}
+      </div>
+      <div className="mt-3 text-[10px] font-ui tracking-widest uppercase text-mist">
+        by {c.owner_name} · HP {c.derived?.health_points ?? "?"} · EP {c.derived?.energy_points ?? "?"}
+      </div>
+    </>
+  );
+}
+
+function CardVital({ label, v }) {
+  return (
+    <div className="border border-gold/15 rounded-sm py-1">
+      <div className="label-ref">{label}</div>
+      <div className="font-display text-lg text-gold">{v}</div>
     </div>
   );
 }
