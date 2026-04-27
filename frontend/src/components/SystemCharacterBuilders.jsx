@@ -18,7 +18,7 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { useNavigate, useParams, Link } from "react-router-dom";
 import { api, formatApiErrorDetail } from "../lib/api";
-import { Save, Plus, X, BookOpen, Sparkles } from "lucide-react";
+import { Save, Plus, X, Sparkles } from "lucide-react";
 
 // ─────────────────────── DnD 5E Builder ───────────────────────
 
@@ -298,6 +298,16 @@ export function CypherBuilder({ campaign, ref_, charId }) {
     }
   }, [charId, campaign?.id]);
 
+  // Compute the sentence BEFORE any early return so useMemo is always
+  // invoked in the same hook order. Use optional chaining so it produces
+  // a stable placeholder when ch hasn't loaded yet.
+  const sentence = useMemo(() => {
+    const cs = ch?.folio?.cypher_state;
+    if (!cs) return "";
+    const article = /^[aeiouAEIOU]/.test(cs.descriptor || "") ? "an" : "a";
+    return `I am ${article} ${cs.descriptor} ${cs.type} who ${(cs.focus || "").toLowerCase()}.`;
+  }, [ch]);
+
   if (!ch || !ref_) return <div className="p-10 text-mist">Summoning…</div>;
   const c = ch.folio.cypher_state;
   const setC = (patch) => setCh({ ...ch,
@@ -306,11 +316,6 @@ export function CypherBuilder({ campaign, ref_, charId }) {
   const setEdge = (k, v) => setC({ edge: { ...c.edge, [k]: Math.max(0, +v) } });
   const toggleSkill = (sk) => setC({ skill_trains:
     c.skill_trains.includes(sk) ? c.skill_trains.filter((x) => x !== sk) : [...c.skill_trains, sk] });
-
-  const sentence = useMemo(() => {
-    const article = /^[aeiouAEIOU]/.test(c.descriptor) ? "an" : "a";
-    return `I am ${article} ${c.descriptor} ${c.type} who ${c.focus.toLowerCase()}.`;
-  }, [c.descriptor, c.type, c.focus]);
 
   const save = async () => {
     setErr("");

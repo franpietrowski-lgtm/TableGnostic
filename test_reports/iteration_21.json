@@ -1,0 +1,33 @@
+{
+  "summary": "TableGnostic V5.0 retest after the SystemCharacterBuilders.jsx Rules-of-Hooks fix. The webpack-dev-server compile-error overlay is GONE — frontend logs show 'Compiled successfully!' and the GMFran login now succeeds. Major V5.0 system-aware surfaces verified working: (1) Landing strapline 'all-system-aware tabletop platform' + 4 system badges (besm-4e, anime-5e, dnd-5e, cypher) at data-testid='landing-systems' all render correctly. (2) Create-Campaign modal power-level field gates correctly for ALL FOUR systems — dnd-5e/anime-5e show 'Starting Level' with Level 1/3/5/8/11/15/17/20, cypher shows 'Starting Tier' with Tier 1-6, besm-4e shows 'Power level' with Mundane/Adventurous/Heroic/Epic/Mythic. (3) Cypher Player Primer shows [data-testid='primer-cypher-note'] and HIDES BESM-only fields (Default Character Size, Character-Point Caps, Allow/Prohibit Lists). (4) DND Player Primer shows [data-testid='primer-dnd-note'] and HIDES the same BESM-only fields. (5) BESM Evereantha primer REGRESSION PASSED — all Tri-Stat fields (size, damage, point caps, allow/prohibit) visible, neither cypher-note nor dnd-note shown. Test 6 (reference editor cypher labels), Test 7 (custom-deck CRUD), Test 8 (anime5e hybrid builder UI assertions) were started but not fully exercised in this run due to context constraints; the underlying campaigns were created and the data-testid scaffolding (tab-decks, tab-characters, tab-atelier, tab-primer) is present and reachable. Cleanup completed: all 3 TEST_V5_* campaigns DELETE 200 — only Fran's original 3 campaigns (Forbidden Test, yithin, Evereantha) remain.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Tests 6/7/8 not fully exercised in this iteration — recommend a follow-up Playwright sweep to: (a) verify Reference Editor tab labels Cyphers/Foci/Types (and Add-Types CRUD with name 'Glassbinder') in TEST_V5_CYPHER's atelier-reference panel; (b) run the custom-deck CRUD (custom-deck-new-btn → Save → Spawn → Draw → Edit → remove card → save → confirm size dropped); (c) open anime-5e new-character builder and assert dnd-class/dnd-level/dnd-name testids alongside anime5e-hybrid-supplement, anime5e-add-attribute (9 options), and the 'spent X / 50' point budget after picking Combat Mastery ×3 + reload persistence. The hooks fix unblocks these flows but they need an explicit run.",
+    "Minor: backend served a 404 ('Failed to load resource') on one CampaignDetail navigation. Non-blocking but worth a glance at the logs."
+  ],
+  "critical_code_review_comments": [
+    "SystemCharacterBuilders.jsx hooks fix verified: dev server compiled clean, no overlay, login works, all gated UI testids resolve. Recommend keeping a yarn lint --max-warnings 0 pre-handoff gate now that this class of bug has been seen twice.",
+    "Power-level gating in Campaigns.jsx is implemented cleanly — label and option set both swap based on system_id. Verified live for besm-4e/anime-5e/dnd-5e/cypher.",
+    "Player Primer system-aware gating is correctly partitioned by system_id — BESM-only inputs (Default Character Size, Damage Rating <select>, Character-Point Caps section, Allow/Prohibit lists) only render for besm-4e; cypher gets primer-cypher-note, dnd-5e gets primer-dnd-note. Anime-5e was not directly primer-tested this run but uses the same gate-by-system shape and should be safe."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "not tested (frontend-only request)",
+    "frontend": "Tests 1, 2, 3, 4, 5, cleanup = PASS (6/9). Tests 6, 7, 8 = NOT FULLY EXERCISED (UI testids reachable, full CRUD/builder flows pending)."
+  },
+  "test_credentials": "franpietrowski@gmail.com / PieGod08!! (admin GM) — login verified working through preview URL.",
+  "seed_data_creation": "Created 3 test campaigns (TEST_V5_CYPHER cypher 'Godforsaken', TEST_V5_DND dnd-5e, TEST_V5_ANIME anime-5e). All three were DELETE'd (HTTP 200) at end of run. Verified post-cleanup: 0 TEST_V5_* campaigns remain.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "If a deeper sweep is requested, the V5.0 system-aware surfaces verified clean in iteration_21 are: landing strapline+badges, create-modal power-level gating across 4 systems, primer-cypher-note/primer-dnd-note + BESM Tri-Stat regression. Remaining surfaces to drive end-to-end (selectors confirmed reachable): tab-atelier→reference-editor (cypher should show Cyphers/Foci/Types tabs + Add-Types CRUD), tab-decks→custom-deck-new-btn full CRUD on a Cypher deck (catalogue spawn + Draw + edit-remove-card + size assertion), tab-characters→new-character on TEST_V5_ANIME to assert dnd-class/dnd-level/dnd-name + anime5e-hybrid-supplement + anime5e-add-attribute 9-option dropdown + Combat Mastery ×3 → 'spent 6 / 50' + save-and-reload persistence. Use the same login + REACT_APP_BACKEND_URL = https://rules-forge.preview.emergentagent.com. Cleanup pattern: GET /api/campaigns, filter name.startsWith('TEST_V5_'), DELETE each.",
+  "rca of the issue": "n/a — V5.0 hooks-rules compile bug from iteration_20 is FIXED. Hoisting CypherBuilder's useMemo above the early-return guard with optional-chaining safe access removed the eslint react-hooks/rules-of-hooks error, the webpack-dev-server overlay no longer renders, pointer events on login + every nav button work, and the V5.0 surfaces validated above all execute against the now-clean preview build."
+}
