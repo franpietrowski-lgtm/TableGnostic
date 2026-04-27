@@ -33,6 +33,7 @@ from routes import ingest as ingest_routes
 from routes import pdf_export as pdf_export_routes
 from routes import xp_approval as xp_approval_routes
 from routes import reference_editor as reference_editor_routes
+from routes import cards as cards_routes
 
 app = FastAPI(title="Table-Gnostic API")
 
@@ -84,6 +85,7 @@ app.include_router(ingest_routes.router)
 app.include_router(pdf_export_routes.router)
 app.include_router(xp_approval_routes.router)
 app.include_router(reference_editor_routes.router)
+app.include_router(cards_routes.router)
 
 # Static-file mount: serve uploaded battlemap images from disk so GMs can
 # drop in renders from Inkarnate / DungeonCraft / Talespire / RPGEngine

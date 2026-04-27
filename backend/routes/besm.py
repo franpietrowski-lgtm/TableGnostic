@@ -73,3 +73,26 @@ async def list_game_systems(response: Response):
     """Public list of game systems advertised by Table-Gnostic."""
     response.headers["Cache-Control"] = "public, max-age=300"
     return {"default": DEFAULT_SYSTEM_ID, "systems": GAME_SYSTEMS}
+
+
+@router.get("/systems/{system_id}/reference")
+async def system_reference(system_id: str, response: Response):
+    """System-aware reference data — D&D 5E, Anime 5E, Cypher, etc.
+
+    Returns mechanic-only content extracted from each system's open licence
+    (CC-BY SRD 5.1 for D&D, OGL for Anime 5E, Cypher System Creator for
+    Cypher). For BESM 4E the canonical /api/besm/reference is returned to
+    preserve the deeper attribute/skill/defect content already shipped.
+    """
+    response.headers["Cache-Control"] = "public, max-age=300"
+    if system_id == "besm-4e":
+        # Deep BESM content already lives on /api/besm/reference.
+        return await besm_reference()
+    from system_data import REFERENCE_BY_SYSTEM
+    if system_id not in REFERENCE_BY_SYSTEM:
+        return {"system_id": system_id, "kind": "scaffold",
+                "rule_note": "Reference content for this system has not yet been "
+                              "extracted. GMs may use the Atelier Reference Editor "
+                              "to seed campaign-scoped Attributes / Skills / "
+                              "Defects / Weapons / Items / Companions / Custom rules."}
+    return REFERENCE_BY_SYSTEM[system_id]

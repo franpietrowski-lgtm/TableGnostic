@@ -29,7 +29,7 @@ _GAME_COLLECTIONS = (
     "initiative", "effects", "nodes", "edges", "recaps",
     "custom_attributes", "genesis", "atelier", "ingestions",
     "battlemaps", "channels", "channel_messages",
-    "xp_pending", "campaign_reference",
+    "xp_pending", "campaign_reference", "deck_instances",
 )
 
 

@@ -6,6 +6,8 @@ import { Users, Plus, UserPlus2, ArrowRight, Trash2, Sparkles, Eye, EyeOff, Link
 import KnowledgeGraph from "./KnowledgeGraph";
 import ChannelsPanel from "./ChannelsPanel";
 import AtelierTab from "./AtelierTab";
+import SystemBadge from "./SystemBadge";
+import CardDeckPanel from "./CardDeckPanel";
 import { useAuth } from "../lib/api";
 import { NODE_TYPES, NODE_TEMPLATES, colorForType, labelForType } from "../lib/nodeTemplates";
 
@@ -70,6 +72,7 @@ export default function CampaignDetail() {
           <div className="mt-4 text-xs font-ui uppercase tracking-widest text-gold/60">
             GM: {camp.gm_name} · {(camp.member_ids || []).length}/{camp.max_players} seated · {camp.schedule || "no schedule"}
           </div>
+          <SystemBadge systemId={camp.system_id} systemName={camp.system}/>
         </div>
         <div className="flex gap-2">
           {(user?.role === "gm" || user?.role === "admin") && (
@@ -107,6 +110,7 @@ export default function CampaignDetail() {
             ["channels", "Channels"],
             ["knowledge", "Knowledge Web"],
             ["sessions", "Sessions"],
+            ["decks", "Decks"],
             ["primer", "Player Primer"],
             ...(camp.is_gm ? [["atelier", "Atelier"], ["custom", "Custom Rules"], ["invite", "Invite & Share"]] : []),
           ].map(([v, l]) => (
@@ -131,6 +135,10 @@ export default function CampaignDetail() {
         <Tabs.Content value="sessions" className="pt-6">
           <SessionsTab camp={camp} sessions={sessions} nodes={nodes}
                        onStart={() => setShowStart(true)} onRefresh={load}/>
+        </Tabs.Content>
+        <Tabs.Content value="decks" className="pt-6">
+          <CardDeckPanel campaignId={id} systemId={camp.system_id}
+                         sessionId={null} isGm={!!camp.is_gm}/>
         </Tabs.Content>
         <Tabs.Content value="primer" className="pt-6">
           <PrimerTab camp={camp} onRefresh={load} />

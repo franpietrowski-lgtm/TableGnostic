@@ -378,6 +378,88 @@ Per-system audit covering all 13 systems in the selector. Status table:
 
 **P0 audio regression fix (`/app/frontend/src/components/AVSeats.jsx`)**
 - Symptom: phone joins session, **video reaches the desktop fine but no audio is heard on the desktop side**.
+- Root cause: the peer `<video>` element was hidden via Tailwind's `hidden` class (= `display:none`) whenever cam was off — `display:none` halts media playback in Chromium and WebKit, so the audio track went silent.
+- Two-line fix: (1) `hidden` → `invisible` on the `<video>` so the element stays in the layout tree, media keeps playing; (2) dedicated `<audio ref autoPlay playsInline>` per peer that mirrors the same MediaStream — guaranteed audio sink immune to any cam-on/off visibility flips. Testid: `av-audio-{conn_id}`.
+
+**Dashboard / app-wide legal footer (`/app/frontend/src/components/Shell.jsx`)**
+- New `<AppFooter>` rendered below every authenticated screen — Table-Gnostic sigil + platform legal disclaimer naming all 13 supported systems, stating only mechanic names + page refs are displayed (no copyrighted prose/lore/art). Per-system attribution lives inside CampaignDetail (see `<SystemBadge>` in V4.5). Testids `app-footer` / `app-footer-legal`.
+
+**Verified-already-in-place**: System selector in Campaign creation (`Campaigns.jsx:137`) and live channel WebSocket (`/api/ws/campaign/{cid}` with 4 s polling fallback).
+
+## V4.5 — Multi-System Content & Card Decks (2026-04-26)
+
+The biggest content drop since V4.0. Three new systems get real reference data (not just scaffolds), card decks land system-wide, ingestion goes system-aware, PDF themes expand, and CampaignDetail gets a per-system legal/logo overlay.
+
+### A. System-aware reference data (`/app/backend/system_data/`)
+
+New package: 4 modules + `__init__.py`. All entries are mechanic-only — page references + names + numerics. No reproduced rulebook prose.
+
+- **`dnd5e_data.py`** — CC-BY SRD 5.1 only. **12 classes** (Barbarian → Wizard with hit-die, primary ability, save proficiencies, spellcasting type), **9 races** (with ASI / size / speed / trait list), **6 abilities**, **18 SRD skills** (mapped to abilities), **17 spells** sample (cantrip → 5th, with damage dice formulas pre-stamped for one-click macros), **13 weapons** (with damage type + properties), **7 armor** (with AC formula), **7 adventuring items**, **14 conditions** (with mechanic effect), **11 actions** (action / bonus / reaction), **5 power levels** (Apprentice → Mythic), proficiency-by-level table, modifier formula `(score - 10) // 2`.
+- **`anime5e_data.py`** — Tri-Stat Emporium OGL release. **Hybrid engine**: BOTH 5E class+slot AND Tri-Stat point-buy are exposed — GM picks the engine in the Primer. **5 classes** (Adept / Champion / Idol / Pilot / Tinker), **8 heritages**, **18 skills** mapped to Body / Mind / Soul, **8 spells**, **8 weapons** (Katana, Wakizashi, Naginata, Mecha Cannon, …), **6 armor** (incl. Mecha Frame), **3 anime-specific conditions** (Genre-Locked / Spotlit / Eclipsed), **9 point-buy attributes** (Combat Mastery / Tough / Massive Damage / …). Tagged `cross_systems: ["dnd-5e"]` so Anime 5E content can layer onto a D&D campaign as a supplement.
+- **`cypher_data.py`** — Cypher System Creator licence (Monte Cook Games). **3 stat pools** (Might / Speed / Intellect), **6 types** (Warrior / Adept / Explorer / Speaker / Wright / Paradox with starting pools + Edge), **16 descriptors**, **18 foci** (each with role keyword), **23 skills**, **12 cyphers** (level + form + effect), **6 artifacts** (with depletion roll), **GM Intrusion** mechanic, **6 tiers**. Compatible-settings list (Numenera / The Strange / Predation / Godforsaken / Stay Alive! / Claim the Sky / Old Gods of Appalachia / Rust & Redemption) so the GM can flag which Cypher setting they're running.
+- **`decks.py`** — see section C.
+
+### B. System-aware reference endpoint (`/app/backend/routes/besm.py`)
+
+- New `GET /api/systems/{system_id}/reference` returns the system-shaped reference dict. `besm-4e` falls through to the existing deep `/api/besm/reference`; `dnd-5e` / `anime-5e` / `cypher` return their respective dicts; unknown systems return a `kind: "scaffold"` notice pointing GMs at the Reference Editor.
+- Cached `Cache-Control: public, max-age=300` for cheap repeated loads.
+
+### C. Card decks system (`/app/backend/routes/cards.py` + `system_data/decks.py` + `frontend/CardDeckPanel.jsx`)
+
+- Per-system deck catalogue. **D&D 5E**: Deck of Many Things (22 trump cards, mechanic-only restatements of SRD effects) + TableGnostic Mood Deck. **Cypher**: Cypher Draw (12 random SRD cyphers from the active list) + Mood Deck. **Anime 5E**: Genre Shift Deck (12 narrative cards: Spotlight / Tournament Arc / Training Montage / Memory Lapse / …) + Mood Deck. **BESM 4E**: Mood Deck only — even though BESM is card-less by design, the user-requested universal opt-in is satisfied.
+- 7 endpoints: `GET /api/cards/decks/{system_id}` (catalogue), `GET /api/cards/decks/{system_id}/{deck_id}/preview` (full card list), `POST /api/cards/instances` (GM creates an instance scoped to a campaign or session), `GET /api/cards/instances?campaign_id=…`, `POST /api/cards/instances/{id}/draw` (random no-replacement; broadcasts `card:drawn` over campaign+session WS), `POST /api/cards/instances/{id}/shuffle` (reset drawn list), `POST /api/cards/instances/{id}/mode?mode=open|gm-only`, `DELETE /api/cards/instances/{id}`.
+- Mongo collection: `deck_instances`. Cleared by admin reset.
+- Frontend `<CardDeckPanel>` (lives in a new **Decks** tab inside CampaignDetail): catalogue list with per-deck spawn buttons (GM-only), instance picker tabs, big "Draw" button (GM, or anyone if mode=open), Shuffle, Open-to-table toggle, recent-draws stack with system-flavoured card faces, draw history `<details>` section.
+- Curl-verified: spawn → draw 3 → shuffle → delete works end-to-end with `card:drawn` events broadcasting to `session:{sid}` and `campaign:{cid}` rooms.
+
+### D. System-aware ingestion (`/app/backend/routes/ingest.py`)
+
+- New `SYSTEM_ADDENDUM` dict branches the Claude prompt per `campaign.system_id`. BESM 4E gets the existing 10-category list (attribute / power_pack / item / weapon / skill / npc / location / lore / quest). D&D 5E adds class / race / background / spell / feature / monster (and explicitly forbids reproducing Wizards-trademarked content like Forgotten Realms / Mind Flayer / Beholder). Anime 5E branches between class+slot and Tri-Stat point-buy categories. Cypher branches to type / focus / descriptor / cypher / artifact / ability with the Cypher difficulty-1-to-10 dice notation.
+- The hard rule about not reproducing rulebook prose / lore / examples is preserved verbatim in every branch. Capped at 60 suggestions, mechanic-only summaries ≤240 chars.
+
+### E. Per-system PDF style profiles (`/app/backend/routes/pdf_export.py`)
+
+- Two new entries in `STYLE_PROFILES`:
+  - **dnd-5e** — parchment background, heraldic crimson primary, midnight indigo secondary, antique gold accent, Times-Roman body, fleur chapter decoration. Cover subtitle: "A 5th Edition Chronicle (CC-BY SRD 5.1)".
+  - **cypher** — white background, deep cyber-cobalt primary, arcane violet secondary, numenera-teal accent, circuit chapter decoration. Cover subtitle: "A Cypher System Chronicle".
+- BESM 4E and Anime 5E profiles unchanged.
+
+### F. SystemBadge overlay (`/app/frontend/src/components/SystemBadge.jsx`)
+
+- Renders inside CampaignDetail header below the campaign description. Per-system logo (resolved from `/system-logos/{system_id}.png` with graceful hide on 404), system label, licence string, and verbatim attribution notice.
+- Profiles in place for besm-4e (Tri-Stat Emporium · Dyskami), anime-5e (Tri-Stat OGL), dnd-5e (Wizards of the Coast · CC-BY-4.0), cypher (Monte Cook Games · CSC). Fallback profile for any other system marks the content as "Original / Community". Testid `system-badge`.
+- This is where the rights-holder credit appears — distinct from the platform-wide footer (which carries TableGnostic's own disclaimer).
+
+### G. Reference page system tabs (`/app/frontend/src/components/Reference.jsx`)
+
+- New system-tab strip at the top: BESM 4E (Native) · Anime 5E · D&D 5E (CC-BY SRD) · Cypher System.
+- BESM 4E renders the existing deep reference (3 tab-groups, search, custom Aurea sections) — no regression.
+- Non-BESM systems render a new `<SystemReferenceView>` that adapts to each system's shape: stat pools / abilities, classes, types, foci, descriptors, races / heritages, point-buy attributes, weapons, armor, spells, cyphers, artifacts, skills, conditions, actions, power levels, GM intrusion. Search filter applies across all sections via JSON-stringify match.
+- The `<div data-system={systemId}>` wrapper picks up the existing CSS variable theming (already defined for all 13 systems in `index.css`).
+
+### H. CampaignDetail wiring
+
+- New **Decks** tab between Sessions and Player Primer. Renders `<CardDeckPanel>` scoped to the current campaign (and current session if one is open).
+- `<SystemBadge>` rendered in the header block under the GM/seat-count line.
+
+### Compliance audit (V4.5)
+
+- D&D 5E: only CC-BY SRD 5.1 mechanic names + page refs. The Deck of Many Things entries restate game effects in mechanic terms (e.g. "Euryale: −1 to all saving throws (permanent until magically removed)") rather than reproducing rulebook prose. No Forgotten Realms, no Mind Flayer / Beholder, no monster-manual flavour.
+- Cypher: Cypher System Creator licence — type / focus / descriptor names + cypher names + page refs. No flavour paragraphs from the SRD or any setting book.
+- Anime 5E: Tri-Stat Emporium OGL — same posture as BESM 4E. Hybrid mode preserves the original Tri-Stat point-buy semantics.
+- TableGnostic Mood Deck (12 cards) and Anime 5E Genre Shift Deck (12 cards) are 100% original TableGnostic content.
+
+### Pending follow-ups (deferred — credit budget)
+
+1. PNG logos for `/system-logos/dnd-5e.png` and `/system-logos/cypher.png` — SystemBadge gracefully hides the `<img>` on 404, so the overlay is functional now but visually richer once the artwork lands. Anime 5E uses `anime5e-tristat-emporium.png` (already on disk).
+2. **D&D-shaped Character Builder** — the current builder is BESM-shaped. A class+slot variant (level / class / race / proficiency / spell-slot tracker / equipment / dice-formula macros) is the next major build. Until then, the D&D Reference page + Atelier Reference Editor + Custom Attributes give GMs a working ingredient set.
+3. **Cypher-shaped Character Builder** — type/focus/descriptor sentence picker + Pool/Edge/Effort tracker + cypher inventory.
+4. Expand the spells / weapons / monsters lists from "representative sample" to "full SRD coverage" — straightforward extension once the structural pattern proves out.
+
+
+
+**P0 audio regression fix (`/app/frontend/src/components/AVSeats.jsx`)**
+- Symptom: phone joins session, **video reaches the desktop fine but no audio is heard on the desktop side**.
 - Root cause: the peer `<video>` element was hidden via Tailwind's `hidden` class (= `display:none`) whenever `camOn || hasStream` was false. **`display:none` halts media playback in Chromium and WebKit** — the audio track travels with the video element's stream, so when the element gets `display:none`'d the mic feed goes silent on the receiving side.
 - Two-line fix:
   1. `hidden` → `invisible` on the `<video>` (Tailwind `visibility:hidden`) — element stays in the layout tree, media keeps playing, but the visual is suppressed so the avatar bubble shows through.

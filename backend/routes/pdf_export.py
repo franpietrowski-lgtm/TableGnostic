@@ -211,6 +211,56 @@ STYLE_PROFILES: Dict[str, Dict[str, Any]] = {
         "chapter_prefix": "Chapter",
         "chapter_decoration": "rule",
     },
+    "dnd-5e": {
+        "name": "D&D 5E (CC-BY SRD)",
+        "palette": {
+            "background": "#FAF6EC",  # parchment
+            "primary":    "#7A1F2E",  # heraldic crimson
+            "secondary":  "#1E2A4A",  # midnight indigo
+            "accent":     "#C8A34A",  # antique gold
+            "ink":        "#0B0710",
+            "muted":      "#5B5040",
+            "rule":       "#7A1F2E",
+            "callout_bg": "#F4E9C8",
+            "callout_border": "#7A1F2E",
+        },
+        "fonts": {
+            "heading": "Helvetica-Bold",
+            "subheading": "Helvetica-Bold",
+            "body": "Times-Roman",
+            "italic": "Times-Italic",
+            "mono": "Courier",
+        },
+        "logo_files": ["dnd-5e.png"],
+        "cover_subtitle": "A 5th Edition Chronicle (CC-BY SRD 5.1)",
+        "chapter_prefix": "Chapter",
+        "chapter_decoration": "fleur",
+    },
+    "cypher": {
+        "name": "Cypher System (Cypher System Creator)",
+        "palette": {
+            "background": "#FFFFFF",
+            "primary":    "#0F2540",  # deep cyber-cobalt
+            "secondary":  "#7B68B5",  # arcane violet
+            "accent":     "#1F8C7A",  # numenera-teal
+            "ink":        "#0A1020",
+            "muted":      "#5A6380",
+            "rule":       "#0F2540",
+            "callout_bg": "#E8F1F8",
+            "callout_border": "#0F2540",
+        },
+        "fonts": {
+            "heading": "Helvetica-Bold",
+            "subheading": "Helvetica-Oblique",
+            "body": "Helvetica",
+            "italic": "Helvetica-Oblique",
+            "mono": "Courier",
+        },
+        "logo_files": ["cypher.png"],
+        "cover_subtitle": "A Cypher System Chronicle",
+        "chapter_prefix": "Chapter",
+        "chapter_decoration": "circuit",
+    },
 }
 
 

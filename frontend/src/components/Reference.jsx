@@ -3,6 +3,13 @@ import { api } from "../lib/api";
 import { BookOpen, Search, Sparkles } from "lucide-react";
 import { InstructionsPanel } from "./ReferenceEditor";
 
+const SYSTEM_TABS = [
+  { id: "besm-4e",  label: "BESM 4E (Native)" },
+  { id: "anime-5e", label: "Anime 5E" },
+  { id: "dnd-5e",   label: "D&D 5E (CC-BY SRD)" },
+  { id: "cypher",   label: "Cypher System" },
+];
+
 /**
  * Reference page — three tab groups:
  *   1. Core BESM 4E       → core-stats / attributes / defects / etc.
@@ -17,8 +24,17 @@ export default function Reference() {
   const [ref, setRef] = useState(null);
   const [q, setQ] = useState("");
   const [tab, setTab] = useState("attributes");
+  const [systemId, setSystemId] = useState("besm-4e");
+  const [systemRef, setSystemRef] = useState(null);
 
   useEffect(() => { api.get("/besm/reference").then((r) => setRef(r.data)); }, []);
+  useEffect(() => {
+    if (systemId === "besm-4e") { setSystemRef(null); return; }
+    api.get(`/systems/${systemId}/reference`)
+      .then((r) => setSystemRef(r.data))
+      .catch(() => setSystemRef({ kind: "scaffold",
+        rule_note: "Reference content for this system has not yet been extracted." }));
+  }, [systemId]);
   const ql = q.toLowerCase();
 
   const lists = useMemo(() => {
@@ -127,18 +143,42 @@ export default function Reference() {
                               "custom_skills"].includes(tab);
 
   return (
-    <div className="px-8 md:px-12 py-10 max-w-6xl">
+    <div className="px-8 md:px-12 py-10 max-w-6xl" data-system={systemId}>
       <div className="label-ref mb-2">Sacred Tome</div>
-      <h1 className="font-display text-4xl tracking-wide text-parchment">BESM 4E Reference</h1>
+      <h1 className="font-display text-4xl tracking-wide text-parchment">
+        {systemId === "besm-4e" ? "BESM 4E Reference" :
+         systemId === "anime-5e" ? "Anime 5E Reference" :
+         systemId === "dnd-5e" ? "D&D 5E Reference (CC-BY SRD 5.1)" :
+         systemId === "cypher" ? "Cypher System Reference" :
+         "System Reference"}
+      </h1>
       <p className="text-mist mt-2 font-body">
-        This application references the BESM 4E rulebook. Look up names, costs, and page numbers here
-        — consult the official rulebook for the full text and rules.
+        Look up mechanic names, costs, and page references — consult the
+        rulebook for full prose. Switch systems below to view a different
+        ruleset's reference data.
       </p>
+      {/* System tab strip */}
+      <div className="mt-4 flex flex-wrap gap-1.5" data-testid="reference-system-tabs">
+        {SYSTEM_TABS.map((s) => (
+          <button key={s.id} onClick={() => setSystemId(s.id)}
+                  className={`text-[10px] px-3 py-1.5 rounded-sm font-ui uppercase tracking-widest transition-colors ${systemId === s.id ? "bg-gold/15 text-gold-bright border border-gold/30" : "text-mist hover:bg-gold/5 border border-transparent"}`}
+                  data-testid={`reference-system-${s.id}`}>
+            {s.label}
+          </button>
+        ))}
+      </div>
+
+      {systemId !== "besm-4e" && (
+        <SystemReferenceView ref_={systemRef} systemId={systemId} q={q}/>
+      )}
+      {systemId !== "besm-4e" && <div className="h-6"/>}
+      {systemId === "besm-4e" && (
+      <>
       <div className="mt-3 text-[11px] font-ui italic text-mist/70" data-testid="ref-system-note">
-        Reference cards reflect the campaign's selected game system. Today,
-        BESM 4E is fully populated — D&amp;D 5E, PF2e, CoC, Savage Worlds, FATE,
+        BESM 4E is fully populated below. PF2e, CoC, Savage Worlds, FATE,
         Cyberpunk RED, V5, Blades, Mothership, and Shadowrun 6E are scaffolded
-        for selection on campaign creation; their reference content is coming soon.
+        for selection on campaign creation; their reference content is coming
+        in subsequent phases.
       </div>
 
       {/* Search bar */}
@@ -302,6 +342,204 @@ export default function Reference() {
           </div>
         </div>
       )}
+      </>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Renders the system-aware reference data returned by /api/systems/{id}/reference.
+ * Three different shapes supported:
+ *   - dnd-5e         (class-and-slot)
+ *   - anime-5e       (hybrid 5E + Tri-Stat point-buy)
+ *   - cypher         (type-focus-descriptor)
+ *   - scaffold       (no content yet)
+ */
+function SystemReferenceView({ ref_, systemId, q }) {
+  if (!ref_) return <div className="text-mist mt-6">Loading {systemId} reference…</div>;
+  if (ref_.kind === "scaffold") {
+    return (
+      <div className="card-mystic p-6 mt-6" data-testid="system-ref-scaffold">
+        <div className="label-ref mb-2">Coming Soon</div>
+        <div className="text-sm text-parchment/90">{ref_.rule_note}</div>
+      </div>
+    );
+  }
+  const ql = (q || "").toLowerCase();
+  const f = (arr) => (arr || []).filter((x) =>
+    JSON.stringify(x).toLowerCase().includes(ql));
+  return (
+    <div className="mt-6 space-y-6" data-testid={`system-ref-${systemId}`}>
+      <div className="card-mystic p-4">
+        <div className="label-ref mb-1">Rule of thumb</div>
+        <div className="text-sm text-parchment/90 leading-snug">{ref_.rule_note}</div>
+        {ref_.book?.title && (
+          <div className="text-[10px] text-mist/70 italic mt-2">
+            Source: {ref_.book.title} · {ref_.book.publisher} · {ref_.book.license}
+          </div>
+        )}
+      </div>
+
+      {/* Common — abilities / pools */}
+      {(ref_.abilities || ref_.stat_pools) && (
+        <Section title={ref_.stat_pools ? "Stat Pools" : "Abilities"}>
+          {(ref_.abilities || ref_.stat_pools).map((a, i) => (
+            <Card key={i} title={a.name} sub={a.abbr || a.blurb_role}/>
+          ))}
+        </Section>
+      )}
+
+      {/* Class-y things */}
+      {f(ref_.classes).length > 0 && (
+        <Section title="Classes">
+          {f(ref_.classes).map((c, i) => (
+            <Card key={i} title={c.name}
+                  sub={`d${c.hit_die} HD · ${c.primary} · saves ${(c.saves || []).join(", ")}${c.casting && c.casting !== "none" ? " · " + c.casting + " caster" : ""}`}
+                  page={c.page}/>
+          ))}
+        </Section>
+      )}
+      {f(ref_.types).length > 0 && (
+        <Section title="Types">
+          {f(ref_.types).map((t, i) => (
+            <Card key={i} title={t.name}
+                  sub={`Intrusion: ${t.intrusion} · Pools ${t.starting_pools} · Edge ${(t.edge_at_1 || []).join(", ")}`}/>
+          ))}
+        </Section>
+      )}
+      {f(ref_.foci).length > 0 && (
+        <Section title="Foci">
+          {f(ref_.foci).map((fc, i) => (
+            <Card key={i} title={fc.name} sub={fc.role}/>
+          ))}
+        </Section>
+      )}
+      {f(ref_.descriptors).length > 0 && (
+        <Section title="Descriptors">
+          {f(ref_.descriptors).map((d, i) => (
+            <Card key={i} title={d}/>
+          ))}
+        </Section>
+      )}
+      {f(ref_.races || ref_.heritages).length > 0 && (
+        <Section title={ref_.races ? "Races" : "Heritages"}>
+          {f(ref_.races || ref_.heritages).map((r, i) => (
+            <Card key={i} title={r.name}
+                  sub={`${r.asi} · ${r.size} · ${r.speed ? `speed ${r.speed}ft` : "—"}${r.traits ? " · " + r.traits.join(", ") : ""}`}
+                  page={r.page}/>
+          ))}
+        </Section>
+      )}
+      {f(ref_.point_buy_attributes).length > 0 && (
+        <Section title="Point-Buy Attributes (Tri-Stat mode)">
+          {f(ref_.point_buy_attributes).map((a, i) => (
+            <Card key={i} title={a.name} sub={`${a.cost_per_level} pts/lvl · ${a.blurb_role}`}/>
+          ))}
+        </Section>
+      )}
+
+      {/* Equipment + spells */}
+      {f(ref_.weapons).length > 0 && (
+        <Section title="Weapons">
+          {f(ref_.weapons).map((w, i) => (
+            <Card key={i} title={w.name}
+                  sub={`${w.kind} · ${w.damage}${w.props ? " · " + w.props.join(", ") : ""}`}
+                  page={w.page}/>
+          ))}
+        </Section>
+      )}
+      {f(ref_.armor).length > 0 && (
+        <Section title="Armor">
+          {f(ref_.armor).map((a, i) => (
+            <Card key={i} title={a.name}
+                  sub={`${a.category} · AC ${a.ac} · stealth ${a.stealth}`} page={a.page}/>
+          ))}
+        </Section>
+      )}
+      {f(ref_.spells).length > 0 && (
+        <Section title="Spells (sample)">
+          {f(ref_.spells).map((s, i) => (
+            <Card key={i} title={s.name}
+                  sub={`Level ${s.level} ${s.school} · ${s.dice} · ${s.range}`} page={s.page}/>
+          ))}
+        </Section>
+      )}
+      {f(ref_.cyphers).length > 0 && (
+        <Section title="Cyphers">
+          {f(ref_.cyphers).map((c, i) => (
+            <Card key={i} title={c.name}
+                  sub={`Level ${c.level} · ${c.form} · ${c.effect}`}/>
+          ))}
+        </Section>
+      )}
+      {f(ref_.artifacts).length > 0 && (
+        <Section title="Artifacts">
+          {f(ref_.artifacts).map((a, i) => (
+            <Card key={i} title={a.name}
+                  sub={`Level ${a.level} · ${a.form} · ${a.effect} · Depletion ${a.depletion}`}/>
+          ))}
+        </Section>
+      )}
+      {f(ref_.skills).length > 0 && (
+        <Section title="Skills">
+          {f(ref_.skills).map((s, i) => (
+            <Card key={i} title={typeof s === "string" ? s : s.name}
+                  sub={typeof s === "string" ? "" : `Ability: ${s.ability}`}/>
+          ))}
+        </Section>
+      )}
+      {f(ref_.conditions).length > 0 && (
+        <Section title="Conditions">
+          {f(ref_.conditions).map((c, i) => (
+            <Card key={i} title={c.name} sub={c.effect}/>
+          ))}
+        </Section>
+      )}
+      {f(ref_.actions).length > 0 && (
+        <Section title="Actions">
+          {f(ref_.actions).map((a, i) => (
+            <Card key={i} title={a.name} sub={`${a.kind} · ${a.summary}`}/>
+          ))}
+        </Section>
+      )}
+      {f(ref_.power_levels).length > 0 && (
+        <Section title="Power Levels">
+          {f(ref_.power_levels).map((p, i) => (
+            <Card key={i} title={p.name} sub={`Level ${p.level_range} · ${p.blurb}`}/>
+          ))}
+        </Section>
+      )}
+      {ref_.gm_intrusion && (
+        <Section title="GM Intrusion">
+          <Card title="The Cypher Tax" sub={ref_.gm_intrusion.summary} page={ref_.gm_intrusion.page}/>
+        </Section>
+      )}
+    </div>
+  );
+}
+
+function Section({ title, children }) {
+  const arr = React.Children.toArray(children);
+  if (arr.length === 0) return null;
+  return (
+    <div data-testid={`system-ref-section-${title.toLowerCase().replace(/\s+/g, "-")}`}>
+      <div className="label-ref mb-2">{title}</div>
+      <div className="grid md:grid-cols-2 gap-2">{arr}</div>
+    </div>
+  );
+}
+
+function Card({ title, sub, page }) {
+  return (
+    <div className="card-mystic p-3">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="text-sm text-parchment font-ui">{title}</div>
+        {page && <div className="text-[10px] font-ui uppercase tracking-widest text-gold/70 flex items-center gap-1">
+          <BookOpen className="w-3 h-3"/> p.{page}
+        </div>}
+      </div>
+      {sub && <div className="text-[11px] text-mist mt-1 font-ui">{sub}</div>}
     </div>
   );
 }

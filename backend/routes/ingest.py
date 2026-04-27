@@ -117,6 +117,45 @@ class AcceptIn(BaseModel):
     overrides: Dict[int, Dict[str, Any]] = Field(default_factory=dict)
 
 
+# ─── Per-system addendum to the ingest prompt ──────────────────────────
+# Branches the category list + page citations + licence reminder so the
+# LLM produces system-shaped suggestions.
+
+SYSTEM_ADDENDUM = {
+    "besm-4e": (
+        "TARGET SYSTEM: BESM 4E (Tri-Stat Emporium licence). Prefer "
+        "attribute / skill / defect / power_pack / power_bundle / weapon / "
+        "item / location / npc / lore / quest. Page references should cite "
+        "BESM 4E (range 1-320). Cost notation: 'N pts/level' for attributes "
+        "and skills, '−N pts/rank' for defects."
+    ),
+    "anime-5e": (
+        "TARGET SYSTEM: Anime 5E (Tri-Stat Emporium OGL release). Hybrid "
+        "engine — accept BOTH 5E class+slot mechanics AND Tri-Stat point-buy. "
+        "Prefer class / heritage / spell / weapon / armor / point_buy_attribute "
+        "/ skill / npc / location / lore / quest. Cite Anime 5E SRD pages "
+        "(range 1-200). Stats are Body / Mind / Soul, not 5E ability scores."
+    ),
+    "dnd-5e": (
+        "TARGET SYSTEM: D&D 5E (CC-BY SRD 5.1 ONLY). NEVER reproduce "
+        "Wizards-trademarked content — no Forgotten Realms, no Mind Flayer, "
+        "no Beholder, etc. Prefer class / race / background / spell / "
+        "feature / weapon / armor / item / monster / npc / location / quest. "
+        "Cite SRD 5.1 page references. Use d20 + ability mod + proficiency "
+        "shape for any rolls in the suggestion. Stick to mechanic names, "
+        "not lore paragraphs."
+    ),
+    "cypher": (
+        "TARGET SYSTEM: Cypher System (Cypher System Creator licence — Monte "
+        "Cook Games). Prefer type / focus / descriptor / cypher / artifact / "
+        "ability / npc / location / lore / quest. Cite Cypher SRD/Numenera "
+        "page references. Use difficulty (1-10) × 3 = TN format. Stats are "
+        "Might / Speed / Intellect with Edge and Effort. NEVER reproduce "
+        "flavour prose — names + mechanic terms only."
+    ),
+}
+
+
 # ─────────────────────── Claude prompt ───────────────────────
 
 SYSTEM_PROMPT = """You are TableGnostic's Knowledge Web ingestor.
@@ -167,11 +206,13 @@ Top-level shape:
 async def _call_claude(filename: str, system_id: Optional[str], text: str) -> Dict[str, Any]:
     if not EMERGENT_LLM_KEY:
         raise HTTPException(503, "LLM key not configured")
+    addendum = SYSTEM_ADDENDUM.get(system_id or "besm-4e", SYSTEM_ADDENDUM["besm-4e"])
     user_prompt = (
         f"# Source file: {filename}\n"
-        f"# Target system: {system_id or 'BESM 4E (default)'}\n\n"
+        f"# Target system: {system_id or 'besm-4e (default)'}\n"
+        f"# System addendum:\n{addendum}\n\n"
         f"{_truncate_for_llm(text)}\n\n"
-        f"Now produce the JSON document per the hard rules."
+        f"Now produce the JSON document per the hard rules + the system addendum above."
     )
     try:
         from emergentintegrations.llm.chat import LlmChat, UserMessage
