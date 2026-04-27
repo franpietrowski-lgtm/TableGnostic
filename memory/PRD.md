@@ -20,8 +20,10 @@
 ### V4.3 Compliance
 - Cypher System Creator licence — cover-line + trade-dress + forbidden-setting (Numenera/Strange/NTYE) PDF-export gate (HTTP 451) + verbatim required-text strings served via `/api/systems/cypher/reference`.
 
-### V5.1 — Atelier "Epic Campaign" plane (this iteration — 2026-04-27)
-**Trigger:** GMFran uploaded Guy Sclanders' follow-up book *Epic Campaigns: Digital Edition* (146 pp) and asked for a new sub-tab inside the Atelier Master-Plot 7-phase page that uses the new framework. The two planes (the existing 7-phase Genesis and the new Epic Campaign) are intentionally INDEPENDENT — usable in tandem, separately, or one-or-the-other; pure GM brainstorming kit.
+### V5.1 — Atelier "Epic Campaign" 8th-phase tab (this iteration — 2026-04-27)
+**Trigger:** GMFran uploaded Guy Sclanders' follow-up book *Epic Campaigns: Digital Edition* (146 pp) and asked for a new tab inside the **"Forge the Master Plot"** Atelier page. The two planes (the existing 7-phase Genesis and the new Epic Campaign) are intentionally INDEPENDENT — usable in tandem, separately, or one-or-the-other; pure GM brainstorming kit.
+
+**Initial mis-placement (corrected):** First pass put the new framework as a sub-tab inside `AtelierTab` (the in-tab Session-0/Arcs/Master-Plot stack). Per user clarification, the user actually meant the standalone `/app/campaigns/:id/genesis` route ("Forge the Master Plot" — 7-phase guided form) reached via the **Atelier** button on the Campaign header. AtelierTab reverted to original; Epic framework moved to a new `phase === 7` panel inside `CampaignGenesis.jsx`, alongside the existing Sentence / Theme & Tone / Nemesis Design / Master Plot / Adventure Outlines / Supporting Cast / Beginning & Ending. The progress bar now reads `0/8 phases`.
 
 **Backend — `/app/backend/routes/epic_campaign.py` (new module)**
 - New collection `db.epic_campaigns`, one doc per campaign (`campaign_id` keyed). GM-only.

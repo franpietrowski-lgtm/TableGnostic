@@ -30,11 +30,15 @@ import {
  * GM edits the entity). Linked node ids are persisted on the entity so
  * the Codex copy stays in sync on subsequent edits.
  */
-export default function EpicCampaignPanel({ campId, characters = [], nodes = [] }) {
+export default function EpicCampaignPanel({ campId, characters: charactersProp, nodes: nodesProp }) {
   const [state, setState] = useState(null);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
   const [savedAt, setSavedAt] = useState(null);
+  const [fetchedCharacters, setFetchedCharacters] = useState([]);
+  const [fetchedNodes, setFetchedNodes] = useState([]);
+  const characters = charactersProp ?? fetchedCharacters;
+  const nodes = nodesProp ?? fetchedNodes;
   const [open, setOpen] = useState({
     fundamentals: true, theme: false, sentence: true,
     nemesis: true, villains: false, expanding: false,
@@ -52,6 +56,22 @@ export default function EpicCampaignPanel({ campId, characters = [], nodes = [] 
       }
     })();
   }, [campId]);
+
+  // If the parent didn't pre-fetch the linkable lists, fetch them ourselves so
+  // the Tie-ins picker has options to select from.
+  useEffect(() => {
+    if (!campId) return;
+    if (!charactersProp) {
+      api.get(`/campaigns/${campId}/characters`)
+        .then((r) => setFetchedCharacters(Array.isArray(r.data) ? r.data : []))
+        .catch(() => {});
+    }
+    if (!nodesProp) {
+      api.get(`/campaigns/${campId}/nodes`)
+        .then((r) => setFetchedNodes(Array.isArray(r.data) ? r.data : []))
+        .catch(() => {});
+    }
+  }, [campId, charactersProp, nodesProp]);
 
   const save = async () => {
     if (!state) return;

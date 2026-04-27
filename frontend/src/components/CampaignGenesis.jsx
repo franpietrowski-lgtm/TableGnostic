@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from "react-router-dom";
 import { api, formatApiErrorDetail } from "../lib/api";
 import { ArrowRight, ArrowLeft, Save, Wand2, Plus, X, Sparkles, BookMarked, CheckCircle2, ExternalLink, Lightbulb } from "lucide-react";
 import { TipDot, Tip } from "./ui/Tip";
+import EpicCampaignPanel from "./EpicCampaignPanel";
 
 const PROMPTS = {
   sentence_who: ["What single act defines them?", "What have they lost that they cannot replace?", "What do others whisper about them?"],
@@ -26,6 +27,7 @@ const PHASES = [
   { key: "adventures", title: "Adventure Outlines",blurb: "Follow Plotters (story-advancing), Make Plotters (player-driven), and Adventures on the Fly." },
   { key: "npcs",       title: "Supporting Cast",   blurb: "Fodder and Plotter NPCs — the humans your table will remember." },
   { key: "bookends",   title: "Beginning & Ending",blurb: "Open with relationship, close with resonance." },
+  { key: "epic",       title: "Epic Campaign",     blurb: "Sclanders' follow-up framework — OGAS NPCs, the Sentence, milestones with POE design, adventure modes & types, seeding, climax. Independent of the seven phases above; use in tandem, separately, or one-or-the-other." },
 ];
 
 const BLANK = {
@@ -367,6 +369,12 @@ export default function CampaignGenesis() {
             </button>
           </div>
         </Panel>
+      )}
+
+      {phase === 7 && (
+        <div data-testid="genesis-phase-epic">
+          <EpicCampaignPanel campId={id}/>
+        </div>
       )}
 
       {err && <div className="mt-4 text-ember text-sm" data-testid="genesis-error">{err}</div>}

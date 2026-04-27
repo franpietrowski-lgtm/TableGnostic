@@ -1,10 +1,9 @@
 import React, { useEffect, useState } from "react";
 import { api, formatApiErrorDetail } from "../lib/api";
-import { Plus, X, AlertTriangle, CheckCircle2, Save, Layers, ListTree, ScrollText, FileDown, Crown } from "lucide-react";
+import { Plus, X, AlertTriangle, CheckCircle2, Save, Layers, ListTree, ScrollText, FileDown } from "lucide-react";
 import IngestPanel from "./IngestPanel";
 import XPApprovalQueue from "./XPApprovalQueue";
 import ReferenceEditor, { InstructionsPanel } from "./ReferenceEditor";
-import EpicCampaignPanel from "./EpicCampaignPanel";
 
 /**
  * AtelierTab — V4.4 dynamic-scaling tiers.
@@ -23,25 +22,16 @@ export default function AtelierTab({ campId, camp }) {
   const [findings, setFindings] = useState([]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
-  const [characters, setCharacters] = useState([]);
-  const [nodes, setNodes] = useState([]);
-  // Sub-tab: "master" = the existing 7-phase Master Plot stack ·
-  //         "epic"   = Sclanders' Epic Campaign framework (new)
-  const [planeTab, setPlaneTab] = useState("master");
 
   useEffect(() => {
     (async () => {
       try {
-        const [a, g, ch, nd] = await Promise.all([
+        const [a, g] = await Promise.all([
           api.get(`/atelier/${campId}`).then((r) => r.data),
           api.get(`/campaigns/${campId}/genesis`).then((r) => r.data).catch(() => null),
-          api.get(`/campaigns/${campId}/characters`).then((r) => r.data).catch(() => []),
-          api.get(`/campaigns/${campId}/nodes`).then((r) => r.data).catch(() => []),
         ]);
         setState(a);
         setGenesis(g);
-        setCharacters(Array.isArray(ch) ? ch : []);
-        setNodes(Array.isArray(nd) ? nd : []);
         setFindings(a.continuity_findings || []);
       } catch (e) {
         setErr(formatApiErrorDetail(e.response?.data?.detail) || e.message);
@@ -137,46 +127,17 @@ export default function AtelierTab({ campId, camp }) {
           </div>
         </div>
         <div className="flex gap-2">
-          {planeTab === "master" && (
-            <button onClick={runContinuity} disabled={busy}
-                    className="btn btn-ghost text-xs" data-testid="atelier-continuity-btn">
-              <AlertTriangle className="w-3 h-3"/> Continuity check
-            </button>
-          )}
+          <button onClick={runContinuity} disabled={busy}
+                  className="btn btn-ghost text-xs" data-testid="atelier-continuity-btn">
+            <AlertTriangle className="w-3 h-3"/> Continuity check
+          </button>
           <ExportPdfBtn campId={campId}/>
-          {planeTab === "master" && (
-            <button onClick={saveAll} disabled={busy}
-                    className="btn btn-primary text-xs" data-testid="atelier-save-btn">
-              <Save className="w-3 h-3"/> {busy ? "Saving…" : "Save"}
-            </button>
-          )}
+          <button onClick={saveAll} disabled={busy}
+                  className="btn btn-primary text-xs" data-testid="atelier-save-btn">
+            <Save className="w-3 h-3"/> {busy ? "Saving…" : "Save"}
+          </button>
         </div>
       </div>
-
-      {/* Sub-tab strip — Master Plot (existing 7-phase) vs Epic Campaign (Sclanders follow-up) */}
-      <div className="flex gap-2 border-b border-gold/10 pb-2 -mt-2" data-testid="atelier-plane-tabs">
-        <button onClick={() => setPlaneTab("master")}
-                className={`px-3 py-1.5 text-[11px] font-ui tracking-widest uppercase transition-colors flex items-center gap-1.5 ${
-                  planeTab === "master" ? "text-gold-bright border-b border-gold" : "text-mist hover:text-parchment"
-                }`}
-                data-testid="atelier-plane-master">
-          <ScrollText className="w-3 h-3"/> Master Plot · 7 Phases
-        </button>
-        <button onClick={() => setPlaneTab("epic")}
-                className={`px-3 py-1.5 text-[11px] font-ui tracking-widest uppercase transition-colors flex items-center gap-1.5 ${
-                  planeTab === "epic" ? "text-gold-bright border-b border-gold" : "text-mist hover:text-parchment"
-                }`}
-                data-testid="atelier-plane-epic"
-                title="Sclanders' Epic Campaigns framework — independent of, or alongside, the 7-phase Master Plot.">
-          <Crown className="w-3 h-3"/> Epic Campaign
-        </button>
-      </div>
-
-      {planeTab === "epic" && (
-        <EpicCampaignPanel campId={campId} characters={characters} nodes={nodes}/>
-      )}
-
-      {planeTab === "master" && <>
 
       {/* ---------- Knowledge Web ingestion ---------- */}
       <IngestPanel campId={campId}/>
@@ -268,7 +229,6 @@ export default function AtelierTab({ campId, camp }) {
           <CheckCircle2 className="w-3 h-3 inline -mt-0.5"/> No continuity issues found.
         </div>
       )}
-      </>}
     </div>
   );
 }
