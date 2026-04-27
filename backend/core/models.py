@@ -73,9 +73,14 @@ class CampaignIn(BaseModel):
     max_per_attribute_rank: int = 0
     # ---------- V3.5 — Campaign Benchmarks ----------
     genre: str = ""           # "High Fantasy", "Cyberpunk", etc.
-    time_period: str = ""     # "Medieval", "Modern", etc.
+    time_period: str = ""     # "Modern", "Medieval", etc.
     default_character_size: str = "Medium"  # BESM 4E size template
     damage_rating_baseline: int = 5         # DM formula base
+    # ---------- V4.6 — Per-licence setting tagging ----------
+    # Free-text setting name (e.g. "Aurea", "Godforsaken", "The Heartwood",
+    # "Eberron-inspired"). Used by the PDF export pipeline to gate exports
+    # against forbidden-settings lists for licence-restricted systems.
+    setting_name: str = ""
 
 
 class CampaignOut(CampaignIn):

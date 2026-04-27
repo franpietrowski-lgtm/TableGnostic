@@ -1035,6 +1035,8 @@ function PrimerTab({ camp, onRefresh }) {
   const [timePeriod, setTimePeriod] = useState(camp.time_period || "");
   const [defaultSize, setDefaultSize] = useState(camp.default_character_size || "Medium");
   const [damageRating, setDamageRating] = useState(camp.damage_rating_baseline || 5);
+  // V4.6 — per-licence setting tag (used by PDF export gate for Cypher).
+  const [settingName, setSettingName] = useState(camp.setting_name || "");
   const [saved, setSaved] = useState(false);
   const [err, setErr] = useState("");
   const parse = (s) => s.split(",").map((x) => x.trim()).filter(Boolean);
@@ -1056,6 +1058,7 @@ function PrimerTab({ camp, onRefresh }) {
         genre, time_period: timePeriod,
         default_character_size: defaultSize,
         damage_rating_baseline: parseInt(damageRating) || 5,
+        setting_name: settingName,
       };
       delete payload.is_gm; delete payload.members; delete payload.id;
       delete payload.gm_id; delete payload.gm_name; delete payload.member_ids;
@@ -1104,6 +1107,32 @@ function PrimerTab({ camp, onRefresh }) {
             and the Damage Rating engine (Damage Multiplier baseline).
           </p>
           <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-3" data-testid="primer-benchmarks">
+            <div className="lg:col-span-2">
+              <label className="label-ref block mb-1 flex items-center gap-2">
+                Setting Name
+                {camp.system_id === "cypher" && (
+                  <span className="text-[9px] text-ember/80 font-ui uppercase tracking-widest"
+                        title="The Cypher System Creator licence forbids exports for Numenera, The Strange, and No Thank You, Evil!. Naming your setting one of those will block PDF export.">
+                    licence-gated
+                  </span>
+                )}
+              </label>
+              <input className="input" value={settingName}
+                     onChange={(e) => setSettingName(e.target.value)}
+                     placeholder={camp.system_id === "cypher"
+                       ? "Godforsaken · The Heartwood · The Revel · custom Cypher setting…"
+                       : "Aurea · Eberron-inspired · home-brew name…"}
+                     data-testid="primer-setting-name"/>
+              {camp.system_id === "cypher" && (
+                <div className="text-[10px] text-mist/70 italic mt-1 leading-snug">
+                  Creator-licensed (full content): Godforsaken, Gods of the Fall, Masters of the Night,
+                  Predation, The Heartwood, The Revel, Unmasked. Compatibility-only: Claim the Sky,
+                  First Responders, Stay Alive!, The Origin, The Stars Are Fire, We Are All Mad Here.
+                  <span className="text-ember/80"> Forbidden (export will be blocked):
+                  Numenera, The Strange, No Thank You Evil!.</span>
+                </div>
+              )}
+            </div>
             <div>
               <label className="label-ref block mb-1">Genre</label>
               <input className="input" list="dl-genres" value={genre}

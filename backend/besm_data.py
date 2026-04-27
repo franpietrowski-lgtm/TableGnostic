@@ -723,7 +723,7 @@ GAME_SYSTEMS = [
         "blurb": "4dF (Fate dice) + skill ladder; Aspects & Compels drive narrative leverage.",
     },
     {
-        "id": "cypher-system", "name": "Cypher System", "publisher": "Monte Cook Games",
+        "id": "cypher", "name": "Cypher System", "publisher": "Monte Cook Games",
         "edition": "Cypher System Rulebook", "year": 2015,
         # Required text per Monte Cook Games' Cypher System Creator programme.
         "copyright": (

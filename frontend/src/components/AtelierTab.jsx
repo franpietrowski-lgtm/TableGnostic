@@ -424,8 +424,10 @@ function ExportPdfBtn({ campId }) {
     }
   };
 
+  const [gateMsg, setGateMsg] = useState("");
+
   const download = async () => {
-    setBusy(true);
+    setBusy(true); setGateMsg("");
     try {
       const token = localStorage.getItem("tg_token");
       const apiBase = process.env.REACT_APP_BACKEND_URL || "";
@@ -433,8 +435,22 @@ function ExportPdfBtn({ campId }) {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!r.ok) {
-        const txt = await r.text();
-        throw new Error(txt || `HTTP ${r.status}`);
+        // 451 Unavailable for Legal Reasons — surfaced when the campaign
+        // setting violates the active system's content licence (e.g. a
+        // Cypher campaign tagged "Numenera"). Show the verbatim disclaimer.
+        let detail = "";
+        try {
+          const j = await r.json();
+          detail = typeof j.detail === "string" ? j.detail : JSON.stringify(j.detail);
+        } catch {
+          detail = await r.text();
+        }
+        if (r.status === 451) {
+          setGateMsg(detail);
+          setBusy(false);
+          return;
+        }
+        throw new Error(detail || `HTTP ${r.status}`);
       }
       const blob = await r.blob();
       const url = URL.createObjectURL(blob);
@@ -486,6 +502,12 @@ function ExportPdfBtn({ campId }) {
                   data-testid="atelier-export-pdf-download">
             <FileDown className="w-3 h-3"/> {busy ? "Rendering…" : "Download chronicle"}
           </button>
+          {gateMsg && (
+            <div className="mt-3 border border-ember/40 bg-ember/10 rounded-sm p-3 text-[11px] text-ember whitespace-pre-wrap font-body leading-snug"
+                 data-testid="atelier-export-licence-gate">
+              {gateMsg}
+            </div>
+          )}
         </div>
       )}
     </div>

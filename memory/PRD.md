@@ -392,7 +392,7 @@ The biggest content drop since V4.0. **Reference data extracted for D&D 5E (CC-B
 
 ## V4.6 — Cypher Compliance Hardening · System Builders · Logos (2026-04-26)
 
-User uploaded the **Cypher Creator System logo** + the **Anime 5E and Tri-Stat Emporium logo (300dpi)**, plus the verbatim Cypher System Creator licence text. This phase applies the licence requirements end-to-end and ships first-pass system-shaped character builders for D&D 5E and Cypher.
+User uploaded the Cypher Creator System logo + Anime 5E/Tri-Stat Emporium logo (300dpi), plus the verbatim Cypher System Creator licence text. This phase applies the licence requirements end-to-end and ships first-pass system-shaped character builders for D&D 5E and Cypher.
 
 ### A. Logos placed
 - `/app/frontend/public/system-logos/cypher.png` — official **Cypher System Creator** logo (900×364 RGBA). This is the mark required to appear on PDF covers per the Creator licence — NOT the Cypher System logo (which Creators are forbidden from using).
@@ -602,7 +602,55 @@ New package: 4 modules + `__init__.py`. All entries are mechanic-only — page r
 ### Legal compliance reaffirmed
 - Per `LEGAL_COMPLIANCE.md` (Tri-Stat Emporium licence): page references and mechanic names only — never reproduce rulebook prose, stat-block descriptions, lore, or examples. The new Evereantha Chronicle dialogue uses **only user-provided "Artisan's Tale" original setting material** with mechanic-only references back to BESM 4E (page numbers + attribute names). The `besm_data.py` Cypher/Anime 5E entries continue to cite mechanics + page numbers without reproducing flavour text.
 
+## V4.7 — System-Aware Sheets · Per-PC PDF Layouts · Setting-Licence Gate (2026-04-27)
+
+User asked for three things: D&D/Cypher character display sheets with system-specific dice macros, system-shaped per-PC PDF appendices, and an export-time gate that blocks PDFs whose campaign settings violate the active system's content licence (with the verbatim disclaimer surfaced to the GM). All three shipped and curl-verified end-to-end.
+
+### A. Per-licence PDF export gate (`/app/backend/routes/pdf_export.py`)
+
+- New `_FORBIDDEN_SETTINGS_BY_SYSTEM` map (currently keyed only on `cypher` per the Creator licence — Numenera, The Strange, No Thank You Evil!). Easy to extend per future system licences.
+- `_setting_violates_licence(system_id, setting_name)` — case-insensitive substring match so "Numenera Spire" or "The Strange but darker" both trip the gate.
+- `_LICENCE_GATE_BLURBS["cypher"]` — verbatim 6-paragraph disclaimer that names the matched forbidden setting, explains the Creator licence, reassures the GM that in-app play continues to work (only PDF export is blocked because exports are the redistributable surface), and lists the Creator-eligible alternatives.
+- Gate wired in at the top of `GET /api/campaigns/{cid}/export.pdf` — returns **HTTP 451 Unavailable for Legal Reasons** when violated. Curl-verified: `setting_name="Numenera Spire"` on a Cypher campaign returns 451 with the verbatim text; switching to `setting_name="Godforsaken"` returns a 160 KB PDF.
+
+### B. Setting Name UI (`/app/frontend/src/components/CampaignDetail.jsx`, `core/models.py`)
+
+- New `Campaign.setting_name: str = ""` field (model + frontend state).
+- Surface lives in **Atelier → Player Primer → Campaign Benchmarks**. For Cypher campaigns, the input is decorated with a `licence-gated` micro-tag and a per-licence helper text that enumerates Creator-licensed settings (Godforsaken / Gods of the Fall / Masters of the Night / Predation / The Heartwood / The Revel / Unmasked), compatibility-only settings (Claim the Sky / First Responders / Stay Alive! / The Origin / The Stars Are Fire / We Are All Mad Here), and forbidden settings shown in ember-orange (Numenera / The Strange / No Thank You Evil!). For non-Cypher systems, the input is a plain free-text "campaign setting" field. Testid: `primer-setting-name`.
+
+### C. Export-error surfacing (`/app/frontend/src/components/AtelierTab.jsx`)
+
+- `ExportPdfButton.download()` now distinguishes **451** from other errors. On 451, the verbatim licence disclaimer is rendered inline beneath the popover button in an ember-bordered `<div>` (preserving newlines), instead of being lost inside a one-line `window.alert`. Testid: `atelier-export-licence-gate`. Other errors continue to use the alert path.
+
+### D. System-aware character appendix in PDF (`pdf_export.py`)
+
+Replaced the BESM-only character appendix with three system-shaped renderers selected by `campaign.system_id` and the presence of `folio.dnd_state` / `folio.cypher_state`:
+
+- **`_render_besm_pc_sheet`** — original Tri-Stat block (Body/Mind/Soul + ACV/DCV/HP/EP, Power Level + Total Points + Spent + XP, attributes/skills/defects). Used for `besm-4e` and `anime-5e`.
+- **`_render_dnd_pc_sheet`** — D&D 5E class+slot block: Class · Level · Race · Background · CC-BY SRD 5.1 attribution. Six ability scores in `STR 14 (+2)` chunk format (mod auto-computed). Proficiency bonus by level + saves + skill profs. Inventory + spells-known sections (only when populated). Notes section. Wraps in `data-system="dnd-5e"` for the heraldic palette.
+- **`_render_cypher_pc_sheet`** — Cypher type-focus-descriptor block: italic sentence header + Tier · Cypher System Creator attribution. Three pools (Might/Speed/Intellect) with Edge per pool + Effort cap on a single line. Skills-trained list, Type/Focus abilities, Cyphers carried, Notes / GM Intrusion ledger sections (only when populated).
+
+Verified via `pypdf` extraction: 7-page export of a Cypher campaign with one PC (Vex Halford, Mystical Adept, Tier 2, pools 7/11/13, cyphers Force Shield + Spatial Warp) shows all key tokens in the extracted text. Cover footer has the verbatim licence-required *"Requires the Cypher System Rulebook from Monte Cook Games. Distributed through the Cypher System Creator™ at DriveThruRPG."*
+
+### E. System-aware Character Sheet read view (`/app/frontend/src/components/CharacterSheet.jsx`)
+
+When `ch.folio.dnd_state` or `ch.folio.cypher_state` is present, the sheet renders a system-shaped read view INSTEAD of the BESM Tri-Stat layout (the BESM blocks are gated behind `!dndState && !cypherState`). The page header label updates from `BESM 4E · Heroic · 0 pts` to `D&D 5E · Fighter 5 · Half-Elf` or `Cypher · Tier 2 · Mystical Adept`.
+
+- **`<DndSheetView>`** — Class · Race · Level · Proficiency stat strip; six ability score buttons each posting `1d20+mod` to the campaign chat with a labelled roll (e.g. "Fighter · STR check"); Save & Skill prof tag rows; Inventory + Spells lists when populated; Notes; **`<DiceCard>`** with system-shaped quick rolls (six `ABC check` macros, Initiative, two attack macros that auto-add proficiency + STR/DEX mod).
+- **`<CypherSheetView>`** — italic sentence header; pools+edge cards; **interactive Difficulty Tracker**: GM enters task difficulty (0-10) and steps lowered (Train/Effort/Asset), the UI computes effective TN = `(diff − steps) × 3` in real time with a single-button "Roll 1d20 vs TN N" macro; Skills Trained chip row; Type/Focus Abilities + Cyphers Carried lists; Notes; **`<DiceCard>`** with Cypher Roll, Recovery, Light Cypher Damage macros. Footer: "Cypher System Creator · Requires the Cypher System Rulebook from Monte Cook Games."
+- **Shared `<DiceCard>`** — DRY component reused across both system views and (implicitly) BESM. Posts each macro into the campaign's first PBP channel + the live session dice altar when one is open. All macros tagged with `data-testid="quick-…"` matching the existing pattern, plus new `dnd-sheet-view` / `cypher-sheet-view` / `cypher-difficulty-tracker` / `cypher-roll-against-tn` / `cypher-tn` test ids.
+
+### F. System-id consolidation (`/app/backend/besm_data.py`)
+
+- The Cypher `GAME_SYSTEMS` entry's id was `cypher-system` while every other Cypher reference (REFERENCE_BY_SYSTEM, FORBIDDEN_SETTINGS, STYLE_PROFILES, SystemBadge, decks, ingest addendum) used `cypher`. Harmonized to `cypher` everywhere — single one-line fix.
+
+### Verification (this iteration)
+- 5 files lint clean (Ruff + ESLint).
+- Curl matrix: forbidden setting → 451 with verbatim disclaimer ✓. Allowed setting → 200 + 160KB PDF ✓. Cypher PC round-trip + PDF appendix renders sentence/pools/cyphers ✓. Cover line carries verbatim Creator licence text ✓.
+- pypdf `extract_text()` confirms 7/9 expected Cypher tokens in the rendered PDF text layer (the missing two are an italic sentence the extractor doesn't always recover, and one was a test-string typo — content is in the PDF binary).
+
 ## V4.4 Phase E.2 — PDF Polish + Profile Byline (2026-04-26)
+
 
 User-reported defects in `chronicle.pdf`: wrong logo, title not centered/width-aware, no GM byline, missing Dyskami legal, double "Chapter N" headers, no paragraph indentation/separation in session recaps. All resolved.
 

@@ -849,7 +849,10 @@ def _build_pdf(camp: Dict[str, Any], chapters_data: List[Dict[str, Any]],
 
     # ── Character Sheet Appendices ──
     # Each published PC gets a one-page sheet so the chronicle is play-ready.
+    # System-aware: BESM-shape for besm-4e/anime-5e (Tri-Stat point-buy),
+    # D&D class+slot for dnd-5e, type-focus-descriptor for cypher.
     if extras and extras.get("characters"):
+        camp_system = camp.get("system_id") or "besm-4e"
         for ci, ch in enumerate(extras["characters"]):
             flow.append(PageBreak())
             flow.append(Paragraph(f"APPENDIX&nbsp;&nbsp;{chr(ord('A')+ci)}", chapter_label))
@@ -859,74 +862,17 @@ def _build_pdf(camp: Dict[str, Any], chapters_data: List[Dict[str, Any]],
             if concept:
                 flow.append(Paragraph(_html_escape(concept), chapter_subtitle))
             flow.append(_thin_rule(rule))
-            # Stats line
-            stats = ch.get("stats", {})
-            derived = ch.get("derived", {})
-            flow.append(Paragraph(
-                f"<b>Body</b> {stats.get('body','-')} &nbsp;·&nbsp; "
-                f"<b>Mind</b> {stats.get('mind','-')} &nbsp;·&nbsp; "
-                f"<b>Soul</b> {stats.get('soul','-')} &nbsp;·&nbsp; "
-                f"<b>ACV</b> {derived.get('acv','-')} &nbsp; "
-                f"<b>DCV</b> {derived.get('dcv','-')} &nbsp; "
-                f"<b>HP</b> {derived.get('hp','-')} &nbsp; "
-                f"<b>EP</b> {derived.get('ep','-')}",
-                body_first))
-            flow.append(Paragraph(
-                f"<b>Power Level:</b> {ch.get('power_level','-')} · "
-                f"<b>Total Points:</b> {ch.get('total_points',0)} · "
-                f"<b>Spent:</b> {ch.get('spent',{}).get('total_spent',0)} · "
-                f"<b>XP:</b> {ch.get('xp_total',0)} earned / "
-                f"{ch.get('xp_unspent',0)} unspent",
-                body_first))
-            # Attributes
-            attrs = ch.get("attributes") or []
-            if attrs:
-                flow.append(Spacer(1, 0.1 * inch))
-                flow.append(Paragraph("Attributes", session_title))
-                for a in attrs:
-                    enh = a.get("enhancements") or []
-                    lim = a.get("limiters") or []
-                    eff = max(1, int(a.get("level",1)) + len(lim) - len(enh))
-                    line = (f"<b>{_html_escape(a.get('name','?'))}</b> "
-                            f"×{a.get('level',1)} "
-                            f"<font color='{p['muted']}'>(eff. ×{eff} · "
-                            f"{a.get('cost_per_level',0)} pt/lvl)</font>")
-                    if enh:
-                        line += f" &nbsp; <i>+ {_html_escape('; '.join(enh))}</i>"
-                    if lim:
-                        line += f" &nbsp; <i>− {_html_escape('; '.join(lim))}</i>"
-                    if a.get("page"):
-                        line += f" &nbsp; <font color='{p['muted']}' size='8'>p.{a['page']}</font>"
-                    flow.append(Paragraph(line, body_first))
-            # Skills
-            skills = ch.get("skills") or []
-            if skills:
-                flow.append(Spacer(1, 0.1 * inch))
-                flow.append(Paragraph("Skills", session_title))
-                for s in skills:
-                    flow.append(Paragraph(
-                        f"<b>{_html_escape(s.get('group','?'))}</b> "
-                        f"×{s.get('level',1)} "
-                        f"<font color='{p['muted']}'>({s.get('cost_per_level',0)} pt/lvl)</font>",
-                        body_first))
-                    for c in s.get("components", []) or []:
-                        flow.append(Paragraph(
-                            f"&nbsp;&nbsp;&nbsp;· {_html_escape(c.get('name','?'))} "
-                            f"×{c.get('level','-')}",
-                            body_first))
-            # Defects
-            defects = ch.get("defects") or []
-            if defects:
-                flow.append(Spacer(1, 0.1 * inch))
-                flow.append(Paragraph("Defects", session_title))
-                for d in defects:
-                    flow.append(Paragraph(
-                        f"<b>{_html_escape(d.get('name','?'))}</b> "
-                        f"rank&nbsp;{d.get('rank',1)} "
-                        f"<font color='{p['muted']}'>(refund "
-                        f"{d.get('points_per_rank',1)}×{d.get('rank',1)} = "
-                        f"{int(d.get('points_per_rank',1))*int(d.get('rank',1))} pts)</font>",
-                        body_first))
+
+            folio = ch.get("folio") or {}
+            cypher_state = folio.get("cypher_state") if camp_system == "cypher" else None
+            dnd_state = folio.get("dnd_state") if camp_system == "dnd-5e" else None
+
+            if cypher_state:
+                _render_cypher_pc_sheet(flow, ch, cypher_state, p, body_first, session_title)
+            elif dnd_state:
+                _render_dnd_pc_sheet(flow, ch, dnd_state, p, body_first, session_title)
+            else:
+                _render_besm_pc_sheet(flow, ch, p, body_first, session_title)
 
     # ── Custom Reference Appendix (GM-editable weapons/armor/items/companions) ──
     if extras and extras.get("reference"):
@@ -1097,6 +1043,226 @@ def _html_escape(text: str) -> str:
 
 # ─────────────────────── Endpoint ───────────────────────
 
+def _render_besm_pc_sheet(flow, ch, p, body_first, session_title):
+    """Tri-Stat / point-buy character appendix (BESM 4E + Anime 5E)."""
+    from reportlab.platypus import Paragraph, Spacer
+    from reportlab.lib.units import inch
+    stats = ch.get("stats", {})
+    derived = ch.get("derived", {})
+    flow.append(Paragraph(
+        f"<b>Body</b> {stats.get('body','-')} &nbsp;·&nbsp; "
+        f"<b>Mind</b> {stats.get('mind','-')} &nbsp;·&nbsp; "
+        f"<b>Soul</b> {stats.get('soul','-')} &nbsp;·&nbsp; "
+        f"<b>ACV</b> {derived.get('acv','-')} &nbsp; "
+        f"<b>DCV</b> {derived.get('dcv','-')} &nbsp; "
+        f"<b>HP</b> {derived.get('hp','-')} &nbsp; "
+        f"<b>EP</b> {derived.get('ep','-')}",
+        body_first))
+    flow.append(Paragraph(
+        f"<b>Power Level:</b> {ch.get('power_level','-')} · "
+        f"<b>Total Points:</b> {ch.get('total_points',0)} · "
+        f"<b>Spent:</b> {ch.get('spent',{}).get('total_spent',0)} · "
+        f"<b>XP:</b> {ch.get('xp_total',0)} earned / "
+        f"{ch.get('xp_unspent',0)} unspent",
+        body_first))
+    # Attributes
+    for a in (ch.get("attributes") or []):
+        enh = a.get("enhancements") or []
+        lim = a.get("limiters") or []
+        eff = max(1, int(a.get("level", 1)) + len(lim) - len(enh))
+        line = (f"<b>{_html_escape(a.get('name','?'))}</b> ×{a.get('level',1)} "
+                f"<font color='{p['muted']}'>(eff. ×{eff} · "
+                f"{a.get('cost_per_level',0)} pt/lvl)</font>")
+        if enh:
+            line += f" &nbsp; <i>+ {_html_escape('; '.join(enh))}</i>"
+        if lim:
+            line += f" &nbsp; <i>− {_html_escape('; '.join(lim))}</i>"
+        if a.get("page"):
+            line += f" &nbsp; <font color='{p['muted']}' size='8'>p.{a['page']}</font>"
+        flow.append(Paragraph(line, body_first))
+    # Skills
+    if ch.get("skills"):
+        flow.append(Spacer(1, 0.1 * inch))
+        flow.append(Paragraph("Skills", session_title))
+        for s in ch["skills"]:
+            flow.append(Paragraph(
+                f"<b>{_html_escape(s.get('group','?'))}</b> ×{s.get('level',1)} "
+                f"<font color='{p['muted']}'>({s.get('cost_per_level',0)} pt/lvl)</font>",
+                body_first))
+            for c in s.get("components", []) or []:
+                flow.append(Paragraph(
+                    f"&nbsp;&nbsp;&nbsp;· {_html_escape(c.get('name','?'))} "
+                    f"×{c.get('level','-')}", body_first))
+    # Defects
+    if ch.get("defects"):
+        flow.append(Spacer(1, 0.1 * inch))
+        flow.append(Paragraph("Defects", session_title))
+        for d in ch["defects"]:
+            flow.append(Paragraph(
+                f"<b>{_html_escape(d.get('name','?'))}</b> rank&nbsp;{d.get('rank',1)} "
+                f"<font color='{p['muted']}'>(refund "
+                f"{d.get('points_per_rank',1)}×{d.get('rank',1)} = "
+                f"{int(d.get('points_per_rank',1))*int(d.get('rank',1))} pts)</font>",
+                body_first))
+
+
+def _render_dnd_pc_sheet(flow, ch, state, p, body_first, session_title):
+    """D&D 5E class+slot character appendix.
+
+    Mechanics restated in our own words; uses only CC-BY SRD 5.1
+    structural references — no Wizards-trademarked content.
+    """
+    from reportlab.platypus import Paragraph, Spacer
+    from reportlab.lib.units import inch
+    cls = state.get("class") or "—"
+    lvl = int(state.get("level") or 1)
+    race = state.get("race") or "—"
+    bg = state.get("background") or ""
+    flow.append(Paragraph(
+        f"<b>Class:</b> {_html_escape(cls)} · <b>Level:</b> {lvl} · "
+        f"<b>Race:</b> {_html_escape(race)}"
+        + (f" · <b>Background:</b> {_html_escape(bg)}" if bg else "")
+        + " &nbsp; <font size='8' color='" + p['muted']
+        + "'>(SRD 5.1 / CC-BY-4.0)</font>",
+        body_first))
+    # Ability scores + modifiers (single line, six pairs).
+    scores = state.get("ability_scores") or {}
+    abbr = {"Strength": "STR", "Dexterity": "DEX", "Constitution": "CON",
+            "Intelligence": "INT", "Wisdom": "WIS", "Charisma": "CHA"}
+    score_chunks = []
+    for name in ["Strength", "Dexterity", "Constitution",
+                 "Intelligence", "Wisdom", "Charisma"]:
+        sc = int(scores.get(name) or 10)
+        mod = (sc - 10) // 2
+        score_chunks.append(
+            f"<b>{abbr[name]}</b> {sc} ({'+' if mod >= 0 else ''}{mod})"
+        )
+    flow.append(Paragraph(" &nbsp;·&nbsp; ".join(score_chunks), body_first))
+    # Proficiency / saves / skills
+    prof_bonus = max(2, 2 + (max(1, lvl) - 1) // 4)
+    saves = state.get("saving_throw_profs") or []
+    skill_profs = state.get("skill_profs") or []
+    flow.append(Paragraph(
+        f"<b>Proficiency:</b> +{prof_bonus} · "
+        f"<b>Saves:</b> {_html_escape(', '.join(saves) or '—')} · "
+        f"<b>Skill Profs:</b> {_html_escape(', '.join(skill_profs) or '—')}",
+        body_first))
+    # Inventory + spells
+    if state.get("inventory"):
+        flow.append(Spacer(1, 0.08 * inch))
+        flow.append(Paragraph("Inventory", session_title))
+        for item in state["inventory"]:
+            flow.append(Paragraph(f"· {_html_escape(str(item))}", body_first))
+    if state.get("spells_known"):
+        flow.append(Spacer(1, 0.08 * inch))
+        flow.append(Paragraph("Spells Known / Prepared", session_title))
+        for sp in state["spells_known"]:
+            flow.append(Paragraph(f"· {_html_escape(str(sp))}", body_first))
+    if state.get("notes"):
+        flow.append(Spacer(1, 0.08 * inch))
+        flow.append(Paragraph("Notes", session_title))
+        flow.append(Paragraph(_html_escape(str(state["notes"])), body_first))
+
+
+def _render_cypher_pc_sheet(flow, ch, state, p, body_first, session_title):
+    """Cypher type-focus-descriptor character appendix.
+
+    Per Cypher System Creator licence: short stat lines and rules
+    references are permissible; we cite mechanic names and tier numbers
+    only, never reproducing flavour prose.
+    """
+    from reportlab.platypus import Paragraph, Spacer
+    from reportlab.lib.units import inch
+    sentence = state.get("sentence") or (
+        f"I am a {state.get('descriptor','?')} {state.get('type','?')} "
+        f"who {(state.get('focus') or '?').lower()}."
+    )
+    tier = int(state.get("tier") or 1)
+    flow.append(Paragraph(
+        f"<i>\u201c{_html_escape(sentence)}\u201d</i> &nbsp; "
+        f"<font size='8' color='{p['muted']}'>Tier {tier} · Cypher System Creator</font>",
+        body_first))
+    pools = state.get("pools") or {}
+    edge = state.get("edge") or {}
+    pool_chunks = []
+    for k in ("Might", "Speed", "Intellect"):
+        pool_chunks.append(
+            f"<b>{k}</b> {int(pools.get(k) or 0)} "
+            f"<font color='{p['muted']}'>(Edge {int(edge.get(k) or 0)})</font>"
+        )
+    flow.append(Paragraph(
+        " &nbsp;·&nbsp; ".join(pool_chunks)
+        + f" &nbsp;·&nbsp; <b>Effort:</b> {int(state.get('effort') or 1)}",
+        body_first))
+    if state.get("skill_trains"):
+        flow.append(Spacer(1, 0.08 * inch))
+        flow.append(Paragraph("Skills Trained", session_title))
+        flow.append(Paragraph(_html_escape(", ".join(state["skill_trains"])), body_first))
+    if state.get("abilities"):
+        flow.append(Spacer(1, 0.08 * inch))
+        flow.append(Paragraph("Type / Focus Abilities", session_title))
+        for ab in state["abilities"]:
+            flow.append(Paragraph(f"· {_html_escape(str(ab))}", body_first))
+    if state.get("cyphers"):
+        flow.append(Spacer(1, 0.08 * inch))
+        flow.append(Paragraph("Cyphers Carried", session_title))
+        for cyp in state["cyphers"]:
+            flow.append(Paragraph(f"· {_html_escape(str(cyp))}", body_first))
+    if state.get("notes"):
+        flow.append(Spacer(1, 0.08 * inch))
+        flow.append(Paragraph("Notes / GM Intrusion ledger", session_title))
+        flow.append(Paragraph(_html_escape(str(state["notes"])), body_first))
+
+
+# ─── Per-licence setting gate ───────────────────────────────────────────
+# Some system licences (notably Cypher System Creator) explicitly forbid
+# Creator-distributed content for certain campaign settings. The export
+# endpoint refuses to generate a PDF when the campaign is tagged with a
+# forbidden setting — players can still run the campaign in-app, but
+# nothing leaves TableGnostic in a form that could be redistributed.
+
+_FORBIDDEN_SETTINGS_BY_SYSTEM: Dict[str, List[str]] = {
+    # Cypher System Creator — these three settings are NOT licensed for
+    # Creator-distributed content per the published Creator agreement.
+    "cypher": ["Numenera", "The Strange", "No Thank You, Evil!",
+               "no thank you evil", "no thank you, evil"],
+}
+
+
+def _setting_violates_licence(system_id: str, setting_name: str) -> Optional[str]:
+    """Return the matching forbidden-setting string if there's a violation,
+    otherwise None. Match is case-insensitive substring (so "A Numenera
+    homebrew" or "the Strange but darker" both trip the gate)."""
+    if not setting_name:
+        return None
+    forbidden = _FORBIDDEN_SETTINGS_BY_SYSTEM.get(system_id) or []
+    haystack = setting_name.lower()
+    for f in forbidden:
+        if f.lower() in haystack:
+            return f
+    return None
+
+
+_LICENCE_GATE_BLURBS: Dict[str, str] = {
+    "cypher": (
+        "PDF EXPORT BLOCKED — Cypher System Creator licence violation.\n\n"
+        "Campaign setting \"{setting}\" matches a setting that the Cypher "
+        "System Creator programme explicitly forbids for Creator-distributed "
+        "content: {forbidden}. Per the licence (Monte Cook Games, LLC), "
+        "Creators may NOT publish or distribute content for the Numenera, "
+        "The Strange, or No Thank You, Evil! settings.\n\n"
+        "You can still run this campaign inside Table-Gnostic — the in-app "
+        "tables, sessions, dice, and Knowledge Web all continue to work. "
+        "Only PDF export is blocked because exports are the surface that "
+        "could be redistributed.\n\n"
+        "If you intended to run a Creator-eligible setting "
+        "(Godforsaken / Gods of the Fall / Masters of the Night / "
+        "Predation / The Heartwood / The Revel / Unmasked), update the "
+        "campaign's Setting Name in the Atelier to that name and re-export."
+    ),
+}
+
+
 @router.get("/campaigns/{cid}/export.pdf")
 async def export_pdf(cid: str, user: dict = Depends(get_current_user)):
     """GM/admin downloads a system-branded PDF chronicle."""
@@ -1105,6 +1271,15 @@ async def export_pdf(cid: str, user: dict = Depends(get_current_user)):
         raise HTTPException(404, "Campaign not found")
     if camp["gm_id"] != user["id"] and user.get("role") != "admin":
         raise HTTPException(403, "GM/admin only.")
+    # Per-licence setting gate — block the export with the verbatim licence
+    # disclaimer if the campaign is tagged with a forbidden setting.
+    sys_id = camp.get("system_id") or "besm-4e"
+    forbidden_match = _setting_violates_licence(sys_id, camp.get("setting_name") or "")
+    if forbidden_match:
+        blurb = _LICENCE_GATE_BLURBS.get(sys_id, "PDF export not permitted.").format(
+            setting=camp.get("setting_name", ""), forbidden=forbidden_match,
+        )
+        raise HTTPException(status_code=451, detail=blurb)
     sessions = await db.sessions.find({"campaign_id": cid}, {"_id": 0}) \
                                  .sort("created_at", 1).to_list(60)
     if not sessions:

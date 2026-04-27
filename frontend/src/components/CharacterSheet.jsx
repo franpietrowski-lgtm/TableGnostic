@@ -76,14 +76,54 @@ export default function CharacterSheet() {
   // BESM 4E (Tri-Stat): Stat checks are 2d6 + Stat ≥ Target Number.
   // Combat rolls (ATK/DEF) similarly add the derived value.
   // Initiative is 1d6 + Mind (BESM 4E p.171).
-  const quickRolls = [
-    { label: "Body Roll", notation: "2d6+body", hint: "Roll 2d6, add Body, meet/beat the GM's Target Number." },
-    { label: "Mind Roll", notation: "2d6+mind" },
-    { label: "Soul Roll", notation: "2d6+soul" },
-    { label: "Attack", notation: "2d6+atk" },
-    { label: "Defence", notation: "2d6+def" },
-    { label: "Initiative", notation: "1d6+mind" },
-  ];
+  // System-aware quick-rolls: D&D 5E uses d20 + ability mod, Cypher uses
+  // 1d20 vs (3 × difficulty). Detected via `folio.dnd_state` /
+  // `folio.cypher_state` populated by the system-shaped builders.
+  const dndState = ch.folio?.dnd_state;
+  const cypherState = ch.folio?.cypher_state;
+  const _systemKind = dndState ? "dnd-5e" : cypherState ? "cypher" : "besm-4e";
+
+  const quickRolls = dndState
+    ? (() => {
+        const lvl = Math.max(1, +(dndState.level || 1));
+        const profBonus = Math.max(2, 2 + Math.floor((lvl - 1) / 4));
+        const sc = dndState.ability_scores || {};
+        const mod = (s) => Math.floor(((sc[s] | 0) - 10) / 2);
+        const fmt = (n) => (n >= 0 ? `+${n}` : `${n}`);
+        const six = ["Strength", "Dexterity", "Constitution",
+                      "Intelligence", "Wisdom", "Charisma"];
+        return six.map((s) => ({
+          label: `${s.slice(0, 3).toUpperCase()} check`,
+          notation: `1d20${fmt(mod(s))}`,
+          hint: `d20 + ${s} mod (SRD 5.1)`,
+        })).concat([
+          { label: "Initiative", notation: `1d20${fmt(mod("Dexterity"))}`,
+            hint: "d20 + DEX mod" },
+          { label: "Attack (PROF + STR)",
+            notation: `1d20${fmt(mod("Strength") + profBonus)}`,
+            hint: "d20 + STR mod + proficiency" },
+          { label: "Attack (PROF + DEX)",
+            notation: `1d20${fmt(mod("Dexterity") + profBonus)}`,
+            hint: "d20 + DEX mod + proficiency" },
+        ]);
+      })()
+    : cypherState
+    ? [
+        { label: "Cypher Roll (d20)", notation: "1d20",
+          hint: "Roll 1d20 ≥ (3 × difficulty). Effort/Edge lower difficulty 1 step each." },
+        { label: "Recovery (1d6)",   notation: "1d6+1",
+          hint: "Cypher recovery roll — pool restoration." },
+        { label: "Cypher Damage",    notation: "1d6",
+          hint: "Light cypher damage die." },
+      ]
+    : [
+        { label: "Body Roll", notation: "2d6+body", hint: "Roll 2d6, add Body, meet/beat the GM's Target Number." },
+        { label: "Mind Roll", notation: "2d6+mind" },
+        { label: "Soul Roll", notation: "2d6+soul" },
+        { label: "Attack", notation: "2d6+atk" },
+        { label: "Defence", notation: "2d6+def" },
+        { label: "Initiative", notation: "1d6+mind" },
+      ];
 
   const delChar = async () => {
     if (!window.confirm("Forget this character?")) return;
@@ -98,7 +138,13 @@ export default function CharacterSheet() {
       </Link>
       <div className="mt-3 flex items-start justify-between flex-wrap gap-4">
         <div>
-          <div className="label-ref mb-1">BESM 4E · {ch.power_level} · {ch.total_points} pts</div>
+          <div className="label-ref mb-1" data-testid="sheet-system-label">
+            {dndState
+              ? `D&D 5E · ${dndState.class || "Class"} ${dndState.level || 1} · ${dndState.race || "Race"}`
+              : cypherState
+              ? `Cypher · Tier ${cypherState.tier || 1} · ${cypherState.descriptor || "?"} ${cypherState.type || "?"}`
+              : `BESM 4E · ${ch.power_level} · ${ch.total_points} pts`}
+          </div>
           <h1 className="font-display text-4xl tracking-wide text-parchment flex items-center gap-3">
             {ch.token_color && (
               <span aria-label="Token colour"
@@ -134,6 +180,11 @@ export default function CharacterSheet() {
         </div>
       </div>
 
+      {/* System-shaped read view — D&D 5E / Cypher get their own block;
+          BESM 4E (and Anime 5E by default) keep the original tri-stat layout. */}
+      {dndState && <DndSheetView state={dndState} roll={roll}/>}
+      {cypherState && <CypherSheetView state={cypherState} roll={roll}/>}
+      {!dndState && !cypherState && (
       <div className="mt-8 grid lg:grid-cols-3 gap-6">
         {/* Left: Core */}
         <div className="card-mystic p-6">
@@ -443,6 +494,275 @@ export default function CharacterSheet() {
           </div>
         </div>
       </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Reusable DiceCard ────────────────────────────────────────────────
+function DiceCard({ quickRolls, roll }) {
+  // Lightweight wrapper so D&D / Cypher views get the same dice surface
+  // without duplicating the markup. Reads quickRolls from the parent so
+  // the macros stay system-shaped (1d20+mod for D&D, 1d20 for Cypher).
+  return (
+    <div className="card-mystic p-6 mt-6" data-testid="system-dice-card">
+      <div className="h-arcane text-sm">Dice Macros</div>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {quickRolls.map((q) => (
+          <button key={q.label} onClick={() => roll(q.notation, q.label)}
+                  className="btn btn-ghost text-xs"
+                  title={q.hint || q.notation}
+                  data-testid={`quick-${q.label.replace(/\s+/g, "-")}`}>
+            <Dice6 className="w-3 h-3"/> {q.label}
+          </button>
+        ))}
+      </div>
+      <div className="text-[10px] text-mist/70 italic mt-2">
+        Click a macro to post the roll into the campaign's first PBP channel.
+        Open a session to also feed the live spotlight + dice altar.
+      </div>
+    </div>
+  );
+}
+
+// ─── D&D 5E read view ─────────────────────────────────────────────────
+function DndSheetView({ state, roll }) {
+  const sc = state.ability_scores || {};
+  const lvl = Math.max(1, +(state.level || 1));
+  const profBonus = Math.max(2, 2 + Math.floor((lvl - 1) / 4));
+  const mod = (s) => Math.floor(((sc[s] | 0) - 10) / 2);
+  const fmt = (n) => (n >= 0 ? `+${n}` : `${n}`);
+  const six = ["Strength", "Dexterity", "Constitution",
+                "Intelligence", "Wisdom", "Charisma"];
+  const abbr = { Strength: "STR", Dexterity: "DEX", Constitution: "CON",
+                  Intelligence: "INT", Wisdom: "WIS", Charisma: "CHA" };
+  // Quick rolls reused inside DiceCard for D&D
+  const quickRolls = six.map((s) => ({
+    label: `${abbr[s]} check`, notation: `1d20${fmt(mod(s))}`,
+    hint: `d20 ${fmt(mod(s))} (SRD 5.1)`,
+  })).concat([
+    { label: "Initiative",
+      notation: `1d20${fmt(mod("Dexterity"))}`, hint: "d20 + DEX mod" },
+    { label: `Atk (PROF+STR)`,
+      notation: `1d20${fmt(mod("Strength") + profBonus)}`,
+      hint: "d20 + STR mod + proficiency" },
+    { label: `Atk (PROF+DEX)`,
+      notation: `1d20${fmt(mod("Dexterity") + profBonus)}`,
+      hint: "d20 + DEX mod + proficiency" },
+  ]);
+  return (
+    <div data-system="dnd-5e" data-testid="dnd-sheet-view">
+      <div className="card-mystic p-6 mt-8">
+        <div className="label-ref">Class · Race</div>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
+          <Stat label="Class" v={state.class || "—"}/>
+          <Stat label="Level" v={lvl}/>
+          <Stat label="Race" v={state.race || "—"}/>
+          <Stat label="Proficiency" v={`+${profBonus}`}/>
+        </div>
+        {state.background && (
+          <div className="mt-3 text-[12px] text-parchment/80 font-ui">
+            <span className="text-mist">Background:</span> {state.background}
+          </div>
+        )}
+      </div>
+
+      <div className="card-mystic p-6 mt-4">
+        <div className="label-ref">Ability Scores</div>
+        <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 mt-3 text-center">
+          {six.map((s) => {
+            const m = mod(s);
+            return (
+              <button key={s}
+                      onClick={() => roll(`1d20${fmt(m)}`, `${state.class || ""} · ${abbr[s]} check`)}
+                      className="border border-gold/15 rounded-sm py-2 hover:border-gold/40 hover:bg-gold/5 transition-colors group"
+                      data-testid={`dnd-sheet-roll-${abbr[s]}`}
+                      title={`Roll d20 ${fmt(m)}`}>
+                <div className="label-ref">{abbr[s]}</div>
+                <div className="font-display text-2xl text-gold">{sc[s] | 0}</div>
+                <div className="text-[10px] font-ui text-gold-bright group-hover:text-gold">{fmt(m)}</div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {(state.saving_throw_profs?.length || state.skill_profs?.length) > 0 && (
+        <div className="card-mystic p-6 mt-4 grid sm:grid-cols-2 gap-4">
+          <div>
+            <div className="label-ref">Saving Throw Profs</div>
+            <div className="flex flex-wrap gap-1 mt-2">
+              {(state.saving_throw_profs || []).map((s) => (
+                <span key={s} className="tag border-gold/40 text-gold-bright">{abbr[s] || s} +{profBonus}</span>
+              ))}
+            </div>
+          </div>
+          <div>
+            <div className="label-ref">Skill Profs</div>
+            <div className="flex flex-wrap gap-1 mt-2">
+              {(state.skill_profs || []).map((s) => (
+                <span key={s} className="tag">{s}</span>
+              ))}
+              {!state.skill_profs?.length && <span className="text-mist italic text-xs">—</span>}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {(state.inventory?.length || 0) > 0 && (
+        <SimpleListCard title="Inventory" items={state.inventory} testid="dnd-sheet-inv"/>
+      )}
+      {(state.spells_known?.length || 0) > 0 && (
+        <SimpleListCard title="Spells Known / Prepared" items={state.spells_known}
+                         testid="dnd-sheet-spells"/>
+      )}
+      {state.notes && (
+        <div className="card-mystic p-6 mt-4">
+          <div className="label-ref">Notes</div>
+          <div className="text-sm text-mist mt-2 whitespace-pre-wrap font-body">{state.notes}</div>
+        </div>
+      )}
+
+      <DiceCard quickRolls={quickRolls} roll={roll}/>
+    </div>
+  );
+}
+
+// ─── Cypher read view ─────────────────────────────────────────────────
+function CypherSheetView({ state, roll }) {
+  const [diff, setDiff] = useState(3);
+  const [extraSteps, setExtraSteps] = useState(0);
+  const sentence = state.sentence || (() => {
+    const article = /^[aeiouAEIOU]/.test(state.descriptor || "") ? "an" : "a";
+    return `I am ${article} ${state.descriptor || "?"} ${state.type || "?"} who ${(state.focus || "").toLowerCase() || "?"}.`;
+  })();
+  // Cypher target = (difficulty - steps_lowered) × 3, floor 0.
+  const effectiveDiff = Math.max(0, diff - Math.max(0, extraSteps));
+  const target = effectiveDiff * 3;
+  const rollAtDifficulty = () => {
+    const label = `Cypher roll · diff ${diff}${extraSteps ? ` (−${extraSteps} steps)` : ""} · TN ${target}`;
+    roll("1d20", label);
+  };
+  const quickRolls = [
+    { label: "Cypher Roll (d20)", notation: "1d20",
+      hint: "1d20 ≥ 3 × difficulty. Train/Specialise/Effort/Asset each lower difficulty 1 step." },
+    { label: "Recovery (1d6+1)", notation: "1d6+1", hint: "Cypher pool recovery roll." },
+    { label: "Light Cypher Damage", notation: "1d6", hint: "Single-target light damage die." },
+  ];
+  return (
+    <div data-system="cypher" data-testid="cypher-sheet-view">
+      {/* Sentence */}
+      <div className="card-mystic p-6 mt-8">
+        <div className="label-ref">Character Sentence</div>
+        <div className="text-base text-gold-bright italic mt-2"
+             data-testid="cypher-sheet-sentence">"{sentence}"</div>
+        <div className="grid grid-cols-3 gap-2 mt-3 text-[11px] text-mist">
+          <div><span className="label-ref">Descriptor</span> {state.descriptor || "—"}</div>
+          <div><span className="label-ref">Type</span> {state.type || "—"}</div>
+          <div><span className="label-ref">Focus</span> {state.focus || "—"}</div>
+        </div>
+      </div>
+
+      {/* Pools + Edge */}
+      <div className="card-mystic p-6 mt-4">
+        <div className="label-ref">Stat Pools &amp; Edge · Tier {state.tier || 1}</div>
+        <div className="grid grid-cols-3 gap-3 mt-3">
+          {["Might", "Speed", "Intellect"].map((k) => (
+            <div key={k} className="border border-gold/15 rounded-sm p-3 text-center">
+              <div className="label-ref">{k}</div>
+              <div className="font-display text-3xl text-gold">{state.pools?.[k] ?? 0}</div>
+              <div className="text-[10px] font-ui text-mist mt-1">
+                Edge <span className="text-gold-bright">{state.edge?.[k] ?? 0}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="mt-3 text-[11px] text-mist">
+          <span className="label-ref">Effort cap</span> {state.effort || 1}
+          <span className="ml-3 italic text-mist/70">(spend Pool to lower difficulty 1 step / Effort)</span>
+        </div>
+      </div>
+
+      {/* Difficulty tracker — the canonical Cypher dice surface */}
+      <div className="card-mystic p-6 mt-4" data-testid="cypher-difficulty-tracker">
+        <div className="label-ref">Difficulty Tracker</div>
+        <div className="grid sm:grid-cols-3 gap-3 mt-3 items-end">
+          <div>
+            <label className="label-ref">Task Difficulty (0-10)</label>
+            <input className="input" type="number" min={0} max={10} value={diff}
+                   onChange={(e) => setDiff(Math.max(0, Math.min(10, +e.target.value || 0)))}
+                   data-testid="cypher-diff-input"/>
+          </div>
+          <div>
+            <label className="label-ref">Steps Lowered (Train/Effort/Asset)</label>
+            <input className="input" type="number" min={0} max={10} value={extraSteps}
+                   onChange={(e) => setExtraSteps(Math.max(0, Math.min(10, +e.target.value || 0)))}
+                   data-testid="cypher-steps-input"/>
+          </div>
+          <div className="text-center border border-gold/30 rounded-sm py-3 bg-gold/5">
+            <div className="label-ref">Target Number</div>
+            <div className="font-display text-3xl text-gold-bright" data-testid="cypher-tn">
+              {target}
+            </div>
+            <div className="text-[10px] text-mist">eff. diff {effectiveDiff}</div>
+          </div>
+        </div>
+        <button onClick={rollAtDifficulty} className="btn btn-primary mt-3"
+                data-testid="cypher-roll-against-tn">
+          <Dice6 className="w-4 h-4"/> Roll 1d20 vs TN {target}
+        </button>
+      </div>
+
+      {(state.skill_trains?.length || 0) > 0 && (
+        <div className="card-mystic p-6 mt-4">
+          <div className="label-ref">Skills Trained</div>
+          <div className="flex flex-wrap gap-1 mt-2">
+            {state.skill_trains.map((s) => <span key={s} className="tag border-gold/40 text-gold-bright">{s}</span>)}
+          </div>
+        </div>
+      )}
+      {(state.abilities?.length || 0) > 0 && (
+        <SimpleListCard title="Type / Focus Abilities" items={state.abilities}
+                         testid="cypher-sheet-abilities"/>
+      )}
+      {(state.cyphers?.length || 0) > 0 && (
+        <SimpleListCard title="Cyphers Carried" items={state.cyphers}
+                         testid="cypher-sheet-cyphers"/>
+      )}
+      {state.notes && (
+        <div className="card-mystic p-6 mt-4">
+          <div className="label-ref">Notes / GM Intrusion ledger</div>
+          <div className="text-sm text-mist mt-2 whitespace-pre-wrap font-body">{state.notes}</div>
+        </div>
+      )}
+
+      <DiceCard quickRolls={quickRolls} roll={roll}/>
+
+      <div className="text-[10px] text-mist/60 italic mt-3 text-center">
+        Cypher System Creator · Requires the Cypher System Rulebook from Monte Cook Games.
+      </div>
+    </div>
+  );
+}
+
+function Stat({ label, v }) {
+  return (
+    <div>
+      <div className="label-ref">{label}</div>
+      <div className="font-display text-xl text-gold-bright">{v}</div>
+    </div>
+  );
+}
+
+function SimpleListCard({ title, items, testid }) {
+  return (
+    <div className="card-mystic p-6 mt-4" data-testid={testid}>
+      <div className="label-ref">{title}</div>
+      <ul className="mt-2 space-y-1">
+        {items.map((it, i) => (
+          <li key={i} className="text-sm text-parchment font-body">· {it}</li>
+        ))}
+      </ul>
     </div>
   );
 }
