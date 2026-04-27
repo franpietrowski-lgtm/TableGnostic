@@ -353,6 +353,59 @@ Per-system audit covering all 13 systems in the selector. Status table:
 
 ## V4.4 Phase K — Customizable Names & Campaign-Reference Attributes/Skills/Defects (2026-04-26)
 
+**User pain:** Once an Attribute / Skill / Defect was selected on a sheet, there was no way to customize its on-sheet name or descriptive flavour. Only the level / enhancements / limiters were editable. The Reference Editor in the Atelier covered Weapons / Armor / Items / Companions / Custom Rules but couldn't curate Attributes / Skills / Defects for the table to use during character creation.
+
+**Backend (`/app/backend/routes/reference_editor.py`, `/app/backend/core/models.py`)**
+- `REFERENCE_KINDS` extended from 5 → 8: now also includes `attribute`, `skill`, `defect`. The `Literal` type on `ReferenceItemIn.kind` updated to match — `POST /api/campaigns/{cid}/reference` validates the new kinds with the same page-validation pipeline that already powers the other kinds.
+- `CharacterAttribute`, `CharacterDefect`, `CharacterSkill` models gained `display_name: Optional[str] = ""`. The existing `note` field is repurposed as the player's freeform description. Both round-trip through `PUT /api/characters/{id}` (curl-verified).
+
+**Frontend — Reference Editor (`/app/frontend/src/components/ReferenceEditor.jsx`)**
+- 3 new tabs in the Atelier reference-editor: **Attributes**, **Skills**, **Defects** (`reference-tab-attribute|skill|defect`).
+- When the GM is creating/editing one of the **playable kinds**, an extra structured-fields panel (`reference-playable-fields`) appears with `cost_per_level` (numeric, attribute & skill), `points_per_rank` (numeric, defect), `category` selector (defect: Lesser / Greater / Custom), and a description input for the player-facing picker.
+
+**Frontend — Character Builder (`/app/frontend/src/components/CharacterBuilder.jsx`)**
+- On mount, also fetches `GET /api/campaigns/{cid}/reference` and merges any `attribute` / `skill` / `defect` rows into the picker as **"Campaign Reference"** options (alongside BESM 4E core + Custom (GM)). Defects auto-negate `points_per_rank` so the refund is correct.
+- AttributeRow / DefectRow / SkillRow each now expose a **"Customise"** toggle that opens a small inline editor with two inputs: custom display name (overrides the on-sheet label while keeping the underlying mechanic name in brackets) and description (long-form flavour persisted as `note`). Testids: `attr|defect|skill-display-name-{idx}` / `attr|defect|skill-note-{idx}`.
+
+**Frontend — Character Sheet (`/app/frontend/src/components/CharacterSheet.jsx`)**
+- When a row has a `display_name`, it renders as a bold parchment header *above* the `BesmTerm` mechanic line. The mechanic name and rule-link still appear directly below it so a click still pops the BESM 4E reference. Testids: `attr|defect|skill-display-{i}`.
+
+**Workflow this enables (the Session-0 GM scenario):** GM opens **Atelier → Reference Tables → Attributes/Skills/Defects** and adds setting-flavoured entries. Players then see them in the picker tagged "Campaign Reference" and rename them per-character. Mechanic resolution (cost, dice, derived stats) all key off the underlying name — renames are pure flavour and never break the engine.
+
+**Verification:** Backend round-trip via curl created an attribute/skill/defect reference row, then PUT a character with `display_name` + `note` on attribute[0] / defect[0] — both fields persisted intact in the response. All ESLint + Ruff lints pass on the 5 modified files.
+
+## V4.4 Phase L — Audio fix · Dashboard footer · Bidirectional UX hardening (2026-04-26)
+
+**P0 audio regression fix (`/app/frontend/src/components/AVSeats.jsx`)**
+- Symptom: phone joins session, **video reaches the desktop fine but no audio is heard on the desktop side**.
+- Root cause: the peer `<video>` element was hidden via Tailwind's `hidden` class (= `display:none`) whenever `camOn || hasStream` was false. **`display:none` halts media playback in Chromium and WebKit** — the audio track travels with the video element's stream, so when the element gets `display:none`'d the mic feed goes silent on the receiving side.
+- Two-line fix:
+  1. `hidden` → `invisible` on the `<video>` (Tailwind `visibility:hidden`) — element stays in the layout tree, media keeps playing, but the visual is suppressed so the avatar bubble shows through.
+  2. Dedicated `<audio ref autoPlay playsInline>` element rendered next to each `PeerTile` and bound to `peer.stream` via the same `srcObject` plumbing. This is a guaranteed audio sink that never participates in the cam-on/cam-off visibility flips, so audio is robust to any future visual-state change. Testid: `av-audio-{conn_id}`.
+- The fix preserves the self-tile mute (`muted={!!isSelf}` still in place — prevents echo for the local user).
+
+**Dashboard / app-wide legal footer (`/app/frontend/src/components/Shell.jsx`)**
+- New `<AppFooter>` rendered below every authenticated screen via the `<Outlet>` slot. Carries:
+  - Internal **Table-Gnostic** sigil (Sigil component, 28 px).
+  - Platform legal disclaimer naming the 13 supported systems (BESM, Anime 5E, Cypher, Numenera, D&D, PF2e, Fate, Mothership, Blades, CoC, Savage Worlds, Cyberpunk RED, V:tM, Shadowrun) and stating that we display only mechanic names + page refs — never copyrighted prose, lore, or art.
+  - "Per-system attribution &amp; required licence text appear on each campaign and exported PDF" — points users at the per-system surfaces where Tri-Stat Emporium · Dyskami · Cypher System Creator marks live.
+  - Year-stamped TableGnostic original-content copyright.
+- Testids: `app-footer` / `app-footer-legal`.
+- Layout: `<main>` switched to `flex flex-col` with the page content in `flex-1` and footer pushed to bottom, so short pages don't leave the footer floating.
+
+**System selection in campaign creation — verified already in place**
+- `Campaigns.jsx:137` exposes a `<select>` populated from `GET /api/systems` (all 13 systems). No work needed.
+
+**Channel live updates — verified already in place**
+- `ChannelsPanel.jsx` connects to `/api/ws/campaign/{cid}` and processes `channel:msg`, `channel:msg-delete`, `channel:reaction`, `channel:pin`, `channel:thread` events in real-time. Polls every 4 s only when the WS is disconnected. The "● live / ○ polling" pip in the composer footer already exposes the WS state.
+
+### Deferred — large phases requiring fresh credit budget
+- **Card decks system** (D&D 5E Deck of Many Things · Cypher cyphers/artifacts · Anime 5E character/bestiary cards) — system-aware. BESM 4E does not use cards by design, so the deck panel only renders for systems where `system.uses_cards === true`.
+- **Full D&D 5E mechanics extraction** — classes, races, backgrounds, equipment, spells, attack-roll/damage/saves dice formulas, system-coloured theme. CC-BY SRD 5.1/5.2 licensing only.
+- **Full Cypher System extraction** — types, foci, descriptors, cyphers, artifacts, GM Intrusion mechanics. Cypher System Creator licence — mechanics only, never reproduce flavour text.
+- **System-aware ingestion** — `routes/ingest.py` Claude prompt currently has one BESM-shaped category list. Should branch per `campaign.system_id` so D&D ingestions return classes/spells/items, Cypher ingestions return cyphers/artifacts/foci, etc.
+- **Per-system logo/disclaimer overlay** inside CampaignDetail header — already groundwork in `STYLE_PROFILES`; just needs the visible badge surface.
+
 **User pain:** Once an Attribute/Skill/Defect was selected on a sheet, there was no way to customize its on-sheet name or descriptive flavour. Only the level / enhancements / limiters were editable. The Reference Editor in the Atelier covered Weapons / Armor / Items / Companions / Custom Rules but couldn't curate Attributes / Skills / Defects for the table to use during character creation.
 
 **Backend (`/app/backend/routes/reference_editor.py`, `/app/backend/core/models.py`)**

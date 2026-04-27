@@ -523,33 +523,49 @@ export default function AVSeats({ subscribe, send, sessionTitle, characters = []
 // ------------ Tile components ------------
 function PeerTile({ peer, characterName, tokenColor, isActive, enlarged, onToggleEnlarge }) {
   const ref = useRef(null);
+  const audioRef = useRef(null);
   useEffect(() => {
     const v = ref.current;
-    if (!v) return;
-    if (v.srcObject !== (peer.stream || null)) {
-      v.srcObject = peer.stream || null;
-    }
+    const a = audioRef.current;
+    const stream = peer.stream || null;
+    if (v && v.srcObject !== stream) v.srcObject = stream;
+    // Mirror onto a dedicated <audio> element so audio playback survives
+    // even if the <video> ever gets display:none'd by a hide-when-cam-off
+    // path. This is the canonical fix for "phone video works but desktop
+    // hears no sound": display:none halts media in Chromium and WebKit;
+    // a separately-attached <audio> is immune.
+    if (a && a.srcObject !== stream) a.srcObject = stream;
     // Defeat autoplay quirks once the user has already gestured (Join voice).
     // Without this, some Chromium builds + Safari hold the element on the
     // first frame and present a black tile until a manual click.
-    if (peer.stream) v.play().catch(() => {});
+    if (stream) {
+      v?.play?.().catch(() => {});
+      a?.play?.().catch(() => {});
+    }
   }, [peer.stream, peer.camOn]);
   return (
-    <Tile
-      name={characterName || peer.name}
-      speakerName={characterName ? peer.name : undefined}
-      isGm={!!peer.is_gm}
-      tokenColor={tokenColor}
-      videoRef={ref}
-      micOn={peer.micOn}
-      camOn={peer.camOn}
-      hasStream={!!peer.stream}
-      inCall={!!peer.inCall || !!peer.stream}
-      isActive={isActive}
-      enlarged={enlarged}
-      onToggleEnlarge={onToggleEnlarge}
-      testId={`av-tile-${peer.conn_id}`}
-    />
+    <>
+      <Tile
+        name={characterName || peer.name}
+        speakerName={characterName ? peer.name : undefined}
+        isGm={!!peer.is_gm}
+        tokenColor={tokenColor}
+        videoRef={ref}
+        micOn={peer.micOn}
+        camOn={peer.camOn}
+        hasStream={!!peer.stream}
+        inCall={!!peer.inCall || !!peer.stream}
+        isActive={isActive}
+        enlarged={enlarged}
+        onToggleEnlarge={onToggleEnlarge}
+        testId={`av-tile-${peer.conn_id}`}
+      />
+      {/* Dedicated audio sink — the <video> in Tile can be hidden via
+          visibility:hidden when cam is off; this <audio> always plays.
+          Lives outside the tile so layout doesn't matter. */}
+      <audio ref={audioRef} autoPlay playsInline
+             data-testid={`av-audio-${peer.conn_id}`}/>
+    </>
   );
 }
 
@@ -588,7 +604,7 @@ function Tile({
         autoPlay
         playsInline
         muted={!!isSelf}
-        className={`w-full h-full object-cover ${showVideo ? "" : "hidden"}`}
+        className={`w-full h-full object-cover ${showVideo ? "" : "invisible"}`}
       />
       {!showVideo && (
         <div className="absolute inset-0 flex items-center justify-center">

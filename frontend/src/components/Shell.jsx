@@ -114,8 +114,11 @@ export default function Shell() {
       )}
 
       {/* CONTENT */}
-      <main className="min-h-screen page overflow-x-hidden pb-20 md:pb-0">
-        <Outlet />
+      <main className="min-h-screen page overflow-x-hidden pb-20 md:pb-0 flex flex-col">
+        <div className="flex-1">
+          <Outlet />
+        </div>
+        <AppFooter/>
       </main>
 
       {/* MOBILE BOTTOM NAV */}
@@ -128,5 +131,48 @@ export default function Shell() {
         ))}
       </nav>
     </div>
+  );
+}
+
+/**
+ * App-level footer.
+ *
+ * Carries the **TableGnostic** legal posture (platform-wide). Per-system
+ * marks (Tri-Stat Emporium · Dyskami · Cypher System Creator · etc.) live
+ * inside each campaign's surfaces — they're applied conditionally by
+ * `[data-system]` so the right rights-holder gets credit on the right page.
+ */
+function AppFooter() {
+  return (
+    <footer className="border-t border-gold/10 bg-void/60 px-6 md:px-12 py-6 mt-10"
+            data-testid="app-footer">
+      <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <Sigil size={28}/>
+          <div>
+            <div className="font-display tracking-[0.25em] text-xs text-parchment">TABLE-GNOSTIC</div>
+            <div className="text-[10px] text-mist/70 italic">Not the system. The table.</div>
+          </div>
+        </div>
+        <div className="text-[10px] text-mist/70 leading-relaxed font-ui max-w-2xl"
+             data-testid="app-footer-legal">
+          <p>
+            Table-Gnostic is an unofficial, system-aware tabletop platform.
+            Trademarks and copyrighted material referenced inside campaigns
+            (BESM, Anime 5E, Cypher System, Numenera, D&amp;D, Pathfinder, Fate, Mothership,
+            Blades in the Dark, Call of Cthulhu, Savage Worlds, Cyberpunk RED,
+            Vampire: the Masquerade, Shadowrun) belong to their respective
+            rights-holders. We display only mechanic names, page references,
+            and numerics — never reproduced rulebook prose, lore, or art.
+            Per-system attribution &amp; required licence text appear on each
+            campaign and exported PDF.
+          </p>
+          <p className="mt-1">
+            © {new Date().getFullYear()} Table-Gnostic · All original platform
+            content licensed under its respective creator's terms.
+          </p>
+        </div>
+      </div>
+    </footer>
   );
 }
