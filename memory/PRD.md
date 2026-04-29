@@ -23,6 +23,24 @@
 ### V5.1 — Atelier "Epic Campaign" 8th-phase tab (2026-04-27)
 **Trigger:** GMFran uploaded Guy Sclanders' follow-up book *Epic Campaigns: Digital Edition* (146 pp) and asked for a new tab inside the **"Forge the Master Plot"** Atelier page. The two planes (the existing 7-phase Genesis and the new Epic Campaign) are intentionally INDEPENDENT — usable in tandem, separately, or one-or-the-other; pure GM brainstorming kit. Implemented as `phase === 7` panel inside `CampaignGenesis.jsx`, alongside the existing seven phases. Backend: new `db.epic_campaigns` collection + `routes/epic_campaign.py` (GET/PUT/seed-codex). Frontend: new `EpicCampaignPanel.jsx` (11 sections — Plan/Constraints, Theme, Sentence, OGAS Nemesis, Villains, Expanding Goal, Milestones, Adventures, Seeds, Beginning, Climax — plus Tie-ins picker). The "Sync to Codex" action pushes the Nemesis + each Villain + each Seed into the World Codex as gm-only knowledge nodes; idempotent on re-run.
 
+### V5.5.1 — `SystemCharacterBuilders` refactor (2026-04-29)
+
+Pure refactor — zero behavioural change. The 853-line monolith
+`/app/frontend/src/components/SystemCharacterBuilders.jsx` was split
+into a `builders/` package:
+
+- `builders/shared.jsx` — `Stat`, `FreeList`, `ABILITIES_5E`, `ABBR_5E`, `modOf`, `profByLevel`.
+- `builders/Dnd5e.jsx` — `Dnd5eBuilder` + `empty5e` (D&D 5E character forge).
+- `builders/Cypher.jsx` — `CypherBuilder` + `emptyCypher` (Cypher System).
+- `builders/Anime5e.jsx` — `Anime5eBuilder` (thin adapter that reshapes the Anime 5E ref into a 5E-shape ref and delegates to `Dnd5eBuilder` with the hybrid prop).
+- `builders/Anime5eHybridSupplement.jsx` — Tri-Stat point-buy card (its own file so `Dnd5e.jsx` and `Anime5e.jsx` can both import it without a circular ESM cycle).
+- `SystemCharacterBuilders.jsx` — reduced to a ~60-line `SystemBuilderLoader` that resolves URL params + fetches the campaign & system reference, then dispatches to the matching builder. Re-exports the named builders so any legacy import `from "./SystemCharacterBuilders"` keeps working.
+
+**Verification — `/app/test_reports/iteration_27.json`**
+- 100 % frontend pass: D&D / Cypher / Anime 5E builders all render with every testid intact and save end-to-end (`POST /api/characters` → navigate to `/app/characters/{id}`).
+- Module compiled with only pre-existing eslint warnings (unrelated). No "Element type is invalid" runtime errors.
+- ESM cycle removed by extracting `Anime5eHybridSupplement` to its own file (suggested by testing agent — applied immediately).
+
 ### V5.5 — Living Ecosystem fixed + Map upgrades + Loading ritual + Speed (2026-04-29)
 
 Continuation pass after the V5.4 testing-agent-found CRITICAL bug.

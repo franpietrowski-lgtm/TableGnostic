@@ -8,14 +8,14 @@
  * supplement card at the bottom of the sheet.
  */
 import React, { useEffect, useState } from "react";
-import { useNavigate, useParams, Link } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { api, formatApiErrorDetail } from "../../lib/api";
 import { Save } from "lucide-react";
 import {
   ABILITIES_5E, ABBR_5E, modOf, profByLevel,
   Stat, FreeList,
 } from "./shared";
-import { Anime5eHybridSupplement } from "./Anime5e";
+import { Anime5eHybridSupplement } from "./Anime5eHybridSupplement";
 
 export const empty5e = (cid) => ({
   campaign_id: cid, name: "", concept: "", power_level: "Heroic", total_points: 0,
