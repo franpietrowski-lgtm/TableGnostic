@@ -23,7 +23,36 @@
 ### V5.1 — Atelier "Epic Campaign" 8th-phase tab (2026-04-27)
 **Trigger:** GMFran uploaded Guy Sclanders' follow-up book *Epic Campaigns: Digital Edition* (146 pp) and asked for a new tab inside the **"Forge the Master Plot"** Atelier page. The two planes (the existing 7-phase Genesis and the new Epic Campaign) are intentionally INDEPENDENT — usable in tandem, separately, or one-or-the-other; pure GM brainstorming kit. Implemented as `phase === 7` panel inside `CampaignGenesis.jsx`, alongside the existing seven phases. Backend: new `db.epic_campaigns` collection + `routes/epic_campaign.py` (GET/PUT/seed-codex). Frontend: new `EpicCampaignPanel.jsx` (11 sections — Plan/Constraints, Theme, Sentence, OGAS Nemesis, Villains, Expanding Goal, Milestones, Adventures, Seeds, Beginning, Climax — plus Tie-ins picker). The "Sync to Codex" action pushes the Nemesis + each Villain + each Seed into the World Codex as gm-only knowledge nodes; idempotent on re-run.
 
-### V5.1.2 — Cypher derived stats + system-aware Characters list + Account page + Seat-character + Narrative PDF (this iteration — 2026-04-27)
+### V5.2 — Content expansion + system-aware UI sweep (this iteration — 2026-04-27)
+
+**Big push.** Tackled most of the user's V5.1.2 backlog list in one pass.
+
+**Backend content expansion**
+- `dnd5e_data.py` — 8 SRD CC-BY backgrounds (Acolyte / Criminal / Folk Hero / Noble / Sage / Soldier / Sailor / Charlatan), full `SPELL_SLOTS_FULL`, `SPELL_SLOTS_HALF`, `SPELL_SLOTS_WARLOCK` tables (level 1-20), `CANTRIPS_KNOWN` per class.
+- `anime5e_data.py` — 8 genre backgrounds (Honor Student / Idol Trainee / Mech Pilot Cadet / Wandering Swordsman / Magical Trainee / Cyberpunk Runner / Spirit Medium / Otherworlder), 8 Defects (Awkward, Bane, Conditional Power…), 10 anime-themed items, `CLASS_CASTING` map (Adept full, Pilot/Tinker half, Champion/Idol none).
+- `cypher_data.py` — Descriptors and Foci now ship as objects with `genres[]` tags (8 genres: fantasy/modern/post/scifi/horror/superhero/historical/any) for genre-gating; new top-level `SETTING_GENRES`.
+- `core/models.py` — Campaign V5.2 fields: `setting_genre` (Cypher gate), `primer_level_min` (D&D/Anime min), `primer_tier_suggest` (Cypher), `primer_xp_cap`, `house_rules`.
+
+**Frontend system-aware UI**
+- `CharacterSheet.jsx` — new universal **CharacterJournal** block (POST /characters/{id}/journal, reverse-chrono entries with timestamp + session id pill); new D&D **dnd-spell-slots** card derived from class+level using SRD tables (full/half/warlock variants + cantrips count).
+- `SystemCharacterBuilders.jsx` — D&D Builder Background field is now a **dropdown** populated from SRD; selecting one surfaces a `dnd-background-card` showing skills/tools/languages/feature blurb. Cypher Builder Descriptor and Focus dropdowns now **filter by `campaign.setting_genre`** (entries tagged 'any' always show; legacy string descriptors normalised inline).
+- `CampaignDetail.jsx` PrimerTab — new system-aware **Forge Caps** block: D&D / Anime show `primer-level-min`, Cypher shows `primer-tier-suggest` + `primer-cypher-genre`, all systems show `primer-xp-cap`. Universal `house-rules` textarea. Read-only player-side primer view surfaces setting / genre / level-min / tier / XP cap / prohibited-list / house-rules in cards.
+- `ReferenceEditor.jsx` — **system-aware row fields**: `cost-per-level` / `points-per-rank` / defect-category hidden for non-BESM systems; non-BESM systems get description + (Cypher) genre tag inputs. The legacy BESM mechanic shape is preserved on `besm-4e`.
+- `CharacterBuilder.jsx` — BESM **points-loading-bar** under the points-pool card; turns ember when over-spent.
+
+**Verification — `/app/test_reports/iteration_23.json`**
+- 5/5 backend pytest cases PASS in `/app/backend/tests/test_iter23_v52.py` (D&D ref, Anime 5E ref, Cypher ref, Campaign primer roundtrip, Character Journal).
+- Frontend Playwright sweep: `primer-system-caps` + all 5 `primer-*` testids + save roundtrip (Cypher); `dnd-background` dropdown + `dnd-background-card` (D&D); `points-pool-card` + `points-loading-bar` (BESM); `character-journal` end-to-end (Cypher). `dnd-spell-slots` UI not visually exercised (no D&D chars yet); component code verified.
+
+**Remaining from the V5.2 backlog (deferred — next iteration):**
+- Anime 5E Challenge Rating / Encounter design tools.
+- Move Reference Editor + Quickstart onto the Genesis page.
+- Custom-rules tab fields system+mechanic specific.
+- Editable card fields + deck composition by GM/players (CRUD wired; UI polish in CustomCardEditor pending).
+- Evereantha + Artisan's Tale demo seeding across all systems.
+- Code refactor — split `SystemCharacterBuilders.jsx` into `builders/{Dnd5e,Cypher,Anime5e}.jsx`.
+
+### V5.1.2 — Cypher derived stats + system-aware Characters list + Account page + Seat-character + Narrative PDF (2026-04-27)
 
 **Big batch in one pass.** Highest-leverage items from the user's list shipped, with the rest logged as P1 backlog.
 
