@@ -23,7 +23,35 @@
 ### V5.1 — Atelier "Epic Campaign" 8th-phase tab (2026-04-27)
 **Trigger:** GMFran uploaded Guy Sclanders' follow-up book *Epic Campaigns: Digital Edition* (146 pp) and asked for a new tab inside the **"Forge the Master Plot"** Atelier page. The two planes (the existing 7-phase Genesis and the new Epic Campaign) are intentionally INDEPENDENT — usable in tandem, separately, or one-or-the-other; pure GM brainstorming kit. Implemented as `phase === 7` panel inside `CampaignGenesis.jsx`, alongside the existing seven phases. Backend: new `db.epic_campaigns` collection + `routes/epic_campaign.py` (GET/PUT/seed-codex). Frontend: new `EpicCampaignPanel.jsx` (11 sections — Plan/Constraints, Theme, Sentence, OGAS Nemesis, Villains, Expanding Goal, Milestones, Adventures, Seeds, Beginning, Climax — plus Tie-ins picker). The "Sync to Codex" action pushes the Nemesis + each Villain + each Seed into the World Codex as gm-only knowledge nodes; idempotent on re-run.
 
-### V5.5.2 — Macro library + XP scorecard polish + Campaign-level XP Ledger (2026-04-29)
+### V6.0 — Session A: WS Pulse + Ingestion Preview + Anime5e DnD import + Evereantha cross-system + Dashboard redesign (2026-04-29)
+
+**Real-time Pulse nervous system**
+- `routes/ecosystem.py` — new `_pulse_tick(cid, kind, meta)` helper broadcasts `{type:'pulse:tick'}` to `campaign:{cid}` room.
+- Motive POST, Director PUT (encounter), and journal POST all fire a pulse tick. `DirectorConsole.jsx` subscribes via `/ws/campaign/{cid}`, debounces 350ms, refetches `/ecosystem/pulse`. New `[data-testid='pulse-live-badge']` flashes on each tick.
+
+**Ingestion preview (clarity-check before LLM spend)**
+- `POST /api/campaigns/{cid}/ingest-preview` — parse-only endpoint, zero LLM cost, returns head/tail excerpts + byte/char/paragraph meta.
+- `IngestPanel.jsx` — two-step Upload & Preview → commit to Claude. New `[data-testid='ingest-preview-overlay']` with head/tail pre blocks + Cancel / Commit buttons.
+
+**Anime 5E — D&D SRD class / race imports + chassis summary card**
+- `system_data/anime5e_data.py` — CLASSES expanded from 5 to 17 (5 Anime-5E originals + 12 D&D SRD: Barbarian through Wizard), each tagged `origin` ('anime-5e' / 'dnd-5e-srd') with hit_die, primary ability, saves, casting. HERITAGES expanded from 8 to 16 (+Dwarf, Elf, Halfling, Dragonborn, Gnome, Half-Elf, Half-Orc, Tiefling) with ASI/size/speed/traits.
+- `CharacterSheet.jsx` — new `[data-testid='dnd-chassis-summary']` 3-column card below the Class/Race/Background header showing hit die · casting · saves · speed · skills · tools · feature. Same mechanics power Anime 5E hybrid sheets (they share the dnd_state folio). `[data-testid='sheet-system-label']` now correctly reads "Anime 5E hybrid" when the folio has anime5e_state.
+
+**Evereantha cross-system suite**
+- `POST /api/admin/seed-evereantha-suite` deploys Evereantha as 4 parallel campaigns — besm-4e (canonical), dnd-5e, cypher, anime-5e — sharing the 23-node Codex + 9 motives but with per-system encounter stat shapes (CR / level / CR+Tri-Stat) and system-flavoured player primers. `Account.jsx` exposes `[data-testid='account-evereantha-suite-btn']`.
+
+**Dashboard one-page redesign**
+- Full rewrite of `components/Dashboard.jsx`. Hero strip + quick-action rail (Forge / Campaigns / Discover / Reference) + "Continue at the table" (3 recent sessions) + rich system-badged campaign grid + "Your characters" strip + "Tables seeking players" strip. 4 StatChips (campaigns / GM of / seats / public) aligned right. Fully responsive (1→2→3 col at base/sm/lg).
+- Supporting backend: `GET /api/characters?mine=true` (user's owned characters, cross-campaign).
+
+**Regression fix**
+- `routes/campaigns.py` — list_campaigns now hydrates `is_gm` and `is_member` per row (previously only the detail handler did). Detail handler also gained `is_member` for parity. Dashboard GM badges, Account "Campaigns GM'd" stat, and Discover filter all rely on these.
+
+**Verification — `/app/test_reports/iteration_{31,32}.json`**
+- Backend: 9/9 iter31 regression, 3/4 iter32 (the 1 "fail" was a parity suggestion for detail endpoint — applied in this turn).
+- Frontend: Dashboard all GM badges correct, DirectorConsole pulse-live-badge mounts + pulse data hydrates, Ingest preview modal open→cancel works (LLM budget preserved), chassis-summary + sheet-system-label testids verified in source.
+
+
 
 Two P1 features shipped + significant hardening from the V5.5 work.
 

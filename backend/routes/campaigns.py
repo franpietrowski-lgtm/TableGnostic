@@ -270,6 +270,10 @@ async def get_campaign(cid: str, user: dict = Depends(get_current_user)):
     ).to_list(100)
     camp["members"] = members
     camp["is_gm"] = (camp["gm_id"] == user["id"])
+    # Parity with list endpoint — Dashboard / Discover / Account all
+    # consume is_member; keep detail in sync so any single-campaign
+    # view never silently mislabels the caller's relationship.
+    camp["is_member"] = user["id"] in (camp.get("member_ids") or [])
     return camp
 
 
