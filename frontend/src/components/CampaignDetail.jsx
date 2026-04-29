@@ -96,6 +96,10 @@ export default function CampaignDetail() {
                               title="GM Director's Console — pull NPCs from your Atelier into encounters, judge Challenge Rating, get tactical suggestions.">
             <Wand2 className="w-4 h-4"/> Director
           </Link>}
+          {camp.is_gm && <button onClick={() => setShowLedger(true)} className="btn" data-testid="xp-ledger-btn"
+                                 title="Campaign-level XP ledger — every award + conversion across all characters.">
+            <ScrollText className="w-4 h-4"/> XP Ledger
+          </button>}
           {camp.is_gm && <button onClick={() => setShowStart(true)} className="btn btn-primary" data-testid="start-session-btn">
             <Sparkles className="w-4 h-4"/> Start session
           </button>}

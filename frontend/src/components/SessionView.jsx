@@ -29,6 +29,7 @@ export default function SessionView() {
   const [mobilePane, setMobilePane] = useState("chat"); // chat | init | dice (mobile only)
   const [mapOpen, setMapOpen] = useState(false);
   const [xpOpen, setXpOpen] = useState(false);
+  const [loadErr, setLoadErr] = useState("");
   const chatEnd = useRef(null);
   const wsRef = useRef(null);
   const subsRef = useRef([]); // AVSeats subscribers
@@ -73,18 +74,26 @@ export default function SessionView() {
   }, []);
 
   const loadAll = async () => {
-    const s = await api.get(`/sessions/${id}`).then((r) => r.data);
-    setSession(s);
-    const [c, d, i, e, chs, camp] = await Promise.all([
-      api.get(`/sessions/${id}/chat`).then(r => r.data),
-      api.get(`/sessions/${id}/dice`).then(r => r.data),
-      api.get(`/sessions/${id}/initiative`).then(r => r.data),
-      api.get(`/sessions/${id}/effects`).then(r => r.data),
-      api.get(`/campaigns/${s.campaign_id}/characters`).then(r => r.data),
-      api.get(`/campaigns/${s.campaign_id}`).then(r => r.data),
-    ]);
-    setChat(c); setDice(d); setInit(i); setEffects(e); setCharacters(chs);
-    setCampaign(camp);
+    try {
+      setLoadErr("");
+      const s = await api.get(`/sessions/${id}`).then((r) => r.data);
+      setSession(s);
+      const [c, d, i, e, chs, camp] = await Promise.all([
+        api.get(`/sessions/${id}/chat`).then(r => r.data).catch(() => []),
+        api.get(`/sessions/${id}/dice`).then(r => r.data).catch(() => []),
+        api.get(`/sessions/${id}/initiative`).then(r => r.data).catch(() => []),
+        api.get(`/sessions/${id}/effects`).then(r => r.data).catch(() => []),
+        api.get(`/campaigns/${s.campaign_id}/characters`).then(r => r.data).catch(() => []),
+        api.get(`/campaigns/${s.campaign_id}`).then(r => r.data).catch(() => null),
+      ]);
+      setChat(c); setDice(d); setInit(i); setEffects(e); setCharacters(chs);
+      setCampaign(camp);
+    } catch (err) {
+      // Session fetch failed — surface real message instead of hanging
+      // on the OPENING THE TABLE min-delay forever.
+      const detail = err?.response?.data?.detail || err?.message || "Session not found.";
+      setLoadErr(typeof detail === "string" ? detail : "Session not found.");
+    }
   };
 
   useEffect(() => { loadAll(); }, [id]);

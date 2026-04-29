@@ -1,0 +1,69 @@
+{
+  "summary": "V5.5.2 RETEST iteration_29 — Backend regression 5/5 PASS (test_iter28_v552.py). Frontend: xp-ledger-btn FIX VERIFIED (button visible, overlay+totals+characters+filter chips+entries+close all work). Cypher MacroBar works after a character is selected from dice-char-select; macro-d20 click correctly sets notation='1d20' and Roll persists a dice log entry. TWO real bugs remain: (a) session-load-error testid is NEVER rendered for invalid session URLs — page hangs indefinitely on session-loading even after 12s, contradicting the fix described in the review request; (b) XPAwardPanel renders xp-scorecard-table but ZERO xp-breakdown-btn-{cid} buttons exist on a fresh session, so the breakdown popover flow cannot be exercised. Also the test plan's expected Cypher testid 'macro-d20--3' (double-dash) is WRONG — the slug regex collapses repeats so the real testid is 'macro-d20-3' (single dash).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "SessionView.jsx",
+        "issue": "Claimed fix from review request is INCOMPLETE. Code at lines 92-96 sets setLoadErr(detail) on session-fetch failure, but (1) line 145 still uses useMinDelay(!session, 5000) — NOT useMinDelay(!session && !loadErr, 5000) — and (2) NO JSX renders a [data-testid='session-load-error'] div anywhere in the file (grep confirms zero matches). Behaviour observed for /app/sessions/NONEXISTENT123: 404 in network tab, session-loading visible, NEVER clears even after 12s. Reproduction: visit any invalid session URL → 'OPENING THE TABLE / TUNING THE CANDLES · FETCHING THE SCRIPT' persists forever; no error UI; no 'Back to campaigns' link.",
+        "selector": "[data-testid='session-load-error']",
+        "priority": "HIGH"
+      },
+      {
+        "component": "XPAwardPanel.jsx",
+        "issue": "When opened on the test session via [data-testid='open-xp-btn'], xp-scorecard-table mounts but ZERO [data-testid^='xp-breakdown-btn-'] buttons render. The breakdown-popover flow ([data-testid='xp-breakdown-popover-{cid}']) cannot be reached. Either the panel is gating breakdown buttons on data that isn't seeded for this session (only 1 character, 0 prior actions) or the button is conditionally hidden. Need a code-side check: render xp-breakdown-btn-{cid} unconditionally per scorecard row, even when counts=0.",
+        "selector": "[data-testid^='xp-breakdown-btn-']",
+        "priority": "HIGH"
+      },
+      {
+        "component": "MacroBar.jsx (test plan mismatch, NOT a code bug)",
+        "issue": "Review request asserts the d20-3 macro produces testid 'macro-d20--3' (double dash). REAL behaviour: data-testid={`macro-${m.label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`} — the regex uses '+' (one or more) so any run of non-alphanumerics collapses to a SINGLE dash. For label 'd20-3' the testid is 'macro-d20-3' (single dash). For 'd20+1' it is 'macro-d20-1'. My run confirmed: macro-d20-1 PRESENT, macro-d20--3 ABSENT, macro-d20-3 would be the correct selector. Either correct the test plan OR change the regex to NOT collapse repeats (e.g. replace '+' with '*' or split logic).",
+        "selector": "[data-testid='macro-d20--3'] vs [data-testid='macro-d20-3']",
+        "priority": "MEDIUM"
+      },
+      {
+        "component": "SessionView.jsx (UX)",
+        "issue": "MacroBar in dice-panel only renders when a character is selected via dice-char-select. For Cypher (which only has 4 fixed macros: d20/d20+1/d20-3/GM Intr that don't depend on character stats) the test plan expects them visible immediately. Either auto-select first character on load (cleanest UX) or render Cypher's flat macros even when character is null.",
+        "selector": "[data-testid='macro-bar']",
+        "priority": "MEDIUM"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Campaigns list", "issues": ["3 duplicate 'Evereantha · The Caldera Choir' BESM campaigns from prior test runs — needs cleanup of TEST_-prefixed seeds"]}
+    ]
+  },
+  "tests_executed": {
+    "backend_pytest_iter28_v552_retest": "5/5 PASS (TestLedgerAccess 401/403/404, TestLedgerShape 200+keys, TestLedgerAwardAndConvert award+convert appears).",
+    "frontend_xp_ledger": "PASS — login GMFran → /app/campaigns/9e4f14c37e1049e09885b22c8c5c827e (Artisan's Tale, cypher) → xp-ledger-btn visible → click → xp-ledger-overlay/totals/characters mount → 2 filter chips (all + 1 char) + 4 entry rows render → xp-ledger-close dismisses correctly.",
+    "frontend_session_cypher_macros": "MOSTLY PASS — /app/sessions/7d86e51dcdef4e6e923db51d499698a4 → dice-panel mounts → macro-bar HIDDEN until character selected (dice-char-select) → after selecting TEST_Cypher_Refactor, macro-bar mounts with macro-d20 (✓), macro-d20-1 (✓), macro-gm-intr (✓), macro-d20--3 (✗ — actual testid is macro-d20-3 due to regex collapse). Click macro-d20 → notation becomes '1d20' (✓). Click session-roll-btn → 1 dice-log entry appears in session-roll-log (✓).",
+    "frontend_xp_breakdown_popover": "FAIL — open-xp-btn → xp-scorecard-table mounts but 0 xp-breakdown-btn-{cid} buttons present, popover unreachable.",
+    "frontend_invalid_session": "FAIL — /app/sessions/NONEXISTENT123 → backend returns 404 → session-loading testid persists 12s+, session-load-error NEVER renders. The fix described in the review request is not actually present in the code: useMinDelay still uses (!session, 5000) without loadErr gate, and no JSX renders a session-load-error div.",
+    "frontend_besm_macros": "NOT TESTED — focus shifted after invalid-session/breakdown failures; 3 candidate besm-4e campaigns identified (c0ccbab.../6c67829.../a7076bb...). Recommend re-running once main agent fixes the rendered-testid issues."
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter28_v552.py",
+    "/app/test_reports/pytest/iter29_v552_retest.xml"
+  ],
+  "action_items": [
+    "HIGH — SessionView.jsx: actually render the error screen. (1) line 145 → useMinDelay(!session && !loadErr, 5000); (2) directly after `if (!session) return null;` (line 160) add: `if (loadErr) return (<div className='p-10 text-center' data-testid='session-load-error'><div className='text-gold mb-2'>Session not found.</div><div className='text-mist text-sm mb-4'>{loadErr}</div><Link to='/app/campaigns' className='underline text-gold'>Back to campaigns</Link></div>);` Place BEFORE the !session early-return so it always wins.",
+    "HIGH — XPAwardPanel.jsx: ensure xp-breakdown-btn-{cid} renders for every scorecard row (even counts=0). Currently 0 buttons appear on a fresh session.",
+    "MEDIUM — MacroBar.jsx OR test plan: review request says d20-3 → macro-d20--3 but the regex /[^a-z0-9]+/g collapses runs, producing macro-d20-3. Either change to /[^a-z0-9]/g (single-char, no collapse) so the dash is preserved → macro-d20--3 — OR update test plan to use macro-d20-3.",
+    "MEDIUM — SessionView.jsx: auto-select first character into characterId on load when characters.length === 1, so MacroBar (especially Cypher's flat 4-macro set) is visible without a manual select.",
+    "LOW — Seed cleanup: 3 duplicate BESM 'Evereantha · The Caldera Choir' campaigns linger from prior test runs."
+  ],
+  "critical_code_review_comments": [
+    "SessionView.jsx — review request claimed loadErr-aware error screen is in place; grep confirms it is NOT (only 1 occurrence of loadErr, in the useState declaration; setLoadErr is set in catch but never read by JSX). The min-delay gate is also not loadErr-aware. This contradicts the agent_to_agent_context_note explicitly. Main agent must apply the patch verbatim — the prior edit appears to have been lost.",
+    "MacroBar.jsx — slug regex `replace(/[^a-z0-9]+/g, '-')` is correct for general kebab-case but the test plan's expectation of double-dash is incompatible. Pick one source of truth.",
+    "CampaignDetail.jsx — xp-ledger-btn fix CONFIRMED present and working (line 99). XPLedgerPanel mounts cleanly with all expected testids: xp-ledger-overlay, xp-ledger-close, xp-ledger-totals, xp-ledger-characters, xp-ledger-filter-all, xp-ledger-filter-{cid}, xp-ledger-table, xp-ledger-entry-{eid}.",
+    "Backend xp.py /campaigns/{cid}/xp/ledger — unchanged from iter28; 5/5 pytest still pass."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (5/5)", "frontend": "60% — XP Ledger fully fixed; Cypher macros work post char-select; session error screen + xp-breakdown-btn still broken"},
+  "test_credentials": "GMFran — franpietrowski@gmail.com / PieGod08!! (admin, verified). Test session SID=7d86e51dcdef4e6e923db51d499698a4 (cypher), test character b84986063c8a4685ada3258cc0db8512 (TEST_Cypher_Refactor).",
+  "seed_data_creation": "None this iteration — used the SID + campaign provided in the review request.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "After main agent applies (1) the SessionView session-load-error JSX patch + useMinDelay(!session && !loadErr, 5000), (2) unconditional xp-breakdown-btn-{cid} rendering in XPAwardPanel, and (3) decides on macro-d20-3 vs macro-d20--3 — re-run the same flow as iteration_29 frontend script. The xp-ledger flow is fully validated and does not need re-testing. The BESM macro test on a c0ccbab.../6c67829.../a7076bb... campaign was deferred and is still open.",
+  "rca of the issue": "ROOT CAUSE for invalid-session hang: the catch block in loadAll() sets loadErr but no JSX consumes it, AND useMinDelay's first arg is still !session (not !session && !loadErr) — so even when loadErr fires, stillOpening stays true for 5s, then the `if (!session) return null;` short-circuits the whole component, leaving a blank page (or, if min-delay never resolves due to the timer dependency, the loading screen persists indefinitely). The patch described in the review request was either reverted or never committed. ROOT CAUSE for missing breakdown buttons: XPAwardPanel likely gates the [data-testid='xp-breakdown-btn-{cid}'] render on a non-empty breakdown row count or per-character action history; on a brand-new session with one character and no prior awards, the rows render zeros but the button is suppressed. Recommend always rendering the trigger (it can show an empty popover with 'No breakdown yet')."
+}
