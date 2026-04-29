@@ -1,8 +1,9 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { api } from "../lib/api";
+import { useMinDelay } from "../lib/useMinDelay";
 import {
   Map as MapIcon, Image as ImageIcon, Eye, EyeOff, Plus, X,
-  Hammer, Hand, MousePointer2, Trash2, Ruler, Sparkles,
+  Hammer, Hand, MousePointer2, Trash2, Ruler, Sparkles, Maximize2, Minimize2,
 } from "lucide-react";
 
 /**
@@ -47,6 +48,45 @@ export default function Battlemap({
   const [measureStart, setMeasureStart] = useState(null);
   const [measureEnd, setMeasureEnd] = useState(null);
   const [losEnabled, setLosEnabled] = useState(true);
+  // Mobile detector — strictly viewport-based; mobile users get a
+  // view-only experience (no GM tools, locked to select mode). Desktop
+  // gets the full editing kit. Tracks resize so a tablet rotation flips
+  // the gating immediately.
+  const [isMobile, setIsMobile] = useState(() =>
+    typeof window !== "undefined" ? window.innerWidth < 768 : false
+  );
+  useEffect(() => {
+    const onR = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener("resize", onR);
+    return () => window.removeEventListener("resize", onR);
+  }, []);
+  // Fullscreen edit mode — desktop GM only. When ON, the map takes
+  // over the viewport with a black backdrop so the GM can place
+  // walls / tokens / fog / notes without the rest of the app fighting
+  // for attention. Auto-engages whenever the GM picks an editing tool.
+  const [fullscreenEdit, setFullscreenEdit] = useState(false);
+  const isEditingMode = mode === "fog" || mode === "wall";
+  // Player & mobile clients must stay in select mode. If a tool gets
+  // assigned that they aren't allowed (e.g. fog), force-revert to
+  // select instead of leaving an unusable cursor.
+  useEffect(() => {
+    if (isMobile && mode !== "select") setMode("select");
+    if (!isGm && (mode === "fog" || mode === "wall")) setMode("select");
+  }, [isMobile, isGm, mode]);
+  // GM editor tool → auto-fullscreen (desktop only).
+  useEffect(() => {
+    if (isMobile) return;
+    if (isGm && isEditingMode) setFullscreenEdit(true);
+  }, [isGm, isEditingMode, isMobile]);
+  // ESC bails out of fullscreen.
+  useEffect(() => {
+    if (!fullscreenEdit) return;
+    const onKey = (e) => { if (e.key === "Escape") setFullscreenEdit(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [fullscreenEdit]);
+  // Min-delay so the "Unrolling the map…" line gets a beat to read.
+  const stillUnrolling = useMinDelay(!state, 5000);
   const canvasRef = useRef(null);
 
   // ─── load map + effects ───
@@ -392,16 +432,45 @@ export default function Battlemap({
   };
 
   // ─── render ───
-  if (!state) return (
-    <div className="card-mystic p-6 text-mist text-sm" data-testid="battlemap-loading">
-      Unrolling the map…
+  if (stillUnrolling || !state) return (
+    <div className="card-mystic p-10 text-mist text-sm flex flex-col items-center justify-center gap-3 min-h-[40vh]" data-testid="battlemap-loading">
+      <div className="text-gold font-display tracking-[0.4em] text-sm animate-flicker">
+        UNROLLING THE MAP
+      </div>
+      <div className="text-mist/60 text-[10px] font-ui uppercase tracking-[0.3em]">
+        Pinning the corners · invoking the grid
+      </div>
     </div>
   );
 
   const fogSet = new Set(state.fog.map((c) => `${c.x},${c.y}`));
 
-  return (
-    <div className="card-mystic p-3 md:p-4 flex flex-col" data-testid="battlemap" data-mode={mode}>
+  // Fullscreen-edit wrapper — desktop GM only when an editing tool is
+  // selected. The wrapper takes over the viewport with a black backdrop
+  // so the rest of the app fades out behind the map. ESC or the
+  // Minimize button exits.
+  const Wrap = ({ children }) => (
+    fullscreenEdit && !isMobile ? (
+      <div className="fixed inset-0 z-[60] bg-black flex flex-col p-3 md:p-5 overflow-auto"
+           data-testid="battlemap-fullscreen">
+        <div className="flex items-center justify-between mb-2 gap-2">
+          <div className="text-[10px] font-ui uppercase tracking-[0.3em] text-gold/80">
+            Fullscreen Editing · Mode: <span className="text-gold-bright">{mode}</span> · ESC to exit
+          </div>
+          <button onClick={() => setFullscreenEdit(false)}
+                  className="btn btn-ghost text-xs"
+                  data-testid="battlemap-fullscreen-exit"
+                  title="Exit fullscreen edit (ESC)">
+            <Minimize2 className="w-3.5 h-3.5"/> Exit
+          </button>
+        </div>
+        <div className="flex-1 min-h-0">{children}</div>
+      </div>
+    ) : children
+  );
+
+  return (<Wrap>
+    <div className="card-mystic p-3 md:p-4 flex flex-col" data-testid="battlemap" data-mode={mode} data-mobile={isMobile ? "1" : "0"}>
       <div className="flex items-center justify-between gap-2 mb-3">
         <div className="min-w-0">
           <div className="label-ref">Battlemap</div>
@@ -444,6 +513,15 @@ export default function Battlemap({
               <Sparkles className="w-3.5 h-3.5"/>
             </button>
           )}
+          {/* Desktop GM only — manual fullscreen toggle for the map. */}
+          {isGm && !isMobile && (
+            <button onClick={() => setFullscreenEdit((v) => !v)}
+                    className={`btn btn-ghost text-xs px-2 ${fullscreenEdit ? "border-gold text-gold-bright" : ""}`}
+                    data-testid="map-fullscreen-toggle"
+                    title={fullscreenEdit ? "Exit fullscreen (ESC)" : "Fullscreen edit"}>
+              {fullscreenEdit ? <Minimize2 className="w-3.5 h-3.5"/> : <Maximize2 className="w-3.5 h-3.5"/>}
+            </button>
+          )}
           {onClose && (
             <button onClick={onClose} className="btn btn-ghost text-xs px-2" data-testid="map-close" title="Close map">
               <X className="w-3.5 h-3.5"/>
@@ -452,7 +530,7 @@ export default function Battlemap({
         </div>
       </div>
 
-      {isGm && (
+      {isGm && !isMobile && (
         <div className="flex flex-wrap gap-1.5 mb-2 text-[10px]" data-testid="map-gm-tools">
           <input
             ref={fileInputRef}
@@ -469,7 +547,7 @@ export default function Battlemap({
           <button onClick={() => fileInputRef.current?.click()}
                   disabled={uploadBusy}
                   className="btn btn-ghost text-[10px]" data-testid="map-bg-upload-btn"
-                  title="Upload a PNG/JPEG/WEBP map image (≤12 MB)">
+                  title="Upload a PNG/JPEG/WEBP map image (≤32 MB · 2K-quality friendly)">
             <ImageIcon className="w-3 h-3"/> {uploadBusy ? "Uploading…" : "Upload Map"}
           </button>
           <button onClick={setBgImageUrl} className="btn btn-ghost text-[10px]" data-testid="map-bg-url-btn"
@@ -498,11 +576,27 @@ export default function Battlemap({
         </div>
       )}
 
+      {/* Mobile = view-only banner. GMs need to prep on desktop. */}
+      {isMobile && (
+        <div className="mb-2 px-3 py-2 rounded-sm border border-arcane/40 bg-arcane/10 text-[10px] font-ui uppercase tracking-widest text-arcane-light"
+             data-testid="map-mobile-viewonly-banner">
+          Map is view-only on mobile. GMs prep walls / fog / tokens on desktop.
+        </div>
+      )}
+
       {/* Canvas */}
       <div
         ref={canvasRef}
         className="relative w-full overflow-hidden border border-gold/30 bg-black/80 select-none cursor-crosshair"
-        style={{ aspectRatio: `${W} / ${H}` }}
+        style={{
+          aspectRatio: `${W} / ${H}`,
+          // Fullscreen-edit OR mobile (view-only) → cap height to viewport so
+          // the map "fits to screen" on first paint without scrolling.
+          maxHeight: fullscreenEdit ? "calc(100vh - 90px)"
+                   : isMobile ? "calc(100vh - 220px)"
+                   : "75vh",
+          margin: "0 auto",
+        }}
         onMouseDown={onMouseDown}
         onMouseMove={onMouseMove}
         onMouseUp={onMouseUp}
@@ -516,7 +610,9 @@ export default function Battlemap({
             alt=""
             draggable={false}
             className="absolute inset-0 w-full h-full pointer-events-none"
-            style={{ objectFit: state.image.fit || "cover" }}
+            // Default to 'contain' so the whole map fits-to-screen on
+            // first paint instead of being cropped.
+            style={{ objectFit: state.image.fit || "contain" }}
           />
         )}
         {/* Grid overlay */}
@@ -665,10 +761,12 @@ export default function Battlemap({
       </div>
 
       <div className="text-[10px] font-ui uppercase tracking-widest text-mist/60 mt-2">
-        {isGm
-          ? "GM · select to move tokens · fog: click hide / shift-click reveal · wall: click+drag · ruler: click+drag · right-click token to remove"
-          : `Drag tokens you own. Gold ring = active turn. ${losEnabled ? "Walls block your line of sight." : "Line-of-sight off — seeing all."}`}
+        {isMobile
+          ? `View-only on mobile. ${losEnabled ? "Walls block your line of sight." : ""}`
+          : isGm
+            ? "GM · select to move tokens · fog: click hide / shift-click reveal · wall: click+drag · ruler: click+drag · right-click token to remove"
+            : `Drag tokens you own. Gold ring = active turn. ${losEnabled ? "Walls block your line of sight." : "Line-of-sight off — seeing all."}`}
       </div>
     </div>
-  );
+  </Wrap>);
 }

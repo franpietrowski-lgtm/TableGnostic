@@ -1,6 +1,7 @@
 import React from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./lib/api";
+import { useMinDelay } from "./lib/useMinDelay";
 import Landing from "./components/Landing";
 import Auth from "./components/Auth";
 import Shell from "./components/Shell";
@@ -20,16 +21,24 @@ import DirectorConsole from "./components/DirectorConsole";
 
 function Protected({ children }) {
   const { user, loading } = useAuth();
-  if (loading || user === null) return <LoadingScreen />;
+  // Hold the SUMMONING screen for a beat so the flicker actually reads
+  // as a ritual instead of a flash. ~5 s minimum.
+  const stillSummoning = useMinDelay(loading || user === null, 5000);
+  if (stillSummoning) return <LoadingScreen />;
   if (!user) return <Navigate to="/auth" replace />;
   return children;
 }
 
 function LoadingScreen() {
   return (
-    <div className="min-h-screen flex items-center justify-center">
-      <div className="text-gold font-display tracking-[0.4em] text-sm animate-flicker">
-        SUMMONING
+    <div className="min-h-screen flex items-center justify-center" data-testid="app-loading-screen">
+      <div className="flex flex-col items-center gap-4">
+        <div className="text-gold font-display tracking-[0.4em] text-sm animate-flicker">
+          SUMMONING
+        </div>
+        <div className="text-mist/50 text-[10px] font-ui uppercase tracking-[0.3em]">
+          The Loremaster gathers your table…
+        </div>
       </div>
     </div>
   );

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import { Link, useParams } from "react-router-dom";
 import { api, API, useAuth } from "../lib/api";
+import { useMinDelay } from "../lib/useMinDelay";
 import { Dice6, Send, Plus, X, Swords, Heart, Zap, Skull, Shield, ChevronRight, Sparkles, ScrollText, Users, MessageSquare, Map as MapIcon } from "lucide-react";
 import AVSeats from "./AVSeats";
 import Battlemap from "./Battlemap";
@@ -129,7 +130,24 @@ export default function SessionView() {
     };
   }, [id]);
 
-  if (!session) return <div className="p-10 text-mist">Opening the table…</div>;
+  // Min-display delay so the "Opening the table…" beat reads as ritual,
+  // not a flash. Held ~5 s even after data resolves.
+  const stillOpening = useMinDelay(!session, 5000);
+  if (stillOpening) {
+    return (
+      <div className="p-10 flex items-center justify-center min-h-[60vh]" data-testid="session-loading">
+        <div className="flex flex-col items-center gap-3">
+          <div className="text-gold font-display tracking-[0.4em] text-sm animate-flicker">
+            OPENING THE TABLE
+          </div>
+          <div className="text-mist/60 text-[10px] font-ui uppercase tracking-[0.3em]">
+            Tuning the candles · {session ? "almost ready" : "fetching the script"}
+          </div>
+        </div>
+      </div>
+    );
+  }
+  if (!session) return null;
 
   const sendChat = async (e) => {
     e?.preventDefault();

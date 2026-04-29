@@ -1,0 +1,38 @@
+{
+  "summary": "V5.5 retest complete. V5.4 CRITICAL BUG (demo_seed.py visibility → GET /api/campaigns/{cid} 500) is FIXED — visibility='private' now set in demo_seed.py line 252 and routes/campaigns.py uses camp.get('visibility','private'). Director Console now mounts cleanly with director-pulse-panel + all 4 PulseCols (pulse-sessions, pulse-journal, pulse-motives=2 [Mayor Mishtee + Malshe Darkening], pulse-encounters=1 [Pass-of-Aurea Ambush]). Backend: 16/16 pytest PASS (new test_iter26_v55.py 9/9 + regression test_iter25_v54.py 7/7). Frontend: SUMMONING loading screen visible, Desktop battlemap fit-to-screen (maxHeight=810px=75vh on 1080 viewport), map-mode-wall auto-engages fullscreen (fixed inset-0 z-60 rgb(0,0,0)), ESC + manual map-fullscreen-toggle both work. Mobile view-only banner visible, map-gm-tools hidden, data-mobile=1. MAX_BYTES=32MB confirmed (constant read + live 33MB upload returns 413). One minor mobile leak found.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Battlemap.jsx header toolbar (lines ~486-505)", "issue": "On mobile (<768px) the compact mode-switch buttons [data-testid=map-mode-fog] and [data-testid=map-mode-wall] still render (count=1 each). Only the map-gm-tools parent (line 533) and fullscreen-toggle (line 517) are gated with !isMobile. The small header mode buttons are not. Functionally safe because the useEffect at line 73 auto-resets mode to 'select' on mobile, but the buttons being visible contradicts the 'locked view-only' spec. Wrap the select/fog/wall/measure mode-button group with `{!isMobile && (...)}` or render only select on mobile.", "selector": "[data-testid='map-mode-fog'], [data-testid='map-mode-wall']", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter26_v55.py",
+    "/app/backend/tests/test_iter25_v54.py",
+    "/app/test_reports/pytest/iter26_results.xml"
+  ],
+  "action_items": [
+    "(LOW) Wrap the inline mode-switch button cluster in Battlemap.jsx (map-mode-select/fog/wall/measure around lines 486-505) with `!isMobile` so mobile users can't see the fog/wall tools. Current behaviour is functionally safe (auto-reset to select) but visible buttons contradict the view-only spec."
+  ],
+  "critical_code_review_comments": [
+    "demo_seed.py now defaults visibility='private' — good. Consider extracting a single campaign-doc factory so seed / clone / create paths don't drift.",
+    "routes/campaigns.py line 257 now uses camp.get('visibility','private') defensively — good defence-in-depth while seed also writes the field.",
+    "uploads.py MAX_BYTES=32MB correctly streams and aborts at 413 before buffering the full upload — good.",
+    "Battlemap.jsx fullscreen auto-engage logic (useEffect watching isEditingMode + !isMobile) works as specified; ESC handler correctly bound; overlay computed as position:fixed, z-index:60, bg rgb(0,0,0), inset 0 — exactly per spec.",
+    "useMinDelay hook holds the loading flag for ≥5s — SUMMONING screen visually verified. session-loading min-delay is harder to observe when session data loads from local cache (<1s); not a bug, just note that min-delay only holds while the flag is true.",
+    "Mobile leak: map-mode-fog/wall buttons visible despite view-only spec. Low impact, easy one-line fix.",
+    "Evereantha now seeds 23 nodes + 9 motives (was 7+3) — verified via seed response: nodes>=20 and motives>=8 asserted and pass."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter26_v55.py (NEW — 9 tests, all passing)"
+  ],
+  "success_rate": {"backend": "100% (16/16 across iter25+iter26 suites)", "frontend": "~90% — all major flows pass, one minor mobile button leak"},
+  "test_credentials": "franpietrowski@gmail.com / PieGod08!! — admin/GM role (sole authoritative account). Disposable player TEST_iter26_player_<ts>@example.com registered for 403 checks.",
+  "seed_data_creation": "Each seed-demo call deploys 2 fresh campaigns (Evereantha besm-4e first, Artisan's Tale cypher second). Latest Evereantha used for frontend: cb... / c0ccbab5... (varies per run). Test session TEST_iter26 session id=741f4e61a90c440aa4cb4587f97425fe created in Evereantha. Multiple TEST_iter26_* gm_only motive entries appended to Mayor Mishtee node — append-only, not cleaned.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "V5.4 critical bug RESOLVED. V5.5 features all working. Only minor issue: mobile still shows map-mode-fog/wall buttons. If fixed, re-run /app/backend/tests/test_iter26_v55.py (should still pass — backend untouched) and replay the mobile Battlemap script checking fog=0, wall=0 testids at 390×844. The useMinDelay hook is visually verified via SUMMONING screenshot — session-loading min-delay is hard to observe reliably because session payloads often resolve fast from cache.",
+  "rca of the issue": "V5.4 500-on-campaign-GET bug RCA: demo_seed.py omitted 'visibility' key while routes/campaigns.py used subscript. Both fixes applied (line 252 demo_seed.py now writes 'visibility':'private'; line 257 campaigns.py uses .get fallback). Verified via test_iter26_v55.py::test_campaign_detail_no_longer_500 — GET 200 on both seeded campaigns."
+}

@@ -254,7 +254,7 @@ async def get_campaign(cid: str, user: dict = Depends(get_current_user)):
     camp = await db.campaigns.find_one({"id": cid}, {"_id": 0})
     if not camp:
         raise HTTPException(404, "Not found")
-    if camp["visibility"] != "public" and camp["gm_id"] != user["id"] and user["id"] not in camp.get("member_ids", []):
+    if camp.get("visibility", "private") != "public" and camp["gm_id"] != user["id"] and user["id"] not in camp.get("member_ids", []):
         raise HTTPException(403, "Not permitted")
     members = await db.users.find(
         {"id": {"$in": camp.get("member_ids", [])}},

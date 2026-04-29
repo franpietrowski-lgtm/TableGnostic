@@ -42,7 +42,7 @@ ALLOWED_IMAGE_TYPES = {
     "image/jpg": ".jpg",
     "image/webp": ".webp",
 }
-MAX_BYTES = 12 * 1024 * 1024  # 12 MB
+MAX_BYTES = 32 * 1024 * 1024  # 32 MB — fits proper 2K (and most 4K) battlemap renders
 
 
 def _sniff_dims(path: Path) -> tuple[Optional[int], Optional[int]]:
