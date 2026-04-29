@@ -486,14 +486,14 @@ export default function Battlemap({
                   data-testid="map-mode-select" title="Select / move">
             <MousePointer2 className="w-3.5 h-3.5"/>
           </button>
-          {isGm && (
+          {isGm && !isMobile && (
             <button onClick={() => setMode("fog")}
                     className={`btn ${mode === "fog" ? "btn-primary" : "btn-ghost"} text-xs px-2`}
                     data-testid="map-mode-fog" title="Paint fog (shift-click to reveal)">
               <Eye className="w-3.5 h-3.5"/>
             </button>
           )}
-          {isGm && (
+          {isGm && !isMobile && (
             <button onClick={() => setMode("wall")}
                     className={`btn ${mode === "wall" ? "btn-primary" : "btn-ghost"} text-xs px-2`}
                     data-testid="map-mode-wall" title="Draw wall segment">

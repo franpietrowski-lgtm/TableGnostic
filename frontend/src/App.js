@@ -1,4 +1,4 @@
-import React from "react";
+import React, { Suspense, lazy } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./lib/api";
 import { useMinDelay } from "./lib/useMinDelay";
@@ -6,18 +6,21 @@ import Landing from "./components/Landing";
 import Auth from "./components/Auth";
 import Shell from "./components/Shell";
 import Dashboard from "./components/Dashboard";
-import Campaigns from "./components/Campaigns";
-import CampaignDetail from "./components/CampaignDetail";
-import CharacterBuilder from "./components/CharacterBuilder";
-import CharacterSheet from "./components/CharacterSheet";
-import SessionView from "./components/SessionView";
-import Reference from "./components/Reference";
-import CampaignGenesis from "./components/CampaignGenesis";
-import Discover from "./components/Discover";
 import Invite from "./components/Invite";
 import Reset from "./components/Reset";
-import Account from "./components/Account";
-import DirectorConsole from "./components/DirectorConsole";
+
+// Lazy-load the heavy route components so initial bundle stays lean and
+// the Dashboard paints sooner. Each chunk is ~50–200KB minified.
+const Campaigns       = lazy(() => import("./components/Campaigns"));
+const CampaignDetail  = lazy(() => import("./components/CampaignDetail"));
+const CharacterBuilder= lazy(() => import("./components/CharacterBuilder"));
+const CharacterSheet  = lazy(() => import("./components/CharacterSheet"));
+const SessionView     = lazy(() => import("./components/SessionView"));
+const Reference       = lazy(() => import("./components/Reference"));
+const CampaignGenesis = lazy(() => import("./components/CampaignGenesis"));
+const Discover        = lazy(() => import("./components/Discover"));
+const Account         = lazy(() => import("./components/Account"));
+const DirectorConsole = lazy(() => import("./components/DirectorConsole"));
 
 function Protected({ children }) {
   const { user, loading } = useAuth();
@@ -44,6 +47,18 @@ function LoadingScreen() {
   );
 }
 
+// Quick fallback for lazily-loaded route chunks. Shorter than the full
+// SUMMONING screen — these chunks are typically <200ms.
+function RouteFallback() {
+  return (
+    <div className="min-h-[40vh] flex items-center justify-center" data-testid="route-loading">
+      <div className="text-gold/70 font-display tracking-[0.3em] text-xs animate-flicker">
+        UNFOLDING…
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   return (
     <AuthProvider>
@@ -55,17 +70,17 @@ export default function App() {
           <Route path="/reset" element={<Reset />} />
           <Route element={<Protected><Shell /></Protected>}>
             <Route path="/app" element={<Dashboard />} />
-            <Route path="/app/campaigns" element={<Campaigns />} />
-            <Route path="/app/discover" element={<Discover />} />
-            <Route path="/app/campaigns/:id" element={<CampaignDetail />} />
-            <Route path="/app/campaigns/:id/genesis" element={<CampaignGenesis />} />
-            <Route path="/app/campaigns/:id/characters/new" element={<CharacterBuilder />} />
-            <Route path="/app/characters/:id" element={<CharacterSheet />} />
-            <Route path="/app/characters/:id/edit" element={<CharacterBuilder />} />
-            <Route path="/app/sessions/:id" element={<SessionView />} />
-            <Route path="/app/reference" element={<Reference />} />
-            <Route path="/app/account" element={<Account />} />
-            <Route path="/app/campaigns/:id/director" element={<DirectorConsole />} />
+            <Route path="/app/campaigns" element={<Suspense fallback={<RouteFallback/>}><Campaigns /></Suspense>} />
+            <Route path="/app/discover" element={<Suspense fallback={<RouteFallback/>}><Discover /></Suspense>} />
+            <Route path="/app/campaigns/:id" element={<Suspense fallback={<RouteFallback/>}><CampaignDetail /></Suspense>} />
+            <Route path="/app/campaigns/:id/genesis" element={<Suspense fallback={<RouteFallback/>}><CampaignGenesis /></Suspense>} />
+            <Route path="/app/campaigns/:id/characters/new" element={<Suspense fallback={<RouteFallback/>}><CharacterBuilder /></Suspense>} />
+            <Route path="/app/characters/:id" element={<Suspense fallback={<RouteFallback/>}><CharacterSheet /></Suspense>} />
+            <Route path="/app/characters/:id/edit" element={<Suspense fallback={<RouteFallback/>}><CharacterBuilder /></Suspense>} />
+            <Route path="/app/sessions/:id" element={<Suspense fallback={<RouteFallback/>}><SessionView /></Suspense>} />
+            <Route path="/app/reference" element={<Suspense fallback={<RouteFallback/>}><Reference /></Suspense>} />
+            <Route path="/app/account" element={<Suspense fallback={<RouteFallback/>}><Account /></Suspense>} />
+            <Route path="/app/campaigns/:id/director" element={<Suspense fallback={<RouteFallback/>}><DirectorConsole /></Suspense>} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

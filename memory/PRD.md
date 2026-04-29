@@ -23,11 +23,50 @@
 ### V5.1 — Atelier "Epic Campaign" 8th-phase tab (2026-04-27)
 **Trigger:** GMFran uploaded Guy Sclanders' follow-up book *Epic Campaigns: Digital Edition* (146 pp) and asked for a new tab inside the **"Forge the Master Plot"** Atelier page. The two planes (the existing 7-phase Genesis and the new Epic Campaign) are intentionally INDEPENDENT — usable in tandem, separately, or one-or-the-other; pure GM brainstorming kit. Implemented as `phase === 7` panel inside `CampaignGenesis.jsx`, alongside the existing seven phases. Backend: new `db.epic_campaigns` collection + `routes/epic_campaign.py` (GET/PUT/seed-codex). Frontend: new `EpicCampaignPanel.jsx` (11 sections — Plan/Constraints, Theme, Sentence, OGAS Nemesis, Villains, Expanding Goal, Milestones, Adventures, Seeds, Beginning, Climax — plus Tie-ins picker). The "Sync to Codex" action pushes the Nemesis + each Villain + each Seed into the World Codex as gm-only knowledge nodes; idempotent on re-run.
 
-### V5.3 — Director's Console + One-Shot Scaffold (this iteration — 2026-04-29)
+### V5.5 — Living Ecosystem fixed + Map upgrades + Loading ritual + Speed (2026-04-29)
+
+Continuation pass after the V5.4 testing-agent-found CRITICAL bug.
+
+**Backend fixes**
+- `routes/demo_seed.py` — base_camp now writes `visibility: "private"` (was missing → caused GET /api/campaigns/{cid} to 500).
+- `routes/campaigns.py:257` — defence-in-depth: `camp.get("visibility", "private")` instead of subscript.
+- `routes/uploads.py` — MAX_BYTES bumped 12 MB → **32 MB** to support proper 2K (and most 4K) battlemap renders.
+
+**Backend content — Evereantha demo expansion**
+- `routes/demo_seed.py` EVEREANTHA blob now seeds **23 codex nodes** (was 7) and **9 NPC motives** (was 3) covering: 6 locations · 4 factions · 4 lore entries (incl. full magic system) · 9 NPCs.
+- New magic system documented: **Seven Resonance Forms** (Quench / Edge / Strike / Weld / Hum / Crack / Seal) + Forbidden Eighth (Break). Each form has 5 ranks; Break costs ×2 CP and risks soul-shatter.
+- New NPCs: Choirmaster Olen, Eli of the Glass-Hands, Cantor Veshin the Heretic, Anbel Mishtee, Sister Quench, Brother Crack — each carries a plot-phase-tagged motive that the Pulse Panel surfaces.
+
+**Frontend — Mobile-friendly Battlemap + Fullscreen Edit + Min-delay loading**
+- `lib/useMinDelay.js` (new) — holds a "still-loading" flag true for ≥ N ms after upstream resolves, so the thematic SUMMONING / OPENING / UNROLLING text gets a beat to read.
+- `App.js` — `Protected` uses `useMinDelay(loading || user===null, 5000)`; `LoadingScreen` styled with new `data-testid="app-loading-screen"`.
+- `components/SessionView.jsx` — replaced flash "Opening the table…" with full ritual: `data-testid="session-loading"` showing **OPENING THE TABLE** / "Tuning the candles" for ≥5s.
+- `components/Battlemap.jsx`:
+  - Replaced flash "Unrolling the map…" with **UNROLLING THE MAP** / "Pinning the corners · invoking the grid" for ≥5s.
+  - **Mobile detector** (`window.innerWidth < 768` + resize listener). On mobile: GM tools hidden (`map-gm-tools`, `map-mode-fog`, `map-mode-wall`, `map-fullscreen-toggle` all gated `!isMobile`); mode auto-resets to `select`; new `data-testid="map-mobile-viewonly-banner"` reads "Map is view-only on mobile. GMs prep walls / fog / tokens on desktop."
+  - **Fullscreen edit (desktop GM only)** — auto-engages when GM picks `fog` or `wall` mode. Renders `data-testid="battlemap-fullscreen"` (fixed inset-0, z-60, bg-black) so the rest of the app blacks out behind. ESC exits; manual toggle button `data-testid="map-fullscreen-toggle"` also works.
+  - **Fit-to-screen on initial paint** — canvas wrapper now uses `maxHeight: 75vh` (default) / `calc(100vh - 90px)` (fullscreen) / `calc(100vh - 220px)` (mobile) and the bg `<img>` defaults to `objectFit: contain` so the whole map shows without scroll.
+  - Upload tooltip + cap raised to **32 MB**.
+
+**Frontend — Speed health-check**
+- `App.js` lazy-loads heavy route components via `React.lazy` + `Suspense`: `Campaigns`, `CampaignDetail`, `CharacterBuilder`, `CharacterSheet`, `SessionView`, `Reference`, `CampaignGenesis`, `Discover`, `Account`, `DirectorConsole`. Each chunk is its own request, so the initial Dashboard paints faster. `RouteFallback` shows "UNFOLDING…" while a chunk loads (typically <200 ms).
+
+**Verification — `/app/test_reports/iteration_25.json` + `iteration_26.json`**
+- iteration_25: V5.4 surfaces 7/7 backend pytest PASS; **CRITICAL bug** found — demo-seeded campaigns 500'd on detail GET.
+- iteration_26 (after fix): **16/16 backend pytest PASS** across `test_iter25_v54.py` + new `test_iter26_v55.py` (9 new tests). Frontend Playwright: SUMMONING / battlemap fullscreen / mobile view-only banner / Director Pulse Panel all visible. Only LOW issue: mobile leak on `map-mode-fog` / `map-mode-wall` buttons — fixed in this turn (now also gated `!isMobile`).
+- Curl verified post-fix: GET /api/campaigns/{seeded_cid} → 200; pulse `?plot_phase=epic-9-adventures` returns Brother Crack + Sister Quench motives.
+
+**Remaining (deferred):**
+- Refactor `SystemCharacterBuilders.jsx` (853 lines) into `builders/{Dnd5e,Cypher,Anime5e}.jsx` — risky in the current context, deferred to a dedicated cleanup sprint.
+- System-native macro library expansion (Session view per-system quick-rolls).
+- XP scorecard polish — per-quantum bonus popover + campaign-level ledger.
+- Ingestion preview — show parsed text excerpt before Claude commits.
+
+
 
 **Two flagship features — the marquee item the user asked for + the deferred improvement idea, shipped in one batch.**
 
-**Feature 1 — GM Director's Console (`/app/campaigns/:id/director`)**
+**Feature 1 — GM Director's Console (`/app/campaigns/:id/director`)** (V5.3 — Director's Console + One-Shot Scaffold)
 The tactical brain of the campaign, GM/admin-only.
 
 *Backend*
