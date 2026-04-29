@@ -1,0 +1,47 @@
+{
+  "summary": "V5.4 Living Ecosystem tested. Backend: 7/7 pytest in /app/backend/tests/test_iter25_v54.py PASS — POST /admin/seed-demo (GM/admin gated, deploys Evereantha+Artisan), GET /campaigns/{cid}/ecosystem/pulse (returns Malshe Darkening evolving motive at epic-7-milestones + 'Pass-of-Aurea Ambush' encounter), POST /nodes/{nid}/motive round-trip, gm_only visibility hidden from non-GM, /ecosystem/pulse 403 for player. Frontend: Account 'Deploy demo campaigns' button (data-testid='account-demo-deploy-btn') visible + clicking POSTs /admin/seed-demo (status 200 confirmed via network listener). CampaignGenesis renders '0/9 PHASES' progress and the 9th tab 'Reference Library' opens the ReferenceEditor + Quickstart Instructions panel cleanly. CRITICAL BUG: Director Console crashes with 'Something went wrong. Please try again.' on the seeded Evereantha campaign because GET /api/campaigns/{cid} returns HTTP 500 — root cause is demo_seed.py not setting `visibility` on the campaign doc, and routes/campaigns.py:257 reading camp['visibility'] via subscript instead of .get().",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "GET /api/campaigns/{cid}", "issue": "Returns HTTP 500 'KeyError: visibility' for any campaign created by /admin/seed-demo. demo_seed.py base_camp dict omits the 'visibility' key, but routes/campaigns.py line 257 uses camp[\"visibility\"] (subscript). All Director Console / campaign-detail UI surfaces break on the new demo campaigns because of this. Reproduction: POST /admin/seed-demo as GM → GET /api/campaigns/{returned_id} → 500.", "priority": "CRITICAL"}
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "DirectorConsole.jsx", "issue": "Renders 'Something went wrong. Please try again.' for newly-seeded demo campaigns because the campaign GET 500s upstream (see backend critical bug). director-pulse-panel + V5.3 testids never mount. Director endpoint itself returns 200; only the wrapping campaign fetch crashes.", "selector": "[data-testid='director-pulse-panel']", "priority": "HIGH"}
+    ],
+    "integration_issues": [
+      {"flow": "Demo deploy → Director Console", "issue": "Account → Deploy demo button POSTs /admin/seed-demo and returns 200, but the deployed campaigns are unreachable in the UI because of the visibility KeyError. The deploy button itself works correctly.", "affected_selectors": ["[data-testid='director-pulse-panel']"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter25_v54.py",
+    "/app/test_reports/pytest/iter25_results.xml"
+  ],
+  "action_items": [
+    "Fix demo_seed.py: add `\"visibility\": \"private\"` (or \"public\") to the base_camp dict around line 224 so seeded campaigns are well-formed.",
+    "OR (defence-in-depth) change routes/campaigns.py line 257 from camp[\"visibility\"] to camp.get(\"visibility\", \"private\") so legacy/seeded docs without the field don't 500.",
+    "After the fix, re-verify the Director Console PulsePanel renders motives≥1 + encounters≥1 on the latest seeded Evereantha campaign."
+  ],
+  "critical_code_review_comments": [
+    "demo_seed.py is missing a `visibility` key on base_camp — this is the kind of field that any centralised campaign factory should fill. Recommend a single `_make_campaign_doc(...)` helper in core/db (or a Pydantic CampaignDoc with defaults) so seed/clone/create paths cannot diverge again.",
+    "routes/campaigns.py uses both `camp[\"visibility\"]` (subscript) and `camp.get(\"member_ids\", [])` in the same expression — inconsistent defensiveness. Standardise on .get() for any field that could legitimately be absent in older docs.",
+    "ecosystem.py is clean: gm-only is enforced, motive entries are append-only, gm_only filter is applied on the read side, Pulse aggregation correctly limits journal to 25 entries and motives to latest-per-node. No bugs found in the V5.4 surface itself.",
+    "DirectorConsole.jsx PulsePanel + PulseCol code is fine — it only fails to render because the parent page errors out. Once the 500 is fixed, the panel will mount with the four columns wired to /ecosystem/pulse?plot_phase=…",
+    "CampaignGenesis.jsx PHASES array correctly carries 9 entries; progressPct uses PHASES.length so it reads 0/9. phase===8 branch renders ReferenceEditor + InstructionsPanel cleanly — verified live."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter25_v54.py (NEW — 7 tests, all passing)"
+  ],
+  "success_rate": {
+    "backend": "100% (7/7 pytest)",
+    "frontend": "66% — Account deploy button OK, Genesis 0/9 + Phase 9 OK, Director Console BROKEN on seeded campaigns (campaign GET 500)"
+  },
+  "test_credentials": "franpietrowski@gmail.com / PieGod08!! — admin role, used for both API tests and live UI session. Throw-away player TEST_iter25_player_<ts>@example.com registered for 403 checks (left in DB).",
+  "seed_data_creation": "Two new demo campaigns deployed (Evereantha besm-4e + Artisan's Tale cypher) per fixture invocation — each call creates fresh copies (idempotency by intent: each click adds two more). Latest Evereantha id used for frontend testing: cb198a25759946ed95b8d3af592a1986. Several gm_only motive entries with text 'TEST_iter25_*' added to the seeded Malshe Darkening node — they're append-only and not cleaned up.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "After main agent fixes the demo_seed.py visibility bug, retest by: (1) running pytest /app/backend/tests/test_iter25_v54.py (must still pass), (2) curl GET /api/campaigns/{any_seeded_cid} should return 200, (3) browse /app/campaigns/{cid}/director and assert director-pulse-panel + four PulseCol testids visible with motives count≥1 + encounters count≥1. The Genesis 0/9 fix and Account deploy button are already verified working. /app/backend/tests/test_iter24_v53.py V5.3 regression suite is unchanged and still authoritative.",
+  "rca of the issue": "demo_seed.py:_seed_one() builds the campaign document at lines 203-228 without a `visibility` field. routes/campaigns.py:257 reads `camp[\"visibility\"]` via subscript when checking membership/visibility on GET /api/campaigns/{cid}. Result: every demo-seeded campaign 500s on detail fetch, which cascades into the Director Console error boundary. Mitigation A (preferred): add `\"visibility\": \"private\"` to the base_camp dict. Mitigation B (defence-in-depth): change subscript to `.get(\"visibility\", \"private\")` in campaigns.py. Both are one-line fixes."
+}
