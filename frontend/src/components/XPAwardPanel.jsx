@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { api, formatApiErrorDetail } from "../lib/api";
-import { X, Sparkles, BookOpen, Check } from "lucide-react";
+import { X, Sparkles, BookOpen, Check, Info } from "lucide-react";
 
 /**
  * XPAwardPanel — GM session-end XP scorecard (BESM 4E p.232 Advancement).
@@ -20,6 +20,8 @@ export default function XPAwardPanel({ sessionId, campaign, onClose, onCommitted
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [committed, setCommitted] = useState(null);
+  // Which row's bonus-breakdown popover is open (character_id or null).
+  const [openBreakdown, setOpenBreakdown] = useState(null);
 
   useEffect(() => {
     let mounted = true;
@@ -139,12 +141,76 @@ export default function XPAwardPanel({ sessionId, campaign, onClose, onCommitted
                          data-testid={`xp-base-${r.character_id}`}/>
                 </td>
                 <td className="text-right">
-                  <input type="number" step="0.05" min={0} max={card.bonus_cap}
-                         className="input w-20 text-right text-xs py-1"
-                         value={e.bonus ?? r.bonus}
-                         onChange={(ev) => update(r.character_id, { bonus: ev.target.value })}
-                         title={`Auto-suggested ${r.bonus} from breakdown ${JSON.stringify(r.bonus_breakdown)}`}
-                         data-testid={`xp-bonus-${r.character_id}`}/>
+                  <div className="inline-flex items-center gap-1 relative">
+                    <input type="number" step="0.05" min={0} max={card.bonus_cap}
+                           className="input w-20 text-right text-xs py-1"
+                           value={e.bonus ?? r.bonus}
+                           onChange={(ev) => update(r.character_id, { bonus: ev.target.value })}
+                           title={`Auto-suggested ${r.bonus} from breakdown`}
+                           data-testid={`xp-bonus-${r.character_id}`}/>
+                    <button type="button"
+                            onClick={() => setOpenBreakdown(
+                              openBreakdown === r.character_id ? null : r.character_id)}
+                            className="text-mist/60 hover:text-gold-bright"
+                            title="Per-quantum bonus breakdown"
+                            data-testid={`xp-breakdown-btn-${r.character_id}`}>
+                      <Info className="w-3 h-3"/>
+                    </button>
+                    {openBreakdown === r.character_id && (
+                      <div className="absolute right-0 top-7 z-40 w-64 card-mystic p-3 text-left shadow-xl"
+                           data-testid={`xp-breakdown-popover-${r.character_id}`}>
+                        <div className="label-ref mb-2">Bonus breakdown</div>
+                        <table className="w-full text-[11px]">
+                          <tbody>
+                            {Object.entries(r.bonus_breakdown || {}).map(([k, v]) => (
+                              <tr key={k} className="border-b border-gold/5">
+                                <td className="py-1 text-parchment/80 capitalize">
+                                  {k.replace(/_/g, " ")}
+                                </td>
+                                <td className="py-1 text-right text-mist tabular-nums">
+                                  {r.counts[k] || 0} × {card.weights[k]}
+                                </td>
+                                <td className="py-1 text-right font-display text-gold tabular-nums">
+                                  {Number(v).toFixed(2)}
+                                </td>
+                              </tr>
+                            ))}
+                            {Object.keys(r.bonus_breakdown || {}).length === 0 && (
+                              <tr><td className="text-mist italic py-2" colSpan={3}>
+                                No engagement quanta in this session window.
+                              </td></tr>
+                            )}
+                          </tbody>
+                          <tfoot>
+                            <tr className="border-t border-gold/20">
+                              <td className="pt-1 text-[10px] text-mist uppercase tracking-widest">Subtotal</td>
+                              <td></td>
+                              <td className="pt-1 text-right font-display text-gold-bright">{r.bonus.toFixed(2)}</td>
+                            </tr>
+                            {!!edits[r.character_id]?.spotlight && (
+                              <tr>
+                                <td className="text-[10px] text-arcane-light uppercase tracking-widest">+ Spotlight</td>
+                                <td></td>
+                                <td className="text-right text-arcane-light tabular-nums">
+                                  +{Number(edits[r.character_id].spotlight).toFixed(2)}
+                                </td>
+                              </tr>
+                            )}
+                            <tr>
+                              <td className="text-[10px] text-mist uppercase tracking-widest">Capped at</td>
+                              <td></td>
+                              <td className="text-right text-mist tabular-nums">+{card.bonus_cap.toFixed(2)}</td>
+                            </tr>
+                          </tfoot>
+                        </table>
+                        <button type="button" onClick={() => setOpenBreakdown(null)}
+                                className="btn btn-ghost text-[10px] mt-2 w-full"
+                                data-testid={`xp-breakdown-close-${r.character_id}`}>
+                          close
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </td>
                 <td className="text-right font-display text-gold tabular-nums" data-testid={`xp-total-${r.character_id}`}>
                   {total.toFixed(2)}

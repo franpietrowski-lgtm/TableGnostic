@@ -337,3 +337,90 @@ async def commit_session_xp(sid: str, body: XPCommitIn,
             "xp_unspent": round(new_unspent, 2),
         })
     return {"ok": True, "committed": committed, "session_id": sid}
+
+
+@router.get("/campaigns/{cid}/xp/ledger")
+async def campaign_xp_ledger(cid: str, user: dict = Depends(get_current_user)):
+    """Campaign-level XP ledger.
+
+    Rolls up every character's `xp_log[]` into a single reverse-chronological
+    feed with per-character totals + campaign totals. GM/admin-only so
+    players can't audit the absolute XP pool of every PC.
+
+    Returns:
+      - characters[]: {id, name, owner_name, xp_total, xp_unspent, converted}
+      - entries[]:    {awarded_at, character_id, character_name, amount,
+                       base, bonus, reason, source, session_id, by_gm_name}
+                       reverse-chrono
+      - totals: {awarded, converted, unspent}
+    """
+    camp = await db.campaigns.find_one({"id": cid}, {"_id": 0})
+    if not camp:
+        raise HTTPException(404, "Campaign not found")
+    if camp["gm_id"] != user["id"] and user.get("role") != "admin":
+        raise HTTPException(403, "Only the GM may view the campaign ledger.")
+
+    chars = await db.characters.find({"campaign_id": cid}, {"_id": 0}).to_list(500)
+
+    characters_out: List[Dict] = []
+    entries: List[Dict] = []
+    total_awarded = 0.0
+    total_converted = 0.0
+    total_unspent = 0.0
+
+    for ch in chars:
+        xp_total = float(ch.get("xp_total", 0.0))
+        xp_unspent = float(ch.get("xp_unspent", 0.0))
+        # Converted = total awarded minus unspent minus positive log sum that's
+        # still unspent. Practical derivation: sum of entries where
+        # source=="convert" (stored as negative amounts).
+        converted = 0.0
+        for e in ch.get("xp_log", []) or []:
+            if e.get("source") == "convert":
+                converted += abs(float(e.get("amount", 0.0)))
+        characters_out.append({
+            "id": ch["id"],
+            "name": ch.get("name"),
+            "owner_name": ch.get("owner_name"),
+            "token_color": ch.get("token_color", ""),
+            "xp_total": round(xp_total, 2),
+            "xp_unspent": round(xp_unspent, 2),
+            "xp_converted": round(converted, 2),
+        })
+        total_awarded += xp_total
+        total_converted += converted
+        total_unspent += xp_unspent
+
+        for e in ch.get("xp_log", []) or []:
+            entries.append({
+                "id": e.get("id"),
+                "awarded_at": e.get("awarded_at"),
+                "character_id": ch["id"],
+                "character_name": ch.get("name"),
+                "owner_name": ch.get("owner_name"),
+                "amount": float(e.get("amount", 0.0)),
+                "base": float(e.get("base", 0.0)) if "base" in e else None,
+                "bonus": float(e.get("bonus", 0.0)) if "bonus" in e else None,
+                "reason": e.get("reason"),
+                "source": e.get("source"),
+                "session_id": e.get("session_id"),
+                "by_gm_name": e.get("by_gm_name"),
+                "converted_to_points": e.get("converted_to_points"),
+            })
+
+    entries.sort(key=lambda x: (x.get("awarded_at") or ""), reverse=True)
+
+    return {
+        "campaign_id": cid,
+        "campaign_name": camp.get("name"),
+        "characters": characters_out,
+        "entries": entries,
+        "totals": {
+            "awarded": round(total_awarded, 2),
+            "converted": round(total_converted, 2),
+            "unspent": round(total_unspent, 2),
+        },
+        "weights": WEIGHTS,
+        "bonus_cap": BONUS_CAP_PER_SESSION,
+        "default_baseline": DEFAULT_BASELINE,
+    }

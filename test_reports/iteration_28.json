@@ -1,0 +1,61 @@
+{
+  "summary": "V5.5.2 testing — Backend XP Ledger endpoint passes ALL 5 pytest cases (401/403/404/shape/award+convert). Frontend XPLedgerPanel component EXISTS but the trigger button data-testid='xp-ledger-btn' is NEVER rendered in CampaignDetail.jsx — feature is unusable from the UI. MacroBar testing was blocked by SessionView's loading screen ('OPENING THE TABLE') not clearing within 15s in the live preview environment, preventing observation of dice-panel and macro-bar mounting.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "CampaignDetail.jsx",
+        "issue": "data-testid='xp-ledger-btn' is NEVER RENDERED. The component imports XPLedgerPanel, declares const [showLedger, setShowLedger] = useState(false) on line 26 and conditionally renders <XPLedgerPanel> when showLedger && camp.is_gm on line 184, but NO button anywhere calls setShowLedger(true). grep -n 'setShowLedger' returns only the useState declaration and the onClose handler — there is no trigger. As a result, GMs cannot open the campaign-level XP ledger from the UI even though the backend endpoint /api/campaigns/{cid}/xp/ledger works correctly.",
+        "selector": "[data-testid='xp-ledger-btn']",
+        "priority": "CRITICAL"
+      },
+      {
+        "component": "SessionView.jsx",
+        "issue": "Live preview never advances past the 'OPENING THE TABLE / TUNING THE CANDLES · ALMOST READY' loading screen within 15s+ for an existing open BESM session (session id 22e59b59060c4912b72e5e6a37d1a4f0, campaign f7403305c6734ffb8fe689ade67627cb). useMinDelay(!session, 5000) on line 136 holds the spinner for at least 5 s but the screen lingers far longer. dice-panel never mounts, blocking validation of MacroBar render, macro-* testids, char-aware notation, and session-roll-btn integration in this environment.",
+        "selector": "[data-testid='session-loading']",
+        "priority": "HIGH"
+      }
+    ],
+    "integration_issues": [
+      {
+        "flow": "Campaign-level XP Ledger",
+        "issue": "Backend endpoint works perfectly (5/5 pytest cases pass) but cannot be reached from the UI because the trigger button is missing.",
+        "affected_selectors": ["[data-testid='xp-ledger-btn']", "[data-testid='xp-ledger-overlay']"]
+      }
+    ],
+    "design_issues": []
+  },
+  "tests_executed": {
+    "backend_pytest_iter28_v552": "5/5 PASS — TestLedgerAccess (401, 403, 404), TestLedgerShape (200 + all required keys: characters, entries, totals.{awarded,converted,unspent}, weights, bonus_cap, default_baseline), TestLedgerAwardAndConvert (POST /characters/{cid}/xp adds an entry with correct amount/reason/awarded_at/source; POST /characters/{cid}/xp/convert adds a second entry with source=='convert' and converted_to_points set).",
+    "frontend_campaign_detail_gm": "PARTIAL FAIL — Logged in as GMFran (admin), navigated to /app/campaigns/f7403305c6734ffb8fe689ade67627cb (BESM 4E, 4 chars, 8 sessions). Header testids present: clone-campaign-btn, genesis-btn, director-btn, start-session-btn, delete-campaign-btn — xp-ledger-btn is ABSENT. Code review of CampaignDetail.jsx confirms no element with data-testid='xp-ledger-btn' exists in the file (grep -n 'xp-ledger-btn' /app/frontend/src/components/CampaignDetail.jsx returns 0 lines).",
+    "frontend_campaign_detail_player": "PASS (vacuously) — Registered new player, navigated to same campaign URL; xp-ledger-btn correctly NOT visible. (But this is also true for GMs, so the GM-gating cannot be distinguished from the missing-button bug.)",
+    "frontend_session_macrobar": "BLOCKED — 'OPENING THE TABLE' loading screen never cleared within 15s in the preview environment; dice-panel and macro-bar testids never became visible. Could not verify BESM/D&D/Cypher macro buttons or click→notation→roll integration.",
+    "frontend_xp_award_popover": "BLOCKED — could not reach the XPAwardPanel because (a) it is mounted from the SessionView (which never finished loading) and (b) no xp-* testid was found on the rendered (loading) page."
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter28_v552.py",
+    "/app/test_reports/pytest/iter28_v552.xml"
+  ],
+  "action_items": [
+    "CRITICAL: Add the GM-only XP Ledger trigger button to CampaignDetail.jsx header. Looking at the existing pattern for director-btn (line 95) and start-session-btn (line 99), add e.g.: {camp.is_gm && <button onClick={() => setShowLedger(true)} className='btn' data-testid='xp-ledger-btn'><ScrollText className='w-3 h-3 mr-1'/>XP Ledger</button>} alongside the other GM header buttons. Without this, the entire client-side feature is dead code — XPLedgerPanel.jsx and the wired-up state never activate.",
+    "Investigate why SessionView's 'OPENING THE TABLE' loading screen does not clear in the preview environment (5s useMinDelay was expected, but it persists 15s+). Possibly related to a slow/failing API call in the session-load chain (channels, dice log, chat, effects, initiative). Check /api/sessions/{sid}, /api/sessions/{sid}/chat, /api/sessions/{sid}/dice etc. for latency/errors.",
+    "After both fixes above, re-run frontend tests for: macro-bar render in dice-panel for BESM/D&D/Cypher campaigns, char-aware notation update on macro click, dice log entry creation on session-roll-btn, xp-breakdown-btn-{cid} → xp-breakdown-popover-{cid} in XPAwardPanel."
+  ],
+  "critical_code_review_comments": [
+    "CampaignDetail.jsx — XP Ledger trigger button is missing (see action items). The setShowLedger state and conditional <XPLedgerPanel/> render are dead code without it.",
+    "SessionView.jsx line 136: useMinDelay(!session, 5000) imposes a deliberate 5-second floor on the loading screen — this is intentional UX but can mask actual data-fetch failures. Recommend adding a 30s timeout with error fallback so users see a real message instead of an indefinite ritual screen.",
+    "XPLedgerPanel.jsx — Solid implementation: filter chips with per-character data-testid (xp-ledger-filter-{cid}), entry rows (xp-ledger-entry-{eid}), totals block, escape via overlay click, GM-gated by parent. No issues from code review.",
+    "MacroBar.jsx — Clean component, system-aware logic for besm-4e/dnd-5e/cypher/anime-5e looks correct. Note the data-testid kebab-cases the label which yields 'macro-d20-1' for 'd20+1' and 'macro-d20--3' for 'd20-3' (double-dash because '-' is preserved while '+' becomes '-'). This matches the test plan exactly. The Macros() function takes an unused onPick parameter (line 21) — minor lint nit.",
+    "Backend xp.py /campaigns/{cid}/xp/ledger — clean implementation, includes 404 + 403 guards, returns all required fields, computes converted via abs(amount) for source='convert' entries (good). No _id leakage (uses {'_id':0} projection). No issues."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter28_v552.py (new — 5 test cases for the new ledger endpoint)"
+  ],
+  "success_rate": {"backend": "100% (5/5)", "frontend": "20% — XP Ledger button missing; SessionView features blocked by loading screen"},
+  "test_credentials": "GMFran — franpietrowski@gmail.com / PieGod08!! (admin, verified). Player accounts created on-the-fly via POST /api/auth/register with role:'player'.",
+  "seed_data_creation": "Used existing BESM campaign f7403305c6734ffb8fe689ade67627cb (Evereantha — The Maiden Adventure, 4 characters, 8 sessions). Backend test awarded XP and converted XP on the first available character of the first eligible GM campaign with a TEST_iter28_award_<ts> reason marker for traceability.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "After main agent adds the xp-ledger-btn to CampaignDetail.jsx header (see action item 1), re-run the frontend ledger flow on /app/campaigns/f7403305c6734ffb8fe689ade67627cb as GMFran: click xp-ledger-btn → expect xp-ledger-overlay/totals/characters/filter-all + entry rows (the BESM 4E test campaign has 4 chars; the test_iter28 backend test already wrote one award + one convert entry to a character there). For SessionView blocking, try increasing the wait to ~25s after navigation, or seed session.session+session.channels endpoints with cached responses. Backend test file /app/backend/tests/test_iter28_v552.py is regression-safe and can be re-run any time.",
+  "rca of the issue": "ROOT CAUSE: CampaignDetail.jsx was edited to add the showLedger state (line 26), the XPLedgerPanel import (line 11), and the conditional modal mount (line 184), but the developer forgot to add the actual <button data-testid='xp-ledger-btn' onClick={() => setShowLedger(true)}> in the header alongside genesis-btn/director-btn/start-session-btn. REPRODUCTION: 1) login as GMFran, 2) goto /app/campaigns/{any_gm_campaign_id}, 3) inspect header — only 5 testid'd buttons present, no xp-ledger-btn. MITIGATION: add a single GM-gated button to the campaign header (3-line patch) — see action item 1."
+}

@@ -8,6 +8,7 @@ import ChannelsPanel from "./ChannelsPanel";
 import AtelierTab from "./AtelierTab";
 import SystemBadge from "./SystemBadge";
 import CardDeckPanel from "./CardDeckPanel";
+import XPLedgerPanel from "./XPLedgerPanel";
 import { useAuth } from "../lib/api";
 import { NODE_TYPES, NODE_TEMPLATES, colorForType, labelForType } from "../lib/nodeTemplates";
 
@@ -22,6 +23,7 @@ export default function CampaignDetail() {
   const [edges, setEdges] = useState([]);
   const [err, setErr] = useState("");
   const [showStart, setShowStart] = useState(false);
+  const [showLedger, setShowLedger] = useState(false);
   const nav = useNavigate();
 
   const load = async () => {
@@ -176,6 +178,11 @@ export default function CampaignDetail() {
           onClose={() => setShowStart(false)}
           onStart={startSession}
         />
+      )}
+
+      {/* Campaign-level XP ledger */}
+      {showLedger && camp.is_gm && (
+        <XPLedgerPanel campaignId={id} onClose={() => setShowLedger(false)}/>
       )}
     </div>
   );
@@ -1605,4 +1612,3 @@ function InviteTab({ camp, onRefresh }) {
     </div>
   );
 }
-

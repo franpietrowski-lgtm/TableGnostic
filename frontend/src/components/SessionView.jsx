@@ -6,6 +6,7 @@ import { Dice6, Send, Plus, X, Swords, Heart, Zap, Skull, Shield, ChevronRight, 
 import AVSeats from "./AVSeats";
 import Battlemap from "./Battlemap";
 import XPAwardPanel from "./XPAwardPanel";
+import MacroBar from "./MacroBar";
 
 export default function SessionView() {
   const { id } = useParams();
@@ -485,6 +486,14 @@ export default function SessionView() {
           <button onClick={rollDice} className="btn btn-primary w-full" data-testid="session-roll-btn">
             <Dice6 className="w-4 h-4"/> Roll
           </button>
+          {/* System-native macros — populate notation+label from a
+              character-aware button. Falls back to flat dice if no
+              character is selected (dice-char-select == ""). */}
+          <MacroBar
+            systemId={campaign?.system_id || "besm-4e"}
+            character={characters.find((c) => c.id === characterId) || null}
+            onPick={(notation, lbl) => { setRoll(notation); setLabel(lbl); }}
+          />
         </div>
         <div className="divider-sigil my-3"/>
         <div className="label-ref mb-2">Log</div>
