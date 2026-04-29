@@ -38,6 +38,9 @@ export default function IngestPanel({ campId }) {
   const [err, setErr] = useState("");
   const [marked, setMarked] = useState({});  // {idx: true}
   const fileRef = useRef(null);
+  const scaffoldFileRef = useRef(null);
+  const [scaffoldPreview, setScaffoldPreview] = useState(null);
+  const [scaffoldBusy, setScaffoldBusy] = useState(false);
 
   const refresh = async () => {
     try {
@@ -71,6 +74,33 @@ export default function IngestPanel({ campId }) {
       setErr(formatApiErrorDetail(e.response?.data?.detail) || e.message);
     } finally {
       setBusy(false);
+    }
+  };
+
+  // ─── One-Shot Scaffold ───
+  // Uploads a published one-shot adventure / module → Claude returns
+  // a full deploy-ready blob (codex nodes, NPCs, opening encounter).
+  // commit=false returns a preview; commit=true writes nodes + an
+  // encounter draft on the campaign's Director's doc.
+  const scaffoldOneShot = async (file, commit) => {
+    if (!file) return;
+    if (file.size > 24 * 1024 * 1024) {
+      setErr("File exceeds 24 MB cap.");
+      return;
+    }
+    setScaffoldBusy(true); setErr("");
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const { data } = await api.post(
+        `/campaigns/${campId}/scaffold-oneshot?commit=${commit ? "true" : "false"}`,
+        fd, { headers: { "Content-Type": "multipart/form-data" } }
+      );
+      setScaffoldPreview({ commit, data, filename: file.name });
+    } catch (e) {
+      setErr(formatApiErrorDetail(e.response?.data?.detail) || e.message);
+    } finally {
+      setScaffoldBusy(false);
     }
   };
 
@@ -131,6 +161,92 @@ export default function IngestPanel({ campId }) {
       </div>
 
       {err && <div className="text-ember text-xs" data-testid="ingest-err">{err}</div>}
+
+      {/* One-Shot Scaffold — flagship feature: drop a published one-shot
+          adventure / GM module, get a deploy-ready campaign skeleton in
+          one Claude pass: codex nodes, NPCs, opening encounter. Two-stage
+          flow — Preview, then Commit. */}
+      <div className="card-mystic p-4" data-testid="scaffold-panel">
+        <div className="flex items-baseline justify-between flex-wrap gap-3">
+          <div>
+            <div className="label-ref flex items-center gap-2">
+              <Sparkles className="w-3 h-3"/> One-Shot Scaffold · 60-second campaign deploy
+            </div>
+            <div className="text-[11px] text-mist/70 italic mt-1 max-w-2xl">
+              Drop a published one-shot adventure or GM module — Claude returns a
+              ready-to-run skeleton: opening session beats, 5-30 Codex nodes,
+              up to 12 NPCs with stat hints, and a staged opening encounter on the
+              Director's Console. Preview first, then Commit. PDF · MD · TXT · RTF · DOCX.
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <input ref={scaffoldFileRef} type="file" className="hidden"
+                   accept=".pdf,.md,.txt,.rtf,.docx,application/pdf,text/markdown,text/plain,application/rtf,text/rtf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                   onChange={(e) => { scaffoldOneShot(e.target.files?.[0], false); e.target.value = ""; }}
+                   data-testid="scaffold-file-input"/>
+            <button onClick={() => scaffoldFileRef.current?.click()} disabled={scaffoldBusy}
+                    className="btn btn-ghost text-xs" data-testid="scaffold-preview-btn">
+              <Upload className="w-3 h-3"/> {scaffoldBusy ? "Scaffolding…" : "Preview a one-shot"}
+            </button>
+          </div>
+        </div>
+        {scaffoldPreview && (
+          <div className="border border-gold/15 rounded-sm p-3 mt-3 text-[12px]" data-testid="scaffold-preview">
+            {scaffoldPreview.commit ? (
+              <>
+                <div className="text-gold-bright font-display text-base">
+                  ✓ Scaffold deployed for "{scaffoldPreview.filename}"
+                </div>
+                <div className="mt-1.5 text-mist">
+                  {scaffoldPreview.data.nodes_created} Codex nodes ·
+                  {" "}{scaffoldPreview.data.npcs_created} NPCs ·
+                  {scaffoldPreview.data.encounter_staged ? " 1 encounter staged on Director" : " no encounter staged"}
+                </div>
+                {scaffoldPreview.data.title_suggestion && (
+                  <div className="mt-1 text-parchment italic">Suggested title: {scaffoldPreview.data.title_suggestion}</div>
+                )}
+                <button onClick={() => setScaffoldPreview(null)}
+                        className="btn btn-ghost text-[10px] mt-2"
+                        data-testid="scaffold-clear-btn">Clear</button>
+              </>
+            ) : (
+              <>
+                <div className="text-parchment font-display">{scaffoldPreview.data.preview.title_suggestion || scaffoldPreview.filename}</div>
+                <div className="text-mist mt-1 italic">{scaffoldPreview.data.preview.premise}</div>
+                <div className="grid sm:grid-cols-3 gap-3 mt-3">
+                  <PreviewBlock title={`Codex nodes · ${scaffoldPreview.data.preview.codex_nodes?.length || 0}`}
+                                items={(scaffoldPreview.data.preview.codex_nodes || []).slice(0, 8).map((n) => `${n.type} · ${n.title}`)}/>
+                  <PreviewBlock title={`NPCs · ${scaffoldPreview.data.preview.npcs?.length || 0}`}
+                                items={(scaffoldPreview.data.preview.npcs || []).slice(0, 8).map((n) => `${n.role} · ${n.name}`)}/>
+                  <PreviewBlock title={`Session beats · ${scaffoldPreview.data.preview.session_beats?.length || 0}`}
+                                items={(scaffoldPreview.data.preview.session_beats || []).slice(0, 6)}/>
+                </div>
+                {scaffoldPreview.data.preview.opening_encounter?.name && (
+                  <div className="text-arcane-light mt-2 text-[11px]">
+                    Opening Encounter: <b>{scaffoldPreview.data.preview.opening_encounter.name}</b>
+                    {" — will be staged on the Director's Console"}
+                  </div>
+                )}
+                <div className="flex gap-2 mt-3">
+                  <button onClick={() => scaffoldOneShot(scaffoldFileRef.current?.files?.[0]
+                            || (scaffoldPreview && new File([], scaffoldPreview.filename)), true)}
+                          className="btn btn-primary text-xs"
+                          disabled={scaffoldBusy}
+                          data-testid="scaffold-commit-btn">
+                    <Sparkles className="w-3 h-3"/> Commit · deploy to campaign
+                  </button>
+                  <button onClick={() => setScaffoldPreview(null)}
+                          className="btn btn-ghost text-[10px]"
+                          data-testid="scaffold-discard-btn">Discard</button>
+                </div>
+                <div className="text-[10px] text-mist/60 italic mt-2">
+                  Re-attaching the file is required for Commit (browsers don't keep file handles between calls).
+                </div>
+              </>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* History */}
       <div className="card-mystic p-4">
@@ -261,5 +377,21 @@ function TabBtn({ label, active, onClick, testid }) {
             data-testid={testid}>
       {label}
     </button>
+  );
+}
+
+function PreviewBlock({ title, items }) {
+  return (
+    <div className="border border-gold/10 rounded-sm p-2 bg-gold/5">
+      <div className="label-ref mb-1">{title}</div>
+      <ul className="space-y-0.5">
+        {(items || []).map((it, i) => (
+          <li key={i} className="text-[11px] text-parchment/85 truncate">· {it}</li>
+        ))}
+        {(!items || items.length === 0) && (
+          <li className="text-[10px] text-mist italic">—</li>
+        )}
+      </ul>
+    </div>
   );
 }

@@ -316,6 +316,227 @@ async def create_ingestion(cid: str,
     return sanitize(doc)
 
 
+# ─────────────────────── One-Shot Scaffold ───────────────────────
+SCAFFOLD_SYSTEM_PROMPT = """You are TableGnostic's One-Shot Scaffolder.
+
+Given a raw text dump from a published one-shot adventure, GM module,
+or campaign brief, you produce a STRICT JSON document a GM can deploy
+in 60 seconds: opening session beats, a starter NPC roster with stat
+hints, an opening encounter draft, and 5-10 Codex nodes (locations,
+factions, lore beats).
+
+Hard rules:
+  1. NEVER reproduce rulebook prose, room boxed text, or lore paragraphs
+     verbatim. Mechanic-only summaries; reword the rest.
+  2. Output MUST be valid JSON. No markdown fences.
+  3. Stat-block hints are MECHANIC-ONLY — names, page references, CR or
+     level, nothing else. The host system field tells you which numbers
+     matter (CR for D&D, level for Cypher, point total for BESM).
+  4. Every NPC carries: name, role (minion/henchman/villain/nemesis/ally),
+     intent (one-line current goal), stat_hint{cr|level|total_points|notes}.
+  5. Cap at 30 codex nodes, 12 NPCs, 1 opening encounter.
+
+Top-level shape:
+{
+  "summary": "≤ 200 chars overview of what this one-shot is.",
+  "title_suggestion": "short campaign name to suggest",
+  "premise": "≤ 400 chars premise / hook for the opening session",
+  "session_beats": ["beat 1", "beat 2", "beat 3", ...],
+  "codex_nodes": [
+    {"type": "location|npc|faction|lore", "title": "...",
+     "summary": "≤ 240 chars mechanic+narrative summary",
+     "tags": [...]}
+  ],
+  "npcs": [
+    {"name": "...", "role": "villain", "intent": "...",
+     "stat_hint": {"cr": "1/4"} | {"level": 4} | {"total_points": 120}}
+  ],
+  "opening_encounter": {
+    "name": "Opening Strike",
+    "environment": {"indoor": true, "weather": "rain"},
+    "npc_indices": [0, 1, 2],   // pick the first NPCs above
+    "notes": "≤ 240 chars setup / GM notes"
+  }
+}
+"""
+
+
+async def _call_scaffold(filename: str, system_id: Optional[str], text: str) -> Dict[str, Any]:
+    if not EMERGENT_LLM_KEY:
+        raise HTTPException(503, "LLM key not configured")
+    user_prompt = (
+        f"# Source one-shot: {filename}\n"
+        f"# Target system: {system_id or 'besm-4e'}\n\n"
+        f"{_truncate_for_llm(text)}\n\n"
+        "Now scaffold the one-shot per the hard rules above."
+    )
+    try:
+        from emergentintegrations.llm.chat import LlmChat, UserMessage
+        chat = LlmChat(
+            api_key=EMERGENT_LLM_KEY,
+            session_id=f"scaffold-{filename[:32]}",
+            system_message=SCAFFOLD_SYSTEM_PROMPT,
+        ).with_model("anthropic", "claude-sonnet-4-5-20250929")
+        raw = await chat.send_message(UserMessage(text=user_prompt))
+    except Exception as e:
+        raise HTTPException(502, f"Claude call failed: {e}")
+    cleaned = raw.strip()
+    if cleaned.startswith("```"):
+        cleaned = re.sub(r"^```[a-zA-Z]*\n?", "", cleaned)
+        cleaned = re.sub(r"\n?```$", "", cleaned)
+    try:
+        parsed = json.loads(cleaned)
+    except Exception:
+        m = re.search(r"\{[\s\S]*\}", cleaned)
+        if not m:
+            raise HTTPException(502, "Claude returned non-JSON output; try again.")
+        try:
+            parsed = json.loads(m.group(0))
+        except Exception as e:
+            raise HTTPException(502, f"Claude JSON malformed: {e}")
+    if not isinstance(parsed, dict):
+        raise HTTPException(502, "Scaffold JSON must be an object.")
+    parsed.setdefault("summary", "")
+    parsed.setdefault("title_suggestion", "")
+    parsed.setdefault("premise", "")
+    parsed.setdefault("session_beats", [])
+    parsed.setdefault("codex_nodes", [])
+    parsed.setdefault("npcs", [])
+    parsed.setdefault("opening_encounter", {})
+    return parsed
+
+
+@router.post("/campaigns/{cid}/scaffold-oneshot")
+async def scaffold_oneshot(cid: str,
+                            commit: bool = False,
+                            file: UploadFile = File(...),
+                            user: dict = Depends(get_current_user)):
+    """GM uploads a published one-shot PDF/TXT/DOCX → Claude scaffolds it
+    into a deploy-ready blob (codex nodes, NPCs, opening encounter).
+
+    `commit=false` (default) returns the parsed structure as a dry-run
+    preview. `commit=true` writes:
+       · each `codex_nodes[]` entry as a `db.nodes` document (gm-only)
+       · each NPC as a Codex `npc` node (gm-only)
+       · the `opening_encounter` as a draft on the campaign's Director doc
+    Idempotent — a re-commit creates fresh nodes (not deduped).
+    """
+    camp = await db.campaigns.find_one({"id": cid}, {"_id": 0})
+    if not camp:
+        raise HTTPException(404, "Campaign not found")
+    if camp["gm_id"] != user["id"] and user.get("role") != "admin":
+        raise HTTPException(403, "GM only.")
+    raw = await file.read()
+    if len(raw) > MAX_BYTES:
+        raise HTTPException(413, f"File exceeds {MAX_BYTES // (1024*1024)} MB cap.")
+    if len(raw) == 0:
+        raise HTTPException(400, "Empty file.")
+    text = _parse_to_text(file.filename, file.content_type or "", raw)
+    if not text:
+        raise HTTPException(400, "Could not extract text from file.")
+    parsed = await _call_scaffold(file.filename, camp.get("system_id"), text)
+
+    if not commit:
+        return {"committed": False, "preview": parsed}
+
+    # Commit path — write nodes + a Director encounter draft.
+    nodes_created: List[Dict[str, Any]] = []
+    for cn in parsed.get("codex_nodes", []) or []:
+        node = {
+            "id": new_id(),
+            "campaign_id": cid,
+            "title": cn.get("title", "Untitled"),
+            "type": cn.get("type", "lore"),
+            "content": cn.get("summary", ""),
+            "tags": (cn.get("tags") or []) + ["one-shot-scaffold"],
+            "visibility": "gm_only",
+            "revealed_to": [],
+            "fields": {"source": "scaffold-oneshot"},
+            "author_id": user["id"],
+            "author_name": user.get("name") or user.get("email"),
+            "created_at": now_iso(),
+            "updated_at": now_iso(),
+        }
+        await db.nodes.insert_one(dict(node))
+        nodes_created.append({"id": node["id"], "title": node["title"], "type": node["type"]})
+
+    npc_node_ids: List[str] = []
+    for n in parsed.get("npcs", []) or []:
+        node = {
+            "id": new_id(),
+            "campaign_id": cid,
+            "title": n.get("name", "Unknown NPC"),
+            "type": "npc",
+            "content": (n.get("intent") or "")[:500],
+            "tags": ["one-shot-scaffold", n.get("role") or "minion"],
+            "visibility": "gm_only",
+            "revealed_to": [],
+            "fields": {"intent": n.get("intent", ""),
+                       "role": n.get("role", "minion"),
+                       "stat_hint": n.get("stat_hint", {})},
+            "author_id": user["id"],
+            "author_name": user.get("name") or user.get("email"),
+            "created_at": now_iso(),
+            "updated_at": now_iso(),
+        }
+        await db.nodes.insert_one(dict(node))
+        npc_node_ids.append(node["id"])
+
+    # Stage the opening encounter on the Director's doc.
+    enc = parsed.get("opening_encounter") or {}
+    if enc:
+        director = await db.directors.find_one({"campaign_id": cid}, {"_id": 0})
+        if not director:
+            director = {"campaign_id": cid, "encounters": [],
+                        "current_location": "", "current_phase_ref": "",
+                        "updated_at": now_iso()}
+        npc_indices = enc.get("npc_indices") or list(range(min(3, len(parsed.get("npcs", [])))))
+        npcs_for_encounter = []
+        for i in npc_indices:
+            if i < 0 or i >= len(parsed.get("npcs", [])):
+                continue
+            n = parsed["npcs"][i]
+            sh = n.get("stat_hint", {}) or {}
+            npcs_for_encounter.append({
+                "id": new_id(),
+                "name": n.get("name", "NPC"),
+                "role": n.get("role", "minion"),
+                "source": "codex",
+                "source_id": npc_node_ids[i] if i < len(npc_node_ids) else None,
+                "location": "",
+                "state": "active",
+                "intent": n.get("intent", ""),
+                "cr": sh.get("cr"),
+                "level": sh.get("level"),
+                "total_points": sh.get("total_points"),
+                "count": 1,
+                "notes": sh.get("notes", ""),
+            })
+        director["encounters"] = list(director.get("encounters") or [])
+        director["encounters"].append({
+            "id": new_id(),
+            "name": enc.get("name") or "Opening Encounter",
+            "party_character_ids": [],
+            "npcs": npcs_for_encounter,
+            "environment": enc.get("environment") or {},
+            "notes": enc.get("notes") or "",
+        })
+        director["updated_at"] = now_iso()
+        await db.directors.replace_one({"campaign_id": cid}, director, upsert=True)
+
+    return {
+        "committed": True,
+        "summary": parsed.get("summary"),
+        "title_suggestion": parsed.get("title_suggestion"),
+        "premise": parsed.get("premise"),
+        "session_beats": parsed.get("session_beats"),
+        "nodes_created": len(nodes_created),
+        "npcs_created": len(npc_node_ids),
+        "encounter_staged": bool(enc),
+    }
+
+
+
 @router.get("/campaigns/{cid}/ingestions")
 async def list_ingestions(cid: str, user: dict = Depends(get_current_user)):
     camp = await db.campaigns.find_one({"id": cid}, {"_id": 0})

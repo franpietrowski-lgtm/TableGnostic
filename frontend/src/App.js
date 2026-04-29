@@ -16,6 +16,7 @@ import Discover from "./components/Discover";
 import Invite from "./components/Invite";
 import Reset from "./components/Reset";
 import Account from "./components/Account";
+import DirectorConsole from "./components/DirectorConsole";
 
 function Protected({ children }) {
   const { user, loading } = useAuth();
@@ -55,6 +56,7 @@ export default function App() {
             <Route path="/app/sessions/:id" element={<SessionView />} />
             <Route path="/app/reference" element={<Reference />} />
             <Route path="/app/account" element={<Account />} />
+            <Route path="/app/campaigns/:id/director" element={<DirectorConsole />} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

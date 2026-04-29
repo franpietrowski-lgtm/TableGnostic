@@ -34,6 +34,7 @@ from routes import pdf_export as pdf_export_routes
 from routes import xp_approval as xp_approval_routes
 from routes import reference_editor as reference_editor_routes
 from routes import cards as cards_routes
+from routes import director as director_routes
 from routes import epic_campaign as epic_campaign_routes
 
 app = FastAPI(title="Table-Gnostic API")
@@ -87,6 +88,7 @@ app.include_router(pdf_export_routes.router)
 app.include_router(xp_approval_routes.router)
 app.include_router(reference_editor_routes.router)
 app.include_router(cards_routes.router)
+app.include_router(director_routes.router)
 app.include_router(epic_campaign_routes.router)
 
 # Static-file mount: serve uploaded battlemap images from disk so GMs can

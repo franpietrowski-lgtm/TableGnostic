@@ -90,6 +90,10 @@ export default function CampaignDetail() {
           {camp.is_gm && <Link to={`/app/campaigns/${id}/genesis`} className="btn" data-testid="genesis-btn">
             <Wand2 className="w-4 h-4"/> Atelier
           </Link>}
+          {camp.is_gm && <Link to={`/app/campaigns/${id}/director`} className="btn" data-testid="director-btn"
+                              title="GM Director's Console — pull NPCs from your Atelier into encounters, judge Challenge Rating, get tactical suggestions.">
+            <Wand2 className="w-4 h-4"/> Director
+          </Link>}
           {camp.is_gm && <button onClick={() => setShowStart(true)} className="btn btn-primary" data-testid="start-session-btn">
             <Sparkles className="w-4 h-4"/> Start session
           </button>}

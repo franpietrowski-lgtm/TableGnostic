@@ -1,0 +1,39 @@
+{
+  "summary": "V5.3 Director's Console + One-Shot Scaffold validated end-to-end. Backend: 9/9 pytest in /app/backend/tests/test_iter24_v53.py PASS — including the LIVE Claude Sonnet scaffold-oneshot preview call (EMERGENT_LLM_KEY is set in this env). Director GET returns system_id=cypher + npc_pool aggregated from Genesis seed_npcs[] + Epic Campaign nemesis/villains + Codex npc nodes; players hit 403; PUT round-trips encounters/npcs with id-stamping + current_location + current_phase_ref. CR-analyse on Cypher tier-1 PC vs L4 villain + 3xL2 minions returned rating='Punishing' with remove_npc + feat suggestions; empty NPC array → 'Pushover'; empty party → 'Unknown'. Scaffold preview returns committed=false + preview block with summary/title_suggestion/etc. Frontend: GM logged in via UI, /app/campaigns/{cid}/director rendered director-console + director-npc-pool + director-encounter-editor + cr-panel; default cr-panel showed 'Unknown · No party seated.'; clicking a pool-pick-* button bumped 'NPCs: 1 NPCs'; toggling director-party-{charId} seated the PC and the cr-panel updated to 'Fair · Effective level 1.5 (encounter 3.0 + overflow 0.0 − party step-down 1.5)' with avg-Tier 1.0 + ~1.5 step-downs, AND populated the SUGGESTIONS list (one-shot Cypher, uneven ground reposition). On the campaign Atelier tab, the new scaffold-panel renders with 'ONE-SHOT SCAFFOLD · 60-SECOND CAMPAIGN DEPLOY' header, scaffold-preview-btn ('Preview a one-shot'), and a wired file input — exactly as spec'd.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter24_v53.py",
+    "/app/test_reports/pytest/iter24_results.xml"
+  ],
+  "action_items": [
+    "None blocking. V5.3 ships clean."
+  ],
+  "critical_code_review_comments": [
+    "core/cr_engine.py is well-structured: separate analyse_dnd / analyse_cypher / analyse_besm with a dispatcher that auto-routes anime-5e to D&D when CR is set, BESM otherwise. DMG p.82 thresholds + group multipliers match the canonical table. Cypher engine uses tier×1.5 step-down heuristic which produced a believable 'Punishing' for the tier-1 vs L4+3xL2 stress test. Suggestion icons (swords/shield/mountain/etc.) align with the spec.",
+    "routes/director.py correctly enforces GM/admin-only on all three routes (verified live — player got 403). _gather_npc_pool de-duplicates across genesis/epic/codex via a (source:name) seen-set — good defence against double-listing the nemesis as both Epic + Codex. _stamp_ids() stamps both encounter ids and per-encounter npc ids on PUT, which round-tripped cleanly.",
+    "routes/ingest.py POST /campaigns/{cid}/scaffold-oneshot correctly returns 422 on missing multipart file (validated), processes a real markdown file through Claude Sonnet on commit=false, and returns the documented {committed:false, preview:{...}} envelope. The route signature + Pydantic shape are sound.",
+    "DirectorConsole.jsx debounces cr-analyse calls and is reactive to party-seat / pool-pick / npc-edit changes — confirmed live (cr-panel updated within ~2s of each interaction). All required testids (director-console, director-npc-pool, director-encounter-editor, cr-panel, pool-pick-*, director-party-{charId}) are present and wired.",
+    "IngestPanel.jsx scaffold-panel renders unconditionally on the AtelierTab and exposes both scaffold-preview-btn and the file <input type='file'> — spec-compliant. Did NOT live-fire a UI scaffold preview because the spec only required the button + file input to exist (and the backend live-fire is already covered)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter24_v53.py (NEW — 9 tests, all passing, includes live Claude scaffold-preview)"
+  ],
+  "success_rate": {
+    "backend": "100% (9/9)",
+    "frontend": "100% — director-console + director-npc-pool + director-encounter-editor + cr-panel + pool-pick + director-party + scaffold-panel + scaffold-preview-btn + scaffold file-input all rendered and interactive on Cypher campaign 22ee28aa"
+  },
+  "test_credentials": "franpietrowski@gmail.com / PieGod08!! — confirmed admin role, used for both Bearer-token API tests and live UI session. One throw-away player TEST_iter24_player_<ts>@example.com was registered for the 403 check (left in DB — no cleanup endpoint exposed).",
+  "seed_data_creation": "TEST_iter24 director encounter (current_location='TEST_iter24_loc', current_phase_ref='TEST_iter24_phase') was written to db.directors for campaign 22ee28aa and then RESTORED to {encounters:[], current_location:'', current_phase_ref:''} in the test_zz_cleanup_director step. No stray data persisted post-run on the director side. Throw-away player account remains.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "V5.3 regression harness at /app/backend/tests/test_iter24_v53.py covers all four V5.3 backend surfaces (director GET/PUT/cr-analyse + scaffold-oneshot route signature + live preview). EMERGENT_LLM_KEY is currently set in /app/backend/.env so the live scaffold preview test passes; if a future env unsets it, the test will pytest.skip() automatically (it reads the .env file directly). Cypher campaign 22ee28aa director state is empty post-test. Cypher character a129db2a is at Tier 1 — used as the tier-1 PC in the CR stress test. The IngestPanel scaffold-panel is at the BOTTOM of the Atelier tab (below 'Mechanic Ingestion' history + above 'Reference Tables'); requires scrolling on a 1080p viewport.",
+  "rca of the issue": "n/a — no blocking bug. V5.3 ships clean."
+}
