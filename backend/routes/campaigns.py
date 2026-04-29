@@ -146,6 +146,14 @@ async def list_campaigns(mine: bool = False, user: dict = Depends(get_current_us
             {"member_ids": user["id"]},
         ]}
     rows = await db.campaigns.find(q, {"_id": 0}).sort("created_at", -1).to_list(200)
+    # Hydrate per-row relationship flags the UI relies on (Dashboard
+    # card badges, Discover filter, Account "Campaigns GM'd" stat).
+    # Detail GET /{cid} already does this at line ~265; the list must
+    # mirror it or list-consumers silently mislabel every row.
+    uid = user["id"]
+    for r in rows:
+        r["is_gm"] = r.get("gm_id") == uid
+        r["is_member"] = uid in (r.get("member_ids") or [])
     return rows
 
 
