@@ -1,0 +1,40 @@
+{
+  "summary": "V5.2 iter23 backend + frontend validation. All 5 pytest cases in /app/backend/tests/test_iter23_v52.py PASS on the preview host: (1) GET /api/systems/dnd-5e/reference ships backgrounds[] with Acolyte + 7 others, spell_slots_full/half/warlock each at exactly 20 rows, cantrips_known.Wizard[0]==3. (2) GET /api/systems/anime-5e/reference ships backgrounds>=8, defects>=8, items>=10, class_casting.Adept=='full' & class_casting.Champion=='none'. (3) GET /api/systems/cypher/reference — every descriptor is a dict with name+genres[], every focus has genres[], setting_genres has >=8 entries, pool_baseline==7. (4) PUT /api/campaigns/22ee28aaf79541c395255e144b5aab42 accepts setting_genre/primer_level_min/primer_tier_suggest/primer_xp_cap/house_rules; subsequent GET round-trips all five fields; values then restored to pre-test defaults. (5) POST /api/characters/a129db2a.../journal appends timestamped entry; subsequent GET of the character shows it persisted in folio.journal. Frontend Playwright sweep on the Cypher campaign's Player Primer tab confirmed primer-system-caps, primer-tier-suggest-block, primer-tier-suggest, primer-xp-cap-block, primer-xp-cap, primer-genre-gate-block, primer-cypher-genre, primer-house-rules, primer-save-btn all render and are visible; UI Save round-trips primer_xp_cap=17 + setting_genre='fantasy' + house_rules through PUT and a reload reads them back. D&D 5E builder (campaign df9f8fbf...) Background field is now a <select data-testid='dnd-background'> with the 8 SRD backgrounds + the placeholder option (Acolyte, Criminal, Folk Hero, Noble, Sage, Soldier, Sailor, Charlatan); selecting Acolyte surfaces dnd-background-card. BESM builder (campaign f7403305...) renders points-pool-card + points-loading-bar, both visible. Character Journal UI on the Cypher character a129db2a... submits through character-journal-input → character-journal-submit and the appended text is visible at character-journal-entry-0. The dnd-spell-slots card was NOT exercised in the live UI this run because the D&D 5E campaign currently has no forged characters (GET /api/characters?campaign_id=... returns 405 in this environment — likely the list route uses a different path; that is a pre-existing shape issue, NOT a V5.2 regression). The ReferenceEditor system-aware fields (reference-input-cost-per-level / points-per-rank / defect-category / genre) were NOT exercised because those testids only attach while a row is actively being edited, and no rows were created during this sweep; the code in ReferenceEditor.jsx does gate them correctly on `isBesm`.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/characters?campaign_id={cid}", "issue": "Returns 405 Method Not Allowed in this environment. May not be a defined list endpoint — frontend likely fetches per-character or via /api/campaigns/{cid}/characters. Not a V5.2 regression; noted for context."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter23_v52.py",
+    "/app/test_reports/pytest/iter23_results.xml"
+  ],
+  "action_items": [
+    "None blocking. Optional: seed a single D&D 5E character (class=Wizard, level=3) on campaign df9f8fbf... so a future agent can visually confirm the dnd-spell-slots card (4/3/2 slots + Cantrips known: 3). All underlying data (SPELL_SLOTS_FULL row L3, CANTRIPS_KNOWN.Wizard[0]==3) is present and correct."
+  ],
+  "critical_code_review_comments": [
+    "cypher_data.py correctly ships descriptors and foci as objects with name+genres[] + the setting_genres list, and the Cypher builder at SystemCharacterBuilders.jsx ~line 431 normalises both object and legacy-string descriptor shapes (good — preserves characters created pre-V5.2).",
+    "CampaignIn model carries all five V5.2 fields with sensible defaults (primer_level_min=1, primer_tier_suggest=1, primer_xp_cap=0, setting_genre='', house_rules='').",
+    "CharacterSheet.jsx ships two dnd-spell-slots render paths (lines 764/775) — full caster vs warlock vs half — keyed off class_casting which matches the D&D reference payload. Verified in code only (no D&D chars exist to render).",
+    "ReferenceEditor.jsx gates cost-per-level / points-per-rank / defect-category behind isBesm and shows genre + description for non-BESM systems — matches the V5.2 spec. Not exercised live (no rows being edited)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter23_v52.py (new — 5 tests, all passing)"
+  ],
+  "success_rate": {
+    "backend": "100% (5/5)",
+    "frontend": "Verified live: primer-system-caps + all 5 primer-* testids + save roundtrip (cypher), dnd-background dropdown + dnd-background-card (D&D), points-pool-card + points-loading-bar (BESM), character-journal end-to-end (cypher). NOT exercised: dnd-spell-slots UI (no D&D chars), ReferenceEditor row fields (no row in edit mode)."
+  },
+  "test_credentials": "franpietrowski@gmail.com / PieGod08!! — confirmed valid. Used Bearer token throughout.",
+  "seed_data_creation": "NO new users. One journal entry appended to Cypher character a129db2a (text 'TEST_V52 journal entry <ts>' + 'TEST_V52 UI journal ...'). Cypher campaign 22ee28aa primer fields were written to (setting_genre=fantasy, primer_xp_cap=17, house_rules='TEST_V52 UI house rules') and then RESTORED to defaults (setting_genre='', primer_level_min=1, primer_tier_suggest=1, primer_xp_cap=0, house_rules='') via a post-test PUT — verified 200. No stray campaigns or sessions created this run.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Regression harness at /app/backend/tests/test_iter23_v52.py covers the five V5.2 backend surfaces. The D&D 5E campaign (df9f8fbf241e490bbf772dca915eaa54) has NO forged characters as of this run — if a future iteration wants to sanity-check the dnd-spell-slots UI, forge a Wizard level-3 char there first, then visit /app/characters/{id}. GET /api/characters?campaign_id=<cid> returns 405 in this env; use GET /api/campaigns/{cid}/characters or the per-id GET /api/characters/{id} instead. The Cypher campaign's primer fields have been RESTORED post-test — so primer-xp-cap / primer-cypher-genre / primer-house-rules will render as their V5.2 defaults on that campaign until a GM explicitly sets them again. The Cypher character journal on a129db2a now has 2 TEST_V52 entries appended this run (not cleaned up — no journal-delete route exposed).",
+  "rca of the issue": "n/a — no blocking bug. Only context note: no D&D characters exist to fully exercise dnd-spell-slots card render path (data layer is verified correct via pytest; component code is in place; no UI bug suspected)."
+}

@@ -78,33 +78,85 @@ TIER_DERIVED = {
                       4: "1d6+4", 5: "1d6+5", 6: "1d6+6"},
 }
 
-# 16 SRD descriptors — flavour-flag for backstory + 1 Edge or Skill bonus.
-DESCRIPTORS = [
-    "Brash", "Charming", "Clever", "Doomed", "Empathic", "Graceful",
-    "Hideous", "Impulsive", "Intelligent", "Mystical", "Mysterious",
-    "Resilient", "Stealthy", "Swift", "Tough", "Vicious",
+# Genre / setting tags. Used by the front-end to filter Descriptors / Foci /
+# Equipment lists when a campaign declares its `setting_genre`. Setting names
+# follow the Cypher SRD's listed genres — the LIBRARY-LEGAL settings shipped
+# in the core book. Forbidden settings (Numenera, Strange, NTYE, etc.) are
+# blocked from BRANDED PDF export elsewhere, but the genre filter itself
+# applies to whatever setting the GM selects.
+SETTING_GENRES = [
+    {"key": "fantasy",     "label": "Fantasy",      "blurb": "Sword & sorcery, swords and spells"},
+    {"key": "modern",      "label": "Modern",       "blurb": "Contemporary thriller / horror / urban"},
+    {"key": "post",        "label": "Post-Apocalypse", "blurb": "Aftermath / scavenger / weird-tech"},
+    {"key": "scifi",       "label": "Science-Fiction", "blurb": "Space-opera, cyber, hard-SF"},
+    {"key": "horror",      "label": "Horror",       "blurb": "Cosmic horror, occult investigation"},
+    {"key": "superhero",   "label": "Superhero",    "blurb": "Capes / masks / city-scale"},
+    {"key": "historical",  "label": "Historical",   "blurb": "Period game with one fantastical lever"},
+    {"key": "any",         "label": "Genre-Agnostic", "blurb": "All Descriptors / Foci available"},
 ]
 
-# 18 SRD foci — name + sentence-fragment role only.
+
+# 16 SRD descriptors — flavour-flag for backstory + 1 Edge or Skill bonus.
+# The `genres` tag lists the genres the descriptor fits naturally; the front-
+# end uses this to narrow the picker when a setting is declared. An empty /
+# missing tag list means the descriptor is genre-agnostic.
+DESCRIPTORS = [
+    {"name": "Brash",       "genres": ["fantasy", "modern", "post", "scifi", "superhero"]},
+    {"name": "Charming",    "genres": ["fantasy", "modern", "scifi", "superhero", "historical"]},
+    {"name": "Clever",      "genres": ["any"]},
+    {"name": "Doomed",      "genres": ["fantasy", "horror", "post"]},
+    {"name": "Empathic",    "genres": ["modern", "scifi", "superhero", "historical"]},
+    {"name": "Graceful",    "genres": ["fantasy", "modern", "scifi", "historical"]},
+    {"name": "Hideous",     "genres": ["horror", "post"]},
+    {"name": "Impulsive",   "genres": ["any"]},
+    {"name": "Intelligent", "genres": ["any"]},
+    {"name": "Mystical",    "genres": ["fantasy", "horror", "superhero"]},
+    {"name": "Mysterious",  "genres": ["fantasy", "horror", "modern", "post", "superhero"]},
+    {"name": "Resilient",   "genres": ["any"]},
+    {"name": "Stealthy",    "genres": ["fantasy", "modern", "post", "scifi", "superhero", "historical"]},
+    {"name": "Swift",       "genres": ["any"]},
+    {"name": "Tough",       "genres": ["any"]},
+    {"name": "Vicious",     "genres": ["fantasy", "post", "horror"]},
+]
+
+# 18 SRD foci — name + sentence-fragment role + genre tags.
 FOCI = [
-    {"name": "Bears a Halo of Fire",       "role": "Burns nearby foes · area zones"},
-    {"name": "Carries a Quiver",            "role": "Ranged archery specialist"},
-    {"name": "Commands Mental Might",       "role": "Telepathy · psionic blasts"},
-    {"name": "Conducts Weird Science",      "role": "Improvised cyphers · gadgets"},
-    {"name": "Crafts Illusions",            "role": "Visual / auditory deceptions"},
-    {"name": "Crafts Unique Objects",       "role": "Item creation · workshop bonuses"},
-    {"name": "Defends the Weak",            "role": "Tank · ally protection"},
-    {"name": "Entertains",                  "role": "Charisma · audience-buff"},
-    {"name": "Exists Partially Out of Phase","role": "Phase shift · selective intangibility"},
-    {"name": "Explores Dark Places",        "role": "Stealth · subterranean expertise"},
-    {"name": "Fights with Panache",         "role": "Duellist · improvised reposte"},
-    {"name": "Howls at the Moon",           "role": "Shapeshift · primal form"},
-    {"name": "Leads",                       "role": "Allies act as if Trained"},
-    {"name": "Masters Defense",             "role": "Armor · Speed defense"},
-    {"name": "Masters Weaponry",            "role": "Weapon-mastery · combat finesse"},
-    {"name": "Murders",                     "role": "Stealth strikes · finishers"},
-    {"name": "Wields Two Weapons at Once",  "role": "Twin-blade · split-attack"},
-    {"name": "Works Miracles",              "role": "Divine intervention · faith effects"},
+    {"name": "Bears a Halo of Fire",       "role": "Burns nearby foes · area zones",
+     "genres": ["fantasy", "horror", "superhero"]},
+    {"name": "Carries a Quiver",            "role": "Ranged archery specialist",
+     "genres": ["fantasy", "post", "historical"]},
+    {"name": "Commands Mental Might",       "role": "Telepathy · psionic blasts",
+     "genres": ["scifi", "superhero", "horror"]},
+    {"name": "Conducts Weird Science",      "role": "Improvised cyphers · gadgets",
+     "genres": ["scifi", "post", "modern", "superhero"]},
+    {"name": "Crafts Illusions",            "role": "Visual / auditory deceptions",
+     "genres": ["fantasy", "horror", "modern", "superhero"]},
+    {"name": "Crafts Unique Objects",       "role": "Item creation · workshop bonuses",
+     "genres": ["any"]},
+    {"name": "Defends the Weak",            "role": "Tank · ally protection",
+     "genres": ["any"]},
+    {"name": "Entertains",                  "role": "Charisma · audience-buff",
+     "genres": ["fantasy", "modern", "scifi", "historical", "superhero"]},
+    {"name": "Exists Partially Out of Phase","role": "Phase shift · selective intangibility",
+     "genres": ["scifi", "horror", "superhero"]},
+    {"name": "Explores Dark Places",        "role": "Stealth · subterranean expertise",
+     "genres": ["fantasy", "post", "horror", "modern"]},
+    {"name": "Fights with Panache",         "role": "Duellist · improvised reposte",
+     "genres": ["fantasy", "modern", "historical", "superhero"]},
+    {"name": "Howls at the Moon",           "role": "Shapeshift · primal form",
+     "genres": ["fantasy", "horror", "superhero"]},
+    {"name": "Leads",                       "role": "Allies act as if Trained",
+     "genres": ["any"]},
+    {"name": "Masters Defense",             "role": "Armor · Speed defense",
+     "genres": ["any"]},
+    {"name": "Masters Weaponry",            "role": "Weapon-mastery · combat finesse",
+     "genres": ["any"]},
+    {"name": "Murders",                     "role": "Stealth strikes · finishers",
+     "genres": ["fantasy", "modern", "horror", "post"]},
+    {"name": "Wields Two Weapons at Once",  "role": "Twin-blade · split-attack",
+     "genres": ["fantasy", "post", "scifi", "modern"]},
+    {"name": "Works Miracles",              "role": "Divine intervention · faith effects",
+     "genres": ["fantasy", "horror", "historical"]},
 ]
 
 # Skills — task-shaped. Train / Specialise lowers difficulty by 1 each step.
@@ -165,6 +217,7 @@ REFERENCE = {
     "stat_pools": STAT_POOLS,
     "pool_baseline": POOL_BASELINE,
     "tier_derived": TIER_DERIVED,
+    "setting_genres": SETTING_GENRES,
     "types": TYPES,
     "descriptors": DESCRIPTORS,
     "foci": FOCI,

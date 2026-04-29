@@ -130,7 +130,89 @@ CONDITIONS = [
     {"name": "Eclipsed",     "effect": "Lose Reaction · ends at start of your next turn."},
 ]
 
-# Power-level brackets aligned to 5E levels but flagged as Tri-Stat tiers too.
+# Genre backgrounds — 8 anime tropes turned into 5E-shape backgrounds.
+BACKGROUNDS = [
+    {"name": "Honor Student",  "skills": ["History", "Investigation"],
+     "tools": ["Calligrapher's set"], "languages": "one of choice",
+     "feature": "Top of the Class — academic doors open without question",
+     "page_role": "Slice-of-life / school"},
+    {"name": "Idol Trainee",   "skills": ["Performance", "Persuasion"],
+     "tools": ["Disguise kit", "Musical instrument (one)"], "languages": "—",
+     "feature": "Stage Pass — fans recognise & assist when role is on-mode",
+     "page_role": "Pop-star arc"},
+    {"name": "Mech Pilot Cadet", "skills": ["Athletics", "Investigation"],
+     "tools": ["Vehicles (mecha)", "Tinker's tools"], "languages": "—",
+     "feature": "Sortie Authorisation — military bay access on duty",
+     "page_role": "Mecha"},
+    {"name": "Wandering Swordsman", "skills": ["Athletics", "Survival"],
+     "tools": ["Vehicles (land)"], "languages": "—",
+     "feature": "Folk Tale — a village will shelter you for one night",
+     "page_role": "Shōnen action"},
+    {"name": "Magical Trainee", "skills": ["Arcana", "Insight"],
+     "tools": ["Calligrapher's set"], "languages": "one of choice",
+     "feature": "Familiar Bond — you began with a low-power familiar",
+     "page_role": "Magical girl"},
+    {"name": "Cyberpunk Runner", "skills": ["Sleight of Hand", "Stealth"],
+     "tools": ["Hacker's kit", "Thieves' tools"], "languages": "Hex-cant",
+     "feature": "Side Job — black-market liaison who answers a single message",
+     "page_role": "Cyberpunk"},
+    {"name": "Spirit Medium",   "skills": ["Insight", "Religion"],
+     "tools": ["Calligrapher's set"], "languages": "Spirit-tongue",
+     "feature": "Veil-Walker — sense the local spirit population",
+     "page_role": "Supernatural"},
+    {"name": "Otherworlder",    "skills": ["Survival", "Perception"],
+     "tools": ["Vehicles (land or air)"], "languages": "you remember Earth-tongue",
+     "feature": "Out-of-Place — common knowledge often surprises you, occasionally to your benefit",
+     "page_role": "Isekai"},
+]
+
+# Defects — a Tri-Stat point-buy concept. Each Defect gives BACK points.
+DEFECTS = [
+    {"name": "Awkward",        "rebate_per_level": 1, "blurb_role": "−1 to social rolls per level"},
+    {"name": "Bane",           "rebate_per_level": 1, "blurb_role": "Susceptibility to a substance / phenomenon"},
+    {"name": "Conditional Power", "rebate_per_level": 1, "blurb_role": "Powers only function when X"},
+    {"name": "Easily Distracted", "rebate_per_level": 1, "blurb_role": "Specific stimulus pulls focus"},
+    {"name": "Marked",         "rebate_per_level": 1, "blurb_role": "Conspicuous tattoo / aura / mark"},
+    {"name": "Owned by Another", "rebate_per_level": 2, "blurb_role": "Bound to a NPC's bidding"},
+    {"name": "Phobia",         "rebate_per_level": 1, "blurb_role": "Specific terror provokes flight"},
+    {"name": "Skeleton in Closet", "rebate_per_level": 2, "blurb_role": "Hidden secret weaponizable by GM"},
+]
+
+# Equipment items — anime gadget kit.
+ITEMS = [
+    {"name": "Power Limiter Bracelet",  "cost": "—",       "weight": "0.2 lb",
+     "uses": "Suppresses an Attribute by one level until removed. Plot-keyed."},
+    {"name": "Bento Box (3 meals)",      "cost": "1 sp",    "weight": "1 lb",
+     "uses": "Restore 1d4 hp on a short rest, once per day, when shared."},
+    {"name": "Walkman / Earbuds",        "cost": "5 sp",    "weight": "0.1 lb",
+     "uses": "Cue music for a Spotlit moment (DM Intrusion candy)."},
+    {"name": "Spirit-Sealing Ofuda",     "cost": "1 gp",    "weight": "0.1 lb",
+     "uses": "Adhered to a surface, blocks low-tier spirit passage 1 hour."},
+    {"name": "Mecha Repair Kit",         "cost": "50 gp",   "weight": "10 lb",
+     "uses": "Restore 2d10 hp to a vehicle/mecha during a long rest."},
+    {"name": "Idol Concert Pass",        "cost": "10 gp",   "weight": "—",
+     "uses": "Grants social entry to one venue/event."},
+    {"name": "Charm Bracelet (Familiar Bond)", "cost": "—", "weight": "0.1 lb",
+     "uses": "Resummon a banished familiar (1/long rest)."},
+    {"name": "Cyberdeck (Light)",         "cost": "200 gp", "weight": "2 lb",
+     "uses": "+5 to Hacker checks; can run one daemon at a time."},
+    {"name": "Schoolyard Bokken",         "cost": "5 sp",   "weight": "2 lb",
+     "uses": "1d6 bludgeoning · counts as a 'safe' weapon for school settings."},
+    {"name": "Ration Box (1 week)",       "cost": "5 gp",   "weight": "8 lb",
+     "uses": "Travel sustenance · fan-service convention warm-up rolls."},
+]
+
+# Anime 5E uses the SRD spell-slot table (full for Adept, half for Pilot/Tinker,
+# none for Champion/Idol — Idol uses Soul-driven Performance abilities instead).
+# We re-export an alias here so the front-end can pick the right table by class.
+CLASS_CASTING = {
+    "Adept":    "full",
+    "Champion": "none",
+    "Idol":     "none",      # Idol uses Soul-stunts, not slots
+    "Pilot":    "half",
+    "Tinker":   "half",
+}
+
 POWER_LEVELS = [
     {"name": "Slice-of-Life",  "level_range": "1-2",   "blurb": "Personal stakes, school setting"},
     {"name": "Adventurous",    "level_range": "3-5",   "blurb": "Town · regional stakes"},
@@ -147,13 +229,17 @@ REFERENCE = {
     "abilities": ABILITIES,
     "classes": CLASSES,
     "heritages": HERITAGES,
+    "backgrounds": BACKGROUNDS,
     "skills": SKILLS,
     "spells": SPELLS,
     "weapons": WEAPONS,
     "armor": ARMOR,
+    "items": ITEMS,
     "conditions": CONDITIONS,
     "power_levels": POWER_LEVELS,
     "point_buy_attributes": POINT_BUY_ATTRIBUTES,
+    "defects": DEFECTS,
+    "class_casting": CLASS_CASTING,
     "modifier_formula": "(score - 10) // 2",
     "rule_note": (
         "Anime 5E supports BOTH 5E class+slot play AND Tri-Stat point-buy. "

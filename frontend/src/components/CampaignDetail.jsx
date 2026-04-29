@@ -1114,6 +1114,12 @@ function PrimerTab({ camp, onRefresh }) {
   const [damageRating, setDamageRating] = useState(camp.damage_rating_baseline || 5);
   // V4.6 — per-licence setting tag (used by PDF export gate for Cypher).
   const [settingName, setSettingName] = useState(camp.setting_name || "");
+  // V5.2 — Cypher genre-gate + system-aware primer caps.
+  const [settingGenre, setSettingGenre] = useState(camp.setting_genre || "");
+  const [primerLevelMin, setPrimerLevelMin] = useState(camp.primer_level_min || 1);
+  const [primerTierSuggest, setPrimerTierSuggest] = useState(camp.primer_tier_suggest || 1);
+  const [primerXpCap, setPrimerXpCap] = useState(camp.primer_xp_cap || 0);
+  const [houseRules, setHouseRules] = useState(camp.house_rules || "");
   const [saved, setSaved] = useState(false);
   const [err, setErr] = useState("");
   const parse = (s) => s.split(",").map((x) => x.trim()).filter(Boolean);
@@ -1136,6 +1142,11 @@ function PrimerTab({ camp, onRefresh }) {
         default_character_size: defaultSize,
         damage_rating_baseline: parseInt(damageRating) || 5,
         setting_name: settingName,
+        setting_genre: settingGenre,
+        primer_level_min: parseInt(primerLevelMin) || 1,
+        primer_tier_suggest: parseInt(primerTierSuggest) || 1,
+        primer_xp_cap: parseInt(primerXpCap) || 0,
+        house_rules: houseRules,
       };
       delete payload.is_gm; delete payload.members; delete payload.id;
       delete payload.gm_id; delete payload.gm_name; delete payload.member_ids;
@@ -1169,9 +1180,64 @@ function PrimerTab({ camp, onRefresh }) {
         <textarea className="input min-h-[220px] font-body" placeholder="Welcome to the campaign. In this world…"
                   value={primer} onChange={(e) => setPrimer(e.target.value)} data-testid="primer-input"/>
       ) : (
+        <>
         <div className="card-mystic p-5 whitespace-pre-wrap text-parchment/90 font-body leading-relaxed" data-testid="primer-readonly">
           {camp.player_primer || <span className="text-mist italic">The Game Master hasn't written a primer yet.</span>}
         </div>
+        {/* Player-facing system & house-rule summary — shown to non-GMs only.
+            Surfaces forge caps + house rules + setting genre so a player
+            can read the table contract before forging a character. */}
+        <div className="grid sm:grid-cols-2 gap-3 mt-4" data-testid="primer-readonly-caps">
+          {camp.setting_name && (
+            <div className="card-mystic p-3 text-xs">
+              <div className="label-ref">Setting</div>
+              <div className="text-parchment mt-1">{camp.setting_name}</div>
+            </div>
+          )}
+          {camp.system_id === "cypher" && camp.setting_genre && (
+            <div className="card-mystic p-3 text-xs">
+              <div className="label-ref">Cypher genre gate</div>
+              <div className="text-parchment mt-1">{camp.setting_genre}
+                <span className="text-mist text-[10px] ml-1">(Descriptors / Foci filtered to this)</span>
+              </div>
+            </div>
+          )}
+          {(camp.system_id === "dnd-5e" || camp.system_id === "anime-5e") && (camp.primer_level_min || 0) > 1 && (
+            <div className="card-mystic p-3 text-xs">
+              <div className="label-ref">Min starting level</div>
+              <div className="text-parchment mt-1">Level {camp.primer_level_min}</div>
+            </div>
+          )}
+          {camp.system_id === "cypher" && (camp.primer_tier_suggest || 0) > 0 && (
+            <div className="card-mystic p-3 text-xs">
+              <div className="label-ref">Suggested Tier</div>
+              <div className="text-parchment mt-1">Tier {camp.primer_tier_suggest}</div>
+            </div>
+          )}
+          {(camp.primer_xp_cap || 0) > 0 && (
+            <div className="card-mystic p-3 text-xs">
+              <div className="label-ref">Starting XP cap</div>
+              <div className="text-parchment mt-1">{camp.primer_xp_cap} XP</div>
+            </div>
+          )}
+          {(camp.prohibited_attributes?.length || camp.prohibited_defects?.length) ? (
+            <div className="card-mystic p-3 text-xs sm:col-span-2"
+                 data-testid="primer-readonly-prohibited">
+              <div className="label-ref">Off the table</div>
+              <div className="text-mist text-[11px] mt-1">
+                {[...(camp.prohibited_attributes || []), ...(camp.prohibited_defects || [])].join(" · ") || "—"}
+              </div>
+            </div>
+          ) : null}
+          {camp.house_rules && (
+            <div className="card-mystic p-3 text-xs sm:col-span-2"
+                 data-testid="primer-readonly-house-rules">
+              <div className="label-ref">House rules</div>
+              <div className="text-parchment mt-1 whitespace-pre-wrap">{camp.house_rules}</div>
+            </div>
+          )}
+        </div>
+        </>
       )}
 
       {camp.is_gm && (
@@ -1263,6 +1329,71 @@ function PrimerTab({ camp, onRefresh }) {
                 </div>
               </>
             )}
+          </div>
+
+          {/* System-aware character-forge primer caps. Different fields show
+              for different systems so the table sees only what's relevant.
+              House rules block is universal. */}
+          <div className="divider-sigil my-6"/>
+          <div className="label-ref mb-2 flex items-center gap-2">Forge Caps · per-system <Shield className="w-3 h-3"/></div>
+          <p className="text-xs text-mist font-body mb-4 italic">
+            What the table guarantees about freshly-forged characters.
+            Empty / 0 = no cap. <span className="text-mist/70">System-aware: D&D shows level, Cypher shows tier, all show XP cap.</span>
+          </p>
+          <div className="grid md:grid-cols-3 gap-3" data-testid="primer-system-caps">
+            {(camp.system_id === "dnd-5e" || camp.system_id === "anime-5e") && (
+              <div data-testid="primer-level-min-block">
+                <label className="label-ref block mb-1">Min starting level</label>
+                <input className="input" type="number" min={1} max={20} value={primerLevelMin}
+                       onChange={(e) => setPrimerLevelMin(e.target.value)}
+                       data-testid="primer-level-min"/>
+                <div className="text-[10px] text-mist/70 italic mt-1">Gates the character builder's level slider.</div>
+              </div>
+            )}
+            {camp.system_id === "cypher" && (
+              <div data-testid="primer-tier-suggest-block">
+                <label className="label-ref block mb-1">Suggested Tier</label>
+                <input className="input" type="number" min={1} max={6} value={primerTierSuggest}
+                       onChange={(e) => setPrimerTierSuggest(e.target.value)}
+                       data-testid="primer-tier-suggest"/>
+                <div className="text-[10px] text-mist/70 italic mt-1">Cypher Tier (1-6) the table starts at.</div>
+              </div>
+            )}
+            <div data-testid="primer-xp-cap-block">
+              <label className="label-ref block mb-1">Starting XP cap</label>
+              <input className="input" type="number" min={0} value={primerXpCap}
+                     onChange={(e) => setPrimerXpCap(e.target.value)}
+                     data-testid="primer-xp-cap"/>
+              <div className="text-[10px] text-mist/70 italic mt-1">0 = no cap. Hard ceiling on XP carried at character creation.</div>
+            </div>
+            {camp.system_id === "cypher" && (
+              <div data-testid="primer-genre-gate-block">
+                <label className="label-ref block mb-1">Cypher genre gate</label>
+                <select className="select" value={settingGenre}
+                        onChange={(e) => setSettingGenre(e.target.value)}
+                        data-testid="primer-cypher-genre">
+                  <option value="">— no gate (all entries) —</option>
+                  <option value="any">Genre-agnostic</option>
+                  <option value="fantasy">Fantasy</option>
+                  <option value="modern">Modern</option>
+                  <option value="post">Post-Apocalypse</option>
+                  <option value="scifi">Science-Fiction</option>
+                  <option value="horror">Horror</option>
+                  <option value="superhero">Superhero</option>
+                  <option value="historical">Historical</option>
+                </select>
+                <div className="text-[10px] text-mist/70 italic mt-1">Filters the Cypher Descriptors / Foci picker by genre tag.</div>
+              </div>
+            )}
+          </div>
+
+          <div className="mt-4">
+            <label className="label-ref block mb-1">House rules</label>
+            <textarea className="input min-h-[70px] font-body" value={houseRules}
+                      onChange={(e) => setHouseRules(e.target.value)}
+                      placeholder="One-liners only — keep it scan-able. e.g. 'Crit on 19-20 with weapons; nat 1 on saves auto-fail.'"
+                      data-testid="primer-house-rules"/>
+            <div className="text-[10px] text-mist/70 italic mt-1">Surfaced on the player primer card so the table sees deviations from RAW.</div>
           </div>
 
           {/* Tri-Stat point-buy caps — irrelevant outside BESM / Anime 5E.

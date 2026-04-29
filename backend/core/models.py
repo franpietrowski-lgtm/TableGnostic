@@ -89,6 +89,20 @@ class CampaignIn(BaseModel):
     # "Eberron-inspired"). Used by the PDF export pipeline to gate exports
     # against forbidden-settings lists for licence-restricted systems.
     setting_name: str = ""
+    # ---------- V5.2 — Cypher genre-gating ----------
+    # When the system is `cypher`, the genre key from `SETTING_GENRES` filters
+    # the Descriptors / Foci picker so the table sees only setting-appropriate
+    # entries. Empty / "any" = no filter.
+    setting_genre: str = ""
+    # ---------- V5.2 — System-aware Player Primer caps ----------
+    # D&D / Anime 5E: minimum starting level a player may forge.
+    primer_level_min: int = 1
+    # Cypher: suggested starting Tier (1..6).
+    primer_tier_suggest: int = 1
+    # System-agnostic: hard cap on XP a freshly-forged character may carry.
+    primer_xp_cap: int = 0
+    # Free-text house rules — surfaced in the primer card.
+    house_rules: str = ""
 
 
 class CampaignOut(CampaignIn):

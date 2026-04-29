@@ -295,12 +295,24 @@ export default function CharacterBuilder() {
             {ch.name || "Unnamed Soul"}
           </h1>
         </div>
-        <div className="card-mystic px-5 py-3 text-right">
+        <div className="card-mystic px-5 py-3 text-right" data-testid="points-pool-card">
           <div className="label-ref">Points</div>
           <div className="font-display text-2xl text-gold" data-testid="points-remaining">
             {remaining} / {ch.total_points}
           </div>
-          <div className="text-[10px] font-ui tracking-widest uppercase text-mist">
+          {/* Visual loading bar — mirrors BESM 4E p.232 forge advice that
+              players should see how much budget they've burned at a glance.
+              Bar darkens as it approaches the cap; turns ember when over-spent. */}
+          <div className="mt-1.5 w-full h-1.5 bg-void/60 rounded-sm overflow-hidden"
+               data-testid="points-loading-bar">
+            <div className={`h-full transition-all ${
+              remaining < 0 ? "bg-ember" :
+              remaining === 0 ? "bg-arcane-light" : "bg-gold"
+            }`}
+                 style={{ width: `${Math.max(0, Math.min(100,
+                   (spent.total_spent / Math.max(1, ch.total_points)) * 100))}%` }}/>
+          </div>
+          <div className="text-[10px] font-ui tracking-widest uppercase text-mist mt-1">
             stats {spent.stat_cost} · attrs {spent.attribute_cost} · skills {spent.skill_cost} · defects −{spent.defect_points}
           </div>
           {capIsOverride && (

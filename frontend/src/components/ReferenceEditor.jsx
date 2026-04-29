@@ -162,6 +162,11 @@ export default function ReferenceEditor({ campaignId, isGm, systemId }) {
 
 function Row({ row, onChange, onSave, onCancel, busy, systemId, editing, onEdit, onRemove }) {
   const valid = row.page_validation;
+  // Only BESM 4E uses the structured cost-per-level / points-per-rank /
+  // category mechanic; D&D / Cypher / Anime 5E entries should NOT surface
+  // those fields. We instead offer a system-shaped tier / level requirement
+  // input that matches the host system.
+  const isBesm = !systemId || systemId === "besm-4e";
   if (editing) {
     return (
       <div className="border border-gold/30 rounded-sm p-3 space-y-2 bg-gold/5"
@@ -170,7 +175,13 @@ function Row({ row, onChange, onSave, onCancel, busy, systemId, editing, onEdit,
           <input className="input col-span-2" placeholder="Name" value={row.name}
                  onChange={(e) => onChange({ ...row, name: e.target.value })}
                  data-testid="reference-input-name"/>
-          <input className="input" placeholder="Cost (e.g. 2 pts/level)" value={row.cost}
+          <input className="input"
+                 placeholder={isBesm ? "Cost (e.g. 2 pts/level)"
+                   : systemId === "cypher" ? "Tier requirement (e.g. 2)"
+                   : systemId === "dnd-5e" ? "Level requirement (e.g. 5)"
+                   : systemId === "anime-5e" ? "Level / point cost"
+                   : "Requirement"}
+                 value={row.cost}
                  onChange={(e) => onChange({ ...row, cost: e.target.value })}
                  data-testid="reference-input-cost"/>
         </div>
@@ -178,7 +189,7 @@ function Row({ row, onChange, onSave, onCancel, busy, systemId, editing, onEdit,
                   value={row.summary}
                   onChange={(e) => onChange({ ...row, summary: e.target.value })}
                   data-testid="reference-input-summary"/>
-        {PLAYABLE_KINDS.has(row.kind) && (
+        {isBesm && PLAYABLE_KINDS.has(row.kind) && (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 border border-gold/15 rounded-sm p-2 bg-gold/5"
                data-testid="reference-playable-fields">
             {row.kind !== "defect" && (
@@ -214,6 +225,23 @@ function Row({ row, onChange, onSave, onCancel, busy, systemId, editing, onEdit,
                    onChange={(e) => onChange({ ...row,
                      fields: { ...(row.fields || {}), description: e.target.value } })}
                    data-testid="reference-input-description"/>
+          </div>
+        )}
+        {!isBesm && PLAYABLE_KINDS.has(row.kind) && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 border border-gold/15 rounded-sm p-2 bg-gold/5"
+               data-testid="reference-playable-fields">
+            <input className="input" placeholder="Description / GM note (optional)"
+                   value={row.fields?.description || ""}
+                   onChange={(e) => onChange({ ...row,
+                     fields: { ...(row.fields || {}), description: e.target.value } })}
+                   data-testid="reference-input-description"/>
+            {systemId === "cypher" && (
+              <input className="input" placeholder="Genre tag (e.g. fantasy, scifi, horror, any)"
+                     value={row.fields?.genre || ""}
+                     onChange={(e) => onChange({ ...row,
+                       fields: { ...(row.fields || {}), genre: e.target.value } })}
+                     data-testid="reference-input-genre"/>
+            )}
           </div>
         )}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">

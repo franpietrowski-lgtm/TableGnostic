@@ -205,6 +205,125 @@ POWER_LEVELS = [
     {"name": "Mythic",     "level_range": "17-20", "blurb": "World/cosmic stakes, godlike foes"},
 ]
 
+# Six iconic SRD-listed Backgrounds (PHB / SRD 5.1 — name + skill profs +
+# tool/language profs + suggested feature). Mechanic-only.
+BACKGROUNDS = [
+    {"name": "Acolyte",   "skills": ["Insight", "Religion"],
+     "tools": [], "languages": "two of choice",
+     "feature": "Shelter of the Faithful — temple aid · ceremony performance",
+     "page": 127},
+    {"name": "Criminal",  "skills": ["Deception", "Stealth"],
+     "tools": ["Thieves' tools", "Gaming set (one)"], "languages": "—",
+     "feature": "Criminal Contact — reliable underworld liaison",
+     "page": 129},
+    {"name": "Folk Hero", "skills": ["Animal Handling", "Survival"],
+     "tools": ["Artisan's tools (one)", "Vehicles (land)"], "languages": "—",
+     "feature": "Rustic Hospitality — humble folk shelter you",
+     "page": 131},
+    {"name": "Noble",     "skills": ["History", "Persuasion"],
+     "tools": ["Gaming set (one)"], "languages": "one of choice",
+     "feature": "Position of Privilege — high society courtesies",
+     "page": 135},
+    {"name": "Sage",      "skills": ["Arcana", "History"],
+     "tools": [], "languages": "two of choice",
+     "feature": "Researcher — recall lore or know who to ask",
+     "page": 137},
+    {"name": "Soldier",   "skills": ["Athletics", "Intimidation"],
+     "tools": ["Gaming set (one)", "Vehicles (land)"], "languages": "—",
+     "feature": "Military Rank — soldiers recognise / defer to it",
+     "page": 140},
+    {"name": "Sailor",    "skills": ["Athletics", "Perception"],
+     "tools": ["Navigator's tools", "Vehicles (water)"], "languages": "—",
+     "feature": "Ship's Passage — work for free passage on a vessel",
+     "page": 139},
+    {"name": "Charlatan", "skills": ["Deception", "Sleight of Hand"],
+     "tools": ["Disguise kit", "Forgery kit"], "languages": "—",
+     "feature": "False Identity — second persona with documents",
+     "page": 128},
+]
+
+# Spell slot table by class+level (SRD 5.1). Index = class level (1..20),
+# tuple = (1st, 2nd, 3rd, 4th, 5th, 6th, 7th, 8th, 9th).
+# Full casters share a table; half casters and warlocks are separate.
+SPELL_SLOTS_FULL = [  # Bard, Cleric, Druid, Sorcerer, Wizard
+    (2, 0, 0, 0, 0, 0, 0, 0, 0),  # 1
+    (3, 0, 0, 0, 0, 0, 0, 0, 0),  # 2
+    (4, 2, 0, 0, 0, 0, 0, 0, 0),  # 3
+    (4, 3, 0, 0, 0, 0, 0, 0, 0),  # 4
+    (4, 3, 2, 0, 0, 0, 0, 0, 0),  # 5
+    (4, 3, 3, 0, 0, 0, 0, 0, 0),  # 6
+    (4, 3, 3, 1, 0, 0, 0, 0, 0),  # 7
+    (4, 3, 3, 2, 0, 0, 0, 0, 0),  # 8
+    (4, 3, 3, 3, 1, 0, 0, 0, 0),  # 9
+    (4, 3, 3, 3, 2, 0, 0, 0, 0),  # 10
+    (4, 3, 3, 3, 2, 1, 0, 0, 0),  # 11
+    (4, 3, 3, 3, 2, 1, 0, 0, 0),  # 12
+    (4, 3, 3, 3, 2, 1, 1, 0, 0),  # 13
+    (4, 3, 3, 3, 2, 1, 1, 0, 0),  # 14
+    (4, 3, 3, 3, 2, 1, 1, 1, 0),  # 15
+    (4, 3, 3, 3, 2, 1, 1, 1, 0),  # 16
+    (4, 3, 3, 3, 2, 1, 1, 1, 1),  # 17
+    (4, 3, 3, 3, 3, 1, 1, 1, 1),  # 18
+    (4, 3, 3, 3, 3, 2, 1, 1, 1),  # 19
+    (4, 3, 3, 3, 3, 2, 2, 1, 1),  # 20
+]
+SPELL_SLOTS_HALF = [  # Paladin, Ranger
+    (0, 0, 0, 0, 0, 0, 0, 0, 0),  # 1 (Paladin gets at 2)
+    (2, 0, 0, 0, 0, 0, 0, 0, 0),  # 2
+    (3, 0, 0, 0, 0, 0, 0, 0, 0),  # 3
+    (3, 0, 0, 0, 0, 0, 0, 0, 0),  # 4
+    (4, 2, 0, 0, 0, 0, 0, 0, 0),  # 5
+    (4, 2, 0, 0, 0, 0, 0, 0, 0),  # 6
+    (4, 3, 0, 0, 0, 0, 0, 0, 0),  # 7
+    (4, 3, 0, 0, 0, 0, 0, 0, 0),  # 8
+    (4, 3, 2, 0, 0, 0, 0, 0, 0),  # 9
+    (4, 3, 2, 0, 0, 0, 0, 0, 0),  # 10
+    (4, 3, 3, 0, 0, 0, 0, 0, 0),  # 11
+    (4, 3, 3, 0, 0, 0, 0, 0, 0),  # 12
+    (4, 3, 3, 1, 0, 0, 0, 0, 0),  # 13
+    (4, 3, 3, 1, 0, 0, 0, 0, 0),  # 14
+    (4, 3, 3, 2, 0, 0, 0, 0, 0),  # 15
+    (4, 3, 3, 2, 0, 0, 0, 0, 0),  # 16
+    (4, 3, 3, 3, 1, 0, 0, 0, 0),  # 17
+    (4, 3, 3, 3, 1, 0, 0, 0, 0),  # 18
+    (4, 3, 3, 3, 2, 0, 0, 0, 0),  # 19
+    (4, 3, 3, 3, 2, 0, 0, 0, 0),  # 20
+]
+SPELL_SLOTS_WARLOCK = [
+    # (slots, slot_level) — warlock has only the listed slot level all at once.
+    {"slots": 1, "slot_level": 1},  # 1
+    {"slots": 2, "slot_level": 1},  # 2
+    {"slots": 2, "slot_level": 2},  # 3
+    {"slots": 2, "slot_level": 2},  # 4
+    {"slots": 2, "slot_level": 3},  # 5
+    {"slots": 2, "slot_level": 3},  # 6
+    {"slots": 2, "slot_level": 4},  # 7
+    {"slots": 2, "slot_level": 4},  # 8
+    {"slots": 2, "slot_level": 5},  # 9
+    {"slots": 2, "slot_level": 5},  # 10
+    {"slots": 3, "slot_level": 5},  # 11
+    {"slots": 3, "slot_level": 5},  # 12
+    {"slots": 3, "slot_level": 5},  # 13
+    {"slots": 3, "slot_level": 5},  # 14
+    {"slots": 3, "slot_level": 5},  # 15
+    {"slots": 3, "slot_level": 5},  # 16
+    {"slots": 4, "slot_level": 5},  # 17
+    {"slots": 4, "slot_level": 5},  # 18
+    {"slots": 4, "slot_level": 5},  # 19
+    {"slots": 4, "slot_level": 5},  # 20
+]
+# Cantrips known per class — index by class then [class_level - 1].
+# 'None' entries mean the class never gets cantrips.
+CANTRIPS_KNOWN = {
+    "Bard":     [2, 2, 2, 2, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4],
+    "Cleric":   [3, 3, 3, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5],
+    "Druid":    [2, 2, 2, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4],
+    "Sorcerer": [4, 4, 4, 5, 5, 5, 5, 5, 5, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6, 6],
+    "Warlock":  [2, 2, 2, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4],
+    "Wizard":   [3, 3, 3, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5],
+}
+
+
 REFERENCE = {
     "system_id": "dnd-5e",
     "kind": "class-and-slot",  # selector-driven, not point-buy
@@ -212,6 +331,7 @@ REFERENCE = {
     "abilities": ABILITIES,
     "classes": CLASSES,
     "races": RACES,
+    "backgrounds": BACKGROUNDS,
     "skills": SKILLS,
     "spells": SPELLS,
     "weapons": WEAPONS,
@@ -220,6 +340,10 @@ REFERENCE = {
     "conditions": CONDITIONS,
     "actions": ACTIONS,
     "power_levels": POWER_LEVELS,
+    "spell_slots_full": SPELL_SLOTS_FULL,
+    "spell_slots_half": SPELL_SLOTS_HALF,
+    "spell_slots_warlock": SPELL_SLOTS_WARLOCK,
+    "cantrips_known": CANTRIPS_KNOWN,
     "modifier_formula": "(score - 10) // 2",
     "proficiency_by_level": [2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6],
     "rule_note": (

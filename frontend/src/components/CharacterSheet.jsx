@@ -495,6 +495,76 @@ export default function CharacterSheet() {
         </div>
       </div>
       )}
+
+      {/* Journal — universal across all systems. Fed by /characters/{id}/journal,
+          which timestamps each entry and (optionally) auto-pins it to the
+          campaign's World Codex as a `player_journal` node. The textbox stays
+          editable inline; rendered entries are read-only with a delete affordance
+          handled by the GM/owner. */}
+      <CharacterJournal character={ch} onUpdated={load}/>
+
+    </div>
+  );
+}
+
+function CharacterJournal({ character, onUpdated }) {
+  const entries = character.folio?.journal || [];
+  const [text, setText] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+  const [err, setErr] = React.useState("");
+  const submit = async () => {
+    const t = text.trim();
+    if (!t) return;
+    setBusy(true); setErr("");
+    try {
+      await api.post(`/characters/${character.id}/journal`, { text: t });
+      setText("");
+      onUpdated && onUpdated();
+    } catch (e) {
+      setErr(formatApiErrorDetail(e.response?.data?.detail) || e.message);
+    } finally { setBusy(false); }
+  };
+  return (
+    <div className="card-mystic p-6 mt-6" data-testid="character-journal">
+      <div className="flex items-baseline justify-between">
+        <div>
+          <div className="label-ref">Character Journal</div>
+          <div className="text-[11px] text-mist/70 italic mt-1">
+            Anything you write here is timestamped and pushed to the campaign's World Codex
+            as a player journal node — feeds session recaps too.
+          </div>
+        </div>
+        <span className="text-[10px] text-mist tracking-widest uppercase">
+          {entries.length} entr{entries.length === 1 ? "y" : "ies"}
+        </span>
+      </div>
+      <div className="mt-3 flex gap-2">
+        <textarea className="input min-h-[60px] flex-1"
+                  value={text}
+                  onChange={(e) => setText(e.target.value)}
+                  placeholder="What does your character note about today's session?"
+                  data-testid="character-journal-input"/>
+        <button onClick={submit} disabled={busy || !text.trim()}
+                className="btn btn-primary text-xs self-stretch px-4"
+                data-testid="character-journal-submit">
+          {busy ? "Posting…" : "Add"}
+        </button>
+      </div>
+      {err && <div className="text-ember text-xs mt-2" data-testid="character-journal-error">{err}</div>}
+      {entries.length > 0 && (
+        <div className="mt-4 space-y-2 max-h-[420px] overflow-y-auto pr-1">
+          {[...entries].reverse().map((e, i) => (
+            <div key={i} className="border border-gold/15 rounded-sm p-3"
+                 data-testid={`character-journal-entry-${i}`}>
+              <div className="text-[10px] text-mist tracking-widest uppercase mb-1">
+                {e.created_at ? new Date(e.created_at).toLocaleString() : ""}
+                {e.session_id ? ` · session ${e.session_id.slice(0, 6)}…` : ""}
+              </div>
+              <div className="text-sm text-parchment whitespace-pre-wrap font-body">{e.text}</div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -646,6 +716,76 @@ function DndSheetView({ state, folio, roll }) {
           </div>
         </div>
       )}
+
+      {/* Spell slots — derived from class + level using the SRD tables.
+          Adept/Cleric/Druid/Sorcerer/Wizard/Bard = full caster.
+          Paladin/Ranger = half caster (slots start at level 2).
+          Warlock = pact-magic. Non-casters get nothing rendered. */}
+      {(() => {
+        const cls = state.class;
+        const FULL = ["Bard","Cleric","Druid","Sorcerer","Wizard"];
+        const HALF = ["Paladin","Ranger"];
+        const isFull = FULL.includes(cls);
+        const isHalf = HALF.includes(cls);
+        const isWarlock = cls === "Warlock";
+        if (!isFull && !isHalf && !isWarlock) return null;
+        // Hard-coded SRD 5.1 spell-slot tables — matches the dnd5e_data.py
+        // tables shipped backend-side. Keeping them here too so the sheet
+        // renders without an extra round-trip.
+        const FULL_TBL = [[2,0,0,0,0,0,0,0,0],[3,0,0,0,0,0,0,0,0],[4,2,0,0,0,0,0,0,0],
+          [4,3,0,0,0,0,0,0,0],[4,3,2,0,0,0,0,0,0],[4,3,3,0,0,0,0,0,0],
+          [4,3,3,1,0,0,0,0,0],[4,3,3,2,0,0,0,0,0],[4,3,3,3,1,0,0,0,0],
+          [4,3,3,3,2,0,0,0,0],[4,3,3,3,2,1,0,0,0],[4,3,3,3,2,1,0,0,0],
+          [4,3,3,3,2,1,1,0,0],[4,3,3,3,2,1,1,0,0],[4,3,3,3,2,1,1,1,0],
+          [4,3,3,3,2,1,1,1,0],[4,3,3,3,2,1,1,1,1],[4,3,3,3,3,1,1,1,1],
+          [4,3,3,3,3,2,1,1,1],[4,3,3,3,3,2,2,1,1]];
+        const HALF_TBL = [[0,0,0,0,0,0,0,0,0],[2,0,0,0,0,0,0,0,0],[3,0,0,0,0,0,0,0,0],
+          [3,0,0,0,0,0,0,0,0],[4,2,0,0,0,0,0,0,0],[4,2,0,0,0,0,0,0,0],
+          [4,3,0,0,0,0,0,0,0],[4,3,0,0,0,0,0,0,0],[4,3,2,0,0,0,0,0,0],
+          [4,3,2,0,0,0,0,0,0],[4,3,3,0,0,0,0,0,0],[4,3,3,0,0,0,0,0,0],
+          [4,3,3,1,0,0,0,0,0],[4,3,3,1,0,0,0,0,0],[4,3,3,2,0,0,0,0,0],
+          [4,3,3,2,0,0,0,0,0],[4,3,3,3,1,0,0,0,0],[4,3,3,3,1,0,0,0,0],
+          [4,3,3,3,2,0,0,0,0],[4,3,3,3,2,0,0,0,0]];
+        const WARLOCK_TBL = [[1,1],[2,1],[2,2],[2,2],[2,3],[2,3],[2,4],[2,4],[2,5],
+          [2,5],[3,5],[3,5],[3,5],[3,5],[3,5],[3,5],[4,5],[4,5],[4,5],[4,5]];
+        const CANTRIPS = {
+          Bard: [2,2,2,2,3,3,3,3,3,4,4,4,4,4,4,4,4,4,4,4],
+          Cleric: [3,3,3,4,4,4,4,4,4,5,5,5,5,5,5,5,5,5,5,5],
+          Druid: [2,2,2,3,3,3,3,3,3,4,4,4,4,4,4,4,4,4,4,4],
+          Sorcerer: [4,4,4,5,5,5,5,5,5,6,6,6,6,6,6,6,6,6,6,6],
+          Warlock: [2,2,2,3,3,3,3,3,3,4,4,4,4,4,4,4,4,4,4,4],
+          Wizard: [3,3,3,4,4,4,4,4,4,5,5,5,5,5,5,5,5,5,5,5],
+        };
+        const cantripsKnown = (CANTRIPS[cls] || [])[lvl - 1] || 0;
+        const used = state.slot_usage || {};
+        if (isWarlock) {
+          const [slots, slotLevel] = WARLOCK_TBL[lvl - 1];
+          return (
+            <div className="card-mystic p-5 mt-4" data-testid="dnd-spell-slots">
+              <div className="label-ref mb-2">Pact Magic · Warlock</div>
+              <div className="text-xs text-mist mb-2">
+                {slots} slot{slots === 1 ? "" : "s"} · all at slot level {slotLevel} · short-rest recovers
+              </div>
+              <div className="text-[11px] text-mist">Cantrips known: <b className="text-gold">{cantripsKnown}</b></div>
+            </div>
+          );
+        }
+        const tbl = (isFull ? FULL_TBL : HALF_TBL)[lvl - 1] || [];
+        return (
+          <div className="card-mystic p-5 mt-4" data-testid="dnd-spell-slots">
+            <div className="label-ref mb-2">Spell Slots</div>
+            <div className="grid grid-cols-3 sm:grid-cols-9 gap-1">
+              {tbl.map((max, i) => max > 0 ? (
+                <div key={i} className="text-center border border-gold/15 rounded-sm py-1.5">
+                  <div className="text-[9px] text-mist tracking-widest uppercase">{i + 1}{["st","nd","rd","th","th","th","th","th","th"][i]}</div>
+                  <div className="font-display text-base text-gold-bright">{Math.max(0, max - (used[i + 1] || 0))}<span className="text-mist text-xs">/{max}</span></div>
+                </div>
+              ) : null)}
+            </div>
+            <div className="text-[11px] text-mist mt-2">Cantrips known: <b className="text-gold">{cantripsKnown}</b></div>
+          </div>
+        );
+      })()}
 
       {(state.inventory?.length || 0) > 0 && (
         <SimpleListCard title="Inventory" items={state.inventory} testid="dnd-sheet-inv"/>

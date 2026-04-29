@@ -50,6 +50,7 @@ export function Dnd5eBuilder({ campaign, ref_, charId, hybridSupplement }) {
   const nav = useNavigate();
   const [ch, setCh] = useState(empty5e(campaign?.id));
   const [err, setErr] = useState("");
+  const [refRows, setRefRows] = useState([]);
 
   useEffect(() => {
     if (charId) {
@@ -65,6 +66,15 @@ export function Dnd5eBuilder({ campaign, ref_, charId, hybridSupplement }) {
       setCh(empty5e(campaign?.id));
     }
   }, [charId, campaign?.id]);
+
+  // Load campaign-reference rows so the Background dropdown can include
+  // GM-authored entries alongside the SRD set.
+  useEffect(() => {
+    if (!campaign?.id) return;
+    api.get(`/campaigns/${campaign.id}/reference?kind=defect`)
+      .then((r) => setRefRows(Array.isArray(r.data) ? r.data : []))
+      .catch(() => {});
+  }, [campaign?.id]);
 
   if (!ch || !ref_) return <div className="p-10 text-mist">Summoning the forge…</div>;
   const s = ch.folio.dnd_state;
@@ -136,11 +146,41 @@ export function Dnd5eBuilder({ campaign, ref_, charId, hybridSupplement }) {
         </div>
         <div>
           <label className="label-ref">Background</label>
-          <input className="input" value={s.background}
-                 onChange={(e) => setS({ background: e.target.value })}
-                 placeholder="Acolyte / Soldier / Sage / …" data-testid="dnd-background"/>
+          <select className="select" value={s.background}
+                  onChange={(e) => setS({ background: e.target.value })}
+                  data-testid="dnd-background">
+            <option value="">— pick a background —</option>
+            <optgroup label="SRD 5.1 (CC-BY)">
+              {(ref_.backgrounds || []).map((b) => (
+                <option key={b.name} value={b.name}>{b.name}</option>
+              ))}
+            </optgroup>
+            {refRows.filter((r) => r.kind === "defect").length > 0 && (
+              <optgroup label="Campaign Reference">
+                {refRows.filter((r) => r.kind === "defect").map((r) => (
+                  <option key={r.id} value={r.name}>{r.name}</option>
+                ))}
+              </optgroup>
+            )}
+          </select>
         </div>
       </div>
+
+      {/* Background detail card — proficiencies + feature blurb */}
+      {s.background && (() => {
+        const bg = (ref_.backgrounds || []).find((x) => x.name === s.background);
+        if (!bg) return null;
+        return (
+          <div className="card-mystic p-4 mt-2 text-[12px] text-parchment/85 leading-snug"
+               data-testid="dnd-background-card">
+            <div className="label-ref mb-1">Background · {bg.name}</div>
+            Skills: {bg.skills.join(", ")}
+            {bg.tools?.length ? ` · Tools: ${bg.tools.join(", ")}` : ""}
+            {bg.languages && bg.languages !== "—" ? ` · Languages: ${bg.languages}` : ""}
+            <div className="mt-1 italic text-mist/80">Feature: {bg.feature}</div>
+          </div>
+        );
+      })()}
 
       {/* Class summary */}
       {cls && (
@@ -376,11 +416,23 @@ export function CypherBuilder({ campaign, ref_, charId }) {
         <div className="text-base text-gold-bright italic mb-3" data-testid="cypher-sentence">"{sentence}"</div>
         <div className="grid sm:grid-cols-3 gap-3">
           <div>
-            <label className="label-ref">Descriptor</label>
+            <label className="label-ref">Descriptor
+              {(campaign?.setting_genre || "") && (
+                <span className="text-[9px] text-arcane-light ml-1" title="Genre-gated by campaign setting">
+                  · {campaign.setting_genre}
+                </span>
+              )}
+            </label>
             <select className="select" value={c.descriptor} onChange={(e) => setC({ descriptor: e.target.value })}
                     data-testid="cypher-descriptor">
               <optgroup label="Cypher SRD">
-                {ref_.descriptors.map((d) => <option key={d} value={d}>{d}</option>)}
+                {(ref_.descriptors || []).map((d) => {
+                  const dn = typeof d === "string" ? d : d.name;
+                  const tags = (typeof d === "object" && d.genres) || ["any"];
+                  const gate = (campaign?.setting_genre || "").trim();
+                  if (gate && !tags.includes(gate) && !tags.includes("any")) return null;
+                  return <option key={dn} value={dn}>{dn}</option>;
+                })}
               </optgroup>
               {refRows.filter((r) => r.kind === "skill").length > 0 && (
                 <optgroup label="Campaign Reference">
@@ -412,7 +464,12 @@ export function CypherBuilder({ campaign, ref_, charId }) {
             <select className="select" value={c.focus} onChange={(e) => setC({ focus: e.target.value })}
                     data-testid="cypher-focus">
               <optgroup label="Cypher SRD">
-                {ref_.foci.map((f) => <option key={f.name} value={f.name}>{f.name}</option>)}
+                {(ref_.foci || []).map((f) => {
+                  const tags = f.genres || ["any"];
+                  const gate = (campaign?.setting_genre || "").trim();
+                  if (gate && !tags.includes(gate) && !tags.includes("any")) return null;
+                  return <option key={f.name} value={f.name}>{f.name}</option>;
+                })}
               </optgroup>
               {refRows.filter((r) => r.kind === "companion").length > 0 && (
                 <optgroup label="Campaign Reference">
