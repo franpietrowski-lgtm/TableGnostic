@@ -2,6 +2,17 @@ import React, { useEffect, useRef, useState } from "react";
 import { api, formatApiErrorDetail } from "../lib/api";
 import { Upload, FileText, Trash2, Check, X, Sparkles, BookOpen, Filter } from "lucide-react";
 
+// Small labeled metadata cell used by the ingest preview modal so the
+// parse summary reads as a stat-block rather than an unformatted blob.
+function MetaCell({ label, v }) {
+  return (
+    <div className="border border-gold/10 rounded-sm px-2 py-1.5">
+      <div className="text-[9px] font-ui uppercase tracking-widest text-mist">{label}</div>
+      <div className="text-parchment truncate" title={String(v)}>{v}</div>
+    </div>
+  );
+}
+
 /**
  * IngestPanel — V4.4 Phase C.
  *
@@ -52,6 +63,43 @@ export default function IngestPanel({ campId }) {
   };
 
   useEffect(() => { refresh(); }, [campId]);
+
+  // ─── Ingestion preview (two-step commit) ───
+  // Step 1: upload → /ingest-preview returns parse-only excerpt, no LLM.
+  // Step 2: GM reviews for clarity / OCR failures / wrong-page pollution
+  //         → clicks "Commit to Claude" which POSTs the same file through
+  //         /ingest and burns LLM budget.
+  // This gives GMs a guarded "is this actually what I meant to upload?"
+  // check before spending Claude calls.
+  const [preview, setPreview] = useState(null); // {data, file}
+  const [previewBusy, setPreviewBusy] = useState(false);
+
+  const runPreview = async (file) => {
+    if (!file) return;
+    if (file.size > 24 * 1024 * 1024) {
+      setErr("File exceeds 24 MB cap.");
+      return;
+    }
+    setPreviewBusy(true); setErr("");
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const { data } = await api.post(
+        `/campaigns/${campId}/ingest-preview`, fd,
+        { headers: { "Content-Type": "multipart/form-data" } });
+      setPreview({ data, file });
+    } catch (e) {
+      setErr(formatApiErrorDetail(e.response?.data?.detail) || e.message);
+    } finally {
+      setPreviewBusy(false);
+    }
+  };
+
+  const commitPreview = async () => {
+    if (!preview?.file) return;
+    await upload(preview.file);   // reuses existing Claude-calling path
+    setPreview(null);
+  };
 
   const upload = async (file) => {
     if (!file) return;
@@ -151,16 +199,92 @@ export default function IngestPanel({ campId }) {
         <div>
           <input ref={fileRef} type="file" className="hidden"
                  accept=".pdf,.md,.txt,.rtf,.docx,application/pdf,text/markdown,text/plain,application/rtf,text/rtf,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                 onChange={(e) => { upload(e.target.files?.[0]); e.target.value = ""; }}
+                 onChange={(e) => { runPreview(e.target.files?.[0]); e.target.value = ""; }}
                  data-testid="ingest-file-input"/>
-          <button onClick={() => fileRef.current?.click()} disabled={busy}
-                  className="btn btn-primary text-xs" data-testid="ingest-upload-btn">
-            <Upload className="w-3 h-3"/> {busy ? "Ingesting…" : "Upload & Ingest"}
+          <button onClick={() => fileRef.current?.click()} disabled={busy || previewBusy}
+                  className="btn btn-primary text-xs" data-testid="ingest-upload-btn"
+                  title="Parse-only preview first — nothing is sent to Claude until you confirm.">
+            <Upload className="w-3 h-3"/> {previewBusy ? "Parsing…" : busy ? "Ingesting…" : "Upload & Preview"}
           </button>
         </div>
       </div>
 
       {err && <div className="text-ember text-xs" data-testid="ingest-err">{err}</div>}
+
+      {/* Preview modal — shown after parse, before LLM commit. Lets the
+          GM verify OCR / extraction quality (table-of-contents junk,
+          hyphenation glitches, wrong pages) before spending Claude
+          budget. Single call to commitPreview() then routes through
+          the normal /ingest endpoint. */}
+      {preview && (
+        <div className="fixed inset-0 z-40 bg-void/90 backdrop-blur-sm flex items-start justify-center p-3 md:p-6 overflow-auto"
+             data-testid="ingest-preview-overlay"
+             onClick={(e) => { if (e.target === e.currentTarget) setPreview(null); }}>
+          <div className="w-full max-w-3xl card-mystic p-5 mt-10">
+            <div className="flex items-baseline justify-between flex-wrap gap-2 mb-3">
+              <div>
+                <div className="label-ref flex items-center gap-2">
+                  <FileText className="w-3 h-3"/> Parse Preview · clarity check
+                </div>
+                <div className="text-[11px] text-mist/70 italic mt-1 max-w-2xl">
+                  Review the extracted text below. If OCR is garbled,
+                  wrong pages were picked up, or headers/footers
+                  polluted the body, cancel and clean the source file.
+                  Nothing has been sent to Claude yet.
+                </div>
+              </div>
+              <button onClick={() => setPreview(null)} className="btn btn-ghost p-2"
+                      data-testid="ingest-preview-close">
+                <X className="w-4 h-4"/>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] text-parchment/85 mb-3"
+                 data-testid="ingest-preview-meta">
+              <MetaCell label="File" v={preview.data.filename}/>
+              <MetaCell label="Size"
+                        v={`${(preview.data.byte_size/1024).toFixed(1)} KB`}/>
+              <MetaCell label="Chars"
+                        v={preview.data.extracted_chars.toLocaleString()}/>
+              <MetaCell label="Paragraphs" v={preview.data.paragraph_count}/>
+            </div>
+
+            <div className="label-ref mb-1">First ~1.8 KB</div>
+            <pre className="text-[11px] text-parchment/90 whitespace-pre-wrap
+                             bg-void/60 border border-gold/15 rounded-sm p-3 mb-3
+                             max-h-[280px] overflow-auto font-mono"
+                 data-testid="ingest-preview-head">
+{preview.data.excerpt_head}
+            </pre>
+
+            {preview.data.excerpt_tail && (
+              <>
+                <div className="label-ref mb-1">Last ~0.9 KB</div>
+                <pre className="text-[11px] text-parchment/90 whitespace-pre-wrap
+                                 bg-void/60 border border-gold/15 rounded-sm p-3 mb-3
+                                 max-h-[180px] overflow-auto font-mono"
+                     data-testid="ingest-preview-tail">
+{preview.data.excerpt_tail}
+                </pre>
+              </>
+            )}
+
+            <div className="flex flex-wrap gap-2 mt-2">
+              <button onClick={commitPreview} disabled={busy}
+                      className="btn btn-primary text-xs"
+                      data-testid="ingest-preview-commit">
+                <Check className="w-3 h-3"/>
+                {busy ? "Committing to Claude…" : "Looks good — commit to Claude"}
+              </button>
+              <button onClick={() => setPreview(null)}
+                      className="btn btn-ghost text-xs"
+                      data-testid="ingest-preview-cancel">
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* One-Shot Scaffold — flagship feature: drop a published one-shot
           adventure / GM module, get a deploy-ready campaign skeleton in

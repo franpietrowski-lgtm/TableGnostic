@@ -140,7 +140,7 @@ export default function CharacterSheet() {
         <div>
           <div className="label-ref mb-1" data-testid="sheet-system-label">
             {dndState
-              ? `D&D 5E · ${dndState.class || "Class"} ${dndState.level || 1} · ${dndState.race || "Race"}`
+              ? `${ch.folio?.anime5e_state ? "Anime 5E hybrid" : "D&D 5E"} · ${dndState.class || "Class"} ${dndState.level || 1} · ${dndState.race || "Race"}`
               : cypherState
               ? `Cypher · Tier ${cypherState.tier || 1} · ${cypherState.descriptor || "?"} ${cypherState.type || "?"}`
               : `BESM 4E · ${ch.power_level} · ${ch.total_points} pts`}
@@ -623,16 +623,78 @@ function DndSheetView({ state, folio, roll }) {
   return (
     <div data-system="dnd-5e" data-testid="dnd-sheet-view">
       <div className="card-mystic p-6 mt-8">
-        <div className="label-ref">Class · Race</div>
+        <div className="label-ref">Class · Race · Background</div>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-3">
           <Stat label="Class" v={state.class || "—"}/>
           <Stat label="Level" v={lvl}/>
           <Stat label="Race" v={state.race || "—"}/>
           <Stat label="Proficiency" v={`+${profBonus}`}/>
         </div>
+
+        {/* Detailed chassis summary — hit-die · saves · casting (class);
+            ASI · size · speed · traits (race); skills · tools · feature
+            (background). Same layout the D&D builder surfaces near the
+            top, mirrored onto the sheet view so Anime 5E hybrid sheets
+            (which share the dnd_state folio) read consistently. */}
+        {(() => {
+          // Best-effort defaults for classes not in the campaign ref.
+          const defaultHd = { Barbarian: 12, Fighter: 10, Paladin: 10, Ranger: 10,
+                              Bard: 8, Cleric: 8, Druid: 8, Monk: 8, Rogue: 8, Warlock: 8,
+                              Sorcerer: 6, Wizard: 6, Adept: 8, Champion: 12, Idol: 6,
+                              Pilot: 8, Tinker: 8 }[state.class] || 8;
+          const defaultCasting = { Barbarian: "none", Fighter: "none", Monk: "none", Rogue: "none",
+                                    Bard: "full", Cleric: "full", Druid: "full", Sorcerer: "full",
+                                    Wizard: "full", Paladin: "half", Ranger: "half",
+                                    Warlock: "pact",
+                                    Adept: "full", Champion: "none", Idol: "none",
+                                    Pilot: "half", Tinker: "half" }[state.class] || "—";
+          const defaultSpeed = { Dwarf: 25, Halfling: 25, Gnome: 25,
+                                  Elf: 30, Human: 30, Dragonborn: 30, "Half-Elf": 30,
+                                  "Half-Orc": 30, Tiefling: 30, Faerie: 25, Apprentice: 30,
+                                  Beastfolk: 30, Construct: 30, "Half-Demon": 30, Spirit: 30,
+                                  Animal: 40 }[state.race] || 30;
+          const hd = state.hit_die || defaultHd;
+          return (
+            <div className="mt-4 grid sm:grid-cols-3 gap-3 text-[12px] text-parchment/85 leading-snug"
+                 data-testid="dnd-chassis-summary">
+              <div className="border border-gold/10 rounded-sm p-3">
+                <div className="label-ref mb-1">Class · {state.class || "—"}</div>
+                d{hd} hit die · casting: <span className="text-gold">{defaultCasting}</span>
+                {state.saving_throw_profs?.length > 0 && (
+                  <div className="mt-1 text-mist">
+                    Saves: {state.saving_throw_profs.map((s) => s.slice(0, 3).toUpperCase()).join(" · ")}
+                  </div>
+                )}
+              </div>
+              <div className="border border-gold/10 rounded-sm p-3">
+                <div className="label-ref mb-1">Race · {state.race || "—"}</div>
+                speed {defaultSpeed} ft
+                {state.racial_traits?.length ? (
+                  <div className="mt-1 text-mist truncate" title={state.racial_traits.join(" · ")}>
+                    {state.racial_traits.join(" · ")}
+                  </div>
+                ) : null}
+              </div>
+              <div className="border border-gold/10 rounded-sm p-3">
+                <div className="label-ref mb-1">Background · {state.background || "—"}</div>
+                {state.skill_profs?.length > 0 ? (
+                  <div className="text-mist">
+                    <span className="text-parchment/80">Skills:</span> {state.skill_profs.join(", ")}
+                  </div>
+                ) : <div className="text-mist italic">no skill profs recorded</div>}
+                {state.tools?.length > 0 && (
+                  <div className="mt-1 text-mist">
+                    <span className="text-parchment/80">Tools:</span> {state.tools.join(", ")}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })()}
+
         {state.background && (
           <div className="mt-3 text-[12px] text-parchment/80 font-ui">
-            <span className="text-mist">Background:</span> {state.background}
+            <span className="text-mist">Background feature:</span> {state.background_feature || state.background}
           </div>
         )}
       </div>

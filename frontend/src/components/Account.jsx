@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { api, formatApiErrorDetail } from "../lib/api";
-import { Save, Lock, Camera, User as UserIcon, Award, Scroll } from "lucide-react";
+import { Save, Lock, Camera, User as UserIcon, Award, Scroll, Sparkles } from "lucide-react";
 
 /**
  * Account — self-service profile editor.
@@ -212,6 +212,35 @@ export default function Account() {
           className="btn btn-primary text-xs mt-3"
           data-testid="account-demo-deploy-btn">
           <Award className="w-3 h-3"/> {busy ? "Deploying…" : "Deploy demo campaigns"}
+        </button>
+
+        {/* V6 — Evereantha cross-system suite. One click creates
+            Evereantha in BESM 4E, D&D 5E, Cypher, AND Anime 5E so
+            the GM can compare adaptation fidelity across engines
+            without hand-rolling four campaigns. */}
+        <p className="text-[11px] text-mist/70 italic mt-5 leading-snug max-w-2xl">
+          Cross-system adaptation testbed — deploys <b>Evereantha</b> as
+          four parallel campaigns (BESM 4E canonical · D&D 5E · Cypher ·
+          Anime 5E hybrid) with reshaped encounters and player primers
+          per engine. Useful for testing how your houserules, codex, and
+          NPC motives port between rulebooks.
+        </p>
+        <button onClick={async () => {
+            if (!window.confirm("Deploy the full Evereantha suite? This adds FOUR new GM campaigns to your account — one per supported system.")) return;
+            try {
+              setBusy(true);
+              const { data } = await api.post("/admin/seed-evereantha-suite");
+              setBusy(false);
+              window.alert(`Deployed: ${data.deployed.map((c) => c.name).join("\n· ")}`);
+            } catch (e) {
+              setBusy(false);
+              setErr(formatApiErrorDetail(e.response?.data?.detail) || e.message);
+            }
+          }}
+          disabled={busy}
+          className="btn btn-ghost text-xs mt-2"
+          data-testid="account-evereantha-suite-btn">
+          <Sparkles className="w-3 h-3"/> {busy ? "Deploying…" : "Deploy Evereantha ×4 (cross-system)"}
         </button>
       </div>
 

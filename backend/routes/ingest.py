@@ -275,6 +275,58 @@ async def _call_claude(filename: str, system_id: Optional[str], text: str) -> Di
 
 # ─────────────────────── Endpoints ───────────────────────
 
+@router.post("/campaigns/{cid}/ingest-preview")
+async def preview_ingestion(cid: str,
+                             file: UploadFile = File(...),
+                             user: dict = Depends(get_current_user)):
+    """PARSE-ONLY preview — no LLM call, no persistence. The GM sees
+    exactly what text we extracted and can decide whether to commit
+    (which then fires Claude). Returns an excerpt (first ~2 KB) plus
+    file meta so the UI can surface clarity checks, OCR failures, and
+    weird PDF parse artefacts BEFORE spending LLM budget.
+
+    Response shape:
+      { filename, content_type, byte_size, extracted_chars,
+        excerpt_head, excerpt_tail, paragraph_count, system_id }
+    """
+    camp = await db.campaigns.find_one({"id": cid}, {"_id": 0})
+    if not camp:
+        raise HTTPException(404, "Campaign not found")
+    if camp["gm_id"] != user["id"] and user.get("role") != "admin":
+        raise HTTPException(403, "Only the GM may preview an ingestion.")
+    raw = await file.read()
+    if len(raw) > MAX_BYTES:
+        raise HTTPException(413, f"File exceeds {MAX_BYTES // (1024*1024)} MB cap.")
+    if len(raw) == 0:
+        raise HTTPException(400, "Empty file.")
+
+    text = _parse_to_text(file.filename, file.content_type or "", raw)
+    if not text:
+        raise HTTPException(400, "Could not extract text from file.")
+
+    # Keep excerpts small — the point is clarity review, not a full
+    # read-back. Head + tail lets the GM spot both "table-of-contents
+    # pollution at the start" and "footnote cruft at the end" failures.
+    head_limit = 1800
+    tail_limit = 900
+    clean = text.strip()
+    head = clean[:head_limit]
+    tail = clean[-tail_limit:] if len(clean) > head_limit + tail_limit else ""
+    paragraphs = [p for p in re.split(r"\n\s*\n", clean) if p.strip()]
+
+    return {
+        "filename": file.filename,
+        "content_type": file.content_type,
+        "byte_size": len(raw),
+        "extracted_chars": len(clean),
+        "excerpt_head": head,
+        "excerpt_tail": tail,
+        "paragraph_count": len(paragraphs),
+        "system_id": camp.get("system_id"),
+        "preview_only": True,
+    }
+
+
 @router.post("/campaigns/{cid}/ingest")
 async def create_ingestion(cid: str,
                             file: UploadFile = File(...),

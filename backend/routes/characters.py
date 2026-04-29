@@ -6,6 +6,7 @@ its `folio.journal` array is the player-facing diary that feeds the recap LLM.
 from fastapi import APIRouter, Depends, HTTPException
 
 from core.bus import broadcast
+from routes.ecosystem import _pulse_tick
 from core.cost_engine import calc_derived, calc_spent_points, effective_level
 from core.db import db, new_id, now_iso, sanitize
 from core.models import CharacterIn, JournalEntryIn
@@ -44,6 +45,22 @@ async def create_character(body: CharacterIn, user: dict = Depends(get_current_u
 @router.get("/campaigns/{cid}/characters")
 async def list_characters(cid: str, user: dict = Depends(get_current_user)):
     rows = await db.characters.find({"campaign_id": cid}, {"_id": 0}).to_list(200)
+    return [_decorate(r) for r in rows]
+
+
+@router.get("/characters")
+async def my_characters(mine: bool = False,
+                         user: dict = Depends(get_current_user)):
+    """Cross-campaign character list — used by the Dashboard 'Your
+    characters' strip. `mine=true` filters to characters the caller
+    owns. Without the flag we return nothing to avoid leaking the full
+    character table.
+    """
+    if not mine:
+        return []
+    rows = await db.characters.find(
+        {"owner_id": user["id"]}, {"_id": 0}
+    ).sort("created_at", -1).to_list(200)
     return [_decorate(r) for r in rows]
 
 
@@ -203,6 +220,14 @@ async def add_journal_entry(cid: str, body: JournalEntryIn,
         "author_id": user["id"],
         "author_name": user["name"],
         "created_at": now_iso(),
+    })
+
+    # Ecosystem Pulse — new journal entry is a first-class signal. The
+    # Director Console's live panel will refetch on this tick.
+    await _pulse_tick(ch["campaign_id"], "journal", {
+        "character_id": cid,
+        "character_name": ch.get("name", ""),
+        "plot_phase": entry.get("plot_phase") or "",
     })
 
     return {"ok": True, "entry": entry, "count": len(journal),

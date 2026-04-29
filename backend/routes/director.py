@@ -19,6 +19,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from core.cr_engine import analyse as cr_analyse
+from routes.ecosystem import _pulse_tick
 from core.db import db, new_id, now_iso, sanitize
 from core.security import get_current_user
 
@@ -205,6 +206,11 @@ async def replace_director(cid: str, body: DirectorIn,
     doc["updated_at"] = now_iso()
     _stamp_ids(doc)
     await db.directors.replace_one({"campaign_id": cid}, doc, upsert=True)
+    # Pulse nerve-fire — encounter list / current phase updated.
+    await _pulse_tick(cid, "encounter", {
+        "count": len(doc.get("encounters", [])),
+        "plot_phase": doc.get("current_phase_ref") or "",
+    })
     return sanitize(doc)
 
 

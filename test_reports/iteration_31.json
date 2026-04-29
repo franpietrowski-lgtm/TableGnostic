@@ -1,0 +1,63 @@
+{
+  "summary": "V6.0 Session A backend 9/9 PASS via /app/backend/tests/test_iter31_v60.py. Frontend Dashboard mounts cleanly with all 4 stat-chips, all 4 action cards, 34 campaign cards and 6 dash-character cards; account-evereantha-suite-btn renders on /app/account; DnD-chassis-summary + sheet-system-label data-testids exist in CharacterSheet.jsx source. ONE high-priority backend regression found: GET /api/campaigns (list) does NOT hydrate the per-row `is_gm` / `is_member` booleans that GET /api/campaigns/{cid} (detail) does. As a direct downstream effect, every Dashboard campaign-card-{id} (incl. all 34 freshly-deployed Evereantha-suite campaigns where GMFran IS the GM) is labelled 'PLAYER' instead of 'GM', the dash-stat-gm chip reads 0 (should be 34), Account 'CAMPAIGNS GM\u2019D' reads 0, and the Discover strip filter `c.is_gm && !c.is_member` is computed against undefined which silently breaks the GM/Player partitioning across the entire Dashboard.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "GET /api/campaigns", "issue": "Response rows missing is_gm / is_member flags. Only GET /api/campaigns/{cid} (detail) injects camp['is_gm'] (campaigns.py:264). The list handler at campaigns.py:137-149 returns raw DB rows. Dashboard.jsx:79,202,271 and Account.jsx all consume c.is_gm, so 100% of GMFran's owned campaigns mislabel as PLAYER and the GM count chips read 0.", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "POST /api/auth/login player@tablegnostic.com / player12345", "issue": "Seeded creds in /app/memory/test_credentials.md return 401. Either the seed never ran or the password drifted. Tests fall back to register-on-the-fly. test_credentials.md may be stale."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Dashboard.jsx 'Your campaigns' grid", "issue": "Every campaign-card-{id} renders 'PLAYER' badge regardless of GM ownership because backend GET /api/campaigns does not return is_gm. Cosmetic on the cards, structural for the GM-of stat chip and Discover filter.", "selector": "[data-testid^='campaign-card-']", "priority": "HIGH"},
+      {"component": "Dashboard StatChip 'GM OF'", "issue": "Always reads 0 because mine.filter(c=>c.is_gm).length === 0 (is_gm absent).", "selector": "[data-testid='dash-stat-gm']", "priority": "HIGH"},
+      {"component": "Account 'CAMPAIGNS GM\u2019D' stat", "issue": "Reads 0 even though GMFran is GM of 34 campaigns \u2014 same root cause.", "selector": "Account.jsx GAME STATS", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [
+      {"flow": "Dashboard \u2192 navigate to GM campaign \u2192 director-pulse-panel / ingest-upload-btn", "issue": "Could not visually validate director-pulse-panel, pulse-live-badge or ingest-preview-overlay in this run because the Dashboard could not surface any GM-flagged campaign to click into (is_gm regression). Source code grep confirms data-testids director-pulse-panel, pulse-live-badge, ingest-upload-btn, ingest-preview-overlay exist; needs retest after backend fix.", "affected_selectors": ["[data-testid='director-pulse-panel']", "[data-testid='pulse-live-badge']", "[data-testid='ingest-upload-btn']", "[data-testid='ingest-preview-overlay']"]}
+    ],
+    "design_issues": []
+  },
+  "tests_executed": {
+    "BE_seed_evereantha_player_403": "PASS (registers TEST_player@example.com on the fly because seeded player creds are stale, then asserts 403)",
+    "BE_seed_evereantha_gm_4_systems": "PASS \u2014 deployed[4], systems == [anime-5e, besm-4e, cypher, dnd-5e]",
+    "BE_my_characters_no_flag_empty": "PASS \u2014 [] without mine=true",
+    "BE_my_characters_mine_true": "PASS \u2014 returns owned chars",
+    "BE_ingest_preview_parse_only": "PASS \u2014 all expected meta fields, preview_only=true, ingestions count unchanged",
+    "BE_ingest_preview_non_gm_403": "PASS",
+    "BE_motive_post_pulse_tick": "PASS \u2014 WS subscribed to /api/ws/campaign/{cid}, pulse:tick(kind=motive,node_id=nid) received within 5s",
+    "BE_director_put_pulse_tick_encounter": "PASS \u2014 pulse:tick(kind=encounter) received",
+    "BE_journal_post_pulse_tick": "PASS \u2014 pulse:tick(kind=journal) received (after fixture creates char in same campaign)",
+    "FE_dashboard_mount": "PASS \u2014 [data-testid='dashboard'] + 4 stat-chips + 4 action cards + 34 campaign-card-* + 6 dash-character-* present",
+    "FE_dashboard_session_strip": "INFO \u2014 0 dash-session-* cards (GMFran has no live sessions)",
+    "FE_account_evereantha_btn": "PASS \u2014 [data-testid='account-evereantha-suite-btn'] renders ('Deploy Evereantha \u00d74' button)",
+    "FE_charsheet_dnd_chassis": "INFO \u2014 source contains [data-testid='dnd-chassis-summary'] + [data-testid='sheet-system-label']; could not validate live D&D char sheet because GMFran's only owned char in the test environment is a TEST_PulseChar created by BE pulse test (BESM 4E). Sheet rendered with sheet-system-label='BESM 4E \u00b7 Heroic \u00b7 120 pts' \u2014 expected, dnd-chassis-summary correctly hidden for non-DnD/Anime5e systems.",
+    "FE_director_pulse_live": "BLOCKED \u2014 Dashboard had no GM-flagged campaign card (see is_gm regression); could not click through to /director."
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter31_v60.py",
+    "/app/test_reports/pytest/iter31_v60.xml"
+  ],
+  "action_items": [
+    "FIX backend GET /api/campaigns (campaigns.py:137-149) to hydrate is_gm = (row.gm_id == user.id) and is_member = (user.id in row.member_ids) on every returned row \u2014 mirroring the detail handler at line 264. This unblocks GM badges, dash-stat-gm chip, Account 'CAMPAIGNS GM\u2019D' stat, and Dashboard \u2192 GM campaign navigation.",
+    "Retest after fix: (a) Dashboard campaign cards show GM badge for GMFran, (b) DirectorConsole pulse panel + pulse-live-badge increments via 2-tab WS test, (c) IngestPanel ingest-upload-btn \u2192 ingest-preview-overlay flow with Cancel.",
+    "Optional: refresh /app/memory/test_credentials.md \u2014 player@tablegnostic.com / player12345 currently 401."
+  ],
+  "critical_code_review_comments": [
+    "campaigns.py:137 list_campaigns returns raw DB rows; is_gm/is_member must be projected here too \u2014 otherwise every list-mode consumer (Dashboard, Discover, Account stats, Sidebar GM badge) silently breaks.",
+    "Dashboard.jsx:79 gmCount calculation (mine.filter(c=>c.is_gm).length) currently always 0 because the field is undefined \u2014 fix is on the backend, not the frontend.",
+    "ecosystem.py:32 _pulse_tick \u2014 verified live: motive/encounter/journal all fire pulse:tick on campaign:{cid} room with kind tag and at-timestamp, observed via wss subscription within <2s.",
+    "ingest.py:278 ingest-preview is correctly parse-only \u2014 verified ingestions count unchanged after preview call. No LLM budget burned."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter31_v60.py (new, 9 tests, all PASS)"
+  ],
+  "success_rate": {"backend": "100% (9/9)", "frontend": "75% \u2014 dashboard mount + account button + chassis-summary code-present PASS; GM/Player labelling and downstream director/ingest flows BLOCKED on the is_gm backend regression"},
+  "test_credentials": "GM/admin: franpietrowski@gmail.com / PieGod08!! (works). Player seeded creds (player@tablegnostic.com / player12345) currently 401 \u2014 tests register a TEST_ player on the fly.",
+  "seed_data_creation": "BE test fired POST /api/admin/seed-evereantha-suite once \u2192 4 fresh Evereantha campaigns deployed (non-idempotent, as documented). Created 1 TEST_PulseNPC_v60 node + 1 TEST_PulseChar_v60 character on an existing GMFran campaign for the WS pulse tests. Created 1 TEST_player_<rand>@example.com user.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "After main agent patches campaigns.py:137-149 to inject is_gm/is_member, run /app/backend/tests/test_iter31_v60.py first (regression baseline) then re-walk the 4 frontend BLOCKED flows: (1) Dashboard campaign card GM badge, (2) /app/campaigns/{gm_cid}/director \u2192 director-pulse-panel + pulse-live-badge increments via 2-tab POST /api/nodes/{nid}/motive, (3) IngestPanel ingest-upload-btn \u2192 ingest-preview-overlay with Cancel (don't Commit \u2014 saves LLM budget), (4) DnD/Anime-5e character creation via Character Forge \u2192 verify dnd-chassis-summary 3-column card. Note: /login route redirects to landing; use /auth directly for login UI. SUMMONING splash blocks /app/campaigns/* for ~5-7s \u2014 wait \u2265 8s after navigation.",
+  "rca of the issue": "GET /api/campaigns (list) returns raw Mongo rows without the is_gm/is_member projection that the detail handler GET /api/campaigns/{cid} adds at campaigns.py:264. Dashboard.jsx, Account.jsx, and the Discover strip all rely on c.is_gm, so the bug surfaces as: (a) every campaign-card labelled PLAYER, (b) dash-stat-gm = 0, (c) Account CAMPAIGNS GM\u2019D = 0, (d) Discover filter `!c.is_gm && !c.is_member` matches everything making the strip empty for GMs. Fix: in list_campaigns, after fetching rows, do `for r in rows: r['is_gm'] = (r['gm_id'] == user['id']); r['is_member'] = user['id'] in (r.get('member_ids') or [])`. Reproduction: login as GMFran, GET /api/campaigns \u2014 inspect any returned row \u2014 keys do NOT include is_gm. Mitigation as above; no DB migration needed."
+}

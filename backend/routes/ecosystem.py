@@ -24,8 +24,23 @@ from fastapi import APIRouter, Depends, HTTPException
 from core.db import db, new_id, now_iso, sanitize
 from core.models import NodeMotiveIn
 from core.security import get_current_user
+from core.bus import broadcast
 
 router = APIRouter(prefix="/api", tags=["ecosystem"])
+
+
+async def _pulse_tick(cid: str, kind: str, meta: Dict[str, Any] | None = None):
+    """Notify the campaign room that the Pulse has something new.
+
+    Any subscribed Director Console will refetch `/ecosystem/pulse` on
+    receipt — we deliberately DON'T send the new motive inline because
+    the Pulse aggregator applies plot-phase / visibility filtering that
+    belongs on the server.
+    """
+    await broadcast(f"campaign:{cid}", {
+        "type": "pulse:tick",
+        "data": {"kind": kind, **(meta or {}), "at": now_iso()},
+    })
 
 
 # ───────────────────── helpers ─────────────────────
@@ -67,6 +82,10 @@ async def post_motive(nid: str, body: NodeMotiveIn,
         "created_at": now_iso(),
     }
     await db.node_motives.insert_one(dict(entry))
+    # Ecosystem nerve-fire — let any Director Console on this campaign
+    # refresh its Pulse panel live.
+    await _pulse_tick(node["campaign_id"], "motive",
+                      {"node_id": nid, "plot_phase": entry["plot_phase"]})
     return sanitize(entry)
 
 

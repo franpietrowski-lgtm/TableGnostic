@@ -1,10 +1,10 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { api, formatApiErrorDetail } from "../lib/api";
+import { api, API, formatApiErrorDetail } from "../lib/api";
 import {
   ArrowLeft, Users, Skull, Plus, X, Save, Wand2, Shield, Swords,
   Mountain, Compass, Flame, Scroll, Sparkles, ChevronRight, MapPin,
-  AlertTriangle, CheckCircle2, Crown,
+  AlertTriangle, CheckCircle2, Crown, Activity,
 } from "lucide-react";
 
 /**
@@ -149,6 +149,9 @@ export default function DirectorConsole() {
   // whenever the phase changes or the GM hits "refresh" on the panel.
   const [pulse, setPulse] = useState(null);
   const [pulseBusy, setPulseBusy] = useState(false);
+  // Live-pulse heartbeat — increments every time the campaign WS
+  // delivers a pulse:tick so the UI can flash a "live" dot.
+  const [pulseLive, setPulseLive] = useState(0);
   const refreshPulse = async () => {
     if (!doc) return;
     setPulseBusy(true);
@@ -163,6 +166,38 @@ export default function DirectorConsole() {
     finally { setPulseBusy(false); }
   };
   useEffect(() => { if (doc) refreshPulse(); }, [doc?.current_phase_ref, cid]);
+
+  // V6 — Live WS pulse. Subscribe to the campaign room; any motive /
+  // encounter / journal write the backend broadcasts as 'pulse:tick'
+  // triggers a debounced refetch so the Pulse Panel stays honest
+  // without polling. Debounce avoids thrashing when a player saves a
+  // three-line journal that fires one tick per line.
+  const wsRef = useRef(null);
+  const debounceRef = useRef(null);
+  useEffect(() => {
+    if (!cid) return;
+    const token = localStorage.getItem("tg_token");
+    if (!token) return;
+    const url = API.replace(/^http/, "ws") + `/ws/campaign/${cid}?token=${encodeURIComponent(token)}`;
+    let ws;
+    try {
+      ws = new WebSocket(url);
+      wsRef.current = ws;
+      ws.onmessage = (e) => {
+        let evt; try { evt = JSON.parse(e.data); } catch { return; }
+        if (evt.type !== "pulse:tick") return;
+        setPulseLive((n) => n + 1);
+        clearTimeout(debounceRef.current);
+        debounceRef.current = setTimeout(() => { refreshPulse(); }, 350);
+      };
+    } catch { /* fall back to manual refresh button */ }
+    return () => {
+      clearTimeout(debounceRef.current);
+      try { ws && ws.close(); } catch { /* noop */ }
+      wsRef.current = null;
+    };
+    // eslint-disable-next-line
+  }, [cid]);
 
   const save = async () => {
     setBusy(true); setErr("");
@@ -244,7 +279,7 @@ export default function DirectorConsole() {
       </div>
 
       {/* Ecosystem Pulse — the live cross-system snapshot. */}
-      <PulsePanel pulse={pulse} busy={pulseBusy} onRefresh={refreshPulse}/>
+      <PulsePanel pulse={pulse} busy={pulseBusy} onRefresh={refreshPulse} liveTicks={pulseLive}/>
 
       <div className="grid lg:grid-cols-[260px_1fr_300px] gap-5">
         {/* NPC pool */}
@@ -603,7 +638,17 @@ function iconFor(name) {
   })[name] || <AlertTriangle className={cls}/>;
 }
 
-function PulsePanel({ pulse, busy, onRefresh }) {
+function PulsePanel({ pulse, busy, onRefresh, liveTicks = 0 }) {
+  // Quick visual feedback — every WS-delivered pulse:tick bumps a
+  // counter; flash the Live badge for 1.2 s so the GM sees nerve-fire
+  // without opening the console.
+  const [flash, setFlash] = React.useState(false);
+  React.useEffect(() => {
+    if (liveTicks === 0) return;
+    setFlash(true);
+    const t = setTimeout(() => setFlash(false), 1200);
+    return () => clearTimeout(t);
+  }, [liveTicks]);
   if (!pulse) return null;
   const phase = pulse.plot_phase || "—";
   const counts = {
@@ -625,8 +670,15 @@ function PulsePanel({ pulse, busy, onRefresh }) {
             NPC motives, and encounter drafts that touch this plot phase. No manual bookkeeping.
           </div>
         </div>
-        <button onClick={onRefresh} disabled={busy} className="btn btn-ghost text-xs"
+        <button onClick={onRefresh} disabled={busy} className="btn btn-ghost text-xs inline-flex items-center gap-2"
                 data-testid="director-pulse-refresh">
+          <span className={`inline-flex items-center gap-1 transition-opacity
+                            ${flash ? "text-arcane-light" : "text-mist/60"}`}
+                data-testid="pulse-live-badge"
+                title={`Live ticks: ${liveTicks}`}>
+            <Activity className={`w-3 h-3 ${flash ? "animate-pulse" : ""}`}/>
+            <span className="tabular-nums">{liveTicks}</span>
+          </span>
           {busy ? "Refreshing…" : "Refresh"}
         </button>
       </div>

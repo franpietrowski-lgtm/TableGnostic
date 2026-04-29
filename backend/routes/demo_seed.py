@@ -376,3 +376,108 @@ async def seed_demo(user: Dict[str, Any] = Depends(get_current_user)):
     out.append(await _seed_one(EVEREANTHA, user))
     out.append(await _seed_one(ARTISAN, user))
     return {"deployed": out}
+
+
+def _evereantha_adapted(system_id: str) -> Dict[str, Any]:
+    """Port the Evereantha setting onto a non-BESM system.
+
+    The Codex nodes (locations, factions, NPCs, lore) are shared across
+    systems — they're narrative, not mechanical. We DO reshape:
+      - campaign name  ← system-flavoured subtitle
+      - encounter NPCs ← system-specific stat_hint (cr / level / pool)
+      - player_primer  ← nod to the local magic system analogue
+    so each adaptation reads like a real conversion rather than a copy.
+    """
+    base = dict(EVEREANTHA)
+    # Shared Codex nodes — same world, different math.
+    base["nodes"] = list(EVEREANTHA["nodes"])
+    base["motives"] = list(EVEREANTHA["motives"])
+    base["genesis"] = dict(EVEREANTHA.get("genesis", {}))
+    base["epic"] = dict(EVEREANTHA.get("epic", {}))
+    base["system_id"] = system_id
+
+    if system_id == "dnd-5e":
+        base["name"] = "Evereantha · The Caldera Choir (D&D 5E adaptation)"
+        base["genre"] = "high fantasy"
+        base["player_primer"] = (
+            "You are Choir apprentices at a crossroads. The mountain sings "
+            "against the pact of the First Eclipse. Expect Bardic ritual, "
+            "Cleric-domain stakes, and Wizard-tier cypher dilemmas."
+        )
+        base["damage_rating_baseline"] = 8
+        # D&D-flavoured encounter: CR-scale NPCs matching the demo's tier.
+        base["encounter"] = {
+            "name": "Pass-of-Aurea Ambush (SRD CR)",
+            "kind": "combat",
+            "plot_phase": "epic-7-milestones",
+            "environment": {"indoor": False, "weather": "snowstorm", "light": "twilight"},
+            "notes": "Sister Quench strikes from cover. The party is level 4.",
+            "npcs": [
+                {"name": "Sister Quench", "role": "nemesis", "cr": "3", "count": 1,
+                 "intent": "Drop the apprentice carrying the Hammer-half hum."},
+                {"name": "Cult Acolytes (minions)", "role": "minion", "cr": "1/4", "count": 4,
+                 "intent": "Suppress the rear while Sister Quench picks targets."},
+            ],
+        }
+    elif system_id == "cypher":
+        base["name"] = "Evereantha · The Caldera Choir (Cypher adaptation)"
+        base["setting_genre"] = "fantasy"
+        base["genre"] = "fantasy"
+        base["player_primer"] = (
+            "You are Choir apprentices in a world where every sung form "
+            "is a cypher. Each Resonance rank maps to a tier; the "
+            "Forbidden Break is a Level-7 task (GM Intrusion favoured)."
+        )
+        base["encounter"] = {
+            "name": "Pass-of-Aurea Ambush (Cypher levels)",
+            "kind": "combat",
+            "plot_phase": "epic-7-milestones",
+            "environment": {"indoor": False, "weather": "snowstorm", "light": "twilight"},
+            "notes": "Cypher difficulty 5 for the ambush roll; Sister Quench level 4.",
+            "npcs": [
+                {"name": "Sister Quench", "role": "nemesis", "level": 4, "count": 1,
+                 "intent": "Silence the Hammer-half hum with one perfect chord."},
+                {"name": "Cult Acolytes", "role": "henchman", "level": 2, "count": 3,
+                 "intent": "Cover angles; drop cyphers on the rear."},
+            ],
+        }
+    elif system_id == "anime-5e":
+        base["name"] = "Evereantha · The Caldera Choir (Anime 5E hybrid)"
+        base["genre"] = "shōnen fantasy"
+        base["player_primer"] = (
+            "You are Choir apprentices — each sung form is a personal "
+            "tune that powers your signature technique. Tri-Stat point "
+            "budget grants genre powers (e.g. Combat Mastery, Massive "
+            "Damage) on top of the d20 class chassis."
+        )
+        base["primer_tier_suggest"] = 1
+        base["encounter"] = {
+            "name": "Pass-of-Aurea Ambush (Hybrid CR/Tri-Stat)",
+            "kind": "combat",
+            "plot_phase": "epic-7-milestones",
+            "environment": {"indoor": False, "weather": "snowstorm", "light": "twilight"},
+            "notes": "Sister Quench: level 5 Idol · 2d6 sonic per Resonance rank.",
+            "npcs": [
+                {"name": "Sister Quench", "role": "nemesis", "cr": "4", "count": 1,
+                 "intent": "Cut the Hammer-half chord with a single note."},
+                {"name": "Cult Acolytes", "role": "minion", "cr": "1/2", "count": 4,
+                 "intent": "Keep the apprentices pinned at the switchback."},
+            ],
+        }
+    return base
+
+
+@router.post("/admin/seed-evereantha-suite")
+async def seed_evereantha_suite(user: Dict[str, Any] = Depends(get_current_user)):
+    """Deploy the FULL Evereantha suite — one campaign per supported
+    system (besm-4e, dnd-5e, cypher, anime-5e). Gives the GM/admin a
+    parallel-world testbed for cross-system compatibility + adaptation
+    review. Four GM-only campaigns in one call.
+    """
+    if user.get("role") not in ("gm", "admin"):
+        raise HTTPException(403, "GM/admin only.")
+    out: List[Dict[str, Any]] = []
+    out.append(await _seed_one(EVEREANTHA, user))  # besm-4e canonical
+    for sid in ("dnd-5e", "cypher", "anime-5e"):
+        out.append(await _seed_one(_evereantha_adapted(sid), user))
+    return {"deployed": out, "suite": "evereantha-cross-system"}
