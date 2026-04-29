@@ -1,0 +1,30 @@
+{
+  "summary": "V5.5.1 REFACTOR-ONLY validation. SystemCharacterBuilders.jsx split into /builders/{Dnd5e,Cypher,Anime5e,shared}.jsx with the original file reduced to a ~60-line SystemBuilderLoader that re-exports named builders. All three system builders render, save, and navigate correctly — ZERO behavioural regression detected. Circular ESM cycle (Dnd5e↔Anime5e) resolves cleanly because the imports are only used inside render functions.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "tests_executed": {
+    "module_compile": "PASS — webpack compiled with only pre-existing unused-var/eslint warnings. No missing-import, no circular-dependency errors, no Element-type-is-invalid runtime errors.",
+    "dnd5e_builder": "PASS — [data-testid='dnd5e-builder'] mounts. All 13 required testids present (dnd-name, dnd-class, dnd-level, dnd-race, dnd-background, dnd-score-STR/DEX/CON/INT/WIS/CHA, dnd-derived, dnd-save-btn). Fill name+STR→save navigates to /app/characters/{id} (POST /api/characters 200).",
+    "cypher_builder": "PASS — [data-testid='cypher-builder'] mounts. All 14 testids present. Auto-fill on cypher-type change verified: selecting 'Adept' updated cypher-pool-might 11→9 (SRD pool_offsets applied). POST /api/characters succeeds, navigates to character view.",
+    "anime5e_hybrid": "PASS — [data-testid='dnd5e-builder'] chassis mounts AND [data-testid='anime5e-hybrid-supplement'] renders below it. anime5e-add-attribute has 10 options; selecting one creates anime5e-buy-0 row with anime5e-buy-level-0 and anime5e-buy-remove-0. Save flow navigates to /app/characters/{id} successfully.",
+    "circular_import": "PASS — Dnd5e.jsx imports Anime5eHybridSupplement from ./Anime5e, Anime5e.jsx imports Dnd5eBuilder from ./Dnd5e. Both imports are consumed only inside JSX render functions, so the ESM cycle resolves without errors (no white screen, no 'Element type is invalid' in page errors)."
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Minor: builders/Dnd5e.jsx line 11 imports useParams but never uses it (lint warning). Safe to drop.",
+    "Minor: Circular ESM cycle between Dnd5e.jsx and Anime5e.jsx works today because both cross-imports are used only inside render, but it is brittle — any future top-level use (e.g., default-prop resolution or a module-scope const referencing the imported component) would break Anime5e rendering. Consider extracting Anime5eHybridSupplement into its own file (e.g., builders/Anime5eHybridSupplement.jsx) and having both Dnd5e and Anime5e import from there to eliminate the cycle.",
+    "No functional or security concerns introduced by this refactor. The loader's edit-vs-new discriminator (regex on /characters/:id/edit$) is correct and preserves prior behaviour."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (not tested per request)", "frontend": "100%"},
+  "test_credentials": "GMFran — franpietrowski@gmail.com / PieGod08!! (admin role, verified working; login via UI at /auth?mode=login, cookies set + access_token returned in JSON but not stored in localStorage by the UI flow — frontend relies on httpOnly cookies for session persistence).",
+  "seed_data_creation": "Three characters created under GMFran: TEST_Dnd_Refactor (dnd-5e), TEST_Cypher_Refactor (cypher), TEST_Anime_Refactor (anime-5e). Campaigns used: existing dnd-5e (df9f8fbf…), cypher (9e4f14c3…), anime-5e (ebcebdca…) — no new campaigns needed.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Refactor is complete and clean. SystemCharacterBuilders.jsx is now a thin loader/re-exporter; all system builders live in /app/frontend/src/components/builders/. All testids from iteration_26 are preserved. If future iterations touch these files, re-run the three-system save flow (DND → Cypher → Anime5e) and confirm no 'Element type is invalid' page errors (that would indicate the Dnd5e↔Anime5e ESM cycle broke)."
+}
