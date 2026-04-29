@@ -23,7 +23,32 @@
 ### V5.1 — Atelier "Epic Campaign" 8th-phase tab (2026-04-27)
 **Trigger:** GMFran uploaded Guy Sclanders' follow-up book *Epic Campaigns: Digital Edition* (146 pp) and asked for a new tab inside the **"Forge the Master Plot"** Atelier page. The two planes (the existing 7-phase Genesis and the new Epic Campaign) are intentionally INDEPENDENT — usable in tandem, separately, or one-or-the-other; pure GM brainstorming kit. Implemented as `phase === 7` panel inside `CampaignGenesis.jsx`, alongside the existing seven phases. Backend: new `db.epic_campaigns` collection + `routes/epic_campaign.py` (GET/PUT/seed-codex). Frontend: new `EpicCampaignPanel.jsx` (11 sections — Plan/Constraints, Theme, Sentence, OGAS Nemesis, Villains, Expanding Goal, Milestones, Adventures, Seeds, Beginning, Climax — plus Tie-ins picker). The "Sync to Codex" action pushes the Nemesis + each Villain + each Seed into the World Codex as gm-only knowledge nodes; idempotent on re-run.
 
-### V5.5.1 — `SystemCharacterBuilders` refactor (2026-04-29)
+### V5.5.2 — Macro library + XP scorecard polish + Campaign-level XP Ledger (2026-04-29)
+
+Two P1 features shipped + significant hardening from the V5.5 work.
+
+**Feature 1 — System-native MacroBar (Session Dice Altar)**
+- `components/MacroBar.jsx` (new) renders per-system character-aware quick-roll macros in the dice panel. Each button populates the notation + label fields; click Roll to fire.
+  - BESM 4E / Anime 5E (Tri-Stat): `macro-body`, `-mind`, `-soul`, `-acv`, `-dcv`, `-init`.
+  - D&D 5E: `macro-str/dex/con/int/wis/cha`, `-adv` (2d20kh1), `-dis` (2d20kl1).
+  - Cypher: `macro-d20`, `-d20-1` (asset), `-d20-3` (impaired), `-gm-intr` (GM Intrusion 1d6).
+  - Anime 5E hybrid appends `2d6+B/M/S` on top of the D&D set.
+- `components/SessionView.jsx` wires `<MacroBar>` below the Roll button; auto-selects the first character on load (player's own if present) so macros show without a dropdown click.
+
+**Feature 2 — XP scorecard polish**
+- *Per-quantum bonus breakdown popover*: Info icon next to each bonus input in `XPAwardPanel.jsx` opens a `[data-testid='xp-breakdown-popover-{cid}']` card showing counts × weights rows + subtotal + spotlight + cap.
+- *Campaign-level XP Ledger*: new endpoint `GET /api/campaigns/{cid}/xp/ledger` (GM-only) aggregates every character's `xp_log[]` into a reverse-chrono feed with per-character totals + campaign totals. Mounted via `components/XPLedgerPanel.jsx` (GM-only modal, filter chips per character, source-label column, converted→CP indicator) triggered from a new `xp-ledger-btn` in the `CampaignDetail` header.
+- *Empty-state safety*: XP scorecard now renders `[data-testid='xp-scorecard-empty']` when no characters are seated in a session instead of showing a confusing empty table.
+
+**Hardening**
+- `SessionView.jsx` `loadAll()` wrapped in try/catch; on failure `setLoadErr(detail)` and `useMinDelay(!session && !loadErr, 5000)` bypasses the ritual; renders `[data-testid='session-load-error']` with a "Back to campaigns" link. Fixes the "Opening the table…" infinite hang on 404 sessions that the testing agent previously hit.
+- Cleaned up two file-tail duplication artefacts (`SessionView.jsx`, `CampaignDetail.jsx`) left over from earlier iterations.
+
+**Verification — `/app/test_reports/iteration_{28,29,30}.json`**
+- Backend: 5/5 pytest pass (`test_iter28_v552.py` — ledger access/shape/award/convert).
+- Frontend iter_30: 4/4 PASS — session-load-error on 404, MacroBar auto-visible for Cypher (macro-d20/d20-1/d20-3/gm-intr), xp-scorecard-empty renders helpful copy, XP Ledger regression still clean.
+
+
 
 Pure refactor — zero behavioural change. The 853-line monolith
 `/app/frontend/src/components/SystemCharacterBuilders.jsx` was split
