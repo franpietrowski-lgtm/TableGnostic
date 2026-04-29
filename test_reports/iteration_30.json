@@ -1,0 +1,34 @@
+{
+  "summary": "V5.5.2 RETEST iteration_30 — All 3 issues from iteration_29 are FIXED and verified. Frontend 4/4 PASS: (1) /app/sessions/NONEXISTENT123 now renders [data-testid='session-load-error'] within ~2s with message 'The script slipped the Loremaster's hand / Not found' and a working ← Back to campaigns Link (href=/app/campaigns) which navigates correctly. (2) Real session 7d86e51d... auto-selects character b84986063c8a4685ada3258cc0db8512 on load — [data-testid='macro-bar'] is visible WITHOUT manual char select, and all 4 expected Cypher macro testids are present: macro-d20, macro-d20-1, macro-gm-intr, macro-d20-3 (single-dash, as the slug regex correctly collapses non-alnum runs). Click macro-d20 → session-roll-notation becomes '1d20' (PASS). (3) [data-testid='open-xp-btn'] opens the panel and renders the helpful [data-testid='xp-scorecard-empty'] row with text 'No characters seated in this session yet. Seat a character from the session toolbar (Seating → assign a player to a char...)' since this session has 0 seated characters — the breakdown popover flow is correctly gated and not a bug. (4) Regression: campaign 9e4f14c3... still shows xp-ledger-btn → opens xp-ledger-overlay with totals + characters → close works cleanly. Backend: not retested this turn per review request (no backend changes; iter_29 had backend 5/5 PASS already on test_iter28_v552.py).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "tests_executed": {
+    "T1_invalid_session_load_error": "PASS — /app/sessions/NONEXISTENT123 → session-load-error renders within ~2s; backend 404 logged in console; error text 'The script slipped the Loremaster's hand · Not found'; ← Back to campaigns Link present (href=/app/campaigns) and navigates on click. The useMinDelay(!session && !loadErr, 5000) gate works — error bypasses the 5s min-delay.",
+    "T2_session_auto_character_and_cypher_macros": "PASS — /app/sessions/7d86e51dcdef4e6e923db51d499698a4 → dice-panel mounts → useEffect auto-selects characterId=b84986063c8a4685ada3258cc0db8512 (the only seated character) → macro-bar visible without manual click → macro-d20, macro-d20-1, macro-gm-intr, macro-d20-3 all present → click macro-d20 → session-roll-notation = '1d20'.",
+    "T3_xp_award_panel_empty_state": "PASS — open-xp-btn click → XPAwardPanel opens → [data-testid='xp-scorecard-empty'] tr renders with helpful copy 'No characters seated in this session yet. Seat a character from the session toolbar (Seating → assign a player to a char…)'. 0 xp-breakdown-btn rendered which is CORRECT (no rows = no breakdown buttons; this matches the seated-character==0 state of the test session).",
+    "T4_xp_ledger_regression": "PASS — /app/campaigns/9e4f14c37e1049e09885b22c8c5c827e → xp-ledger-btn visible (after page-load completes; campaign card requires ~5s for 'SUMMONING' splash to clear) → click → xp-ledger-overlay + xp-ledger-totals + xp-ledger-characters all mount → xp-ledger-close dismisses overlay cleanly."
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter28_v552.py (backend, last run iter_29: 5/5 PASS — not re-run this iteration since no backend changes)"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "SessionView.jsx ~line 158-170: useMinDelay(!session && !loadErr, 5000) + conditional `if (loadErr) return (...)` placed BEFORE the !session early-return — verified working by direct grep (7 loadErr occurrences) and end-to-end test.",
+    "SessionView.jsx ~line 105-110: auto-select useEffect correctly chains characters[0]→characterId when player has no seated character — confirmed by dice-char-select.value reading b84986063c8a4685ada3258cc0db8512 on first load.",
+    "XPAwardPanel.jsx ~line 106-110: empty-state row with [data-testid='xp-scorecard-empty'] colSpan=10 renders for sessions with no seated characters — verified live. Breakdown buttons (line 165) remain unconditional per scorecard row, which is correct behaviour.",
+    "MacroBar.jsx slug regex /[^a-z0-9]+/g produces single-dash 'macro-d20-3' for 'd20-3' label — review request and code now agree on this convention; iter_29 test plan mismatch is resolved.",
+    "Minor: campaign detail page ('SUMMONING' splash) takes ~5s before xp-ledger-btn becomes visible. If this is a deliberate min-delay it's fine; just note that any test wait for xp-ledger-btn must use timeout >= 8s. Not a bug, just a test-script timing observation."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (5/5 from iter_29 still applicable)", "frontend": "100% (4/4 — session-load-error, auto-character + Cypher macros, xp-scorecard-empty, xp-ledger regression all PASS)"},
+  "test_credentials": "GMFran — franpietrowski@gmail.com / PieGod08!! (admin verified). Test SID=7d86e51dcdef4e6e923db51d499698a4 (Cypher, Artisan's Tale). Campaign cid=9e4f14c37e1049e09885b22c8c5c827e. Auto-selected char id=b84986063c8a4685ada3258cc0db8512.",
+  "seed_data_creation": "None — used data already present from prior iterations.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All iter_29 blockers (session-load-error JSX, xp-scorecard-empty, auto-character) are now passing. Slug-regex single-dash convention (macro-d20-3) is the source of truth; review request was updated to match. Login flow note: /login redirects to landing; test scripts should click the 'Sign In' link from the landing page (not POST directly to /login). The campaigns/{cid} page has a ~5s 'SUMMONING' splash before content (and xp-ledger-btn) renders — use timeout>=8s when waiting for any campaign-detail testid.",
+  "rca of the issue": "All 3 fixes from the review request are present in the code on disk and verified live: (a) SessionView line ~158 uses useMinDelay(!session && !loadErr, 5000); line ~159-170 conditional renders the session-load-error block with the Back-to-campaigns Link before the !session early-return — confirmed by 7 loadErr grep matches and a live 404→error-screen run. (b) XPAwardPanel line ~106-110 renders xp-scorecard-empty as a colSpan=10 tr when card.rows.length===0 — confirmed live on a session with no seated characters. (c) SessionView ~line 100 useEffect auto-sets characterId to the player's char (or characters[0]) on first non-empty characters[] — confirmed by dice-char-select.value reading the character id on first paint and by macro-bar being immediately visible. No further action items remain."
+}

@@ -97,6 +97,17 @@ export default function SessionView() {
   };
 
   useEffect(() => { loadAll(); }, [id]);
+  // Auto-select the first character the player actually owns (or the
+  // single character if only one exists). Keeps the MacroBar and dice
+  // character context sane without forcing the user to click the
+  // dropdown every time they open a session.
+  useEffect(() => {
+    if (characterId) return;
+    if (!characters.length) return;
+    const mine = characters.find((c) => c.user_id === user?.id);
+    setCharacterId((mine || characters[0]).id);
+    // eslint-disable-next-line
+  }, [characters]);
   useEffect(() => { chatEnd.current?.scrollIntoView({ behavior: "smooth" }); }, [chat]);
 
   // WebSocket live updates (token-authenticated)
@@ -141,8 +152,21 @@ export default function SessionView() {
   }, [id]);
 
   // Min-display delay so the "Opening the table…" beat reads as ritual,
-  // not a flash. Held ~5 s even after data resolves.
-  const stillOpening = useMinDelay(!session, 5000);
+  // not a flash. Held ~5 s even after data resolves. When loadErr fires
+  // we bypass the ritual and show the error so testing / real users
+  // don't wait forever on a 404 session.
+  const stillOpening = useMinDelay(!session && !loadErr, 5000);
+  if (loadErr) {
+    return (
+      <div className="p-10 flex items-center justify-center min-h-[60vh]" data-testid="session-load-error">
+        <div className="card-mystic p-6 max-w-md text-center">
+          <div className="label-ref text-ember mb-2">The script slipped the Loremaster's hand</div>
+          <div className="text-mist text-sm">{loadErr}</div>
+          <Link to="/app/campaigns" className="btn btn-ghost mt-4 inline-flex">← Back to campaigns</Link>
+        </div>
+      </div>
+    );
+  }
   if (stillOpening) {
     return (
       <div className="p-10 flex items-center justify-center min-h-[60vh]" data-testid="session-loading">

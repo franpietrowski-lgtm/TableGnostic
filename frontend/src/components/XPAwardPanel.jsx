@@ -103,6 +103,15 @@ export default function XPAwardPanel({ sessionId, campaign, onClose, onCommitted
           </tr>
         </thead>
         <tbody>
+          {card.rows.length === 0 && (
+            <tr>
+              <td colSpan={10} className="py-6 text-center text-mist italic text-xs" data-testid="xp-scorecard-empty">
+                No characters seated in this session yet. Seat a character
+                from the session toolbar (Seating → assign a player to a
+                character) then reopen this panel.
+              </td>
+            </tr>
+          )}
           {card.rows.map((r) => {
             const e = edits[r.character_id] || {};
             const total = (+e.base || 0) + effectiveBonus(r.character_id);
