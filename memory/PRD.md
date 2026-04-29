@@ -23,7 +23,57 @@
 ### V5.1 — Atelier "Epic Campaign" 8th-phase tab (2026-04-27)
 **Trigger:** GMFran uploaded Guy Sclanders' follow-up book *Epic Campaigns: Digital Edition* (146 pp) and asked for a new tab inside the **"Forge the Master Plot"** Atelier page. The two planes (the existing 7-phase Genesis and the new Epic Campaign) are intentionally INDEPENDENT — usable in tandem, separately, or one-or-the-other; pure GM brainstorming kit. Implemented as `phase === 7` panel inside `CampaignGenesis.jsx`, alongside the existing seven phases. Backend: new `db.epic_campaigns` collection + `routes/epic_campaign.py` (GET/PUT/seed-codex). Frontend: new `EpicCampaignPanel.jsx` (11 sections — Plan/Constraints, Theme, Sentence, OGAS Nemesis, Villains, Expanding Goal, Milestones, Adventures, Seeds, Beginning, Climax — plus Tie-ins picker). The "Sync to Codex" action pushes the Nemesis + each Villain + each Seed into the World Codex as gm-only knowledge nodes; idempotent on re-run.
 
-### V5.2 — Content expansion + system-aware UI sweep (this iteration — 2026-04-27)
+### V5.3 — Director's Console + One-Shot Scaffold (this iteration — 2026-04-29)
+
+**Two flagship features — the marquee item the user asked for + the deferred improvement idea, shipped in one batch.**
+
+**Feature 1 — GM Director's Console (`/app/campaigns/:id/director`)**
+The tactical brain of the campaign, GM/admin-only.
+
+*Backend*
+- New `core/cr_engine.py` — system-aware Challenge Rating with rule-based suggestions:
+  - **D&D 5E**: DMG p.82 XP-threshold table per PC level, encounter-multiplier by NPC count, CR→XP map (DMG p.275). Returns Pushover/Easy/Medium/Hard/Deadly with reason.
+  - **Cypher**: avg NPC level + crowd overflow vs party tier-weighted step-down (tier × 1.5). Pushover/Easy/Fair/Hard/Punishing.
+  - **BESM 4E**: NPC CP total ÷ party CP total, ±15% bands. Pushover/Easy/Fair/Hard/Punishing.
+  - **Anime 5E hybrid**: routes to D&D engine if any NPC has `cr` set, BESM engine otherwise.
+- New `routes/director.py` — `GET /api/director/{cid}` aggregates `npc_pool` from Genesis seed_npcs[], Epic Campaign nemesis+villains, and Codex `npc` nodes (de-duplicated by source:name); `PUT /api/director/{cid}` round-trips encounters with id-stamping; `POST /api/director/{cid}/cr-analyse` runs the engine without persisting (debounced UI calls).
+- New collection `db.directors`, one doc per campaign.
+
+*Frontend — `DirectorConsole.jsx` (~700 lines)*
+- 3-column layout: NPC Pool (left, sticky) · Encounter Editor (centre) · CR Panel (right, sticky).
+- NPC Pool grouped by source (Genesis · Epic · Codex), one-click adds the NPC to the active encounter with intent + role pre-filled.
+- Encounter Editor: party seat toggles, NPC rows with location/intent/state/role/count/system-shaped stat hint (CR for D&D, level for Cypher, CP for BESM/Anime), environment toggles (indoor/weather/light).
+- CR Panel: rating with colour-coded difficulty bar (green→red), party_label, npc_label, reason, and rule-based suggestions list with Lucide icons (swords/shield/mountain/compass/flame/scroll/sparkles/x). Suggestions are designed to make encounters MORE engaging, not easier — explicit nudges like "GM Intrusion at the climax", "Plant a moral lever", "Add a ticking environmental clock".
+- Multi-encounter tabs at the top so a GM can pre-build a session arc.
+- Live "Atelier phase" picker that ties the current scene back to the 7-phase Genesis or 8-phase Epic Campaign.
+- Director button on the campaign header (GM-only).
+
+**Feature 2 — One-Shot Scaffold (`POST /api/campaigns/{cid}/scaffold-oneshot`)**
+The "60-second campaign deploy" improvement.
+
+*Backend — `routes/ingest.py` (extended)*
+- New SCAFFOLD_SYSTEM_PROMPT — strict-JSON Claude Sonnet 4.5 contract: title_suggestion, premise, session_beats[], codex_nodes[] (≤30, type/title/summary/tags), npcs[] (≤12, name/role/intent/stat_hint), opening_encounter (name/environment/npc_indices/notes). Hard rules: no rulebook prose verbatim, mechanic-only, valid JSON.
+- `commit=false` returns the parsed preview; `commit=true` writes Codex nodes (each codex_node + each NPC as a `npc`-typed gm-only node), tags them `one-shot-scaffold`, and stages the opening_encounter on the Director's doc with the picked NPC indices linked back to the codex node ids.
+- Integrates with existing `_parse_to_text()` (PDF/MD/TXT/RTF/DOCX) + `_truncate_for_llm()` so the upload pipeline is identical to the existing Knowledge Web ingestion.
+
+*Frontend — `IngestPanel.jsx` (extended)*
+- New `scaffold-panel` card above the History block.
+- Two-stage flow: Preview button → reviews title/premise/session-beats/codex-nodes/npcs in a 3-column preview block → Commit button writes everything to the campaign + Director.
+- File input requires re-attach for Commit (browsers don't keep file handles between calls — documented in the helper text).
+
+**Verification — `/app/test_reports/iteration_24.json`**
+- 9/9 backend pytest cases PASS in `/app/backend/tests/test_iter24_v53.py` — including a LIVE Claude Sonnet scaffold-preview call (EMERGENT_LLM_KEY is set in this env).
+- Director GET returns system_id=cypher + npc_pool aggregating Genesis/Epic/Codex; players get 403; PUT round-trips with id-stamping. CR-analyse on Cypher tier-1 PC vs L4 villain + 3×L2 minions returned `Punishing` with `remove_npc + feat` suggestions; empty-NPC = `Pushover`; empty-party = `Unknown`.
+- Frontend Playwright sweep confirmed: director-console + director-npc-pool + director-encounter-editor + cr-panel render; pool-pick-* adds an NPC; director-party-{charId} seats the PC and the cr-panel updates to "Fair · Effective level 1.5 (encounter 3.0 + overflow 0.0 − party step-down 1.5)" with the suggestions list populated. Scaffold-panel + scaffold-preview-btn + file input present on the Atelier tab.
+
+**Remaining backlog (deferred — judged lower-impact for this batch):**
+- Move Reference Editor + Quickstart Instructions onto the Genesis page (UI re-org, low risk but no functional gain — existing locations still work).
+- Custom-rules tab fields system+mechanic specific (small UI tweak — most fields already work for all systems).
+- Editable card fields polish in CustomCardEditor (already wired at API + UI level — additional polish only).
+- Evereantha + Artisan's Tale demo seeding across all systems (now SOLVABLE in 60 seconds via the One-Shot Scaffold for any pasted setting brief).
+- Code refactor — split `SystemCharacterBuilders.jsx` into `builders/{Dnd5e,Cypher,Anime5e}.jsx` (no user-visible change, deferred to a dedicated cleanup sprint).
+
+### V5.2 — Content expansion + system-aware UI sweep (2026-04-27)
 
 **Big push.** Tackled most of the user's V5.1.2 backlog list in one pass.
 
