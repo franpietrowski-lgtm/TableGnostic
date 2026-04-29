@@ -182,6 +182,39 @@ export default function Account() {
         </div>
       )}
 
+      {/* Demo deploy — V5.4 ecosystem showcase. Drops two fully-interweaved
+          campaigns (Evereantha · BESM 4E + Artisan's Tale · Cypher) into
+          this user's account so the deferred network of connections can be
+          tested end-to-end without manual data entry. */}
+      <div className="card-mystic p-6 mt-4" data-testid="account-demo-deploy">
+        <div className="label-ref flex items-center gap-2"><Award className="w-3 h-3"/> Demo campaigns</div>
+        <p className="text-[12px] text-mist/80 italic mt-2 max-w-2xl">
+          Deploy <b>Evereantha · The Caldera Choir</b> (BESM 4E heroic fantasy)
+          and <b>Artisan's Tale · The Last Glassworks</b> (Cypher post-apocalypse) —
+          fully wired campaigns with codex nodes, NPC motives tagged to plot phases,
+          a Genesis 7-phase plan, an Epic Campaign nemesis, and a staged Director's
+          Console encounter. Use them as a showcase, a template, or to test the
+          ecosystem end-to-end.
+        </p>
+        <button onClick={async () => {
+            if (!window.confirm("Deploy the two demo campaigns? This adds two new GM campaigns to your account.")) return;
+            try {
+              setBusy(true);
+              const { data } = await api.post("/admin/seed-demo");
+              setBusy(false);
+              window.alert(`Deployed: ${data.deployed.map((c) => c.name).join(" · ")}`);
+            } catch (e) {
+              setBusy(false);
+              setErr(formatApiErrorDetail(e.response?.data?.detail) || e.message);
+            }
+          }}
+          disabled={busy}
+          className="btn btn-primary text-xs mt-3"
+          data-testid="account-demo-deploy-btn">
+          <Award className="w-3 h-3"/> {busy ? "Deploying…" : "Deploy demo campaigns"}
+        </button>
+      </div>
+
       {/* Profile patch */}
       <div className="card-mystic p-6 mt-4" data-testid="account-profile-patch">
         <div className="label-ref flex items-center gap-2"><Scroll className="w-3 h-3"/> Profile</div>

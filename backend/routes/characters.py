@@ -154,6 +154,11 @@ async def add_journal_entry(cid: str, body: JournalEntryIn,
         "by_uid": user["id"],
         "by_name": user["name"],
         "created_at": now_iso(),
+        # V5.4 — ecosystem nervous system. Echo the optional plot_phase
+        # + session_id back onto the entry so the Pulse aggregator can
+        # filter by phase without re-walking the chat log.
+        "session_id": body.session_id,
+        "plot_phase": (body.plot_phase or "").strip(),
     }
     journal.append(entry)
     folio["journal"] = journal

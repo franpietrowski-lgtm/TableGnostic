@@ -197,6 +197,23 @@ class CharacterIn(BaseModel):
 class JournalEntryIn(BaseModel):
     text: str = Field(min_length=1, max_length=2000)
     session_id: Optional[str] = None
+    # V5.4 — ecosystem nervous system. Optional plot phase ref so the Pulse
+    # panel and Director's Console can correlate journal entries to the
+    # campaign's current plot beat. Free-form key (e.g. "epic-7-milestones",
+    # "genesis-3-nemesis") to keep it loose for the GM's convenience.
+    plot_phase: Optional[str] = None
+
+
+# V5.4 — NPC motives evolve over the plot timeline.
+# Each entry is an append-only diary of what a Codex NPC wants RIGHT NOW
+# at a given plot phase — driven by GM intent, journal entries that
+# touch the NPC, and Director events. Players never see GM-only motives.
+class NodeMotiveIn(BaseModel):
+    motive: str = Field(min_length=1, max_length=600)
+    plot_phase: Optional[str] = None
+    state: Literal["dormant", "active", "thwarted", "achieved", "evolving"] = "active"
+    triggered_by: Optional[str] = None  # session_id / journal_entry_id / encounter_id
+    visibility: Literal["gm_only", "shared"] = "gm_only"
 
 
 # -------- Knowledge Web --------
@@ -230,6 +247,11 @@ class SessionIn(BaseModel):
     campaign_id: str
     title: str
     scheduled_at: Optional[str] = None
+    # V5.4 — ecosystem nervous system. Tags this session with the plot
+    # phase the table is playing through, so Pulse / Director / Codex
+    # views can correlate cross-system activity.
+    plot_phase: Optional[str] = None
+    location: Optional[str] = None  # free-text in-fiction location
 
 
 class ChatIn(BaseModel):

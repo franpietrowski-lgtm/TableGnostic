@@ -138,10 +138,31 @@ export default function DirectorConsole() {
         id: null, name: `Encounter ${d.encounters.length + 1}`,
         party_character_ids: [], npcs: [],
         environment: { indoor: false }, notes: "",
+        kind: "combat", plot_phase: d.current_phase_ref || "",
       }],
     }));
     setActiveIdx(doc.encounters.length);
   };
+
+  // ─── Ecosystem Pulse — V5.4 ───
+  // Aggregated cross-system snapshot for the active plot phase. Updated
+  // whenever the phase changes or the GM hits "refresh" on the panel.
+  const [pulse, setPulse] = useState(null);
+  const [pulseBusy, setPulseBusy] = useState(false);
+  const refreshPulse = async () => {
+    if (!doc) return;
+    setPulseBusy(true);
+    try {
+      const phase = doc.current_phase_ref || "";
+      const url = phase
+        ? `/campaigns/${cid}/ecosystem/pulse?plot_phase=${encodeURIComponent(phase)}`
+        : `/campaigns/${cid}/ecosystem/pulse`;
+      const { data } = await api.get(url);
+      setPulse(data);
+    } catch {/* surface non-blockingly */}
+    finally { setPulseBusy(false); }
+  };
+  useEffect(() => { if (doc) refreshPulse(); }, [doc?.current_phase_ref, cid]);
 
   const save = async () => {
     setBusy(true); setErr("");
@@ -222,6 +243,9 @@ export default function DirectorConsole() {
         </div>
       </div>
 
+      {/* Ecosystem Pulse — the live cross-system snapshot. */}
+      <PulsePanel pulse={pulse} busy={pulseBusy} onRefresh={refreshPulse}/>
+
       <div className="grid lg:grid-cols-[260px_1fr_300px] gap-5">
         {/* NPC pool */}
         <NpcPool pool={doc.npc_pool || []} onPick={addNpcFromPool}/>
@@ -253,6 +277,28 @@ export default function DirectorConsole() {
                      onChange={(e) => setActive({ name: e.target.value })}
                      placeholder="Encounter name"
                      data-testid="director-encounter-name"/>
+
+              {/* Encounter type + plot-phase tag — V5.4 ecosystem nervous
+                  system. Tagging encounters lets the Pulse panel correlate
+                  combat/social/puzzle encounters to a specific plot beat. */}
+              <div className="grid sm:grid-cols-2 gap-2">
+                <select className="select" value={active.kind || "combat"}
+                        onChange={(e) => setActive({ kind: e.target.value })}
+                        data-testid="director-encounter-kind">
+                  <option value="combat">Combat</option>
+                  <option value="social">Social</option>
+                  <option value="puzzle">Puzzle</option>
+                  <option value="exploration">Exploration</option>
+                  <option value="chase">Chase</option>
+                  <option value="ritual">Ritual</option>
+                </select>
+                <input className="input"
+                       value={active.plot_phase || ""}
+                       onChange={(e) => setActive({ plot_phase: e.target.value })}
+                       placeholder="Plot phase tag (e.g. epic-7-milestones)"
+                       data-testid="director-encounter-phase"
+                       title="Tag this encounter to a plot phase. Leave blank to inherit from the campaign-level live phase."/>
+              </div>
 
               {/* Party seats */}
               <div>
@@ -555,6 +601,87 @@ function iconFor(name) {
     crown:     <Crown className={cls}/>,
     skull:     <Skull className={cls}/>,
   })[name] || <AlertTriangle className={cls}/>;
+}
+
+function PulsePanel({ pulse, busy, onRefresh }) {
+  if (!pulse) return null;
+  const phase = pulse.plot_phase || "—";
+  const counts = {
+    sessions: pulse.sessions?.length || 0,
+    journal: pulse.journal_entries?.length || 0,
+    motives: pulse.active_motives?.length || 0,
+    encounters: pulse.encounters?.length || 0,
+  };
+  return (
+    <div className="card-mystic p-5 mb-6" data-testid="director-pulse-panel">
+      <div className="flex items-baseline justify-between flex-wrap gap-3 mb-3">
+        <div>
+          <div className="label-ref flex items-center gap-2">
+            <Sparkles className="w-3 h-3 text-arcane-light"/> Ecosystem Pulse
+            <span className="text-[10px] text-mist tracking-widest uppercase">· phase {phase}</span>
+          </div>
+          <div className="text-[11px] text-mist/70 italic mt-1 max-w-2xl">
+            What's live right now in your campaign — sessions, journal entries,
+            NPC motives, and encounter drafts that touch this plot phase. No manual bookkeeping.
+          </div>
+        </div>
+        <button onClick={onRefresh} disabled={busy} className="btn btn-ghost text-xs"
+                data-testid="director-pulse-refresh">
+          {busy ? "Refreshing…" : "Refresh"}
+        </button>
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <PulseCol title="Sessions" count={counts.sessions} testid="pulse-sessions">
+          {(pulse.sessions || []).slice(0, 4).map((s) => (
+            <PulseLine key={s.id} primary={s.title}
+                       secondary={`${s.location || s.status || ""}${s.round ? ` · round ${s.round}` : ""}`}/>
+          ))}
+        </PulseCol>
+        <PulseCol title="Journal" count={counts.journal} testid="pulse-journal">
+          {(pulse.journal_entries || []).slice(0, 4).map((j, i) => (
+            <PulseLine key={i} primary={`${j.character_name}: ${(j.text || "").slice(0, 60)}${(j.text || "").length > 60 ? "…" : ""}`}
+                       secondary={j.created_at ? new Date(j.created_at).toLocaleDateString() : ""}/>
+          ))}
+        </PulseCol>
+        <PulseCol title="NPC motives" count={counts.motives} testid="pulse-motives">
+          {(pulse.active_motives || []).slice(0, 4).map((m) => (
+            <PulseLine key={m.id} primary={m.node_label}
+                       secondary={`${m.state} · ${(m.motive || "").slice(0, 60)}`}/>
+          ))}
+        </PulseCol>
+        <PulseCol title="Encounters" count={counts.encounters} testid="pulse-encounters">
+          {(pulse.encounters || []).slice(0, 4).map((e) => (
+            <PulseLine key={e.id} primary={e.name}
+                       secondary={`${e.kind} · ${e.npc_count} NPCs · ${e.party_count} PCs`}/>
+          ))}
+        </PulseCol>
+      </div>
+    </div>
+  );
+}
+
+function PulseCol({ title, count, testid, children }) {
+  return (
+    <div className="border border-gold/15 rounded-sm p-3" data-testid={testid}>
+      <div className="flex items-baseline justify-between mb-2">
+        <span className="label-ref">{title}</span>
+        <span className="text-[11px] text-gold-bright font-display">{count}</span>
+      </div>
+      <div className="space-y-1.5">{children}</div>
+      {(!children || children.length === 0) && (
+        <div className="text-[10px] text-mist italic">No entries yet.</div>
+      )}
+    </div>
+  );
+}
+
+function PulseLine({ primary, secondary }) {
+  return (
+    <div className="text-[11px] leading-snug">
+      <div className="text-parchment/90 truncate">{primary}</div>
+      {secondary && <div className="text-mist/70 italic truncate">{secondary}</div>}
+    </div>
+  );
 }
 
 function pcBlurb(c, sysId) {

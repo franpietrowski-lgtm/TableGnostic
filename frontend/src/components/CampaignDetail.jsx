@@ -154,7 +154,7 @@ export default function CampaignDetail() {
         )}
         {camp.is_gm && (
           <Tabs.Content value="custom" className="pt-6">
-            <CustomTab campId={id} customs={customs} onRefresh={load} />
+            <CustomTab campId={id} customs={customs} onRefresh={load} systemId={camp.system_id}/>
           </Tabs.Content>
         )}
         {camp.is_gm && (
@@ -419,6 +419,15 @@ function CardVital({ label, v }) {
       <div className="font-display text-lg text-gold">{v}</div>
     </div>
   );
+}
+
+function labelForSystemShort(sysId) {
+  return ({
+    "dnd-5e":   "D&D 5E",
+    "cypher":   "Cypher",
+    "besm-4e":  "BESM 4E",
+    "anime-5e": "Anime 5E",
+  })[sysId] || sysId || "BESM 4E";
 }
 
 function KnowledgeTab({ camp, nodes, edges, onRefresh }) {
@@ -1034,14 +1043,67 @@ function JournalRow({ j, onRefresh }) {
   );
 }
 
-function CustomTab({ campId, customs, onRefresh }) {
+function CustomTab({ campId, customs, onRefresh, systemId }) {
+  // System-aware kind options + cost label.
+  // BESM 4E uses Attribute/Defect/Skill.
+  // D&D 5E surfaces Class Feature / Race Trait / Background Feat / House Rule.
+  // Cypher uses Descriptor / Focus / Ability / Cypher / Artifact / House Rule.
+  // Anime 5E hybrid offers both Tri-Stat and 5E shapes.
+  const KIND_OPTIONS = (() => {
+    if (systemId === "dnd-5e") {
+      return [
+        { value: "feature",   label: "Class feature" },
+        { value: "trait",     label: "Race trait" },
+        { value: "feat",      label: "Feat" },
+        { value: "house",     label: "House rule" },
+      ];
+    }
+    if (systemId === "cypher") {
+      return [
+        { value: "descriptor", label: "Descriptor" },
+        { value: "focus",      label: "Focus" },
+        { value: "ability",    label: "Type/Ability" },
+        { value: "cypher",     label: "Cypher (one-shot)" },
+        { value: "artifact",   label: "Artifact" },
+        { value: "house",      label: "House rule" },
+      ];
+    }
+    if (systemId === "anime-5e") {
+      return [
+        { value: "attribute", label: "Tri-Stat Attribute" },
+        { value: "defect",    label: "Tri-Stat Defect" },
+        { value: "skill",     label: "Skill" },
+        { value: "feature",   label: "Class feature" },
+        { value: "feat",      label: "Feat" },
+        { value: "house",     label: "House rule" },
+      ];
+    }
+    // BESM 4E default
+    return [
+      { value: "attribute", label: "Attribute" },
+      { value: "defect",    label: "Defect" },
+      { value: "skill",     label: "Skill" },
+    ];
+  })();
+  const isBesmShape = !systemId || systemId === "besm-4e";
+  const costLabel = isBesmShape ? "Cost per level" : (
+    systemId === "cypher" ? "Tier requirement" :
+    systemId === "dnd-5e" ? "Level requirement" : "Cost / Level"
+  );
+  const categoryHint = isBesmShape
+    ? "Greater / Lesser / Serious"
+    : (systemId === "cypher" ? "Genre tag (fantasy / scifi / horror / any)"
+       : systemId === "dnd-5e" ? "Class tier (mundane / martial / casted)"
+       : "Power band");
+
   const [form, setForm] = useState({
-    kind: "attribute", name: "", cost_per_level: 1, category: "", page_ref: "Custom", description_note: "",
+    kind: KIND_OPTIONS[0].value, name: "", cost_per_level: 1, category: "",
+    page_ref: "Custom", description_note: "",
   });
   const save = async (e) => {
     e.preventDefault();
     await api.post(`/campaigns/${campId}/custom`, { ...form, campaign_id: campId, cost_per_level: +form.cost_per_level });
-    setForm({ kind: "attribute", name: "", cost_per_level: 1, category: "", page_ref: "Custom", description_note: "" });
+    setForm({ kind: KIND_OPTIONS[0].value, name: "", cost_per_level: 1, category: "", page_ref: "Custom", description_note: "" });
     onRefresh();
   };
   const del = async (cid) => { await api.delete(`/campaigns/${campId}/custom/${cid}`); onRefresh(); };
@@ -1050,22 +1112,23 @@ function CustomTab({ campId, customs, onRefresh }) {
     <div>
       <div className="label-ref mb-3">Custom rules (GM-authored)</div>
       <p className="text-xs text-mist mb-4 font-body">
-        Create your own Attributes, Defects, or Skills for this campaign. Players can select them in the character forge.
+        Create your own homebrew entries for this campaign. Field shapes adapt to your campaign's system —
+        currently <b>{labelForSystemShort(systemId)}</b>. Players can select them in the character forge.
         Your prose stays in your campaign — it is never reproduced elsewhere.
       </p>
 
       <form onSubmit={save} className="card-mystic p-5 mb-6 grid md:grid-cols-2 gap-3" data-testid="custom-form">
         <select className="select" value={form.kind} data-testid="rule-kind"
                 onChange={(e) => setForm({ ...form, kind: e.target.value })}>
-          <option value="attribute">Attribute</option>
-          <option value="defect">Defect</option>
-          <option value="skill">Skill</option>
+          {KIND_OPTIONS.map((k) => <option key={k.value} value={k.value}>{k.label}</option>)}
         </select>
         <input className="input" placeholder="Name" value={form.name} required data-testid="rule-name"
                onChange={(e) => setForm({ ...form, name: e.target.value })}/>
-        <input className="input" type="number" step="0.5" placeholder="Cost per level" data-testid="rule-cost"
-               value={form.cost_per_level} onChange={(e) => setForm({ ...form, cost_per_level: e.target.value })}/>
-        <input className="input" placeholder="Category (Greater/Lesser/Serious, or Group tier)" data-testid="rule-category"
+        <input className="input" type={isBesmShape ? "number" : "text"} step="0.5"
+               placeholder={costLabel} data-testid="rule-cost"
+               value={form.cost_per_level}
+               onChange={(e) => setForm({ ...form, cost_per_level: e.target.value })}/>
+        <input className="input" placeholder={categoryHint} data-testid="rule-category"
                value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}/>
         <input className="input md:col-span-2" placeholder="Page reference (e.g. Custom · Homebrew 1.2)"
                value={form.page_ref} data-testid="rule-pageref"

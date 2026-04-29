@@ -4,6 +4,7 @@ import { api, formatApiErrorDetail } from "../lib/api";
 import { ArrowRight, ArrowLeft, Save, Wand2, Plus, X, Sparkles, BookMarked, CheckCircle2, ExternalLink, Lightbulb } from "lucide-react";
 import { TipDot, Tip } from "./ui/Tip";
 import EpicCampaignPanel from "./EpicCampaignPanel";
+import ReferenceEditor, { InstructionsPanel } from "./ReferenceEditor";
 
 const PROMPTS = {
   sentence_who: ["What single act defines them?", "What have they lost that they cannot replace?", "What do others whisper about them?"],
@@ -28,6 +29,7 @@ const PHASES = [
   { key: "npcs",       title: "Supporting Cast",   blurb: "Fodder and Plotter NPCs — the humans your table will remember." },
   { key: "bookends",   title: "Beginning & Ending",blurb: "Open with relationship, close with resonance." },
   { key: "epic",       title: "Epic Campaign",     blurb: "Sclanders' follow-up framework — OGAS NPCs, the Sentence, milestones with POE design, adventure modes & types, seeding, climax. Independent of the seven phases above; use in tandem, separately, or one-or-the-other." },
+  { key: "library",    title: "Reference Library", blurb: "GM-editable reference tables (custom Attributes, Skills, Defects, system-specific entries) and the system-aware Quickstart instructions for your players. Lives here — not buried in the campaign tab." },
 ];
 
 const BLANK = {
@@ -46,6 +48,13 @@ export default function CampaignGenesis() {
   const [err, setErr] = useState("");
   const [saved, setSaved] = useState(false);
   const [seeding, setSeeding] = useState(false);
+  const [camp, setCamp] = useState(null);
+
+  // Load the campaign so we can pass `system_id` to the V5.4 Library tab.
+  useEffect(() => {
+    if (!id) return;
+    api.get(`/campaigns/${id}`).then((r) => setCamp(r.data)).catch(() => {});
+  }, [id]);
 
   useEffect(() => {
     (async () => {
@@ -374,6 +383,13 @@ export default function CampaignGenesis() {
       {phase === 7 && (
         <div data-testid="genesis-phase-epic">
           <EpicCampaignPanel campId={id}/>
+        </div>
+      )}
+
+      {phase === 8 && (
+        <div data-testid="genesis-phase-library" className="space-y-6">
+          <ReferenceEditor campaignId={id} isGm systemId={camp?.system_id}/>
+          <InstructionsPanel isGm={true} systemId={camp?.system_id}/>
         </div>
       )}
 

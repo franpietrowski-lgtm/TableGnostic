@@ -13,7 +13,7 @@ Aggregates everything the GM needs at the table:
 State is persisted in `db.directors`, one document per campaign.
 GM/admin only — players do not read or write the Director's Console.
 """
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -53,6 +53,14 @@ class EncounterIn(BaseModel):
     npcs: List[EncounterNpcIn] = Field(default_factory=list)
     environment: Dict[str, Any] = Field(default_factory=dict)  # {indoor: bool, weather, light, hazards}
     notes: str = ""
+    # V5.4 — ecosystem nervous system. Free-form plot phase key — the same
+    # one used on Sessions and Journal entries — so the Pulse panel can
+    # correlate which encounters were live during which beat.
+    plot_phase: str = ""
+    # V5.4 — encounter type so the Director can plan social / puzzle /
+    # exploration alongside combat (the user's vision: "social, combat,
+    # puzzle, etc").
+    kind: Literal["combat", "social", "puzzle", "exploration", "chase", "ritual"] = "combat"
 
 
 class DirectorIn(BaseModel):

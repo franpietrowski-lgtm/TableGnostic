@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { api, formatApiErrorDetail } from "../lib/api";
 import { Plus, X, AlertTriangle, CheckCircle2, Save, Layers, ListTree, ScrollText, FileDown } from "lucide-react";
 import IngestPanel from "./IngestPanel";
 import XPApprovalQueue from "./XPApprovalQueue";
-import ReferenceEditor, { InstructionsPanel } from "./ReferenceEditor";
 
 /**
  * AtelierTab — V4.4 dynamic-scaling tiers.
@@ -145,11 +145,14 @@ export default function AtelierTab({ campId, camp }) {
       {/* ---------- XP Approval Queue (GM-side) ---------- */}
       <XPApprovalQueue campaignId={campId} isGm/>
 
-      {/* ---------- Campaign Reference Tables (GM-editable) ---------- */}
-      <ReferenceEditor campaignId={campId} isGm systemId={camp?.system_id}/>
-
-      {/* ---------- GM Instructions (system-aware) ---------- */}
-      <InstructionsPanel isGm={true} systemId={camp?.system_id}/>
+      {/* Reference Editor + GM Instructions moved to the Genesis page in
+          V5.4 — they're authoring surfaces, not in-campaign tools. The
+          Atelier tab keeps the ingestion + XP queue + Session-0/Arcs /
+          continuity that you want at-the-table. */}
+      <div className="text-[11px] text-mist/60 italic px-1" data-testid="atelier-ref-moved-note">
+        Looking for the campaign Reference tables and the GM Quickstart instructions?
+        They moved to the <Link to={`/app/campaigns/${campId}/genesis`} className="text-gold-bright underline">Atelier Genesis page</Link> as a dedicated phase, alongside the 7-phase Master Plot and the Epic Campaign tab.
+      </div>
 
       {/* ---------- Session 0 ---------- */}
       <SessionZeroPanel sz={state.session_zero || {}} setSZ={setSZ}/>
