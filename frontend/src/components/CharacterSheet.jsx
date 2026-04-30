@@ -4,6 +4,7 @@ import { api, formatApiErrorDetail } from "../lib/api";
 import { Dice6, Edit3, BookOpen, Trash2 } from "lucide-react";
 import BesmTerm from "./ui/BesmTerm";
 import XPApprovalQueue, { XPSpendForm } from "./XPApprovalQueue";
+import CharacterApprovalPanel from "./CharacterApprovalPanel";
 
 export default function CharacterSheet() {
   const { id } = useParams();
@@ -17,16 +18,19 @@ export default function CharacterSheet() {
   const [lastRoll, setLastRoll] = useState(null);
   const [selectedSession, setSelectedSession] = useState("");
   const [pbpChannelId, setPbpChannelId] = useState(null);
+  const [campaign, setCampaign] = useState(null);
 
   const load = async () => {
     try {
       const data = await api.get(`/characters/${id}`).then((r) => r.data);
       setCh(data);
-      const [s, channels] = await Promise.all([
+      const [s, channels, camp] = await Promise.all([
         api.get(`/campaigns/${data.campaign_id}/sessions`).then((r) => r.data),
         api.get(`/campaigns/${data.campaign_id}/channels`).then((r) => r.data).catch(() => []),
+        api.get(`/campaigns/${data.campaign_id}`).then((r) => r.data).catch(() => null),
       ]);
       setSessions(s);
+      setCampaign(camp);
       if (s.length) setSelectedSession(s[0].id);
       if (channels.length) setPbpChannelId(channels[0].id);
     } catch (e) { setErr(formatApiErrorDetail(e.response?.data?.detail) || e.message); }
@@ -171,6 +175,11 @@ export default function CharacterSheet() {
             <XPSpendForm characterId={ch.id} character={ch} onProposed={load}/>
           </div>
           <XPApprovalQueue campaignId={ch.campaign_id} characterId={ch.id} isGm={false} onUpdate={load}/>
+          <CharacterApprovalPanel
+            characterId={ch.id}
+            isGm={!!(campaign?.is_gm)}
+            campaignHouseRules={campaign?.house_rules || ""}
+            onChanged={load}/>
         </div>
         <div className="flex gap-2">
           <Link to={`/app/characters/${ch.id}/edit`} className="btn" data-testid="edit-character-btn">
@@ -1229,8 +1238,11 @@ function SimpleListCard({ title, items, testid }) {
 }
 
 // Anime 5E hybrid supplement — read-only echo on the character sheet.
-// Displays the Tri-Stat point-buy attributes the player layered on top of
-// their d20 chassis (`folio.anime5e_state.point_buys[]`). Pure presentation.
+// Displays the BESM-style point-buy attributes the player layered on top
+// of their d20 chassis (`folio.anime5e_state.point_buys[]`). Pure
+// presentation. Anime 5E is a D&D 5E chassis with an OPTIONAL BESM-style
+// point-buy layer — it is NOT Tri-Stat. Body / Mind / Soul scores are
+// absent here.
 function Anime5eSupplementView({ folio }) {
   const state = folio?.anime5e_state;
   const buys = state?.point_buys || [];
@@ -1243,9 +1255,9 @@ function Anime5eSupplementView({ folio }) {
          data-testid="anime5e-sheet-supplement">
       <div className="flex items-baseline justify-between flex-wrap gap-2">
         <div>
-          <div className="label-ref">Tri-Stat Supplement · Anime 5E hybrid</div>
+          <div className="label-ref">BESM Point-Buy Layer · Anime 5E hybrid</div>
           <div className="text-[11px] text-mist/80 italic">
-            Genre-power layer over the d20 chassis. Tri-Stat OGL.
+            Genre-power layer over the d20 chassis. BESM-style point-buy (one-way port from 5E).
           </div>
         </div>
         <div className="text-right">

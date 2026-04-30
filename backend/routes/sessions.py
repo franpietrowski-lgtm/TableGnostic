@@ -84,6 +84,7 @@ async def get_session(sid: str, user: dict = Depends(get_current_user)):
 
 @router.post("/sessions/{sid}/seat-character")
 async def seat_character(sid: str, character_id: str = "",
+                          force: bool = False,
                           user: dict = Depends(get_current_user)):
     """Assign a character to the calling user for a session ('seat-take').
     Players may only seat one of their own characters; GM/admin may seat
@@ -91,6 +92,11 @@ async def seat_character(sid: str, character_id: str = "",
     (added below as an explicit override route). The session document
     grows a `character_assignments: { user_id -> character_id }` map.
     Pass `character_id=""` to UNSEAT (free the seat).
+
+    Approval gate: a character must be `approved_for_play` (GM has
+    ratified AND either app-internal rules validation passes OR the
+    campaign has house-rules declared). Un-approved characters are
+    blocked HTTP 409 unless `force=true` AND the caller is the GM.
     """
     s = await db.sessions.find_one({"id": sid}, {"_id": 0})
     if not s:
@@ -110,6 +116,21 @@ async def seat_character(sid: str, character_id: str = "",
         if ch.get("owner_id") != user["id"] and camp["gm_id"] != user["id"] \
                 and user.get("role") != "admin":
             raise HTTPException(403, "You can only seat your own characters.")
+        # Approval gate (V6.2)
+        approval = ch.get("approval") or {}
+        house_rules = bool((camp.get("house_rules") or "").strip())
+        approved_for_play = bool(
+            approval.get("gm_approved")
+            and (approval.get("app_validated") or house_rules)
+        )
+        is_gm = camp["gm_id"] == user["id"] or user.get("role") == "admin"
+        if not approved_for_play and not (force and is_gm):
+            raise HTTPException(
+                409,
+                "Character is not approved for play. Owner must run "
+                "validation and GM must ratify. GM may force-seat via "
+                "?force=true."
+            )
     assignments = dict(s.get("character_assignments") or {})
     if character_id:
         assignments[user["id"]] = character_id

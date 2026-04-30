@@ -9,6 +9,7 @@ import AtelierTab from "./AtelierTab";
 import SystemBadge from "./SystemBadge";
 import CardDeckPanel from "./CardDeckPanel";
 import XPLedgerPanel from "./XPLedgerPanel";
+import DeltaDropPanel from "./DeltaDropPanel";
 import { useAuth } from "../lib/api";
 import { NODE_TYPES, NODE_TEMPLATES, colorForType, labelForType } from "../lib/nodeTemplates";
 
@@ -122,7 +123,7 @@ export default function CampaignDetail() {
             ["sessions", "Sessions"],
             ["decks", "Decks"],
             ["primer", "Player Primer"],
-            ...(camp.is_gm ? [["atelier", "Atelier"], ["custom", "Custom Rules"], ["invite", "Invite & Share"]] : []),
+            ...(camp.is_gm ? [["atelier", "Atelier"], ["delta", "Delta Drop"], ["custom", "Custom Rules"], ["invite", "Invite & Share"]] : []),
           ].map(([v, l]) => (
             <Tabs.Trigger key={v} value={v}
               className="px-4 py-2 text-xs font-ui tracking-widest uppercase text-mist hover:text-parchment
@@ -156,6 +157,11 @@ export default function CampaignDetail() {
         {camp.is_gm && (
           <Tabs.Content value="atelier" className="pt-6">
             <AtelierTab campId={id} camp={camp} />
+          </Tabs.Content>
+        )}
+        {camp.is_gm && (
+          <Tabs.Content value="delta" className="pt-6">
+            <DeltaDropPanel campaign={camp} onApplied={load}/>
           </Tabs.Content>
         )}
         {camp.is_gm && (
