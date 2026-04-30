@@ -23,6 +23,46 @@
 ### V5.1 — Atelier "Epic Campaign" 8th-phase tab (2026-04-27)
 **Trigger:** GMFran uploaded Guy Sclanders' follow-up book *Epic Campaigns: Digital Edition* (146 pp) and asked for a new tab inside the **"Forge the Master Plot"** Atelier page. The two planes (the existing 7-phase Genesis and the new Epic Campaign) are intentionally INDEPENDENT — usable in tandem, separately, or one-or-the-other; pure GM brainstorming kit. Implemented as `phase === 7` panel inside `CampaignGenesis.jsx`, alongside the existing seven phases. Backend: new `db.epic_campaigns` collection + `routes/epic_campaign.py` (GET/PUT/seed-codex). Frontend: new `EpicCampaignPanel.jsx` (11 sections — Plan/Constraints, Theme, Sentence, OGAS Nemesis, Villains, Expanding Goal, Milestones, Adventures, Seeds, Beginning, Climax — plus Tie-ins picker). The "Sync to Codex" action pushes the Nemesis + each Villain + each Seed into the World Codex as gm-only knowledge nodes; idempotent on re-run.
 
+### V6.3 — Epic panel crash fix + System-label correctness + Cypher dynamics + Custom Reference expansion (2026-04-30)
+
+**Bugs fixed**
+- 🔴 `EpicCampaignPanel.jsx` crashed `Cannot read properties of undefined (reading 'kind')` on Phase 7 of Genesis. Root cause: epic docs seeded before newer fields existed arrived missing `beginning` / `seeds[*].kind` / `sentence` shapes. Fix: defensive normalisation in the load effect — every optional sub-doc (sentence, nemesis, beginning, ending_coolness) defaults to an empty-shape object, and list-items (seeds, villains, milestones, adventures) are spread with safe defaults so every section renders even on legacy docs.
+- 🔴 Character sheet `sheet-system-label` showed "D&D 5E" / "5E hybrid" on Anime 5E campaigns. Root cause: label read from `folio.dnd_state` / `folio.anime5e_state` — player only populated the chassis, so Anime never registered. Fix: label now keyed off `campaign.system_id` (authoritative truth). An Anime 5E campaign always reads "Anime 5E"; a D&D 5E campaign "D&D 5E"; Cypher "Cypher · Tier N …"; BESM 4E "BESM 4E · PowerLevel · N pts".
+
+**Cypher dynamic accounting**
+- `builders/Cypher.jsx` — `setTier(newTier)` now also refreshes the Recovery die (defaults to 1d6+tier unless the player customised it). When the Type changes, `pools_type_baseline` is stored alongside `pools` so the discretionary-points chip can tell the "given by Type" bucket apart from the player-spent bucket.
+- New **`cypher-pool-budget-chip`** in the Pools header: "Discretionary X / 6 [over]". X is the pool-points spent above the Type's baseline; the chip goes ember when > 6 (CSR p.16 creation rule).
+- Character-sheet Cypher skill-train tags now have **per-kind hover tooltips**: Trained (−1 step), Specialised (−2 steps), Inability (+1 step). Colour-coded + cursor-help.
+
+**BESM tooltip sweep**
+- Enhancement tags: "Enhancement: {name}. Lowers the Attribute's effective Level by 1 — the power is more potent per CP paid. Stacks if listed multiple times."
+- Limiter tags: "Limiter: {name}. Raises the Attribute's effective Level by 1 — the power is narrower, so each CP buys more functional range."
+- Both rendered with `cursor-help`.
+
+**Custom Reference Editor expansion**
+- `REFERENCE_KINDS` grew from 8 → 23. New kinds (backend `Literal` + runtime allow-list kept in sync): `enhancement`, `limiter`, `power_pack`, `power_bundle` (BESM); `spell`, `feat`, `background`, `race_trait`, `class_feature` (D&D / Anime 5E); `cypher_ability`, `cypher_item`, `artifact`, `descriptor`, `focus`, `type` (Cypher).
+- `SYSTEM_KIND_ORDER` — per-system tab ordering in the Reference Editor so BESM GMs don't scroll past 15 Cypher-only kinds to find Attributes.
+- New **`PowerBundleEditor`** composer: GMs add Attribute/Skill/Defect/Enhancement/Limiter components, see a live CP estimate (via new `POST /api/reference/estimate-bundle-cost`) — same math path as the character validator so there's no drift between the two surfaces.
+
+**Backend**
+- `routes/reference_editor.py`:
+  - `REFERENCE_KINDS` expanded.
+  - `ReferenceItemIn.kind: Literal[...]` widened.
+  - New `BundleComponentIn` + `BundleEstimateIn` + `POST /api/reference/estimate-bundle-cost` returning `{total_cost, component_count, lines[]}`.
+
+**Verification — `/app/test_reports/iteration_36.json`**
+- Backend: 28/28 (13 V6.3 + 15 V6.2 regression). Bundle estimator math verified (attribute 4×3−2=10, skill 2×2=4, defect −2 → 12). New kinds accepted via POST. Unknown kind still 400.
+- Frontend: EpicCampaignPanel mounts without pageerrors on all four systems. Sheet-system-label correct across besm-4e / anime-5e / dnd-5e / cypher. Cypher builder shows `cypher-pool-budget-chip` 0/6 for a default Warrior. BESM Enhancement/Limiter/Defect tags carry hover tooltips verified live.
+
+**Stashed for next session**
+- `/app/memory/references/Anime_5E_Spell_Conversions.pdf` — user-uploaded conversion kit for the upcoming D&D-spell-mimic Power Bundle builder.
+
+**Deferred to next session:**
+- 🟠 BESM Power Bundle templates mimicking D&D spell effects (using the stashed conversion PDF as blueprint).
+- 🟠 Public canon registry (discover + subscribe to campaigns that publish Delta Drops).
+- 🟠 Per-system PDF theming; mobile PDF sheets; "How to" interactive guide.
+
+
 ### V6.2 — Delta-Drop + Character Rules-Compliance + Dual Approval (2026-04-30)
 
 Session continuation after previous agent ran out of context. Completed three inter-linked P0 items:
