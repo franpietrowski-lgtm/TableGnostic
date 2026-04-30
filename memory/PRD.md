@@ -23,6 +23,37 @@
 ### V5.1 — Atelier "Epic Campaign" 8th-phase tab (2026-04-27)
 **Trigger:** GMFran uploaded Guy Sclanders' follow-up book *Epic Campaigns: Digital Edition* (146 pp) and asked for a new tab inside the **"Forge the Master Plot"** Atelier page. The two planes (the existing 7-phase Genesis and the new Epic Campaign) are intentionally INDEPENDENT — usable in tandem, separately, or one-or-the-other; pure GM brainstorming kit. Implemented as `phase === 7` panel inside `CampaignGenesis.jsx`, alongside the existing seven phases. Backend: new `db.epic_campaigns` collection + `routes/epic_campaign.py` (GET/PUT/seed-codex). Frontend: new `EpicCampaignPanel.jsx` (11 sections — Plan/Constraints, Theme, Sentence, OGAS Nemesis, Villains, Expanding Goal, Milestones, Adventures, Seeds, Beginning, Climax — plus Tie-ins picker). The "Sync to Codex" action pushes the Nemesis + each Villain + each Seed into the World Codex as gm-only knowledge nodes; idempotent on re-run.
 
+### V6.6 — Cypher codex-aware suggest + Anime 5E CR kit + Mobile character PDF + Spell→Bundle converter (2026-04-30)
+
+**Cypher codex-aware suggestions**
+- `routes/cypher_suggest_anime_cr.py` — new module, registered on `server.py`.
+- `GET /api/cypher/{cid}/suggest?kind=<axis>&limit=N` — inspects the campaign's `setting_genre` + the latest 5 motives + session `plot_phase`, weighs tone-hint keywords against Descriptor/Focus/Type candidates, returns the top N per axis with a `why` line per row. Tone hints cover Doomed/Tragic/Sacrifice, Rising/Ascending, Mystery/Investigation, Heist/Infiltration, Revolution/Uprising, War/Conflict — each boosts curated descriptor+focus sets.
+- Frontend `builders/Cypher.jsx` — new **Suggest from codex** button (testid `cypher-suggest-btn`) next to the identity sentence. One click populates descriptor/type/focus from the top suggestion per axis. Genre-gated campaigns supported.
+
+**Anime 5E / D&D 5E CR + Encounter design kit**
+- Same router: `GET /api/anime5e/encounter-budget?party_level=N&party_size=N&difficulty=easy|medium|hard|deadly`.
+- Returns `xp_per_pc`, `total_xp_budget`, slot-by-CR suggestions (1/2/4/6/8 monster clusters with DMG p.82 multipliers), `environmental_hazard_budget` (half medium).
+- Frontend `EncounterDesigner.jsx` — new component, mounted in `SessionView.jsx` for GMs on Anime 5E / D&D 5E sessions. Controls for party level/size/difficulty, live recompute button, budget chip, slot rows, hazard chip.
+
+**Mobile character-sheet PDF**
+- `routes/character_pdf.py` — new module, registered on `server.py`.
+- `GET /api/characters/{cid}/export.pdf?mode=mobile` — renders an A6 phone-portrait 1-column character sheet styled per system (BESM stats+attrs+defects; Anime 5E D&D chassis + BESM point-buy layer; D&D 5E abilities+combat+spell slots; Cypher pools+edge+cyphers). Uses the same per-system `STYLE_PROFILES` palette and font map as the campaign-level chronicle export.
+- Frontend `CharacterSheet.jsx` — **Mobile PDF** button in the sheet header (testid `export-mobile-sheet-btn`) downloads the PDF via authenticated fetch → blob → `download` anchor pattern (mirrors AtelierTab's export flow).
+
+**Spell → Power Bundle converter (bonus)**
+- `GET /api/reference/spell-conversions/{slug}/as-power-bundle` — converts a read-only Spell Conversion Atlas row into a Power Bundle draft shape (name, description, invocation heuristic from spell level, charges, cost, components with enhancement/limiter rows).
+- Frontend `ReferenceEditor.jsx` — Spell Conversion Atlas rows gained a **→ Power Bundle** button (GM-only, testid `spell-convert-{slug}`). Clicking auto-switches the tab to `power_bundle`, pre-populates the editor draft, and closes the atlas modal.
+
+**Testing — `/app/test_reports/iteration_39.json`**
+- Backend: **61/61 pass** (12 V6.6 new + 19 V6.4 + 15 V6.2 + 5 V6.1 + 10 V6.5).
+- Frontend surfaces source-verified (all testids present). Playwright headless auth-propagation quirk noted but verified a live browser renders the landing page cleanly; login flow uses `/signin`.
+
+**Deferred to next sprint**
+- `SystemCharacterBuilders` + `CampaignDetail.jsx` split-by-tab refactor (still 1656 lines) + `ReferenceEditor.jsx` split (971 lines → 4 files).
+- Artisan / Evereantha full seed across all 4 core systems (classes, skill profs, weapons, NPCs, magic items, artifacts).
+- Public canon registry (discover + subscribe to campaigns publishing Delta Drops).
+
+
 ### V6.5 — Spell Conversion Atlas + Live Spend Preview + Per-system PDF ornaments (2026-04-30)
 
 **Spell Conversion Atlas (62 entries, read-only reference)**
