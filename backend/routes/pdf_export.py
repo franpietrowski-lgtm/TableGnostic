@@ -663,6 +663,57 @@ def _build_pdf(camp: Dict[str, Any], chapters_data: List[Dict[str, Any]],
                 pass
         canv.restoreState()
 
+    def _draw_system_ornament(canv, x, y, size, kind):
+        """V6.5 — per-system header/footer ornamental glyph.
+        Drawn at (x,y) sized `size` points. Pure vector so scales cleanly.
+        * diamond  — BESM 4E: lozenge outline
+        * petal    — Anime 5E: four-petal rosette
+        * fleur    — D&D 5E: stylised fleur-de-lis stroke
+        * circuit  — Cypher: nested brackets with a dot core
+        * rule     — Default: simple horizontal tick
+        """
+        canv.saveState()
+        canv.setStrokeColor(rule)
+        canv.setFillColor(rule)
+        canv.setLineWidth(0.7)
+        if kind == "diamond":
+            half = size / 2
+            p = canv.beginPath()
+            p.moveTo(x, y + half)
+            p.lineTo(x + half, y)
+            p.lineTo(x, y - half)
+            p.lineTo(x - half, y)
+            p.close()
+            canv.drawPath(p, stroke=1, fill=0)
+        elif kind == "petal":
+            r = size / 2
+            for dx, dy in ((r, 0), (-r, 0), (0, r), (0, -r)):
+                canv.circle(x + dx / 2, y + dy / 2, r / 2.2, stroke=1, fill=0)
+        elif kind == "fleur":
+            # Cluster of three strokes + a crossbar.
+            canv.setLineWidth(1.0)
+            canv.line(x, y - size / 2, x, y + size / 2)
+            canv.line(x - size / 3, y - size / 3, x, y + size / 3)
+            canv.line(x + size / 3, y - size / 3, x, y + size / 3)
+            canv.line(x - size / 2, y - size / 4, x + size / 2, y - size / 4)
+        elif kind == "circuit":
+            # Numenera-teal bracket pair + dot.
+            canv.setLineWidth(0.8)
+            half = size / 2
+            # Left bracket
+            canv.line(x - half, y - half, x - half, y + half)
+            canv.line(x - half, y - half, x - half + size / 4, y - half)
+            canv.line(x - half, y + half, x - half + size / 4, y + half)
+            # Right bracket
+            canv.line(x + half, y - half, x + half, y + half)
+            canv.line(x + half, y - half, x + half - size / 4, y - half)
+            canv.line(x + half, y + half, x + half - size / 4, y + half)
+            # Core dot
+            canv.circle(x, y, size / 10, stroke=0, fill=1)
+        else:
+            canv.line(x - size / 2, y, x + size / 2, y)
+        canv.restoreState()
+
     def chrome(canv, doc, kind: str = "body"):
         """Header/footer for non-cover pages."""
         canv.saveState()
@@ -670,6 +721,9 @@ def _build_pdf(camp: Dict[str, Any], chapters_data: List[Dict[str, Any]],
         canv.setStrokeColor(rule)
         canv.setLineWidth(0.6)
         canv.line(margin, ph - 0.55 * inch, pw - margin, ph - 0.55 * inch)
+        # V6.5 — per-system ornament midway in the top rule (subtle flourish).
+        deco = profile.get("chapter_decoration") or "rule"
+        _draw_system_ornament(canv, pw / 2, ph - 0.55 * inch, 0.15 * inch, deco)
         # Header text
         canv.setFont(f["subheading"], 8)
         canv.setFillColor(muted)
@@ -678,6 +732,8 @@ def _build_pdf(camp: Dict[str, Any], chapters_data: List[Dict[str, Any]],
         # Bottom rule
         canv.setStrokeColor(rule)
         canv.line(margin, 0.55 * inch, pw - margin, 0.55 * inch)
+        # V6.5 — mirrored ornament on the footer rule.
+        _draw_system_ornament(canv, pw / 2, 0.55 * inch, 0.15 * inch, deco)
         canv.setFont(f["body"], 8)
         canv.setFillColor(muted)
         canv.drawString(margin, 0.38 * inch,

@@ -1,0 +1,43 @@
+{
+  "summary": "V6.5 testing — Spell Conversion Atlas (62 entries / 9 schools) + Live Spend Preview simulate-import + per-system PDF ornaments. Backend 11/11 V6.5 tests pass (2 PDF skips are data-only — no sessions seeded on those campaigns). V6.4/V6.2/V6.1 regression: 39/39 still pass. CRITICAL frontend compile-blocker (missing `}` in ReferenceEditor.jsx caused SpellConversionAtlas to be declared inside PowerBundleTemplatePicker scope) — fixed by relocating the orphan brace; frontend now compiles cleanly. All required testids confirmed present in the source.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/campaigns/{cid}/export.pdf", "issue": "Endpoint is GET (not POST). Review request mentioned POST /api/campaigns/{cid}/export-pdf which does not exist. The actual route is GET /api/campaigns/{cid}/export.pdf — main agent should align doc/spec wording. Endpoint itself works: 789KB BESM PDF rendered successfully with new system ornaments."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "ReferenceEditor.jsx", "issue": "FIXED — missing `}` after PowerBundleTemplatePicker return JSX (line ~373) put SpellConversionAtlas inside its parent's closure → 'react/jsx-no-undef' compile error blocking the entire app. Orphan `}` was at line ~498. Repositioned the brace.", "selector": "n/a (compile error)", "priority": "CRITICAL (FIXED)"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter38_v65.py",
+    "/app/test_reports/pytest/iter38_v65.xml",
+    "/app/test_reports/pytest/iter38_v65_combined.xml"
+  ],
+  "action_items": [
+    "VERIFY the brace fix in ReferenceEditor.jsx — main agent should re-read lines 370-500 and confirm structure (PowerBundleTemplatePicker closes at ~374, SpellConversionAtlas closes at ~496, then Row begins).",
+    "Seed sessions on a besm-4e and anime-5e campaign so the per-system PDF ornament tests can fully cover both systems (currently only one BESM camp had sessions; anime-5e PDF skipped).",
+    "Align review request wording: PDF export route is GET /api/campaigns/{cid}/export.pdf, not POST /api/campaigns/{cid}/export-pdf."
+  ],
+  "critical_code_review_comments": [
+    "ReferenceEditor.jsx is now 933 lines — exceeds 700-line guideline. Recommend splitting SpellConversionAtlas + PowerBundleTemplatePicker into their own files.",
+    "ReferenceEditor.jsx has 2 unfixed react-hooks/exhaustive-deps warnings (lines 120, 845) that may cause subtle stale-closure bugs in refresh / template-load flows.",
+    "/api/characters/{cid}/simulate-import accepts both extra_cost and extra_bundle but does NOT enforce mutual-exclusion or sum them — it prefers extra_cost when both are non-zero. Consider documenting or summing.",
+    "Spell Conversion Atlas endpoint uses case-insensitive school matching (good); max_level only filters with <= (good). No pagination on 62-entry response (acceptable at this size; revisit if entries grow > 200)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter38_v65.py (NEW)",
+    "/app/frontend/src/components/ReferenceEditor.jsx (fixed missing brace at line 374, removed orphan brace at line 498)"
+  ],
+  "success_rate": {"backend": "100% (49/49 executed pass; 1/50 skipped due to seed data)", "frontend": "compile-fixed; testids verified by source inspection (Playwright sign-in flow on hosted preview was not completed in this run — but the compile-blocker was resolved and the app now renders past the error overlay)"},
+  "test_credentials": "franpietrowski@gmail.com / PieGod08!! (admin/GM) — works",
+  "seed_data_creation": "Created TEST_v65_sim_pc character + TEST_v65_nonmember_<uuid>@example.com player account during simulate-import access-gate test.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "After main agent verifies the brace fix in ReferenceEditor.jsx, run a full Playwright walk-through: login -> open campaign -> reference tab -> click reference-open-atlas-btn -> assert spell-conversion-atlas modal + 62 'Source:' rows + filter to Evocation reduces count -> close -> click reference-import-templates-btn -> select character in bundle-preview-character-select -> hover any template card -> assert bundle-preview-result-{cost} tag shows 'OK (N spare)' or 'OVER by N'. Backend V6.5 tests in /app/backend/tests/test_iter38_v65.py are stable for regression.",
+  "rca of the issue": "ReferenceEditor.jsx had a missing closing `}` for PowerBundleTemplatePicker after its return JSX block at line 373. The `}` that should have closed it ended up orphaned at line 498 (between SpellConversionAtlas's closing and Row's declaration). Result: SpellConversionAtlas was declared as a nested function inside PowerBundleTemplatePicker, making it unreachable from the JSX in ReferenceEditor at line 252. ESLint correctly flagged 'react/jsx-no-undef' which CRA escalates to a build-failing error. Mitigation: moved the closing `}` from line 498 to line 374 so PowerBundleTemplatePicker closes properly and SpellConversionAtlas becomes a module-level sibling. Verified by frontend logs showing 'webpack compiled with 1 warning' (the previous ERROR is gone) and the error overlay no longer rendering on the landing page."
+}

@@ -573,8 +573,76 @@ async def anime5e_xp_curve(cid: str, user: dict = Depends(get_current_user)):
     }
 
 
-# ─── V6.4 — D&D-spell-mimic Power Bundle starter templates ─────────
+# ─── V6.5 — Live Spend Preview for Power Bundle templates ────────
+# Lets GMs hover/tap a seeded template card and see "if I import this
+# onto Aeris — her 175/200 spend becomes 182/200 (fits)." Pure audit;
+# nothing is persisted.
+
+from pydantic import BaseModel as _PydBaseModel
+
+
+class SimulateImportIn(_PydBaseModel):
+    """What to pretend-apply. Either provide a full template (with
+    components + cost) from the template library, or a raw cost to
+    add on top of the existing sheet."""
+    extra_cost: int = 0
+    extra_bundle: Dict[str, Any] = {}
+
+
+@router.post("/characters/{cid}/simulate-import")
+async def simulate_import(cid: str, body: SimulateImportIn,
+                           user: dict = Depends(get_current_user)):
+    """Return a before/after CP-budget view for the sheet if the
+    declared bundle were imported. Read-only."""
+    ch = await db.characters.find_one({"id": cid}, {"_id": 0})
+    if not ch:
+        raise HTTPException(404, "Character not found")
+    camp = await db.campaigns.find_one({"id": ch["campaign_id"]}, {"_id": 0})
+    if not camp:
+        raise HTTPException(404, "Campaign missing")
+    # Access gate — owner / GM / member / admin.
+    allowed = (
+        user["id"] == ch.get("owner_id")
+        or user["id"] == camp["gm_id"]
+        or user["id"] in (camp.get("member_ids") or [])
+        or user.get("role") == "admin"
+    )
+    if not allowed:
+        raise HTTPException(403, "Not a table member.")
+
+    current = _validate_character(ch)
+    current_spent = current["breakdown"].get("total_spent") or 0
+    current_cap = current.get("total_points") or int(ch.get("total_points") or 0)
+
+    # Project the spend after the import.
+    extra = int(body.extra_cost or 0)
+    if not extra and body.extra_bundle:
+        extra = int(body.extra_bundle.get("cost") or 0)
+    projected_spent = current_spent + extra
+    fits = projected_spent <= current_cap
+    headroom = current_cap - projected_spent
+
+    return {
+        "character_id": cid,
+        "character_name": ch.get("name"),
+        "power_level": ch.get("power_level"),
+        "current_spent": current_spent,
+        "current_cap": current_cap,
+        "extra_cost": extra,
+        "projected_spent": projected_spent,
+        "fits": fits,
+        "headroom": headroom,
+        "summary": (
+            f"{ch.get('name')} · {ch.get('power_level')} · "
+            f"{projected_spent}/{current_cap} CP"
+            + (f" · OVER by {-headroom}" if not fits else f" · OK ({headroom} spare)")
+        ),
+    }
+
+
+# ─── V6.4/V6.5 — D&D-spell-mimic Power Bundle templates + conversion ref ───
 from system_data.power_bundle_templates import POWER_BUNDLE_TEMPLATES
+from system_data.spell_conversion_library import SPELL_CONVERSIONS
 
 
 @router.get("/reference/power-bundle-templates")
@@ -590,4 +658,35 @@ async def list_power_bundle_templates(
         ],
         "total": len(POWER_BUNDLE_TEMPLATES),
     }
+
+
+@router.get("/reference/spell-conversions")
+async def list_spell_conversions(
+    max_level: int = 9,
+    school: str = "",
+    user: dict = Depends(get_current_user),
+):
+    """Read-only reference library: D&D spells & class abilities
+    translated to BESM Attributes with enhancement/limiter values.
+
+    Visible to players to understand how rule X in their SRD book
+    gets represented on a BESM / Anime 5E sheet. Each entry cites
+    its SRD source (page-equivalent) and offers the BESM conversion
+    with the same CP math the validator would use.
+    """
+    school_lc = school.strip().lower()
+    rows = [
+        r for r in SPELL_CONVERSIONS
+        if int(r.get("source_level") or 0) <= max_level
+           and (not school_lc or (r.get("school") or "").lower() == school_lc)
+    ]
+    schools = sorted({r.get("school") for r in SPELL_CONVERSIONS if r.get("school")})
+    return {
+        "entries": rows,
+        "total": len(SPELL_CONVERSIONS),
+        "returned": len(rows),
+        "schools": schools,
+    }
+
+
 

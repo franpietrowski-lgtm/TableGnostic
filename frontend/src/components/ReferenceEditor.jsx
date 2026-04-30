@@ -106,6 +106,8 @@ export default function ReferenceEditor({ campaignId, isGm, systemId }) {
   const [busy, setBusy] = useState(false);
   // V6.4 — Power Bundle template picker.
   const [showTemplates, setShowTemplates] = useState(false);
+  // V6.5 — Spell Conversion Atlas (read-only reference).
+  const [showAtlas, setShowAtlas] = useState(false);
 
   const refresh = async () => {
     try {
@@ -173,6 +175,12 @@ export default function ReferenceEditor({ campaignId, isGm, systemId }) {
                 <BookOpen className="w-3 h-3"/> Import from templates
               </button>
             )}
+            <button onClick={() => setShowAtlas(true)}
+                    className="btn btn-ghost text-xs"
+                    data-testid="reference-open-atlas-btn"
+                    title="Read-only atlas: D&D spells & class abilities translated to BESM Attributes with SRD citations.">
+              <BookOpen className="w-3 h-3"/> Spell Conversion Atlas
+            </button>
             <button onClick={() => setDraft(blank())} className="btn btn-primary text-xs"
                     data-testid="reference-add-btn">
               <Plus className="w-3 h-3"/> Add {String(labelOf(tab)).split(" ")[0]}
@@ -205,6 +213,7 @@ export default function ReferenceEditor({ campaignId, isGm, systemId }) {
       </div>
       {showTemplates && (
         <PowerBundleTemplatePicker
+          campaignId={campaignId}
           onPick={(t) => {
             // Drop the template as the new draft. Shape it to the
             // Reference Editor's row schema.
@@ -239,6 +248,9 @@ export default function ReferenceEditor({ campaignId, isGm, systemId }) {
           }}
           onClose={() => setShowTemplates(false)}/>
       )}
+      {showAtlas && (
+        <SpellConversionAtlas onClose={() => setShowAtlas(false)}/>
+      )}
     </div>
   );
 }
@@ -247,19 +259,29 @@ export default function ReferenceEditor({ campaignId, isGm, systemId }) {
  * PowerBundleTemplatePicker — modal grid of seeded D&D-spell-mimic
  * Power Bundle templates. Click a card to drop it into the draft editor.
  */
-function PowerBundleTemplatePicker({ onPick, onClose }) {
+function PowerBundleTemplatePicker({ onPick, onClose, campaignId }) {
   const [templates, setTemplates] = useState([]);
   const [err, setErr] = useState("");
   const [filter, setFilter] = useState("");
+  // V6.5 — Live Spend Preview: pick a character; hover a template to
+  // see fits/over math projected onto their current spend.
+  const [chars, setChars] = useState([]);
+  const [previewCharId, setPreviewCharId] = useState("");
+  const [previewByCost, setPreviewByCost] = useState({});
 
   useEffect(() => {
     (async () => {
       try {
         const { data } = await api.get("/reference/power-bundle-templates");
         setTemplates(data.templates || []);
+        if (campaignId) {
+          const cs = await api.get(`/campaigns/${campaignId}/characters`).then((r) => r.data);
+          setChars(cs || []);
+          if (cs?.length) setPreviewCharId(cs[0].id);
+        }
       } catch (e) { setErr(formatApiErrorDetail(e.response?.data?.detail) || e.message); }
     })();
-  }, []);
+  }, [campaignId]);
 
   const filtered = templates.filter((t) =>
     !filter || t.name.toLowerCase().includes(filter.toLowerCase())
@@ -285,27 +307,189 @@ function PowerBundleTemplatePicker({ onPick, onClose }) {
         <input className="input text-sm mb-3" placeholder="Filter by name or school…"
                value={filter} onChange={(e) => setFilter(e.target.value)}
                data-testid="bundle-template-filter"/>
+        {/* V6.5 — Live Spend Preview: pick a PC → cards show fits/over. */}
+        {chars.length > 0 && (
+          <div className="flex items-center gap-2 mb-3 text-xs" data-testid="bundle-preview-picker">
+            <span className="label-ref text-[9px]">Spend Preview for</span>
+            <select className="select select-sm" value={previewCharId}
+                    onChange={(e) => setPreviewCharId(e.target.value)}
+                    data-testid="bundle-preview-character-select">
+              <option value="">— no preview —</option>
+              {chars.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name || "(unnamed)"} · {c.power_level} · {c.total_points} CP
+                </option>
+              ))}
+            </select>
+            <span className="text-[10px] text-mist italic">
+              Hover a card → live projection of the PC's CP spend if imported.
+            </span>
+          </div>
+        )}
         {err && <div className="text-ember text-xs mb-2">{err}</div>}
         <div className="grid gap-2 sm:grid-cols-2">
-          {filtered.map((t) => (
-            <button key={t.name} onClick={() => onPick(t)}
-                    className="text-left card-mystic p-3 hover:-translate-y-0.5 transition"
-                    data-testid={`bundle-template-${t.source_spell_name.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}`}>
-              <div className="flex items-baseline justify-between gap-2">
-                <span className="font-ui text-parchment text-sm">{t.name}</span>
-                <span className="text-[10px] text-mist uppercase tracking-widest">
-                  L{t.source_spell_level} · {t.school}
-                </span>
+          {filtered.map((t) => {
+            const preview = previewByCost[t.cost];
+            const fits = preview?.fits;
+            return (
+              <button key={t.name} onClick={() => onPick(t)}
+                      onMouseEnter={async () => {
+                        if (!previewCharId || previewByCost[t.cost] !== undefined) return;
+                        try {
+                          const { data } = await api.post(
+                            `/characters/${previewCharId}/simulate-import`,
+                            { extra_cost: t.cost });
+                          setPreviewByCost((prev) => ({ ...prev, [t.cost]: data }));
+                        } catch (_) { /* silent */ }
+                      }}
+                      className="text-left card-mystic p-3 hover:-translate-y-0.5 transition"
+                      data-testid={`bundle-template-${t.source_spell_name.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}`}>
+                <div className="flex items-baseline justify-between gap-2">
+                  <span className="font-ui text-parchment text-sm">{t.name}</span>
+                  <span className="text-[10px] text-mist uppercase tracking-widest">
+                    L{t.source_spell_level} · {t.school}
+                  </span>
+                </div>
+                <div className="text-[11px] text-mist italic mt-1 line-clamp-2">{t.description}</div>
+                <div className="flex items-center gap-2 mt-2 text-[10px] font-ui flex-wrap">
+                  <span className="tag border-gold/40 text-gold-bright">{t.cost} CP</span>
+                  <span className="tag border-arcane/30 text-arcane">{t.invocation}</span>
+                  {t.charges_max > 0 && <span className="tag border-mist/40 text-mist">{t.charges_max} charges</span>}
+                  {t.energy_cost > 0 && <span className="tag border-ember/30 text-ember">{t.energy_cost} EP</span>}
+                  {preview && (
+                    <span className={`tag ${fits ? "border-arcane/60 text-arcane" : "border-ember/60 text-ember"}`}
+                          data-testid={`bundle-preview-result-${t.cost}`}
+                          title={preview.summary}>
+                      {fits ? `OK (${preview.headroom} spare)` : `OVER by ${-preview.headroom}`}
+                    </span>
+                  )}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * SpellConversionAtlas — V6.5 read-only reference that renders the
+ * D&D-to-BESM translation library (`/reference/spell-conversions`).
+ * Filter by spell level, school, or free-text. Each row shows the
+ * canonical D&D spell/ability, its BESM attribute conversion, every
+ * enhancement/limiter with its numeric value, the net CP, and the
+ * SRD citation — so players can see HOW rule X gets expressed on a
+ * BESM sheet rather than just getting a fire-and-forget Power Bundle.
+ */
+function SpellConversionAtlas({ onClose }) {
+  const [rows, setRows] = useState([]);
+  const [schools, setSchools] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [err, setErr] = useState("");
+  const [search, setSearch] = useState("");
+  const [school, setSchool] = useState("");
+  const [maxLvl, setMaxLvl] = useState(9);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const qs = new URLSearchParams();
+        qs.set("max_level", String(maxLvl));
+        if (school) qs.set("school", school);
+        const { data } = await api.get(`/reference/spell-conversions?${qs.toString()}`);
+        setRows(data.entries || []);
+        setSchools(data.schools || []);
+        setTotal(data.total || 0);
+      } catch (e) { setErr(formatApiErrorDetail(e.response?.data?.detail) || e.message); }
+    })();
+  }, [school, maxLvl]);
+
+  const filtered = rows.filter((r) =>
+    !search || r.source_name.toLowerCase().includes(search.toLowerCase())
+    || (r.short_description || "").toLowerCase().includes(search.toLowerCase()));
+
+  return (
+    <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4"
+         onClick={onClose} data-testid="spell-conversion-atlas">
+      <div className="card-mystic p-6 max-w-5xl w-full max-h-[88vh] overflow-y-auto"
+           onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start justify-between flex-wrap gap-2 mb-3">
+          <div>
+            <div className="label-ref">Spell Conversion Atlas</div>
+            <h3 className="font-display text-xl text-gold mt-1">
+              D&D 5E → BESM / Anime 5E · {total} entries
+            </h3>
+            <div className="text-[11px] text-mist italic max-w-xl leading-snug">
+              Read-only translation library. Each row shows how a D&D spell or class feature maps to a BESM Attribute bundle — cost, enhancement/limiter values, and SRD page citation. Copy any line into your campaign's Power Bundle reference if you want it purchasable.
+            </div>
+          </div>
+          <button onClick={onClose} className="btn btn-ghost text-xs"
+                  data-testid="spell-conversion-atlas-close">Close</button>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-3 mb-3">
+          <input className="input text-sm" placeholder="Filter by name or text…"
+                 value={search} onChange={(e) => setSearch(e.target.value)}
+                 data-testid="spell-conversion-search"/>
+          <select className="select text-sm" value={school}
+                  onChange={(e) => setSchool(e.target.value)}
+                  data-testid="spell-conversion-school">
+            <option value="">All schools</option>
+            {schools.map((s) => <option key={s} value={s}>{s}</option>)}
+          </select>
+          <select className="select text-sm" value={maxLvl}
+                  onChange={(e) => setMaxLvl(Number(e.target.value))}
+                  data-testid="spell-conversion-max-level">
+            {[0,1,2,3,4,5,6,7,8,9].map((l) => (
+              <option key={l} value={l}>Up to level {l}</option>
+            ))}
+          </select>
+        </div>
+        {err && <div className="text-ember text-xs mb-2">{err}</div>}
+        <div className="space-y-3">
+          {filtered.map((r, i) => (
+            <div key={`${r.source_name}-${i}`} className="border border-gold/15 rounded-sm p-3"
+                 data-testid={`spell-conversion-${r.source_name.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}`}>
+              <div className="flex items-baseline justify-between flex-wrap gap-2">
+                <div>
+                  <span className="font-ui text-parchment text-sm">{r.source_name}</span>
+                  <span className="ml-2 tag border-gold/40 text-gold-bright">
+                    L{r.source_level} · {r.school}
+                  </span>
+                </div>
+                <span className="tag border-arcane/40 text-arcane">{r.net_cp} CP net</span>
               </div>
-              <div className="text-[11px] text-mist italic mt-1 line-clamp-2">{t.description}</div>
-              <div className="flex items-center gap-2 mt-2 text-[10px] font-ui">
-                <span className="tag border-gold/40 text-gold-bright">{t.cost} CP</span>
-                <span className="tag border-arcane/30 text-arcane">{t.invocation}</span>
-                {t.charges_max > 0 && <span className="tag border-mist/40 text-mist">{t.charges_max} charges</span>}
-                {t.energy_cost > 0 && <span className="tag border-ember/30 text-ember">{t.energy_cost} EP</span>}
-              </div>
-            </button>
+              <div className="text-[11px] text-mist italic mt-1">{r.short_description}</div>
+              {(r.besm || []).map((b, j) => (
+                <div key={j} className="mt-2 text-[12px] border-l-2 border-gold/30 pl-3">
+                  <div className="font-ui text-gold-bright">
+                    {b.attribute} <span className="text-mist text-[10px]">· {b.cost_per_level}/Lvl × {b.level}</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {(b.enhancements || []).map((e, k) => (
+                      <span key={`e${k}`} className="tag border-arcane/30 text-arcane"
+                            title={e.name}>
+                        +{e.name}{e.value != null ? ` (${e.value > 0 ? "+" : ""}${e.value})` : ""}
+                      </span>
+                    ))}
+                    {(b.limiters || []).map((l, k) => (
+                      <span key={`l${k}`} className="tag border-ember/30 text-ember"
+                            title={l.name}>
+                        −{l.name}{l.value != null ? ` (${l.value > 0 ? "+" : ""}${l.value})` : ""}
+                      </span>
+                    ))}
+                  </div>
+                  {b.note && <div className="text-[10px] text-mist italic mt-1">{b.note}</div>}
+                </div>
+              ))}
+              <div className="text-[10px] text-mist/70 italic mt-2">Source: {r.source_reference}</div>
+            </div>
           ))}
+          {filtered.length === 0 && (
+            <div className="text-[11px] text-mist italic" data-testid="spell-conversion-empty">
+              No conversions match the current filters.
+            </div>
+          )}
         </div>
       </div>
     </div>
