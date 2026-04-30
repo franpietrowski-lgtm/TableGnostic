@@ -104,6 +104,8 @@ export default function ReferenceEditor({ campaignId, isGm, systemId }) {
   const [err, setErr] = useState("");
   const [draft, setDraft] = useState(null);
   const [busy, setBusy] = useState(false);
+  // V6.4 — Power Bundle template picker.
+  const [showTemplates, setShowTemplates] = useState(false);
 
   const refresh = async () => {
     try {
@@ -162,10 +164,20 @@ export default function ReferenceEditor({ campaignId, isGm, systemId }) {
           </div>
         </div>
         {isGm && !draft && (
-          <button onClick={() => setDraft(blank())} className="btn btn-primary text-xs"
-                  data-testid="reference-add-btn">
-            <Plus className="w-3 h-3"/> Add {String(labelOf(tab)).split(" ")[0]}
-          </button>
+          <div className="flex items-center gap-2 flex-wrap">
+            {(tab === "power_bundle" || tab === "power_pack") && (
+              <button onClick={() => setShowTemplates(true)}
+                      className="btn btn-ghost text-xs"
+                      data-testid="reference-import-templates-btn"
+                      title="Browse the seeded D&D-spell-mimic Power Bundle templates.">
+                <BookOpen className="w-3 h-3"/> Import from templates
+              </button>
+            )}
+            <button onClick={() => setDraft(blank())} className="btn btn-primary text-xs"
+                    data-testid="reference-add-btn">
+              <Plus className="w-3 h-3"/> Add {String(labelOf(tab)).split(" ")[0]}
+            </button>
+          </div>
         )}
       </div>
       <div className="flex flex-wrap gap-1 mb-3 border-b border-gold/10 pb-2"
@@ -190,6 +202,111 @@ export default function ReferenceEditor({ campaignId, isGm, systemId }) {
                onEdit={isGm ? () => setDraft(r) : null}
                onRemove={isGm ? () => remove(r.id) : null}/>
         ))}
+      </div>
+      {showTemplates && (
+        <PowerBundleTemplatePicker
+          onPick={(t) => {
+            // Drop the template as the new draft. Shape it to the
+            // Reference Editor's row schema.
+            setDraft({
+              ...blank(),
+              kind: "power_bundle",
+              name: t.name,
+              summary: t.description,
+              book: "Anime 5E Spell Conversions",
+              fields: {
+                components: (t.components || []).map((c) => ({
+                  kind: c.kind, name: c.name,
+                  cost_per_level: c.cost_per_level || 0,
+                  level: c.level || 1,
+                  points_per_rank: c.points_per_rank || 0,
+                  rank: c.rank || 0,
+                  refund: 0,
+                  note: c.note || "",
+                })),
+                description: t.description,
+                invocation: t.invocation,
+                charges_max: t.charges_max,
+                energy_cost: t.energy_cost,
+                cooldown: t.cooldown,
+                source_spell_name: t.source_spell_name,
+                source_spell_level: t.source_spell_level,
+                cost: t.cost,
+                tags: t.tags,
+              },
+            });
+            setShowTemplates(false);
+          }}
+          onClose={() => setShowTemplates(false)}/>
+      )}
+    </div>
+  );
+}
+
+/**
+ * PowerBundleTemplatePicker — modal grid of seeded D&D-spell-mimic
+ * Power Bundle templates. Click a card to drop it into the draft editor.
+ */
+function PowerBundleTemplatePicker({ onPick, onClose }) {
+  const [templates, setTemplates] = useState([]);
+  const [err, setErr] = useState("");
+  const [filter, setFilter] = useState("");
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data } = await api.get("/reference/power-bundle-templates");
+        setTemplates(data.templates || []);
+      } catch (e) { setErr(formatApiErrorDetail(e.response?.data?.detail) || e.message); }
+    })();
+  }, []);
+
+  const filtered = templates.filter((t) =>
+    !filter || t.name.toLowerCase().includes(filter.toLowerCase())
+    || (t.school || "").toLowerCase().includes(filter.toLowerCase()));
+
+  return (
+    <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4"
+         onClick={onClose} data-testid="bundle-template-picker">
+      <div className="card-mystic p-6 max-w-4xl w-full max-h-[85vh] overflow-y-auto"
+           onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start justify-between flex-wrap gap-2 mb-3">
+          <div>
+            <div className="label-ref">Power Bundle Templates</div>
+            <h3 className="font-display text-xl text-gold mt-1">D&D-spell-mimic starter library</h3>
+            <div className="text-[11px] text-mist italic">
+              Seeded from the <b>Anime 5E Spell Conversions</b> supplement. Click a card
+              to drop it into the editor — tweak cost, invocation, and components before saving.
+            </div>
+          </div>
+          <button onClick={onClose} className="btn btn-ghost text-xs"
+                  data-testid="bundle-template-picker-close">Close</button>
+        </div>
+        <input className="input text-sm mb-3" placeholder="Filter by name or school…"
+               value={filter} onChange={(e) => setFilter(e.target.value)}
+               data-testid="bundle-template-filter"/>
+        {err && <div className="text-ember text-xs mb-2">{err}</div>}
+        <div className="grid gap-2 sm:grid-cols-2">
+          {filtered.map((t) => (
+            <button key={t.name} onClick={() => onPick(t)}
+                    className="text-left card-mystic p-3 hover:-translate-y-0.5 transition"
+                    data-testid={`bundle-template-${t.source_spell_name.replace(/\s+/g, '-').toLowerCase()}`}>
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="font-ui text-parchment text-sm">{t.name}</span>
+                <span className="text-[10px] text-mist uppercase tracking-widest">
+                  L{t.source_spell_level} · {t.school}
+                </span>
+              </div>
+              <div className="text-[11px] text-mist italic mt-1 line-clamp-2">{t.description}</div>
+              <div className="flex items-center gap-2 mt-2 text-[10px] font-ui">
+                <span className="tag border-gold/40 text-gold-bright">{t.cost} CP</span>
+                <span className="tag border-arcane/30 text-arcane">{t.invocation}</span>
+                {t.charges_max > 0 && <span className="tag border-mist/40 text-mist">{t.charges_max} charges</span>}
+                {t.energy_cost > 0 && <span className="tag border-ember/30 text-ember">{t.energy_cost} EP</span>}
+              </div>
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );

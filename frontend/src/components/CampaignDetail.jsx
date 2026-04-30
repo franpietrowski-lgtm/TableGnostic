@@ -1204,6 +1204,7 @@ function PrimerTab({ camp, onRefresh }) {
   const [primerTierSuggest, setPrimerTierSuggest] = useState(camp.primer_tier_suggest || 1);
   const [primerXpCap, setPrimerXpCap] = useState(camp.primer_xp_cap || 0);
   const [houseRules, setHouseRules] = useState(camp.house_rules || "");
+  const [anime5eXpFormula, setAnime5eXpFormula] = useState(camp.anime5e_xp_formula || "flat");
   const [saved, setSaved] = useState(false);
   const [err, setErr] = useState("");
   const parse = (s) => s.split(",").map((x) => x.trim()).filter(Boolean);
@@ -1231,6 +1232,7 @@ function PrimerTab({ camp, onRefresh }) {
         primer_tier_suggest: parseInt(primerTierSuggest) || 1,
         primer_xp_cap: parseInt(primerXpCap) || 0,
         house_rules: houseRules,
+        anime5e_xp_formula: anime5eXpFormula,
       };
       delete payload.is_gm; delete payload.members; delete payload.id;
       delete payload.gm_id; delete payload.gm_name; delete payload.member_ids;
@@ -1477,8 +1479,37 @@ function PrimerTab({ camp, onRefresh }) {
                       onChange={(e) => setHouseRules(e.target.value)}
                       placeholder="One-liners only — keep it scan-able. e.g. 'Crit on 19-20 with weapons; nat 1 on saves auto-fail.'"
                       data-testid="primer-house-rules"/>
-            <div className="text-[10px] text-mist/70 italic mt-1">Surfaced on the player primer card so the table sees deviations from RAW.</div>
+            <div className="text-[10px] text-mist/70 italic mt-1">Surfaced on the player primer card so the table sees deviations from RAW. Also bypasses the app-internal character-approval rules gate so the GM can ratify house-rule-legal PCs.</div>
           </div>
+
+          {/* V6.4 — Anime 5E XP→CP formula selector. Only relevant when
+              players can use the optional BESM point-buy layer. */}
+          {camp.system_id === "anime-5e" && (
+            <div className="mt-4" data-testid="primer-anime5e-xp-formula">
+              <label className="label-ref block mb-1">Anime 5E XP → CP formula</label>
+              <div className="flex items-center gap-2 flex-wrap">
+                <label className="inline-flex items-center gap-1 text-xs cursor-pointer"
+                       title="CP = 50 + 8 × adventure level. Flat linear climb; good for gritty / narrow-power campaigns.">
+                  <input type="radio" name="anime5e-xp-formula" value="flat"
+                         checked={anime5eXpFormula === "flat"}
+                         onChange={() => setAnime5eXpFormula("flat")}
+                         data-testid="anime5e-xp-formula-flat"/>
+                  <span>Flat <span className="text-mist">(50 + 8 × Lvl)</span></span>
+                </label>
+                <label className="inline-flex items-center gap-1 text-xs cursor-pointer"
+                       title="CP = 40 + Lvl × {10 if Lvl ≤ 5 else 12 if Lvl ≤ 10 else 15}. Sharper mid-tier bump for power-fantasy campaigns.">
+                  <input type="radio" name="anime5e-xp-formula" value="curve"
+                         checked={anime5eXpFormula === "curve"}
+                         onChange={() => setAnime5eXpFormula("curve")}
+                         data-testid="anime5e-xp-formula-curve"/>
+                  <span>Curve <span className="text-mist">(40 + Lvl × 10/12/15)</span></span>
+                </label>
+              </div>
+              <div className="text-[10px] text-mist/70 italic mt-1">
+                Sets the default CP budget the BESM-style point-buy layer gets when a player forges a new PC at the campaign's level floor.
+              </div>
+            </div>
+          )}
 
           {/* Tri-Stat point-buy caps — irrelevant outside BESM / Anime 5E.
               D&D uses class+level; Cypher uses tier-driven pools. */}

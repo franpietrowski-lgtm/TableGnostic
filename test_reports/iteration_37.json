@@ -1,0 +1,31 @@
+{
+  "summary": "V6.4 verification — Backend pytest 39/39 (19 V6.4 + 15 V6.2 + 5 V6.1) all green. Frontend smoke: Anime 5E XP→CP formula toggle works on Anime 5E campaign and persists ('curve'); hidden on D&D campaign. Power Bundle templates picker opens with 10 seeded D&D-spell-mimic templates and filter input is present. Reference Editor flow on Anime 5E genesis page works via Reference Library tab.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter37_v64_rules.py",
+    "/app/backend/tests/test_iter35_v62.py",
+    "/app/backend/tests/test_iter34_v61_retest.py",
+    "/app/test_reports/pytest/iter37_v64.xml"
+  ],
+  "action_items": [
+    "Note for review-request authors: review_request mentioned 'bundle-template-fireball' as an example testid, but the actual 10 seeded templates per /app/backend/system_data/power_bundle_templates.py are: dancing-lights, cure-wounds, enlarge/reduce, dispel-magic, greater-invisibility, insect-plague, move-earth, plane-shift, control-weather, meteor-swarm. No 'fireball' template exists. Picker correctly shows 10 templates as required."
+  ],
+  "critical_code_review_comments": [
+    "ReferenceEditor template testid uses raw template name without slug normalisation — 'enlarge/reduce' contains a forward slash inside data-testid which is unusual but accepted by browsers. Consider slugifying (e.g. 'enlarge-reduce') for better selector safety.",
+    "CampaignDetail.jsx is 1656 lines — exceeds 700-line guideline; should be split by tab (Primer / Atelier / etc.) for maintainability.",
+    "Campaign-detail page shows 'UNFOLDING' / 'SUMMONING' splash for ~6 seconds; this is long for a single-page navigation. Consider parallelising the warm-up fetches or showing skeleton UI sooner."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (39/39)", "frontend": "100% on the two surfaces under test"},
+  "test_credentials": "franpietrowski@gmail.com / PieGod08!! (admin/GM) — confirmed working via /api/auth/login",
+  "seed_data_creation": "None. Verified persistence by toggling Anime 5E XP formula on existing campaign 'yithin' (anime5e_xp_formula: None → 'curve') via UI then re-fetching via /api/campaigns/{id}.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All V6.4 acceptance criteria from review_request validated. Pytest report at /app/test_reports/pytest/iter37_v64.xml. The Reference Editor lives under the Atelier 'Reference Library' phase (i.e. /campaigns/{id}/genesis), not under /campaigns/{id} Atelier tab — keep this in mind. The 10 seeded D&D-spell-mimic templates are intentionally cantrip→9th-level (no Fireball); review_request used Fireball as illustrative example only.",
+  "rca of the issue": "N/A — no defects found."
+}

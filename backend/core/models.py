@@ -103,6 +103,13 @@ class CampaignIn(BaseModel):
     primer_xp_cap: int = 0
     # Free-text house rules — surfaced in the primer card.
     house_rules: str = ""
+    # V6.4 — Anime 5E XP→CP conversion formula for the optional BESM
+    # point-buy layer when forging a new character.
+    #   * "flat"  — CP = 50 + 8 × adventure_level (CSR house default)
+    #   * "curve" — CP = 40 + level × (10 if level ≤ 5
+    #                                 else 12 if level ≤ 10
+    #                                 else 15) (sharper mid-tier bump)
+    anime5e_xp_formula: Literal["flat", "curve"] = "flat"
 
 
 class CampaignOut(CampaignIn):
@@ -133,14 +140,41 @@ class CharacterDefect(BaseModel):
     page: Optional[int] = None
     note: Optional[str] = ""
     display_name: Optional[str] = ""
+    # V6.4 — structured value (BESM Extras ch.3 allows defects to be
+    # rated beyond the canonical 1/2-pt scale for Absolute Power /
+    # Silver-Age Sentinels-style campaigns). Default 0 = inherit
+    # points_per_rank × rank; a non-zero `value` overrides and stamps the
+    # explicit CP refund.
+    value: int = 0
+
+
+class ModifierRow(BaseModel):
+    """BESM 4E V4.1 / Extras ch.3 — an Enhancement or Limiter applied to
+    an Attribute. Each row is exactly ONE application; stack by listing
+    multiple rows.
+
+    * `value` is the effective-level delta this modifier imposes.
+      Canonical scale is −12 to +12 (BESM Extras ch.3); Absolute Power
+      supplements can push beyond. We WARN beyond ±12 but do not block.
+    * Sign convention: positive value = the modifier INCREASES effective
+      level (Limiter-like — narrower scope, more potent per CP).
+      Negative = DECREASES (Enhancement-like — broader scope, more CP/lvl).
+      This matches the character validator's CP path.
+    """
+    name: str
+    value: int = 0
+    note: str = ""
 
 
 class CharacterAttribute(BaseModel):
     name: str
     level: int = 1
     cost_per_level: float
-    enhancements: List[str] = []
-    limiters: List[str] = []
+    # V6.4 — Enhancements / Limiters can now be strings (legacy) OR
+    # ModifierRow objects ({name, value, note}). The validator treats
+    # a bare string as {name: s, value: +1 for limiter, -1 for enhancement}.
+    enhancements: List[Any] = []
+    limiters: List[Any] = []
     custom_attribute_id: Optional[str] = None
     page: Optional[int] = None
     note: Optional[str] = ""
@@ -149,6 +183,13 @@ class CharacterAttribute(BaseModel):
     defects: List[CharacterDefect] = []
     # Optional Size template — "" means inherit the character's size.
     size: str = ""
+    # V6.4 — effective-level tracking. `effective_level` is the final
+    # functional level after all enhancement/limiter value deltas are
+    # applied; `cost_modifier` is the per-level cost multiplier after
+    # the same deltas (Flight Lvl 1 (4) → cost_modifier 4). If both are
+    # left at 0/None the validator computes them on the fly.
+    effective_level: Optional[int] = None
+    cost_modifier: Optional[int] = None
 
 
 class CharacterSkillComponent(BaseModel):
@@ -168,12 +209,57 @@ class CharacterSkill(BaseModel):
 
 
 class CharacterPowerPack(BaseModel):
-    """Narrative grouping of a character's powers / materials / training tied
-    to a single in-setting source. Defaults to free; GM may set a cost."""
+    """**Power Pack** (BESM Extras ch.5) — a narrative source-of-power
+    cluster of Attributes/Skills/Defects bought once and ALWAYS ACTIVE.
+    Think "Enchanted Armor Set" or "Cybernetic Implant Rig" — the CP cost
+    is paid once, the effects are baseline-on-forever until the source is
+    removed narratively (armor sundered, implant disabled).
+
+    For SPELL-LIKE / ACTIVATABLE effects (Fireball, Cure Wounds), use
+    `CharacterPowerBundle` instead — those have invocation costs.
+    """
     name: str
     description: str = ""
     references: List[str] = []
     cost: int = 0
+    # V6.4 — explicit kind marker for clarity in the sheet UI.
+    kind: Literal["power_pack"] = "power_pack"
+
+
+class CharacterPowerBundle(BaseModel):
+    """**Power Bundle** (BESM Extras ch.5) — a spell-like / activatable
+    packet of Attribute effects that the character invokes in play.
+
+    Unlike a Power Pack (always-on), a Bundle:
+    * Is dormant until invoked (GM narration or action economy).
+    * Consumes a resource — energy points, a charge, a round of casting,
+      or a to-hit/to-invoke roll — declared via `invocation`.
+    * Can have per-scene / per-day / per-encounter limits via `charges`.
+
+    Typical uses: D&D spells adapted via Anime 5E Spell Conversions (see
+    `/app/memory/references/Anime_5E_Spell_Conversions.pdf`).
+    """
+    name: str
+    description: str = ""
+    references: List[str] = []
+    cost: int = 0
+    kind: Literal["power_bundle"] = "power_bundle"
+    # Invocation — how the bundle is activated in play.
+    # * always-on        — baseline active (use Power Pack instead).
+    # * per-scene        — once per scene / encounter.
+    # * per-charge       — consumes a charge from a finite pool.
+    # * per-day          — once per in-game day (recharges on long rest).
+    # * roll-to-invoke   — requires a skill check or casting roll.
+    # * energy-cost      — spends N Energy Points / Mana per invocation.
+    invocation: Literal["always-on", "per-scene", "per-charge", "per-day",
+                         "roll-to-invoke", "energy-cost"] = "per-scene"
+    charges_max: int = 0   # 0 = no charge cap
+    charges_current: int = 0
+    energy_cost: int = 0   # energy/EP/mana spent per invocation
+    cooldown: str = ""     # free-text ("1 round", "5 minutes", "long rest")
+    # For D&D-spell-mimic bundles seeded from the conversion PDF.
+    source_spell_name: str = ""
+    source_spell_level: Optional[int] = None  # 0 (cantrip) .. 9
 
 
 class CharacterIn(BaseModel):
@@ -189,6 +275,7 @@ class CharacterIn(BaseModel):
     defects: List[CharacterDefect] = []
     skills: List[CharacterSkill] = []
     power_packs: List[CharacterPowerPack] = []
+    power_bundles: List[CharacterPowerBundle] = []
     notes: str = ""
     published: bool = False
     folio: Dict[str, Any] = Field(default_factory=dict)

@@ -84,24 +84,82 @@ def _besm_points_breakdown(ch: Dict[str, Any]) -> Dict[str, Any]:
 
     # ── Attributes (paid at cost_per_level × level). Item-defect
     # refunds are applied per-attribute (BESM 4E V4.1 — Items p.82).
+    # V6.4: Enhancement / Limiter VALUES (BESM Extras ch.3) shift the
+    # effective level AND the per-level cost modifier. Syntax examples:
+    #   Flight (Lvl 1) with no modifiers      → cost_mod = cpl, eff_lvl = 1
+    #   Flight Range 1 (4) [+3 Limiters]      → eff_lvl = 4, cost_mod = cpl × 4/1
+    # Canonical rule: positive values are Limiters (increase eff level,
+    # pay more per CP), negative are Enhancements (decrease eff level,
+    # power is broader). We track BOTH sides as explicit value rows on
+    # the attribute; legacy string tags default to ±1 based on list.
     attr_total = 0
+    warnings: List[str] = []
     for a in (ch.get("attributes") or []):
         lvl = int(a.get("level") or 1)
         cpl = float(a.get("cost_per_level") or 0)
-        gross = cpl * lvl
+
+        # Sum enhancement + limiter value deltas.
+        def _mods_sum(items, legacy_sign):
+            total = 0
+            for m in (items or []):
+                if isinstance(m, dict):
+                    total += int(m.get("value") or 0)
+                else:
+                    total += legacy_sign  # bare string → ±1
+            return total
+
+        enh_delta = _mods_sum(a.get("enhancements"), -1)  # enhancements lower eff
+        lim_delta = _mods_sum(a.get("limiters"), +1)       # limiters raise eff
+        net_delta = enh_delta + lim_delta
+
+        # Warn-only on out-of-range modifier values (Absolute Power allows beyond).
+        for m in (a.get("enhancements") or []) + (a.get("limiters") or []):
+            if isinstance(m, dict):
+                v = int(m.get("value") or 0)
+                if abs(v) > 12:
+                    warnings.append(
+                        f"Attribute '{a.get('name')}' modifier '{m.get('name')}' "
+                        f"has value {v} (outside canonical ±12 range; "
+                        f"Absolute Power supplement only)."
+                    )
+
+        # Effective level can be explicitly set on the attribute; else
+        # compute from level + net delta (floored at 1).
+        eff_lvl_override = a.get("effective_level")
+        eff_lvl = int(eff_lvl_override) if eff_lvl_override else max(1, lvl + net_delta)
+
+        # Cost is paid on the POST-modifier line, not the assigned level:
+        # `cost_modifier` (if set) takes precedence, else we recompute
+        # from cpl scaled by (eff_lvl / lvl) rounded up.
+        cost_mod_override = a.get("cost_modifier")
+        if cost_mod_override:
+            gross = float(cost_mod_override) * lvl
+        else:
+            # Canonical BESM Extras: each +1 value on a Limiter means you
+            # pay cpl × 1 extra per level. Each −1 on an Enhancement means
+            # you pay cpl × 1 less per level (floor at 1 CP total).
+            gross = max(1, cpl * lvl + net_delta * lvl)
+
         refund = sum(
             float(d.get("points_per_rank") or 0) * int(d.get("rank") or 0)
             for d in (a.get("defects") or [])
         )
-        paid = max(0, gross - refund)
+        paid = max(0, int(round(gross)) - int(round(refund)))
         attr_total += paid
         lines.append({
             "kind": "attribute",
             "name": a.get("display_name") or a.get("name"),
-            "level": lvl, "cost_per_level": cpl,
-            "gross": gross, "item_defect_refund": refund,
+            "level": lvl, "effective_level": eff_lvl,
+            "cost_per_level": cpl,
+            "enhancement_delta": enh_delta,
+            "limiter_delta": lim_delta,
+            "gross": int(round(gross)), "item_defect_refund": int(round(refund)),
             "points": paid,
-            "note": f"{cpl}×{lvl}" + (f" − {refund} item-defect refund" if refund else ""),
+            "note": (
+                f"{cpl}×{lvl}"
+                + (f" ±{net_delta} mods" if net_delta else "")
+                + (f" − {int(round(refund))} item-defect refund" if refund else "")
+            ),
         })
 
     # ── Skill Groups (cost_per_level × level).
@@ -129,7 +187,27 @@ def _besm_points_breakdown(ch: Dict[str, Any]) -> Dict[str, Any]:
             lines.append({
                 "kind": "power_pack",
                 "name": p.get("name"),
-                "points": cost, "note": "narrative bundle",
+                "points": cost, "note": "narrative source-of-power bundle (always-on)",
+            })
+
+    # ── Power Bundles (activatable spell-like effects — BESM Extras ch.5).
+    # A bundle's CP cost is paid like any attribute bundle; its invocation
+    # mode (per-scene / per-charge / energy-cost) is NOT a CP modifier —
+    # that's a narrative gate, not a point-spend rebate.
+    bundle_total = 0
+    for b in (ch.get("power_bundles") or []):
+        cost = int(b.get("cost") or 0)
+        if cost:
+            bundle_total += cost
+            lines.append({
+                "kind": "power_bundle",
+                "name": b.get("name"),
+                "points": cost,
+                "note": (
+                    f"activatable · {b.get('invocation', 'per-scene')}"
+                    + (f" · {b.get('charges_max')} charges" if b.get('charges_max') else "")
+                    + (f" · {b.get('energy_cost')} EP/cast" if b.get('energy_cost') else "")
+                ),
             })
 
     # ── Defects (character-level only — refund back to the pool).
@@ -145,15 +223,17 @@ def _besm_points_breakdown(ch: Dict[str, Any]) -> Dict[str, Any]:
             "note": f"{d.get('points_per_rank')}×{d.get('rank')} refund",
         })
 
-    spent = stat_total + attr_total + skill_total + pack_total - defect_refund
+    spent = stat_total + attr_total + skill_total + pack_total + bundle_total - defect_refund
     return {
         "stat_total": stat_total,
         "attribute_total": attr_total,
         "skill_total": skill_total,
         "power_pack_total": pack_total,
+        "power_bundle_total": bundle_total,
         "defect_refund": defect_refund,
         "total_spent": spent,
         "lines": lines,
+        "modifier_warnings": warnings,
     }
 
 
@@ -211,6 +291,8 @@ def _validate_character(ch: Dict[str, Any]) -> Dict[str, Any]:
     if sys_id == "besm-4e":
         breakdown = _besm_points_breakdown(ch)
         spent = breakdown["total_spent"]
+        # Propagate modifier warnings from the breakdown helper.
+        warnings.extend(breakdown.get("modifier_warnings") or [])
         if spent > total_points:
             issues.append(
                 f"Over budget: {spent} CP spent vs {total_points} CP cap "
@@ -448,3 +530,64 @@ async def gm_approve_for_play(cid: str, body: ApprovalIn,
             and (approval.get("app_validated") or house_rules)
         ),
     }
+
+
+# ─── V6.4 — Anime 5E XP→CP conversion ────────────────────────────────
+
+def anime5e_xp_to_cp(level: int, formula: str = "flat") -> int:
+    """Return the CP budget for a new Anime 5E character at the given
+    adventure level, using the campaign's configured formula.
+
+    Formulas (both user-approved for V6.4):
+      * "flat"  — CP = 50 + 8 × level
+      * "curve" — CP = 40 + level × (10 if level ≤ 5
+                                      else 12 if level ≤ 10
+                                      else 15)
+    """
+    lvl = max(0, int(level or 0))
+    if formula == "curve":
+        per = 10 if lvl <= 5 else (12 if lvl <= 10 else 15)
+        return 40 + lvl * per
+    return 50 + lvl * 8
+
+
+@router.get("/campaigns/{cid}/anime5e-xp-curve")
+async def anime5e_xp_curve(cid: str, user: dict = Depends(get_current_user)):
+    """Return the CP-budget curve for the campaign's configured formula.
+    Used by the Anime 5E character builder to set the default point-buy
+    budget on a freshly-forged character at `primer_level_min`."""
+    camp = await db.campaigns.find_one({"id": cid}, {"_id": 0})
+    if not camp:
+        raise HTTPException(404, "Campaign not found")
+    formula = (camp.get("anime5e_xp_formula") or "flat").lower()
+    level = int(camp.get("primer_level_min") or 1)
+    return {
+        "campaign_id": cid,
+        "formula": formula,
+        "primer_level_min": level,
+        "cp_budget_at_level": anime5e_xp_to_cp(level, formula),
+        "curve": [
+            {"level": L, "cp": anime5e_xp_to_cp(L, formula)}
+            for L in range(1, 21)
+        ],
+    }
+
+
+# ─── V6.4 — D&D-spell-mimic Power Bundle starter templates ─────────
+from system_data.power_bundle_templates import POWER_BUNDLE_TEMPLATES
+
+
+@router.get("/reference/power-bundle-templates")
+async def list_power_bundle_templates(
+    max_level: int = 9, user: dict = Depends(get_current_user)
+):
+    """Return the seeded D&D-spell-mimic Power Bundle templates up to
+    `max_level` (0 = cantrips, 9 = 9th-level spells)."""
+    return {
+        "templates": [
+            t for t in POWER_BUNDLE_TEMPLATES
+            if int(t.get("source_spell_level") or 0) <= max_level
+        ],
+        "total": len(POWER_BUNDLE_TEMPLATES),
+    }
+
