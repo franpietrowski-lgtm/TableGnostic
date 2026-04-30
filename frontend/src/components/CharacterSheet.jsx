@@ -849,6 +849,120 @@ function DndSheetView({ state, folio, roll }) {
         );
       })()}
 
+      {/* Anime 5E — Energy Points pool. Only renders if this is an
+          Anime 5E hybrid sheet (folio has anime5e_state). EP is the
+          anime-flavoured resource pool for signature techniques per the
+          Anime 5E v1.02 sheet. `folio.anime5e_state.ep_max` / `ep_current`
+          let the player & GM track it without an extra sheet pass. */}
+      {folio?.anime5e_state && (() => {
+        const an = folio.anime5e_state;
+        const epMax = an.ep_max ?? 10 + (mod("Charisma") * lvl);
+        const epCur = an.ep_current ?? epMax;
+        const pct = epMax > 0 ? Math.max(0, Math.min(100, (epCur / epMax) * 100)) : 0;
+        return (
+          <div className="card-mystic p-5 mt-4" data-testid="anime5e-ep-pool"
+               style={{ borderLeftWidth: 3, borderLeftColor: "#E03A8E" }}>
+            <div className="label-ref">Energy Points (Anime 5E)</div>
+            <div className="flex items-center gap-3 mt-1">
+              <div className="font-display text-2xl" style={{ color: "#E03A8E" }}>
+                {Math.round(epCur)}<span className="text-mist text-sm"> / {Math.round(epMax)}</span>
+              </div>
+              <div className="flex-1 h-2 bg-void/60 rounded-full overflow-hidden">
+                <div className="h-full transition-all" style={{ width: `${pct}%`, backgroundColor: "#E03A8E" }}/>
+              </div>
+            </div>
+            <div className="text-[10px] text-mist/70 italic mt-1">
+              Spent on signature techniques. Default max = 10 + CHA mod × level.
+              GM override via state.anime5e_state.ep_max.
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Combat Gear & Boons — magical items, +1 weapons/armor, class
+          attunements. Free-form but with a TAG column so the table can
+          see instantly what's enchanted. Stored at
+          state.magic_items[] = [{name, slot, tag, notes}]. */}
+      {((state.magic_items?.length || 0) > 0) && (
+        <div className="card-mystic p-5 mt-4" data-testid="dnd-magic-items">
+          <div className="label-ref mb-2">Combat Gear &amp; Boons</div>
+          <table className="w-full text-sm">
+            <thead className="text-[10px] font-ui uppercase tracking-widest text-gold/60">
+              <tr className="border-b border-gold/15">
+                <th className="text-left py-1.5">Item</th>
+                <th className="text-left py-1.5">Slot</th>
+                <th className="text-left py-1.5">Tag</th>
+                <th className="text-left py-1.5 pl-2">Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(state.magic_items || []).map((it, i) => (
+                <tr key={i} className="border-b border-gold/5">
+                  <td className="py-1.5 text-parchment">{it.name}</td>
+                  <td className="py-1.5 text-mist text-xs font-ui uppercase tracking-widest">{it.slot || "—"}</td>
+                  <td className="py-1.5">
+                    {it.tag && (
+                      <span className="tag border-gold/50 text-gold-bright text-[10px]">
+                        {it.tag}
+                      </span>
+                    )}
+                  </td>
+                  <td className="py-1.5 pl-2 text-mist text-xs">{it.notes || ""}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div className="text-[10px] text-mist/60 italic mt-2">
+            GM: populate via state.magic_items = [{`{`}name,slot,tag,notes{`}`}]. Tags: +1 / +2 / +3 / Attuned / Boon / Cursed.
+          </div>
+        </div>
+      )}
+
+      {/* Class features unlocked by level — the "what did I get at level
+          up" reference the table always asks for. Data-driven from
+          state.class_features[] = [{level, name, blurb}]. If empty, we
+          render a gentle prompt so the player knows to populate it. */}
+      <div className="card-mystic p-5 mt-4" data-testid="dnd-class-features">
+        <div className="label-ref mb-2">Class Features · Unlocked at Level {lvl}</div>
+        {(state.class_features?.length || 0) === 0 ? (
+          <div className="text-[11px] text-mist italic">
+            No class features recorded yet. Populate via
+            state.class_features = [&#123;level, name, blurb&#125;] from the SRD class
+            table. The sheet will list everything your current level has
+            unlocked.
+          </div>
+        ) : (
+          <div className="space-y-1.5">
+            {(state.class_features || [])
+              .filter((f) => (f.level || 1) <= lvl)
+              .sort((a, b) => (a.level || 1) - (b.level || 1))
+              .map((f, i) => (
+                <div key={i} className="text-[12px] leading-snug">
+                  <span className="text-gold font-ui text-[10px] uppercase tracking-widest mr-2">
+                    Lv {f.level || 1}
+                  </span>
+                  <span className="text-parchment font-ui">{f.name}</span>
+                  {f.blurb && <span className="text-mist ml-2 italic">· {f.blurb}</span>}
+                </div>
+              ))}
+          </div>
+        )}
+      </div>
+
+      {/* Racial/heritage traits — explicit card so these don't get lost
+          in the chassis summary. If state.racial_traits is empty we
+          hide (chassis card already showed the shorthand list). */}
+      {(state.racial_traits?.length || 0) > 0 && (
+        <div className="card-mystic p-5 mt-4" data-testid="dnd-racial-traits">
+          <div className="label-ref mb-2">Racial / Heritage Traits</div>
+          <div className="flex flex-wrap gap-1.5">
+            {(state.racial_traits || []).map((t, i) => (
+              <span key={i} className="tag">{t}</span>
+            ))}
+          </div>
+        </div>
+      )}
+
       {(state.inventory?.length || 0) > 0 && (
         <SimpleListCard title="Inventory" items={state.inventory} testid="dnd-sheet-inv"/>
       )}
