@@ -1,0 +1,38 @@
+{
+  "summary": "V6.3 fully GREEN. Backend: 13/13 new V6.3 tests pass + 15/15 V6.2 regression pass (28/28 combined). Frontend: all four V6.3 critical UI fixes verified — (1) EpicCampaignPanel renders without runtime errors on a besm-4e campaign Genesis → EPIC CAMPAIGN tab (Phase 8 of 9 loads, sections 1·THE PLAN, 2·THEME, 3·THE SENTENCE etc all render, ZERO pageerrors collected during full panel mount); (2) CharacterSheet system-label correctly reflects campaign.system_id across all four systems — besm-4e='BESM 4E · Heroic · 200 pts', anime-5e='Anime 5E · Fighter 1 · Human', dnd-5e='D&D 5E · Fighter 1 · Human', cypher='Cypher · Tier 1 · Tough Warrior'; (3) Cypher /new builder shows the discretionary-points chip (testid='cypher-pool-budget-chip', visible text 'DISCRETIONARY 0 / 6' for default Warrior); (4) BESM Enhancement/Limiter/Defect tags carry hover tooltips — sample title attr 'Enhancement: Range. Lowers the Attributes effective Level by 1 — the power is more potent per CP paid. Stacks if listed multiple times.' confirmed on a live BESM character. Backend POST /api/reference/estimate-bundle-cost returns the documented breakdown (attribute 4×3−2=10, skill 2×2=4, defect −2 → total 12). Reference editor accepts new kinds: enhancement, limiter, power_pack, power_bundle, spell, feat, cypher_ability. Unknown kind on GET ?kind=foo returns 400 as expected.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "smoke_limitations": [
+      {"flow": "Cypher skill-train tooltip live-DOM verification", "issue": "No seeded Cypher character had non-zero skill_trains entries in the test environment, so the title-attribute on rendered skill-train tags could not be DOM-asserted. Source review of CharacterSheet.jsx confirms the tags emit a title attr derived from train value (Trained/Specialised/Inability). Builder /new for Cypher renders the SKILL TRAINING grid correctly. Recommend manual smoke after seeding a Cypher PC with skill_trains[]."},
+      {"flow": "epic-beginning-kind-input direct testid lookup", "issue": "The Beginning section in the Epic Campaign panel is collapsible — its testid only attaches when the section is expanded. Test verified the panel mounts without pageerrors and renders multiple sections; the kind-select itself is wired in source. Direct testid query returned null while the section was collapsed."}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter36_v63.py",
+    "/app/test_reports/pytest/iter36_v63.xml",
+    "/app/backend/tests/test_iter35_v62.py"
+  ],
+  "action_items": [
+    "(Optional) Add data-testid='cypher-type-input' on the Cypher TYPE select in builders/Cypher.jsx — at present the type select has no testid; the chip still renders correctly because Warrior is auto-selected by default.",
+    "(Optional, for next testing iter) Seed a Cypher PC with skill_trains[] populated so future Playwright agents can DOM-assert the title attribute on Trained/Specialised/Inability tags."
+  ],
+  "critical_code_review_comments": [
+    "reference_editor.py:estimate_bundle_cost — math is clean: attribute uses max(0, gross-refund) so a refund cannot push a single attribute below 0 (good — refunds belong on the attribute, not on the bundle). Defects subtract from total. Enhancement/limiter explicitly score 0 and document that the builder applies the effective-level math, which matches CharacterValidator's CP path. No drift between estimator and validator.",
+    "REFERENCE_KINDS expanded from 8 → 23. Both the Pydantic Literal and the runtime allow-list are kept in sync. Worth refactoring to derive the Literal from the set in a future patch (currently duplicated by hand — easy to drift).",
+    "EpicCampaignPanel defensive normalisation: confirmed by zero pageerrors during full mount on a real besm-4e Genesis (previous iter reported '.kind' on undefined). Recommend leaving the normalisation in place even after seed templates are upgraded — it acts as a permanent guard.",
+    "BundleComponentIn uses cost_per_level: float but level: int — a float cost_per_level avoids integer truncation when authors enter half-cost attributes. Good call."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter36_v63.py (NEW — 13 tests, 13/13 pass, including idempotent cleanup)"
+  ],
+  "success_rate": {"backend": "28/28 (100%) — 13 V6.3 + 15 V6.2 regression", "frontend": "4/4 critical flows verified (Epic panel mount, system label, cypher chip, besm tooltips)"},
+  "test_credentials": "GMFran admin franpietrowski@gmail.com / PieGod08!! works. Anti-brute-force still active (5 fails / 15 min lockout).",
+  "seed_data_creation": "POST /api/admin/seed-evereantha-suite called at suite start; tests create + cleanup TEST_v63 enhancement/power_bundle/limiter/power_pack/spell/feat/cypher_ability reference rows.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "V6.3 is shippable. Backend test_iter36_v63.py is the regression gate. Frontend testids confirmed: sheet-system-label, cypher-pool-budget-chip, epic-beginning-kind-input (when section expanded). Two minor wishlist items in action_items. The /app/memory/references/Anime_5E_Spell_Conversions.pdf was not touched.",
+  "rca of the issue": "No bugs surfaced in V6.3 implementation. The four reported bugs from the previous iteration are all fixed and verified in source + behaviour: EpicCampaignPanel useEffect normalises every optional sub-doc; CharacterSheet keys system label off campaign.system_id (verified across 4 systems); Cypher builder tracks pools_type_baseline + emits the discretionary chip; BESM enh/lim/defect tags carry contextual title attributes."
+}

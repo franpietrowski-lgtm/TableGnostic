@@ -16,6 +16,22 @@ const KIND_LABELS = {
   weapon: "Weapons", armor: "Armor", item: "Items",
   companion: "Companions", custom: "Custom Rules",
   attribute: "Attributes", skill: "Skills", defect: "Defects",
+  // V6.3 additions — expanded cross-system authorable kinds
+  enhancement: "Enhancements",
+  limiter: "Limiters",
+  power_pack: "Power Packs",
+  power_bundle: "Power Bundles",
+  spell: "Spells",
+  feat: "Feats",
+  background: "Backgrounds",
+  race_trait: "Race Traits",
+  class_feature: "Class Features",
+  cypher_ability: "Type/Focus Abilities",
+  cypher_item: "Artifacts",
+  artifact: "Artifacts",
+  descriptor: "Descriptors",
+  focus: "Foci",
+  type: "Types",
 };
 // System-aware label & ordering overrides. The backend kind enum stays the
 // same (8 universal kinds), but we re-label them per active system so the
@@ -58,10 +74,29 @@ const SYSTEM_KIND_LABELS = {
   },
 };
 const KIND_KEYS = Object.keys(KIND_LABELS);
+// V6.3 — system-aware tab ordering. Only expose kinds that make mechanical
+// sense for the active system; avoids a BESM GM having to scroll past 15
+// Cypher-only kinds to find Attributes.
+const SYSTEM_KIND_ORDER = {
+  "besm-4e": ["attribute", "skill", "defect", "enhancement", "limiter",
+              "power_pack", "power_bundle", "weapon", "armor", "item",
+              "companion", "custom"],
+  "anime-5e": ["class_feature", "race_trait", "background", "spell", "feat",
+               "skill", "attribute", "defect", "enhancement", "limiter",
+               "power_pack", "power_bundle", "weapon", "armor", "item",
+               "companion", "custom"],
+  "dnd-5e": ["class_feature", "race_trait", "background", "spell", "feat",
+             "skill", "weapon", "armor", "item", "companion", "custom"],
+  "cypher": ["type", "descriptor", "focus", "cypher_ability", "cypher_item",
+             "artifact", "skill", "weapon", "armor", "item", "custom"],
+};
 // Kinds that flow back into the Character Builder's pickers — they expose
 // extra structured inputs (cost_per_level / points_per_rank / category) so
 // players can select them when forging a sheet.
-const PLAYABLE_KINDS = new Set(["attribute", "skill", "defect"]);
+const PLAYABLE_KINDS = new Set(["attribute", "skill", "defect",
+  "enhancement", "limiter", "power_pack", "power_bundle",
+  "spell", "feat", "background", "class_feature",
+  "cypher_ability", "descriptor", "focus", "type"]);
 
 export default function ReferenceEditor({ campaignId, isGm, systemId }) {
   const [tab, setTab] = useState("weapon");
@@ -135,7 +170,7 @@ export default function ReferenceEditor({ campaignId, isGm, systemId }) {
       </div>
       <div className="flex flex-wrap gap-1 mb-3 border-b border-gold/10 pb-2"
            data-testid="reference-tabs">
-        {KIND_KEYS.map((k) => (
+        {(SYSTEM_KIND_ORDER[systemId] || KIND_KEYS).map((k) => (
           <button key={k} onClick={() => setTab(k)}
                   className={`text-[10px] px-2 py-1 rounded-sm font-ui uppercase tracking-widest transition-colors ${tab === k ? "bg-gold/15 text-gold-bright border border-gold/30" : "text-mist hover:bg-gold/5"}`}
                   data-testid={`reference-tab-${k}`}>
@@ -192,9 +227,12 @@ function Row({ row, onChange, onSave, onCancel, busy, systemId, editing, onEdit,
         {isBesm && PLAYABLE_KINDS.has(row.kind) && (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 border border-gold/15 rounded-sm p-2 bg-gold/5"
                data-testid="reference-playable-fields">
-            {row.kind !== "defect" && (
+            {(row.kind === "attribute" || row.kind === "skill"
+              || row.kind === "enhancement" || row.kind === "limiter") && (
               <input className="input" type="number" step="0.5" min={0}
-                     placeholder="Cost / Level (e.g. 4)"
+                     placeholder={row.kind === "enhancement" || row.kind === "limiter"
+                       ? "Eff-level modifier (typically 1)"
+                       : "Cost / Level (e.g. 4)"}
                      value={(row.fields?.cost_per_level ?? "")}
                      onChange={(e) => onChange({ ...row,
                        fields: { ...(row.fields || {}),
@@ -226,6 +264,10 @@ function Row({ row, onChange, onSave, onCancel, busy, systemId, editing, onEdit,
                      fields: { ...(row.fields || {}), description: e.target.value } })}
                    data-testid="reference-input-description"/>
           </div>
+        )}
+        {/* V6.3 — Power Pack / Power Bundle composer with live CP estimate. */}
+        {(row.kind === "power_pack" || row.kind === "power_bundle") && (
+          <PowerBundleEditor row={row} onChange={onChange}/>
         )}
         {!isBesm && PLAYABLE_KINDS.has(row.kind) && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 border border-gold/15 rounded-sm p-2 bg-gold/5"
@@ -466,6 +508,123 @@ function Section({ title, children, testid }) {
     <div className="mb-4" data-testid={testid}>
       <div className="text-[11px] font-ui uppercase tracking-widest text-gold-bright mb-1">{title}</div>
       {children}
+    </div>
+  );
+}
+
+
+/**
+ * PowerBundleEditor — composer for BESM Power Packs & Power Bundles.
+ *
+ * A Power Bundle is a named, reusable cluster of components (Attributes,
+ * Skills, Defects, Enhancements, Limiters) that a GM authors in the
+ * Atelier and a player can drop into a character sheet as a single
+ * "spell-like" unit. The composer calls `/api/reference/estimate-bundle-cost`
+ * on every edit so the GM sees the net CP cost the bundle imposes — plus
+ * a hint at how many CP this slot would "cost" vs a D&D spell-level
+ * equivalent (guidance only, not enforcement).
+ */
+function PowerBundleEditor({ row, onChange }) {
+  const comps = row.fields?.components || [];
+  const [estimate, setEstimate] = React.useState(null);
+  const [err, setErr] = React.useState("");
+
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await api.post("/reference/estimate-bundle-cost",
+          { components: comps });
+        if (!cancelled) setEstimate(data);
+      } catch (e) {
+        if (!cancelled) setErr(formatApiErrorDetail(e.response?.data?.detail) || e.message);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [JSON.stringify(comps)]);
+
+  const setComps = (next) => onChange({ ...row,
+    fields: { ...(row.fields || {}), components: next } });
+  const addComp = () => setComps([...comps,
+    { kind: "attribute", name: "", cost_per_level: 0, level: 1,
+      points_per_rank: 0, rank: 0, refund: 0, note: "" }]);
+  const patch = (i, p) => setComps(comps.map((c, j) => j === i ? { ...c, ...p } : c));
+  const drop = (i) => setComps(comps.filter((_, j) => j !== i));
+
+  return (
+    <div className="border border-gold/20 rounded-sm p-3 bg-gold/5 space-y-2"
+         data-testid="reference-bundle-editor">
+      <div className="flex items-baseline justify-between flex-wrap gap-2">
+        <div className="label-ref">Bundle Components</div>
+        <div className="text-[10px] text-mist italic">
+          Each component contributes to the bundle's net CP cost — use this to keep
+          "Fireball-like" bundles balanced against equivalent D&D spell slots.
+        </div>
+      </div>
+      {comps.length === 0 && (
+        <div className="text-[11px] text-mist italic">No components yet. Click + to add one.</div>
+      )}
+      <div className="space-y-2">
+        {comps.map((c, i) => (
+          <div key={i} className="grid grid-cols-1 sm:grid-cols-[120px_1fr_90px_90px_90px_24px] gap-2 items-center"
+               data-testid={`reference-bundle-comp-${i}`}>
+            <select className="select select-sm" value={c.kind}
+                    onChange={(e) => patch(i, { kind: e.target.value })}>
+              <option value="attribute">Attribute</option>
+              <option value="skill">Skill Group</option>
+              <option value="defect">Defect</option>
+              <option value="enhancement">Enhancement</option>
+              <option value="limiter">Limiter</option>
+            </select>
+            <input className="input" placeholder="Name (e.g. Weapon)"
+                   value={c.name} onChange={(e) => patch(i, { name: e.target.value })}/>
+            {c.kind !== "defect" ? (
+              <input className="input" type="number" step="0.5" min={0}
+                     placeholder="Cost/Lvl"
+                     value={c.cost_per_level}
+                     onChange={(e) => patch(i, { cost_per_level: Number(e.target.value) || 0 })}/>
+            ) : (
+              <input className="input" type="number" min={0}
+                     placeholder="Pts/Rank"
+                     value={c.points_per_rank}
+                     onChange={(e) => patch(i, { points_per_rank: Number(e.target.value) || 0 })}/>
+            )}
+            <input className="input" type="number" min={0}
+                   placeholder={c.kind === "defect" ? "Rank" : "Level"}
+                   value={c.kind === "defect" ? c.rank : c.level}
+                   onChange={(e) => patch(i, c.kind === "defect"
+                     ? { rank: Number(e.target.value) || 0 }
+                     : { level: Number(e.target.value) || 0 })}/>
+            <input className="input" type="number" min={0}
+                   placeholder="Refund"
+                   title="Item-defect refund for this component (attribute-only)."
+                   value={c.refund || 0}
+                   disabled={c.kind !== "attribute"}
+                   onChange={(e) => patch(i, { refund: Number(e.target.value) || 0 })}/>
+            <button onClick={() => drop(i)} className="text-ember/70 hover:text-ember p-1"
+                    aria-label="Remove component">
+              <X className="w-3 h-3"/>
+            </button>
+          </div>
+        ))}
+      </div>
+      <div className="flex items-center justify-between flex-wrap gap-2 pt-2 border-t border-gold/15">
+        <button onClick={addComp} className="btn btn-ghost text-xs"
+                data-testid="reference-bundle-add-comp">
+          <Plus className="w-3 h-3"/> Add component
+        </button>
+        {estimate && (
+          <div className="text-[11px] font-ui"
+               data-testid="reference-bundle-estimate">
+            <span className="text-mist">Net CP cost: </span>
+            <span className={estimate.total_cost < 0 ? "text-arcane" : "text-gold-bright"}>
+              {estimate.total_cost}
+            </span>
+            <span className="text-mist"> · {estimate.component_count} component{estimate.component_count === 1 ? "" : "s"}</span>
+          </div>
+        )}
+      </div>
+      {err && <div className="text-ember text-[11px]">{err}</div>}
     </div>
   );
 }

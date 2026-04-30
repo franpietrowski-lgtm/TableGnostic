@@ -50,7 +50,61 @@ export default function EpicCampaignPanel({ campId, characters: charactersProp, 
     (async () => {
       try {
         const { data } = await api.get(`/epic/${campId}`);
-        setState(data);
+        // V6.3 — defensive shape normalisation. Older epic docs seeded before
+        // some fields existed can arrive without `beginning` / `seeds[*]` /
+        // `sentence` etc, and the panel crashes on the first undefined read.
+        // Fill every optional sub-shape with an empty default so every
+        // section can render without runtime errors.
+        const safe = {
+          plan_summary: "", constraints: "", theme: "", theme_evolution: "",
+          expanding_goal: [], villains: [], milestones: [], adventures: [],
+          seeds: [], tie_in_node_ids: [], tie_in_character_ids: [],
+          ...data,
+          sentence: {
+            someone: "", wants: "", timeframe: "", method: "", method_detail: "",
+            refined: "", ...(data?.sentence || {}),
+          },
+          nemesis: {
+            name: "", role: "nemesis", occupation: "", attitude: "",
+            goal: "", stake: "", desire: "other", psychology: "other",
+            weakness: "", weakness_kind: "none", notes: "", linked_node_id: null,
+            ...(data?.nemesis || {}),
+          },
+          beginning: {
+            kind: "", notes: "", ...(data?.beginning || {}),
+          },
+          ending_coolness: {
+            location: "", abilities: "", npcs: "", situation: "", pressure: "",
+            ...(data?.ending_coolness || {}),
+          },
+          chaos_calm: data?.chaos_calm || "",
+          contingency: data?.contingency || "",
+          catastrophic: data?.catastrophic || "",
+          climax_beats: data?.climax_beats || "",
+        };
+        // Ensure every seed / milestone / villain / adventure row has the
+        // minimum shape the editor expects.
+        safe.seeds = (safe.seeds || []).map((s) => ({
+          kind: "name", label: "", payoff: "", seeded_in: "", paid_off: false,
+          ...(s || {}),
+        }));
+        safe.villains = (safe.villains || []).map((v) => ({
+          name: "", role: "villain", occupation: "", attitude: "",
+          goal: "", stake: "", desire: "other", psychology: "other",
+          weakness: "", weakness_kind: "none", notes: "", linked_node_id: null,
+          ...(v || {}),
+        }));
+        safe.milestones = (safe.milestones || []).map((m) => ({
+          name: "", plan: "", obstacles: [], resources_have: [],
+          resources_needed: [], poe_prob: "", poe_opt: "", poe_exp: "",
+          ...(m || {}),
+        }));
+        safe.adventures = (safe.adventures || []).map((a) => ({
+          title: "", mode: "advancing-campaign", type: "nemesis-on-track",
+          linked_pc_ids: [], notes: "",
+          ...(a || {}),
+        }));
+        setState(safe);
       } catch (e) {
         setErr(formatApiErrorDetail(e.response?.data?.detail) || e.message);
       }

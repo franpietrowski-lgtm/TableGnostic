@@ -143,11 +143,28 @@ export default function CharacterSheet() {
       <div className="mt-3 flex items-start justify-between flex-wrap gap-4">
         <div>
           <div className="label-ref mb-1" data-testid="sheet-system-label">
-            {dndState
-              ? `${ch.folio?.anime5e_state ? "Anime 5E hybrid" : "D&D 5E"} · ${dndState.class || "Class"} ${dndState.level || 1} · ${dndState.race || "Race"}`
-              : cypherState
-              ? `Cypher · Tier ${cypherState.tier || 1} · ${cypherState.descriptor || "?"} ${cypherState.type || "?"}`
-              : `BESM 4E · ${ch.power_level} · ${ch.total_points} pts`}
+            {(() => {
+              // V6.3 — system label is driven by the CAMPAIGN's system_id,
+              // not by which folio state-bag happens to be populated. An
+              // Anime 5E campaign is Anime 5E regardless of whether the
+              // player only filled in the d20 chassis; the Anime 5E rules
+              // still govern encounter design, CR, and the optional
+              // BESM-style point-buy layer.
+              const sysId = campaign?.system_id;
+              if (sysId === "anime-5e") {
+                const d = dndState || {};
+                return `Anime 5E · ${d.class || "Class"} ${d.level || 1} · ${d.race || "Race"}`;
+              }
+              if (sysId === "dnd-5e" || (!sysId && dndState && !ch.folio?.anime5e_state)) {
+                const d = dndState || {};
+                return `D&D 5E · ${d.class || "Class"} ${d.level || 1} · ${d.race || "Race"}`;
+              }
+              if (sysId === "cypher" || (!sysId && cypherState)) {
+                const c = cypherState || {};
+                return `Cypher · Tier ${c.tier || 1} · ${c.descriptor || "?"} ${c.type || "?"}`;
+              }
+              return `BESM 4E · ${ch.power_level} · ${ch.total_points} pts`;
+            })()}
           </div>
           <h1 className="font-display text-4xl tracking-wide text-parchment flex items-center gap-3">
             {ch.token_color && (
@@ -304,8 +321,12 @@ export default function CharacterSheet() {
                           {" "}· {limCount} limiter{limCount === 1 ? "" : "s"} ↑eff
                         </div>
                         <div className="flex flex-wrap gap-1">
-                          {a.enhancements.map((e, j) => <span key={`e${j}`} className="tag border-gold/40 text-gold-bright" title="Enhancement — lowers effective Level by 1">+{e}</span>)}
-                          {a.limiters.map((l, j) => <span key={`l${j}`} className="tag border-ember/40 text-ember" title="Limiter — raises effective Level by 1">−{l}</span>)}
+                          {a.enhancements.map((e, j) => <span key={`e${j}`}
+                            className="tag border-gold/40 text-gold-bright cursor-help"
+                            title={`Enhancement: ${e}. Lowers the Attribute's effective Level by 1 — the power is more potent per CP paid. Stacks if listed multiple times.`}>+{e}</span>)}
+                          {a.limiters.map((l, j) => <span key={`l${j}`}
+                            className="tag border-ember/40 text-ember cursor-help"
+                            title={`Limiter: ${l}. Raises the Attribute's effective Level by 1 — the power is narrower, so each CP buys more functional range. Stacks if listed multiple times.`}>−{l}</span>)}
                         </div>
                       </div>
                     )}
@@ -1185,9 +1206,31 @@ function CypherSheetView({ state, roll }) {
 
       {(state.skill_trains?.length || 0) > 0 && (
         <div className="card-mystic p-6 mt-4">
-          <div className="label-ref">Skills Trained</div>
+          <div className="label-ref flex items-center gap-2">
+            Skills Trained
+            <span className="text-[10px] text-mist/70 italic normal-case tracking-normal"
+                  title="Trained skills: difficulty of tasks using this skill is lowered by 1 step (Specialised lowers by 2). Inability: raised by 1 step.">
+              (hover any tag)
+            </span>
+          </div>
           <div className="flex flex-wrap gap-1 mt-2">
-            {state.skill_trains.map((s) => <span key={s} className="tag border-gold/40 text-gold-bright">{s}</span>)}
+            {state.skill_trains.map((s) => {
+              const [skill, kind] = (typeof s === "string")
+                ? [s, /^specialised?:/i.test(s) ? "specialised"
+                     : /^inability:/i.test(s) ? "inability" : "trained"]
+                : [s.name, s.kind || "trained"];
+              const tooltip = kind === "specialised"
+                ? `Specialised in ${skill}: difficulty lowered by 2 steps — normally requires two training slots.`
+                : kind === "inability"
+                ? `Inability with ${skill}: difficulty raised by 1 step. Often taken for roleplay or to free a training slot.`
+                : `Trained in ${skill}: difficulty lowered by 1 step on applicable tasks.`;
+              const cls = kind === "specialised" ? "border-arcane/50 text-arcane"
+                        : kind === "inability" ? "border-ember/40 text-ember"
+                        : "border-gold/40 text-gold-bright";
+              return <span key={typeof s === "string" ? s : s.name}
+                           className={`tag cursor-help ${cls}`}
+                           title={tooltip}>{skill}</span>;
+            })}
           </div>
         </div>
       )}

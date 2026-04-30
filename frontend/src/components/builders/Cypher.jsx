@@ -101,8 +101,41 @@ export function CypherBuilder({ campaign, ref_, charId }) {
       edge: t.starting_edge || { Might: 0, Speed: 0, Intellect: 0 },
       starting_cypher_limit: t.starting_cypher_limit || 2,
       cypher_limit: t.starting_cypher_limit || 2,
+      // Track the baseline + offsets so the discretionary-points validator
+      // can tell what was "given by Type" vs what the player added on top.
+      pools_type_baseline: {
+        Might: baseline + (off.Might || 0),
+        Speed: baseline + (off.Speed || 0),
+        Intellect: baseline + (off.Intellect || 0),
+      },
     });
   };
+
+  // V6.3 — tier-bump recompute. When the tier changes, some derived values
+  // should move in lock-step: recovery die defaults to 1d6+tier and the
+  // max Effort is (by house convention) tier capped at Edge+1 in play.
+  // We leave the explicit Effort value editable but refresh the recovery
+  // die unless the player has customised it.
+  const setTier = (newTier) => {
+    const next = Math.max(1, Math.min(6, +newTier || 1));
+    const defaultRecovery = `1d6+${c.tier || 1}`;
+    const nextRecovery = (c.recovery_die === defaultRecovery
+      || !c.recovery_die) ? `1d6+${next}` : c.recovery_die;
+    setC({ tier: next, recovery_die: nextRecovery });
+  };
+
+  // Pool-discretionary points tracker. The Cypher character-creation rule
+  // (CSR p.16) gives 6 points to distribute across the three stat pools
+  // at any ratio (max +X per pool is a soft cap — we warn at > +6 which
+  // would exceed the canonical Type+rotation budget). The `pools_type_baseline`
+  // captures what the Type + offsets granted; anything above that is a
+  // discretionary spend we can audit.
+  const POOL_BUDGET = ref_?.pool_discretionary_budget ?? 6;
+  const baseline = c.pools_type_baseline || {
+    Might: c.pools?.Might, Speed: c.pools?.Speed, Intellect: c.pools?.Intellect };
+  const spent = ["Might", "Speed", "Intellect"].reduce((sum, k) =>
+    sum + Math.max(0, (c.pools?.[k] || 0) - (baseline?.[k] || 0)), 0);
+  const over = spent > POOL_BUDGET;
 
   const save = async () => {
     setErr("");
@@ -209,14 +242,26 @@ export function CypherBuilder({ campaign, ref_, charId }) {
         <div>
           <label className="label-ref">Tier (1-6)</label>
           <input className="input" type="number" min={1} max={6} value={c.tier}
-                 onChange={(e) => setC({ tier: Math.max(1, Math.min(6, +e.target.value)) })}
+                 onChange={(e) => setTier(e.target.value)}
+                 title="Your Cypher tier — every increment advances a derived stat track (an ability, a skill, or a pool). Recovery die defaults to 1d6+tier."
                  data-testid="cypher-tier"/>
         </div>
       </div>
 
       {/* Pools & Edge */}
       <div className="card-mystic p-5 mt-4">
-        <h3 className="h-arcane text-sm mb-3">Stat Pools &amp; Edge</h3>
+        <div className="flex items-baseline justify-between flex-wrap gap-2 mb-3">
+          <h3 className="h-arcane text-sm">Stat Pools &amp; Edge</h3>
+          <div className="text-[10px] font-ui uppercase tracking-widest"
+               data-testid="cypher-pool-budget-chip"
+               title={`Cypher character-creation rule: ${POOL_BUDGET} discretionary points to spend across the three Pools above the Type baseline. Exceeding is a flag for the GM.`}>
+            <span className="text-mist">Discretionary </span>
+            <span className={over ? "text-ember" : "text-gold-bright"}>
+              {spent} / {POOL_BUDGET}
+            </span>
+            {over && <span className="ml-1 text-ember">over</span>}
+          </div>
+        </div>
         <div className="grid sm:grid-cols-3 gap-3">
           {["Might", "Speed", "Intellect"].map((k) => (
             <div key={k} className="border border-gold/15 rounded-sm p-3">

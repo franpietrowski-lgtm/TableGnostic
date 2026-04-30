@@ -31,8 +31,18 @@ KNOWN_BOOK_RANGES: Dict[str, Dict[str, Any]] = {
     "_default": {"min": 1, "max": 999, "title": "Custom"},
 }
 
-REFERENCE_KINDS = {"weapon", "armor", "item", "companion", "custom",
-                   "attribute", "skill", "defect"}
+REFERENCE_KINDS = {
+    # Shared / legacy
+    "weapon", "armor", "item", "companion", "custom",
+    # BESM core
+    "attribute", "skill", "defect",
+    # V6.3 additions (BESM)
+    "enhancement", "limiter", "power_pack", "power_bundle",
+    # D&D 5E / Anime 5E content
+    "spell", "feat", "background", "race_trait", "class_feature",
+    # Cypher
+    "cypher_ability", "cypher_item", "artifact", "descriptor", "focus", "type",
+}
 
 router = APIRouter(prefix="/api", tags=["reference-editor"])
 
@@ -40,8 +50,26 @@ router = APIRouter(prefix="/api", tags=["reference-editor"])
 # ─────── Pydantic ───────
 
 class ReferenceItemIn(BaseModel):
-    kind: Literal["weapon", "armor", "item", "companion", "custom",
-                  "attribute", "skill", "defect"]
+    # V6.3 — expanded kinds for cross-system custom content authoring.
+    # Atelier GMs can now seed enhancements, limiters, power packs, and
+    # full power bundles (a narrative bundle with a CP estimate and a
+    # list of component-attribute pointers) for BESM — and skills /
+    # spells / feats / backgrounds for D&D 5E and Anime 5E, and
+    # abilities / cyphers / artifacts for Cypher. `kind=custom` remains
+    # as the catch-all for system-specific one-offs.
+    kind: Literal[
+        # Shared / legacy
+        "weapon", "armor", "item", "companion", "custom",
+        # BESM core
+        "attribute", "skill", "defect",
+        # BESM V6.3 additions
+        "enhancement", "limiter", "power_pack", "power_bundle",
+        # D&D 5E / Anime 5E
+        "spell", "feat", "background", "race_trait", "class_feature",
+        # Cypher
+        "cypher_ability", "cypher_item", "artifact", "descriptor", "focus",
+        "type",
+    ]
     name: str = Field(min_length=1, max_length=120)
     summary: str = Field(default="", max_length=500)
     page: Optional[int] = None  # cited rulebook page
@@ -97,6 +125,88 @@ def _is_gm(camp: dict, user: dict) -> bool:
 async def validate_page(body: PageValidateIn,
                           user: dict = Depends(get_current_user)):
     return _validate_page(body.page, body.book)
+
+
+class BundleComponentIn(BaseModel):
+    """One component of a BESM Power Bundle / Power Pack.
+
+    `kind` is one of:
+      - "attribute"    : a BESM Attribute reference. Cost = cost_per_level × level
+                         minus item-defect refunds embedded in the component.
+      - "skill"        : a BESM Skill Group. Cost = cost_per_level × level.
+      - "defect"       : a BESM Defect. Cost = −(points_per_rank × rank).
+      - "enhancement"  : Enhancement rows. We DON'T add CP for these directly
+                         at the component level — Enhancements lower effective
+                         Level; the character builder handles the math.
+      - "limiter"      : Symmetric to enhancement (raises effective Level).
+    """
+    kind: Literal["attribute", "skill", "defect", "enhancement", "limiter"]
+    name: str
+    cost_per_level: float = 0
+    level: int = 1
+    points_per_rank: int = 0
+    rank: int = 0
+    refund: int = 0
+    note: str = ""
+
+
+class BundleEstimateIn(BaseModel):
+    """Estimate the CP cost of a composed Power Bundle.
+
+    Helps a GM authoring a custom Power Bundle in the Atelier see
+    exactly what the bundle will cost a player before they save it as
+    a reusable reference. Mirrors the character-validator CP math so
+    there's no drift between the two surfaces.
+    """
+    components: List[BundleComponentIn] = Field(default_factory=list)
+
+
+@router.post("/reference/estimate-bundle-cost")
+async def estimate_bundle_cost(body: BundleEstimateIn,
+                                 user: dict = Depends(get_current_user)):
+    """Run the BESM CP math across a bundle's components and return a
+    structured breakdown (per-line cost + net total)."""
+    lines: List[Dict[str, Any]] = []
+    total = 0
+    for c in body.components:
+        if c.kind == "attribute":
+            gross = int(round(c.cost_per_level * c.level))
+            net = max(0, gross - (c.refund or 0))
+            lines.append({
+                "kind": c.kind, "name": c.name, "level": c.level,
+                "cost_per_level": c.cost_per_level, "gross": gross,
+                "refund": c.refund or 0, "points": net,
+                "note": c.note or f"{c.cost_per_level}×{c.level}"
+                        + (f" − {c.refund}" if c.refund else ""),
+            })
+            total += net
+        elif c.kind == "skill":
+            cost = int(round(c.cost_per_level * c.level))
+            lines.append({
+                "kind": c.kind, "name": c.name, "level": c.level,
+                "cost_per_level": c.cost_per_level, "points": cost,
+                "note": f"{c.cost_per_level}×{c.level}",
+            })
+            total += cost
+        elif c.kind == "defect":
+            refund = (c.points_per_rank or 0) * (c.rank or 0)
+            lines.append({
+                "kind": c.kind, "name": c.name, "rank": c.rank,
+                "points_per_rank": c.points_per_rank,
+                "points": -refund,
+                "note": f"{c.points_per_rank}×{c.rank} refund",
+            })
+            total -= refund
+        elif c.kind in ("enhancement", "limiter"):
+            lines.append({
+                "kind": c.kind, "name": c.name, "points": 0,
+                "note": "Effective-Level modifier — applied by the builder, not by bundle cost.",
+            })
+    return {
+        "total_cost": total,
+        "component_count": len(body.components),
+        "lines": lines,
+    }
 
 
 @router.get("/campaigns/{cid}/reference")
