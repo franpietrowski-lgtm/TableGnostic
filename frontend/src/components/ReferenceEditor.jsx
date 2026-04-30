@@ -249,7 +249,36 @@ export default function ReferenceEditor({ campaignId, isGm, systemId }) {
           onClose={() => setShowTemplates(false)}/>
       )}
       {showAtlas && (
-        <SpellConversionAtlas onClose={() => setShowAtlas(false)}/>
+        <SpellConversionAtlas
+          onClose={() => setShowAtlas(false)}
+          onConvert={isGm ? async (slug) => {
+            try {
+              const { data: t } = await api.get(`/reference/spell-conversions/${slug}/as-power-bundle`);
+              setTab("power_bundle");
+              setDraft({
+                ...blank(),
+                kind: "power_bundle",
+                name: t.name,
+                summary: t.description,
+                book: (t.references && t.references[0]) || "Anime 5E Spell Conversions",
+                fields: {
+                  components: t.components || [],
+                  description: t.description,
+                  invocation: t.invocation,
+                  charges_max: t.charges_max,
+                  energy_cost: t.energy_cost,
+                  cooldown: t.cooldown,
+                  source_spell_name: t.source_spell_name,
+                  source_spell_level: t.source_spell_level,
+                  cost: t.cost,
+                  tags: t.tags,
+                },
+              });
+              setShowAtlas(false);
+            } catch (e) {
+              setErr(formatApiErrorDetail(e.response?.data?.detail) || e.message);
+            }
+          } : null}/>
       )}
     </div>
   );
@@ -382,7 +411,7 @@ function PowerBundleTemplatePicker({ onPick, onClose, campaignId }) {
  * SRD citation — so players can see HOW rule X gets expressed on a
  * BESM sheet rather than just getting a fire-and-forget Power Bundle.
  */
-function SpellConversionAtlas({ onClose }) {
+function SpellConversionAtlas({ onClose, onConvert }) {
   const [rows, setRows] = useState([]);
   const [schools, setSchools] = useState([]);
   const [total, setTotal] = useState(0);
@@ -457,7 +486,18 @@ function SpellConversionAtlas({ onClose }) {
                     L{r.source_level} · {r.school}
                   </span>
                 </div>
-                <span className="tag border-arcane/40 text-arcane">{r.net_cp} CP net</span>
+                <div className="flex items-center gap-2">
+                  <span className="tag border-arcane/40 text-arcane">{r.net_cp} CP net</span>
+                  {onConvert && (
+                    <button
+                      onClick={() => onConvert(r.source_name.replace(/[^a-z0-9]+/gi, '-').toLowerCase())}
+                      className="btn btn-ghost text-[10px]"
+                      title="Convert this read-only conversion into an editable Power Bundle draft (opens in the editor pre-filled)."
+                      data-testid={`spell-convert-${r.source_name.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}`}>
+                      → Power Bundle
+                    </button>
+                  )}
+                </div>
               </div>
               <div className="text-[11px] text-mist italic mt-1">{r.short_description}</div>
               {(r.besm || []).map((b, j) => (

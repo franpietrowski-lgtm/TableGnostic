@@ -7,6 +7,7 @@ import AVSeats from "./AVSeats";
 import Battlemap from "./Battlemap";
 import XPAwardPanel from "./XPAwardPanel";
 import MacroBar from "./MacroBar";
+import EncounterDesigner from "./EncounterDesigner";
 
 export default function SessionView() {
   const { id } = useParams();
@@ -528,6 +529,11 @@ export default function SessionView() {
             onPick={(notation, lbl) => { setRoll(notation); setLabel(lbl); }}
           />
         </div>
+        {/* V6.6 — Encounter Designer on Anime 5E / D&D 5E sessions only. */}
+        {campaign?.is_gm
+          && (campaign?.system_id === "anime-5e" || campaign?.system_id === "dnd-5e") && (
+          <EncounterDesigner className="mt-3" partySize={(characters || []).length || 4}/>
+        )}
         <div className="divider-sigil my-3"/>
         <div className="label-ref mb-2">Log</div>
         <div className="flex-1 overflow-y-auto scroll-stylish space-y-2" data-testid="session-roll-log">

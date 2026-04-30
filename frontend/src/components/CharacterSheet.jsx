@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import { api, formatApiErrorDetail } from "../lib/api";
-import { Dice6, Edit3, BookOpen, Trash2 } from "lucide-react";
+import { Dice6, Edit3, BookOpen, Trash2, Printer } from "lucide-react";
 import BesmTerm from "./ui/BesmTerm";
 import XPApprovalQueue, { XPSpendForm } from "./XPApprovalQueue";
 import CharacterApprovalPanel from "./CharacterApprovalPanel";
@@ -199,6 +199,27 @@ export default function CharacterSheet() {
             onChanged={load}/>
         </div>
         <div className="flex gap-2">
+          <button onClick={async () => {
+                    try {
+                      const token = localStorage.getItem("tg_token");
+                      const r = await fetch(
+                        `${process.env.REACT_APP_BACKEND_URL}/api/characters/${ch.id}/export.pdf?mode=mobile`,
+                        { headers: { Authorization: `Bearer ${token}` } });
+                      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+                      const blob = await r.blob();
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement("a");
+                      a.href = url;
+                      a.download = `${(ch.name || "character").replace(/\s+/g, "_")}-sheet.pdf`;
+                      document.body.appendChild(a); a.click(); a.remove();
+                      URL.revokeObjectURL(url);
+                    } catch (e) { window.alert("PDF download failed: " + e.message); }
+                  }}
+                  className="btn btn-ghost text-xs"
+                  data-testid="export-mobile-sheet-btn"
+                  title="Download a phone-portrait PDF character sheet (A6) — easy to hand to a player mid-session.">
+            <Printer className="w-4 h-4"/> Mobile PDF
+          </button>
           <Link to={`/app/characters/${ch.id}/edit`} className="btn" data-testid="edit-character-btn">
             <Edit3 className="w-4 h-4"/> Edit
           </Link>

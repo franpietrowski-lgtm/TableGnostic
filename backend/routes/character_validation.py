@@ -689,4 +689,66 @@ async def list_spell_conversions(
     }
 
 
+@router.get("/reference/spell-conversions/{source_name_slug}/as-power-bundle")
+async def spell_conversion_as_power_bundle(
+    source_name_slug: str, user: dict = Depends(get_current_user),
+):
+    """V6.6 — convert a read-only Spell Conversion row into a draft
+    Power Bundle shape, ready to drop into the Reference Editor.
+
+    Bridges the Atlas (understand) and the Bundle (equip). GMs can
+    then save it as a reusable custom reference.
+    """
+    def slug(s):
+        import re
+        return re.sub(r"[^a-z0-9]+", "-", (s or "").lower()).strip("-")
+
+    row = next(
+        (r for r in SPELL_CONVERSIONS if slug(r["source_name"]) == source_name_slug),
+        None,
+    )
+    if not row:
+        raise HTTPException(404, "No spell conversion matches that slug.")
+
+    # Reshape into the Power Bundle component schema used by the
+    # Reference Editor's PowerBundleEditor + character validator.
+    components = []
+    for b in (row.get("besm") or []):
+        components.append({
+            "kind": "attribute",
+            "name": b.get("attribute"),
+            "cost_per_level": b.get("cost_per_level") or 0,
+            "level": b.get("level") or 1,
+            # Flatten enhancement/limiter rows into their value deltas —
+            # these are applied AT the character level when the bundle is
+            # imported onto a sheet.
+            "enhancements": b.get("enhancements") or [],
+            "limiters": b.get("limiters") or [],
+            "note": b.get("note") or "",
+        })
+    # Infer an invocation mode from the spell level (heuristic — GM can
+    # override in the editor).
+    lvl = int(row.get("source_level") or 0)
+    invocation = "per-scene" if lvl <= 2 else "per-day"
+    charges = 3 if lvl <= 2 else (1 if lvl >= 6 else 2)
+
+    return {
+        "name": row["source_name"],
+        "description": row.get("short_description", ""),
+        "source_spell_name": row["source_name"],
+        "source_spell_level": lvl,
+        "school": row.get("school"),
+        "invocation": invocation,
+        "charges_max": charges,
+        "energy_cost": 0,
+        "cooldown": "short rest" if invocation == "per-scene" else "long rest",
+        "cost": row.get("net_cp") or 0,
+        "components": components,
+        "references": [row.get("source_reference") or ""],
+        "tags": [(row.get("school") or "unknown").lower(),
+                  "cantrip" if lvl == 0 else "leveled"],
+    }
+
+
+
 

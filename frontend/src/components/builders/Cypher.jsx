@@ -162,7 +162,29 @@ export function CypherBuilder({ campaign, ref_, charId }) {
       {/* Sentence builder — the Cypher's signature mechanic */}
       <div className="card-mystic p-5 mt-6">
         <div className="label-ref mb-2 flex items-center gap-2"><Sparkles className="w-3 h-3"/> Character Sentence</div>
-        <div className="text-base text-gold-bright italic mb-3" data-testid="cypher-sentence">"{sentence}"</div>
+        <div className="flex items-baseline justify-between flex-wrap gap-2 mb-3">
+          <div className="text-base text-gold-bright italic" data-testid="cypher-sentence">"{sentence}"</div>
+          {campaign?.id && (
+            <button type="button" className="btn btn-ghost text-xs"
+                    data-testid="cypher-suggest-btn"
+                    title="Ask the codex: reads this campaign's setting genre + recent motives + plot phase and suggests the best-fitting Descriptor / Type / Focus."
+                    onClick={async () => {
+                      try {
+                        const { data } = await api.get(
+                          `/cypher/${campaign.id}/suggest?limit=1`);
+                        const s = data?.suggestions || {};
+                        const pick = (arr) => (arr?.[0]?.entry?.name) || null;
+                        setC({
+                          descriptor: pick(s.descriptors) || c.descriptor,
+                          type:       pick(s.types)       || c.type,
+                          focus:      pick(s.foci)        || c.focus,
+                        });
+                      } catch (_e) { /* silent — leave sheet unchanged */ }
+                    }}>
+              <Sparkles className="w-3 h-3"/> Suggest from codex
+            </button>
+          )}
+        </div>
         <div className="grid sm:grid-cols-3 gap-3">
           <div>
             <label className="label-ref">Descriptor

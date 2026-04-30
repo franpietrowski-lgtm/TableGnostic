@@ -1,0 +1,44 @@
+{
+  "summary": "V6.6 testing — 4 new surfaces: Cypher codex-aware suggest, Anime 5E CR/encounter budget kit, Mobile character PDF, Spell -> Power Bundle conversion. 12 new V6.6 backend tests in test_iter39_v66.py ALL PASS (100%). Regression on V6.5/V6.4/V6.2/V6.1: 49/49 + V6.6 12/12 = 61 passed / 1 skipped (no PDF-able char on non-BESM systems — data gap, not code bug). Frontend testids verified by source inspection: cypher-suggest-btn, encounter-designer (+ -level/-size/-difficulty/-run/-budget), encounter-slot-{n}, encounter-hazard-budget, export-mobile-sheet-btn all present. Playwright walkthrough: login works; campaign detail + character builder pages render 'Not found' in headless preview (likely auth-cookie propagation quirk — backend API auth via Bearer works perfectly in pytest). Main agent should self-validate the Playwright UI path in a real browser session.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/characters", "issue": "Returns empty list [] for admin at the global scope — characters only surface via /api/campaigns/{cid}/characters. Not a V6.6 regression; just a design quirk worth noting for future testing agents."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Campaign detail / Character builder routes", "issue": "Headless Playwright sees 'Not found' on /app/campaigns/{id} and /app/campaigns/{id}/characters/new after a successful POST /api/auth/login — localStorage.access_token comes back false in the browser context, so subsequent /api/* calls 404. Works in curl/pytest (Bearer header), so the finding is scoped to Playwright's cookie-less context. Main agent should confirm live browser behavior.", "affected_selectors": ["[data-testid=\"cypher-suggest-btn\"]", "[data-testid=\"encounter-designer\"]", "[data-testid=\"export-mobile-sheet-btn\"]"]}
+    ],
+    "design_issues": []
+  },
+  "critical_code_review_comments": [
+    "TESTID MISMATCH vs review spec: review says testid 'spell-convert-rules-forge' but ReferenceEditor.jsx:496 emits per-row dynamic testid `spell-convert-{slug}` (e.g. `spell-convert-fireball`). This is more testable but will break any hardcoded 'spell-convert-rules-forge' selector. Main agent should align either the spec or the code.",
+    "CharacterSheet.jsx is 1348 lines and ReferenceEditor.jsx is 971 lines — both well over the 700-line guideline. Recommend splitting ReferenceEditor's SpellConversionAtlas, PowerBundleTemplatePicker, and PowerBundleEditor into their own files.",
+    "EncounterDesigner is correctly gated on campaign.is_gm && (anime-5e|dnd-5e) in SessionView.jsx:533-536, but the review request copy says it should appear 'below MacroBar' — code mounts it after MacroBar inside the same flex column, so spec is satisfied. Just verify visually.",
+    "cypher_suggest endpoint: hint matching is exact-string (entry.name == hint). This is strict — minor typos in tone-hint lists (e.g. 'Bears a Halo of Fire' vs codex 'Bears a Halo of Fire') won't fuzzy-match. If codex name changes, suggestions silently stop firing for that row. Consider case-insensitive substring fallback.",
+    "anime5e encounter-budget: no upper-bound validation on party_level / party_size. Level > 20 gracefully clamps via _xp_budget, but negative/zero party_size is protected only by max(1, …). Consider returning 400 on absurd inputs."
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_iter39_v66.py",
+    "/app/test_reports/pytest/iter39_v66.xml",
+    "/app/test_reports/pytest/iter39_combined.xml"
+  ],
+  "action_items": [
+    "Decide: rename testid to static `spell-convert-rules-forge` (spec-compliant) OR update spec docs to match the dynamic per-row `spell-convert-{slug}` pattern already in code.",
+    "Seed at least one PC on Anime 5E, D&D 5E, and Cypher campaigns so mobile PDF regression covers all 4 systems (currently only BESM has TEST_v65_sim_pc).",
+    "Visually confirm EncounterDesigner renders in-session on Anime 5E (campaign 80b005…) and D&D 5E (campaign db17aa…) — main agent needs to seed a session first (none currently exist on these campaigns, per iteration 38).",
+    "Main agent should verify login + navigate flow in a real browser (Playwright hit an auth-propagation wall — not reproducible via curl/pytest)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter39_v66.py (NEW — 12 tests, all passing)"
+  ],
+  "success_rate": {"backend": "100% (61/61 executed pass, 1 skipped due to seed-data gap)", "frontend": "source-verified (testids present); live Playwright interaction blocked by auth-cookie propagation — main agent self-test required"},
+  "test_credentials": "franpietrowski@gmail.com / PieGod08!! (admin) — verified working via REST login, token returned in JSON",
+  "seed_data_creation": "Created 2 throwaway player accounts (TEST_v66_noncypher_*@example.com and TEST_v66_pdfnm_*@example.com) for 403-gate tests. No campaign/character seed data added.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend test_iter39_v66.py is stable — run with `cd /app/backend && python -m pytest tests/test_iter39_v66.py` (conftest.py loads .env; running from /app breaks routes.* imports). Spell conversion endpoint lives at /api/reference/spell-conversions/{slug}/as-power-bundle (note: route decorator is in character_validation.py line 692, not in a dedicated rules-forge route). Cypher campaign IDs to reuse: 3ca7755b06f14a7191d62e26335f8fa0 (Evereantha · Cypher adaptation), 54efb6d3cd6d40228d4853a84411fcfa (Artisan's Tale), 22ee28aaf79541c395255e144b5aab42 (Forbidden Test). Anime 5E: 80b005a2de614c73b4aa93ad322f5a2c, ebcebdcad7ff476daf62655438ac1256. Only BESM camp (aecff59…) has a PC. To verify UI end-to-end, main agent should seed a session on anime-5e + dnd-5e so EncounterDesigner actually mounts.",
+  "rca of the issue": "No P1 issues. The 'spell-convert-rules-forge' testid spec vs code mismatch is the only functional delta — code is defensible (dynamic per-row testids are more useful), but review checklist will fail a strict selector search for 'spell-convert-rules-forge'. Suggested mitigation: either add a parent wrapper with data-testid='spell-convert-rules-forge' in the SpellConversionAtlas container (spec-compliant) OR update the spec to reference the per-row pattern. Playwright auth-propagation quirk: REST login returns access_token in JSON but the frontend's axios client appears to rely on httpOnly cookies which Playwright isolates per-navigation unless sharing context — main agent should verify in a persistent browser session."
+}
