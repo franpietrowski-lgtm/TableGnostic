@@ -1,53 +1,74 @@
-"""Anime 5E reference data — Tri-Stat Emporium OGL release.
+"""Anime 5E reference data — D&D 5E + BESM-style point-buy hybrid.
 
-Anime 5E is published under both the Cypher CC-BY-style OGL and stands as
-its own point-buy d20 hybrid (the Tri-Stat point engine grafted onto a 5E
-chassis). The Reference page exposes BOTH shapes so a GM can run it as
-either a stand-alone or a 5E supplement.
+CORRECT FRAMING (per the official Anime 5E hybrid release):
+  • Anime 5E is essentially D&D 5E with a BESM-style optional point-buy
+    LAYER on top for genre-flavour customisation.
+  • It DOES NOT use Tri-Stat ability scores. The d20 chassis runs
+    Strength / Dexterity / Constitution / Intelligence / Wisdom /
+    Charisma exactly as in 5E.
+  • The port is one-way: D&D SRD races, classes, feats, and
+    backgrounds import directly into Anime 5E. Anime 5E content
+    (point-buy attributes / defects) does NOT port back to a
+    strict-5E table.
+  • The point-buy layer is OPTIONAL — a GM can run a campaign with
+    pure 5E + Anime 5E races/classes and never touch the point engine.
 
-Mechanic names + page references only. No reproduced flavour prose.
+We keep a `tri_stat_legacy_abilities` list internally for migration of
+older characters that were built before this clarification, but new
+characters should use the standard D&D 5E ability score block.
 """
 
 BOOK = {
     "title": "Anime 5E SRD v1.01",
     "publisher": "Mark MacKinnon · Dyskami Publishing Company",
-    "license": "OGL — A Tri-Stat Emporium System",
+    "license": "OGL — D&D 5E + BESM-style point-buy hybrid",
     "page_range_max": 200,
 }
 
 # Cross-system tag so D&D-5E settings can opt in to Anime 5E supplement use.
 CROSS_SYSTEMS = ["dnd-5e"]
 
-# Anime 5E uses the BESM 4E Body / Mind / Soul tri-stat grafted onto a d20 chassis.
+# Anime 5E ability scores ARE the standard 5E six. Body/Mind/Soul are
+# retained ONLY for migration of characters built under the previous
+# (incorrect) Tri-Stat framing; new sheets use the d20 SRD set.
 ABILITIES = [
+    {"name": "Strength",      "abbr": "STR"},
+    {"name": "Dexterity",     "abbr": "DEX"},
+    {"name": "Constitution",  "abbr": "CON"},
+    {"name": "Intelligence",  "abbr": "INT"},
+    {"name": "Wisdom",        "abbr": "WIS"},
+    {"name": "Charisma",      "abbr": "CHA"},
+]
+TRI_STAT_LEGACY_ABILITIES = [
     {"name": "Body",  "abbr": "BOD"},
     {"name": "Mind",  "abbr": "MND"},
     {"name": "Soul",  "abbr": "SOL"},
 ]
 
-# Five archetypal classes — the Anime 5E shapes its classes around genre roles.
+# Anime 5E original classes — these layer onto the d20 chassis with
+# point-buy genre flavour. Saves use the standard 5E six abilities.
 CLASSES = [
-    {"name": "Adept",      "primary": "Mind", "hit_die": 8,  "blurb_role": "Caster · psychic",
+    {"name": "Adept",      "primary": "Wisdom", "hit_die": 8,  "blurb_role": "Caster · psychic",
      "origin": "anime-5e",
-     "saves": ["Mind", "Soul"]},
-    {"name": "Champion",   "primary": "Body", "hit_die": 12, "blurb_role": "Front-line warrior",
+     "saves": ["Wisdom", "Charisma"]},
+    {"name": "Champion",   "primary": "Strength", "hit_die": 12, "blurb_role": "Front-line warrior",
      "origin": "anime-5e",
-     "saves": ["Body", "Mind"]},
-    {"name": "Idol",       "primary": "Soul", "hit_die": 6,  "blurb_role": "Face · charm caster",
+     "saves": ["Strength", "Constitution"]},
+    {"name": "Idol",       "primary": "Charisma", "hit_die": 6,  "blurb_role": "Face · charm caster",
      "origin": "anime-5e",
-     "saves": ["Soul", "Mind"]},
-    {"name": "Pilot",      "primary": "Mind", "hit_die": 8,  "blurb_role": "Mecha / vehicle",
+     "saves": ["Charisma", "Wisdom"]},
+    {"name": "Pilot",      "primary": "Intelligence", "hit_die": 8,  "blurb_role": "Mecha / vehicle",
      "origin": "anime-5e",
-     "saves": ["Mind", "Body"]},
-    {"name": "Tinker",     "primary": "Mind", "hit_die": 8,  "blurb_role": "Item-crafter · gadgeteer",
+     "saves": ["Intelligence", "Dexterity"]},
+    {"name": "Tinker",     "primary": "Intelligence", "hit_die": 8,  "blurb_role": "Item-crafter · gadgeteer",
      "origin": "anime-5e",
-     "saves": ["Mind", "Soul"]},
+     "saves": ["Intelligence", "Wisdom"]},
 
-    # ─── D&D 5E SRD imports (CC-BY 4.0). Reshape: 5E ability names
-    # remain (so the dnd_state folio is compatible), and we tag origin
-    # so the UI can badge "5E-import · Tri-Stat layerable" — GMs may
-    # grant D&D-class PCs a Tri-Stat point budget via the hybrid
-    # supplement card on the sheet.
+    # ─── D&D 5E SRD imports (CC-BY 4.0). The 5E ability score block
+    # is the same one Anime 5E uses, so these import directly. The
+    # `origin` tag lets the UI badge "5E-import · BESM-layerable" —
+    # GMs may grant D&D-class PCs a BESM-style point-buy budget via
+    # the optional supplement card on the sheet.
     {"name": "Barbarian", "hit_die": 12, "primary": "Strength",
      "saves": ["Strength", "Constitution"], "casting": "none", "origin": "dnd-5e-srd",
      "blurb_role": "Rage-fuelled frontline berserker (SRD 5.1)"},
@@ -126,8 +147,9 @@ HERITAGES = [
      "traits": ["Darkvision 60 ft", "Hellish Resistance", "Infernal Legacy"]},
 ]
 
-# A point-buy attribute engine layered on top so a GM can run Anime 5E in
-# its native Tri-Stat mode — same shape as BESM 4E.
+# BESM-style point-buy attributes — the OPTIONAL flavour layer that
+# sits on top of the standard 5E sheet. GMs and players can ignore
+# this entirely and run Anime 5E as plain D&D + Anime classes.
 POINT_BUY_ATTRIBUTES = [
     {"name": "Combat Mastery",  "cost_per_level": 2, "blurb_role": "+1 to-hit per level"},
     {"name": "Heightened Sense","cost_per_level": 1, "blurb_role": "Sharpened sight/hearing/scent"},
@@ -239,7 +261,7 @@ BACKGROUNDS = [
      "page_role": "Isekai"},
 ]
 
-# Defects — a Tri-Stat point-buy concept. Each Defect gives BACK points.
+# Defects — a BESM-style point-buy concept. Each Defect gives BACK points.
 DEFECTS = [
     {"name": "Awkward",        "rebate_per_level": 1, "blurb_role": "−1 to social rolls per level"},
     {"name": "Bane",           "rebate_per_level": 1, "blurb_role": "Susceptibility to a substance / phenomenon"},
@@ -315,9 +337,13 @@ REFERENCE = {
     "class_casting": CLASS_CASTING,
     "modifier_formula": "(score - 10) // 2",
     "rule_note": (
-        "Anime 5E supports BOTH 5E class+slot play AND Tri-Stat point-buy. "
-        "Roll d20 + ability mod + proficiency for class-mode, OR 2d6 + Stat "
-        "+ Attribute Level for point-buy mode. GM picks the engine in the "
-        "campaign Primer. Mechanic-only content per the OGL/Tri-Stat Emporium release."
+        "Anime 5E is D&D 5E + an OPTIONAL BESM-style point-buy LAYER. "
+        "Roll d20 + ability mod + proficiency for everything — class, "
+        "level, hit dice, AC, and saves are pure 5E. The point-buy "
+        "layer is OPTIONAL flavour: spend a budget on signature genre "
+        "powers (Combat Mastery, Heightened Senses, Personal Gear, "
+        "Custom Technique). The port is one-way — D&D SRD races / "
+        "classes / feats / backgrounds import directly into Anime 5E; "
+        "Anime 5E content does NOT port back to a strict-5E table."
     ),
 }

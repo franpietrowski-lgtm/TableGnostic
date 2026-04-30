@@ -29,133 +29,300 @@ def _now() -> str:
     return now_iso()
 
 
-# ─────────── Evereantha — BESM 4E heroic-fantasy demo ───────────
+# ─────────── Evereantha — "The Fracture of the Unmaker" ───────────
+# Canonical setting drawn from the Evereantha core reference:
+#   • Continenta Aurea / Vitae / Nivalis / Arida / Umbrosa
+#   • Order of the Darkening Star + Eclipse Syndicate + Singularity
+#   • Azazel/Samael paradox + the Kin (broken nervous system)
+#   • Aurae / Mortiscura magic + Butterfly Effect Gauge
 EVEREANTHA = {
     "system_id": "besm-4e",
-    "name": "Evereantha · The Caldera Choir",
+    "name": "Evereantha · The Fracture of the Unmaker",
     "description": (
-        "A heroic-fantasy table where the Solar-Lunar Caldera is cracking and "
-        "an ancient choir threatens to wake what was sealed beneath it. The "
-        "demo seeds a 24-session arc complete with NPC motives that evolve."
+        "A 52-session arc across Continenta Aurea. The Order of the "
+        "Darkening Star believes void energy is the only force that can "
+        "stop a coming cosmic extinction. They are right — and they are "
+        "wrong. Azazel is not their prophet; he IS the Unmaker. His "
+        "splintered counterpart Samael waits in Technopolis Lumina. "
+        "Between them: the Kin — fragments of a broken god that hear "
+        "each other across timelines. Every relic the players 'secure' "
+        "is another organ in the body they're unknowingly assembling."
     ),
-    "setting_name": "Evereantha · Forge-Glass Reach",
-    "genre": "heroic fantasy",
-    "time_period": "late mythic age",
+    "setting_name": "Evereantha · Continenta Aurea",
+    "genre": "dark heroic fantasy with cosmic horror",
+    "time_period": "the Age of the Singularity",
     "default_character_size": "Medium",
     "damage_rating_baseline": 5,
     "primer_xp_cap": 0,
-    "house_rules": "Crit on natural 6 with the ten-sided check die. Forge-Glass shards lower difficulty by 1 step (consumable).",
+    "house_rules": (
+        "Crit on natural 6 with the ten-sided check die. Aurae magic "
+        "uses Threading; Mortiscura uses Chaining (see Codex). The GM "
+        "tracks a Butterfly Effect Gauge per session — past-changing "
+        "actions accumulate Time Displacement Factor that warps "
+        "future scenes."
+    ),
     "player_primer": (
-        "You are apprentices of the Forge-Glass Choir. The mountain hums "
-        "louder each night. The Mayor of Aurea has hired you to find why."
+        "You begin in Eagle's Nest, where animals are born with black "
+        "glass eyes and children draw the same star in ash. Beneath a "
+        "dying tree, a relic sleeps that is not a relic at all. You "
+        "do not yet know it, but every cult deacon you fell, every "
+        "ritual you break, brings the Unmaker one breath closer to "
+        "remembering who he is."
     ),
     "nodes": [
-        {"type": "location", "title": "Aurea, the Forge-Glass City", "tags": ["evereantha", "city"],
-         "summary": "Capital of the Reach. Foundries throw red light over a city that runs on songs. The Choir-Halls hum at dawn; every guildhouse keeps a 'tuning bell' that the Iron-Cantors can hear three districts away. Population ~38,000 with a floating apprentice class."},
-        {"type": "location", "title": "Solar-Lunar Caldera", "tags": ["evereantha", "site"],
-         "summary": "Twin-eye crater above the city where the eclipse will land. Two perfect-circle pools of liquid forge-glass — one Solar, one Lunar — the Choir keeps in tension. Crack the rim and the Eclipse Saint underneath wakes."},
-        {"type": "location", "title": "Choir Hall of First Resonance", "tags": ["evereantha", "site"],
-         "summary": "The mountain-side amphitheatre where apprentice singers learn the seven Resonance forms. Acoustically perfect — a whisper from the centre rolls audibly to the back row 80 m away."},
-        {"type": "location", "title": "Brassyards", "tags": ["evereantha", "district"],
-         "summary": "Aurea's smelter quarter. The forge-cantors sing iron into shape. Smoke columns visible from the Caldera rim — the cult uses them as a calendar."},
-        {"type": "location", "title": "Pass of Aurea", "tags": ["evereantha", "wilderness"],
-         "summary": "Single mountain switchback connecting the city to the Caldera. Snow nine months of the year. Every adventuring party crosses it twice."},
-        {"type": "location", "title": "The Drowned Choir", "tags": ["evereantha", "ruin"],
-         "summary": "A Choir-Hall sunk beneath a glacial lake during the First Eclipse. Its bells still ring in 7-year cycles when the moon is right. Treasure: pre-Choir manuscripts of the Forbidden Resonance."},
-        {"type": "faction", "title": "Order of the Darkening Star", "tags": ["evereantha", "antagonist"],
-         "summary": "Star-cult that intends to crack the Caldera open during the next eclipse. ~120 initiates, six Hierophants, one Eclipse-Saint sealed beneath the Caldera. They believe they are FREEING the Saint, not destroying the city."},
-        {"type": "faction", "title": "Forge-Glass Choir", "tags": ["evereantha", "ally"],
-         "summary": "The Choir-singers' guild. Trains apprentices in seven Resonance forms (Quench, Edge, Strike, Weld, Hum, Crack, Seal). Pious but politically cautious — they will not act without proof."},
-        {"type": "faction", "title": "The Mayoral Council of Aurea", "tags": ["evereantha", "ally"],
-         "summary": "Twelve elected stewards (one per guild). Mayor Mishtee chairs. The Council's writ unlocks city resources but every withdrawal must pass a vote — slow when the cult is fast."},
-        {"type": "faction", "title": "The Solitary Cantors", "tags": ["evereantha", "neutral"],
-         "summary": "Heretic Choir-singers exiled for practising the Forbidden Resonance (the eighth song that BREAKS rather than seals). One of them knows what the Saint truly is."},
-        {"type": "lore", "title": "The Forge-Glass Hammer", "tags": ["evereantha", "macguffin"],
-         "summary": "Lost relic that can either seal the Caldera or shatter it. Two singers know its hum — Eli of the Glass-Hands (knows half) and the heretic Cantor Veshin (knows the other half). Both halves must be combined to attune."},
-        {"type": "lore", "title": "The Seven Resonance Forms (Magic System)", "tags": ["evereantha", "magic"],
-         "summary": "Evereantha's magic is sung. Seven forms: QUENCH (cool/seal), EDGE (sharpen/cut), STRIKE (kinetic), WELD (bind), HUM (charm/calm), CRACK (sunder), SEAL (preserve). Each form has 5 ranks. Forbidden Eighth: BREAK (unmaking — instant CP-cost ×2; risk of soul-shatter)."},
-        {"type": "lore", "title": "The Eclipse Saint", "tags": ["evereantha", "lore"],
-         "summary": "First-age entity sealed under the Caldera by the original Choir. Half-deity, half-glass-elemental. Sings on the eclipse cycle. The cult believes she is suffering; the Choir believes she is the seal."},
-        {"type": "lore", "title": "The Choir Codex (Apprentice Reader)", "tags": ["evereantha", "lore"],
-         "summary": "First-year reader for Choir apprentices. Covers vocal exercises, the seven forms, the seven SAFE intervals, and the three Songs the apprentices must sing at every Choir-Hall before sunset (the Hush, the Open, the Mind)."},
-        {"type": "npc", "title": "Mayor Mishtee", "tags": ["evereantha", "ally"],
-         "summary": "Pragmatic leader who hired the apprentices. Trusts the table — for now. Has a daughter (Anbel) the cult will try to take. Carries the Mayoral whistle (calls 30 city guards in 3 rounds)."},
-        {"type": "npc", "title": "Eli of the Glass-Hands", "tags": ["evereantha", "ally"],
-         "summary": "Master glassblower who teaches QUENCH and EDGE forms. Charges in songs, not coin. Knows half the Forge-Glass Hammer's attunement."},
-        {"type": "npc", "title": "Cantor Veshin the Heretic", "tags": ["evereantha", "ambivalent"],
-         "summary": "Exiled Solitary Cantor. Knows the FORBIDDEN BREAK form and the second half of the Hammer's hum. Lives in the Drowned Choir. Will help the table — for a price they will not understand until later."},
-        {"type": "npc", "title": "Anbel Mishtee", "tags": ["evereantha", "ally"],
-         "summary": "The Mayor's daughter. Apprentice singer. Brave, naive. Plot-keyed (kidnapping potential)."},
-        {"type": "npc", "title": "Choirmaster Olen", "tags": ["evereantha", "ally"],
-         "summary": "Head of the Forge-Glass Choir. Will not believe in the Star-cult without testimony from inside it. Blocking until convinced."},
-        {"type": "npc", "title": "Malshe Darkening", "tags": ["evereantha", "nemesis"],
-         "summary": "Star-Cult Hierophant. Patient, reverent, never raises voice. Believes she is freeing the Saint, not killing the city. Carries the Eclipse Sigil cypher (one-shot — opens any sealed door)."},
-        {"type": "npc", "title": "Frock the Iron-Cantor", "tags": ["evereantha", "henchman"],
-         "summary": "Forge-Cantor turned cult Lieutenant. Servile then mocking. Tests apprentices. Uses STRIKE form 3 with a forge-hammer."},
-        {"type": "npc", "title": "Sister Quench", "tags": ["evereantha", "henchman"],
-         "summary": "Cult assassin trained in QUENCH form. Hits weld-points on armour to drop fighters in one note. Quiet, polite, lethal."},
-        {"type": "npc", "title": "Brother Crack", "tags": ["evereantha", "henchman"],
-         "summary": "Cult demolitionist. Uses CRACK form on city walls to make 'doors' the cult can pour through. Unstable, loud."},
+        # ─── Cosmic geography ───
+        {"type": "lore", "title": "The Aetheris (Serene Abyss)",
+         "tags": ["evereantha", "cosmology", "ocean"],
+         "summary": "Vast saltwater expanse cradling the continent of Continenta Aurea. Shimmers blue-green; holds memory in its depths. As the campaign progresses the Aetheris itself begins ERASING history — wars forgotten, borders gone, names falling out of language."},
+        {"type": "location", "title": "Continenta Aurea — the Golden Continent",
+         "tags": ["evereantha", "continent"],
+         "summary": "Primary landmass of the campaign. Divided into four quarters: Septentrionalis (north), Meridionalis (south), Orientalis (east), Occidentalis (west). Most of the campaign happens here; the four other continents (Vitae, Nivalis, Arida, Umbrosa) supply NPCs, allies and threats from beyond."},
+        {"type": "location", "title": "Eagle's Nest",
+         "tags": ["evereantha", "starting-village"],
+         "summary": "Quiet hamlet near the Montes Inexpugnabilis and the western Aetheris. Old artisan bloodlines have faded into superstition. The campaign opens here. Beneath a dying tree's roots, the first of the Kin sleeps."},
+        {"type": "location", "title": "Gildenwood",
+         "tags": ["evereantha", "wilderness"],
+         "summary": "Sprawling forest with gilded foliage; natural bastion encasing parts of Taurid Tor and the road to Eagle's Nest. A vibrant, dangerous labyrinth of beasts and lost shrines."},
+        {"type": "location", "title": "Taurid Tor",
+         "tags": ["evereantha", "region"],
+         "summary": "Southwestern rocky plains scattered with resilient villages, including the new Tech-Forged Hamlets uplifted by Singularity tech. Guardian Outposts watch the passes; Verdant Nexus Farms feed the city beyond."},
+        {"type": "location", "title": "Aevum & the Colosseum",
+         "tags": ["evereantha", "city"],
+         "summary": "Walled city famed for its Colosseum where slaves and herculi fight. Sylas Stonefist runs the resident forge, fitting the gladiators with weapons and armour he reveres as instruments of carnage."},
+        {"type": "location", "title": "Technopolis Lumina · Capital of the Singularity",
+         "tags": ["evereantha", "city"],
+         "summary": "Where magic and machine have become indistinguishable. Districts: Nexus Ward (administrative core, Eclipse Syndicate stronghold, houses Samael's machine), Aether Heights (floating apartments of the wealthy), Mechanist's Enclave (artificers' industrial heart), Shadowthorn Sector (espionage), Circuit Market (trade)."},
+        {"type": "location", "title": "The Nexus",
+         "tags": ["evereantha", "site"],
+         "summary": "Spiraling tower at the heart of Technopolis Lumina. Pulses with the energy that powers the entire Singularity. The artifact Samael was born from sits at its base."},
+        {"type": "location", "title": "Quad Quay (the Mine-Labyrinth)",
+         "tags": ["evereantha", "underground"],
+         "summary": "Underground mine network so vast it is a city in its own right. Center of mining, technological experiment, and industry; honeycombed with tunnels older than the Singularity."},
+        {"type": "location", "title": "13th Temple — Temple of the Void",
+         "tags": ["evereantha", "site", "endgame"],
+         "summary": "A temple located WITHIN the void itself. Holds an artifact capable of manipulating reality. Goal of the Order's deepest rituals; final-act destination."},
+        {"type": "location", "title": "Sun and Moon Temple",
+         "tags": ["evereantha", "site"],
+         "summary": "Twin-shrine where Morrigan Nightshade has been performing the death-art rites. A confrontation site flagged by the hermit's note."},
+        {"type": "location", "title": "Montes Inexpugnabilis",
+         "tags": ["evereantha", "geography"],
+         "summary": "The Impenetrable Mountains, dividing Continenta Aurea and Continenta Vitae. Rumored to hide secret tunnels and sealed-age secrets — including paths the Order has reopened."},
+
+        # ─── Cosmic principals ───
+        {"type": "npc", "title": "Azazel — Deacon of the Void / The Unmaker",
+         "tags": ["evereantha", "principal", "antagonist"],
+         "summary": "The hidden master of the Order of the Darkening Star. Believes void energy is the only force that can halt the coming Unmaker. He is wrong: he IS the Unmaker. He may not yet remember. Appears not as a monster but as someone tired beyond history."},
+        {"type": "npc", "title": "Samael — born of Azazel's machine",
+         "tags": ["evereantha", "principal", "ambivalent"],
+         "summary": "Manifested from a machine artifact in Technopolis Lumina. Claims he is the discarded branch — Azazel's failed escape from the same doom under a different name. Offers the players maps, weapons, partial truths. He does not want Azazel free; he wants to BECOME the final Unmaker himself."},
+        {"type": "lore", "title": "The Kin — Azazel's Broken Nervous System",
+         "tags": ["evereantha", "cosmology", "principal"],
+         "summary": "Fragments of Azazel scattered across history — human-shaped artifacts, relics with faces, statues that dream, weapons that remember being alive, lookalikes wearing different names in different ages. When one awakens, the others hear. When one dies, the others remember. The Kin do not serve the Order — they ARE the Unmaker's broken nervous system."},
+
+        # ─── Factions ───
+        {"type": "faction", "title": "Order of the Darkening Star",
+         "tags": ["evereantha", "antagonist", "cult"],
+         "summary": "Apocalyptic order of priests, deacons, killers, scholars, artisan-lords. Hunts the scattered relics of the Void, convinced void energy is the only force potent enough to confront the Unmaker. They believe atrocity is preparation. Led (in form) by Archdeacons under the hidden hand of Azazel."},
+        {"type": "faction", "title": "Eclipse Syndicate",
+         "tags": ["evereantha", "antagonist", "syndicate"],
+         "summary": "Power bloc inside Technopolis Lumina. Controls the Nexus Ward and Aether Heights. Magic + technocracy fused into a shadow government. Currently sheltering / harnessing Samael."},
+        {"type": "faction", "title": "The Singularity",
+         "tags": ["evereantha", "neutral", "civilization"],
+         "summary": "Transhuman magitech civilization centered on Technopolis Lumina. Five Noble Houses run its internals: House Novar (factories/research), House Lumicore (energy/magic), House Aetherforge (airships), House CyBerrun (cybernetic defense), House Etherion (biotech / harmonized ecosystems)."},
+        {"type": "faction", "title": "The Five Noble Houses",
+         "tags": ["evereantha", "civilization"],
+         "summary": "Novar (Domina) — factories & R&D. Lumicore (Illumina) — energy production / magical research. Aetherforge (Skrelm) — airship yards & aeronautical academies. CyBerrun (Pathsgeon) — tech-defense hub, cybernetic + rune barriers. Etherion (Synthgard) — biotech gardens, synthetic ecosystems."},
+
+        # ─── Deacons (Order's archcraftspeople) ───
+        {"type": "npc", "title": "Sylas Stonefist — Archdeacon, master smith",
+         "tags": ["evereantha", "deacon", "antagonist"],
+         "summary": "Resident smith of Aevum's Colosseum. Forges weapons and armour for the gladiators, reveling in the carnage. His devotion to the Order has clouded his morality. When he falls (Act I), the artifact he protects 'stabilizes' — the players believe they have stopped something. They have completed the first lock."},
+        {"type": "npc", "title": "Vaelin the Quiet — Deacon of Shadows",
+         "tags": ["evereantha", "deacon", "antagonist"],
+         "summary": "Hides in plain sight as a maid in a noble house. Grief-tattooed shadow-script beneath her skin. Driven by the loss of her lover, she works dark magic to bring him back. Her calligraphy and tattoo work harness shadow itself. Strained — possibly antagonistic — relationship with Morrigan Nightshade."},
+        {"type": "npc", "title": "Morrigan Nightshade — Deaconess of the Dead",
+         "tags": ["evereantha", "deacon", "antagonist"],
+         "summary": "Practices death as an art. Binds souls into vessels that whisper prophecies they should not know. Cruel and sadistic, but respected for her mastery of necromancy and the afterlife. Her shadow returns post-mortem as Shadow Morrigan, serving Samael."},
+        {"type": "npc", "title": "Lyra Earthheart — Deaconess of the Elements / EarthMancer",
+         "tags": ["evereantha", "deacon", "antagonist"],
+         "summary": "Sculptor-geomancer who bends stone, root, and buried bone into ritual geometry. A love of nature warped into a need for control."},
+        {"type": "npc", "title": "Luminar — Deacon of Light / Light Weaver",
+         "tags": ["evereantha", "deacon", "antagonist"],
+         "summary": "Obsessed with light as a tool of manipulation and control. Messianic complex — believes he will bring enlightenment through total mastery. Even radiance can enslave."},
+        {"type": "npc", "title": "Rowena Wildwood — High Deaconess / Woodweaver",
+         "tags": ["evereantha", "deacon", "antagonist"],
+         "summary": "Staffmaker, lumberjack, self-styled protector of ancient groves. Believes preserving the cult's knowledge restores 'balance' against forces of good."},
+        {"type": "npc", "title": "Augustus Blackpaw — Deacon of the Hunt / Bait Master",
+         "tags": ["evereantha", "deacon", "antagonist"],
+         "summary": "Hunter-fisherman who supplies the Order's larder. Believes provisioning sustains the apocalypse-prep."},
+        {"type": "npc", "title": "Marcus Aurelius — Deacon of Alchemy / Matter Tinkerer",
+         "tags": ["evereantha", "deacon", "antagonist"],
+         "summary": "Transmutation obsessive — willing to sacrifice others to chase the universe's mechanical secrets."},
+        {"type": "npc", "title": "Zephyr Windrider — Deacon of the Wilds / Apocophea",
+         "tags": ["evereantha", "deacon", "antagonist"],
+         "summary": "Eco-fanatic who would destroy civilization to 'protect' the wilds. Extreme, unethical means."},
+        {"type": "npc", "title": "Ignatius the Inferno — Deacon of Flames / Ore Talker-Smith",
+         "tags": ["evereantha", "deacon", "antagonist"],
+         "summary": "Charismatic, impulsive. Uses fire to intimidate and rule. Believes the Order alone can wield true flame."},
+        {"type": "npc", "title": "Azura Starlight — Deaconess of the Oceans / Bait Master",
+         "tags": ["evereantha", "deacon", "antagonist"],
+         "summary": "Spiritual oceanic devotee. 'Protects' marine life through ruthless cult enforcement."},
+
+        # ─── Eclipse Syndicate operatives ───
+        {"type": "npc", "title": "Shadow Morrigan",
+         "tags": ["evereantha", "syndicate", "antagonist"],
+         "summary": "Reformed from the lingering miasma of the original Morrigan; now Samael's enforcer. Necromantic, shadow-creature creation, death-energy manipulation."},
+        {"type": "npc", "title": "Zephyr (Vitae Origin)",
+         "tags": ["evereantha", "syndicate"],
+         "summary": "Former gladiator from Continenta Vitae. Combines Mortiscura magic with Vitae gladiatorial techniques."},
+        {"type": "npc", "title": "Shade Nix (Umbrosa)",
+         "tags": ["evereantha", "syndicate"],
+         "summary": "From the shadow continent. Stealth and assassination specialist; the syndicate's scout."},
+        {"type": "npc", "title": "ArVex (Aurea)",
+         "tags": ["evereantha", "syndicate"],
+         "summary": "Master of Aurea's Faces; ruthless strategic adviser inside the syndicate."},
+        {"type": "npc", "title": "Malak (Singularity)",
+         "tags": ["evereantha", "syndicate"],
+         "summary": "Magic-tech integration prodigy. Builds the syndicate's advanced weapons and machinery."},
+        {"type": "npc", "title": "Strategist Kael (Singularity, rogue)",
+         "tags": ["evereantha", "syndicate"],
+         "summary": "Former Singularity general turned. Plans the syndicate's military operations."},
+
+        # ─── Singularity technocrats ───
+        {"type": "npc", "title": "Dr. Caelum Innovus — Science Technocrat",
+         "tags": ["evereantha", "singularity", "neutral"],
+         "summary": "Bioengineering and mechanotechnology lead pushing Singularity's scientific frontier."},
+        {"type": "npc", "title": "Magus Noctis Aeterna — Magic Technocrat",
+         "tags": ["evereantha", "singularity", "ambivalent"],
+         "summary": "Master of Mortiscura magic. Aims to integrate dark magical forces with Singularity's tech."},
+        {"type": "npc", "title": "Senator Vox Populi — People's Technocrat",
+         "tags": ["evereantha", "singularity", "ally"],
+         "summary": "Elected mediator between technocrat and military sectors. Voice of public interest."},
+        {"type": "npc", "title": "General 'Jea' Stratos — Air Force",
+         "tags": ["evereantha", "singularity"],
+         "summary": "Aerial warfare strategist commanding Singularity airships."},
+        {"type": "npc", "title": "General 'Kun' Firma — Ground Forces",
+         "tags": ["evereantha", "singularity"],
+         "summary": "Mechanized & magic-enhanced ground commander."},
+
+        # ─── Magic system ───
+        {"type": "lore", "title": "Aurae Magic — the Two Faces",
+         "tags": ["evereantha", "magic"],
+         "summary": "Evereantha's magic is split into two Faces: Face of Aurae (creation, nurturing, expansion) and Face of Mortiscura (hiding, deception, halting). Aurae mastery progresses Single Face → Threading → Multi-Face Threading → Tri-Threading. Mortiscura: Single Face → Chaining → Multi-Face Chaining → Chain Binding → Recursive Chaining."},
+        {"type": "lore", "title": "Butterfly Effect Gauge (BEG)",
+         "tags": ["evereantha", "magic", "mechanic"],
+         "summary": "Custom mechanic: tracks how player decisions in past timelines warp the present. Combines Time Displacement Factor (TDF — how far back the act reaches) and Decision Impact Factor (DIF — magnitude of the change). The GM uses BEG to introduce timeline ripples in Acts III-V."},
     ],
-    # Per-node motives keyed to plot phases (the Pulse panel will pick these up).
     "motives": [
-        ("Malshe Darkening", "Locate the Forge-Glass Hammer before the table can.",
+        ("Azazel — Deacon of the Void / The Unmaker",
+         "Remember that he already IS the Unmaker. Each broken seal returns a sliver of memory.",
          "epic-7-milestones", "evolving"),
-        ("Frock the Iron-Cantor", "Humiliate the apprentices to test their resolve.",
-         "epic-8-adventures", "active"),
-        ("Mayor Mishtee", "Shelter the apprentices and find evidence of a star-cult.",
-         "genesis-3-nemesis", "active"),
-        ("Cantor Veshin the Heretic", "Watch the apprentices — decide if they can survive the Eighth Form.",
-         "epic-8-adventures", "active"),
-        ("Sister Quench", "Identify which apprentice carries the Hammer-half hum and silence them.",
+        ("Samael — born of Azazel's machine",
+         "Become the final Unmaker. Use the players to weaken Azazel without freeing him.",
+         "genesis-3-nemesis", "evolving"),
+        ("The Kin — Azazel's Broken Nervous System",
+         "Become whole again. Independently jealous, afraid, ambitious — but the instinct binds them all.",
          "epic-9-adventures", "evolving"),
-        ("Brother Crack", "Open three new 'doors' in Aurea's walls before the eclipse.",
+        ("Sylas Stonefist — Archdeacon, master smith",
+         "Forge weapons fit for the apocalypse-prep — and bait the players into the first 'wrong victory'.",
+         "epic-8-adventures", "active"),
+        ("Vaelin the Quiet — Deacon of Shadows",
+         "Bring her dead lover back through Mortiscura — even if it requires a player as the soul-vessel.",
          "epic-9-adventures", "active"),
-        ("Anbel Mishtee", "Prove she is more than the Mayor's daughter — sing the Open at Choir-Hall.",
-         "genesis-4-master-plot", "active"),
-        ("Choirmaster Olen", "Demand inside-cult testimony before mobilising the Choir.",
+        ("Morrigan Nightshade — Deaconess of the Dead",
+         "Bind a player's soul to a vessel before they realise what the 'rescue' actually was.",
+         "epic-9-adventures", "active"),
+        ("Lyra Earthheart — EarthMancer",
+         "Inscribe the third stone-circle of the Order's geometry before the spring melt.",
+         "epic-9-adventures", "active"),
+        ("Luminar — Deacon of Light",
+         "Capture a Kin alive and 'enlighten' it into obedience.",
+         "epic-9-adventures", "active"),
+        ("Senator Vox Populi",
+         "Identify which Singularity technocrat is feeding the Eclipse Syndicate.",
          "genesis-3-nemesis", "active"),
-        ("Eli of the Glass-Hands", "Teach the table QUENCH form before the Star-cult finds her.",
-         "genesis-7-beginning-ending", "active"),
     ],
     "genesis": {
-        "sentence_who": "An apprentice of the Forge-Glass Choir",
-        "sentence_what": "must seal the Solar-Lunar Caldera",
-        "sentence_badly_when": "before the next solar eclipse, in 8 sessions",
-        "theme": "Faith demands proof.",
-        "tone": "heroic with consequences",
-        "nemesis_name": "Malshe Darkening",
-        "nemesis_motive": "Free the Eclipse Saint",
-        "beginning": "Open with the Mayor assigning the Maiden Adventure to the apprentices.",
-        "ending": "A silence as the eclipse passes — one apprentice's sigil written on the Caldera floor.",
+        "sentence_who": "A circle of ordinary people from Eagle's Nest",
+        "sentence_what": "must oppose the Order of the Darkening Star",
+        "sentence_badly_when": "before realising every victory is another organ in the Unmaker's body",
+        "theme": "The terror of being useful to the thing you oppose.",
+        "tone": "dark heroic with creeping cosmic horror",
+        "nemesis_name": "Azazel — Deacon of the Void / The Unmaker",
+        "nemesis_motive": "Remember that he already IS the Unmaker.",
+        "beginning": (
+            "Open in Eagle's Nest with the small wrongnesses — black-glass-eyed "
+            "lambs, humming tools, ash-stars in children's drawings. A relic "
+            "is found beneath the dying tree's roots. It appears to be an "
+            "artifact. It is not. It is one of the Kin, sleeping."
+        ),
+        "ending": (
+            "All timelines overlap; the players face Azazel, Samael, and "
+            "alternate versions of themselves at once, deciding which truth "
+            "the world is bound to."
+        ),
     },
     "epic": {
-        "plan_summary": "The Order of the Darkening Star intends to shatter the Caldera and free the Eclipse Saint.",
-        "theme": "Faith demands proof.",
-        "sentence": {"someone": "Malshe Darkening", "wants": "the Forge-Glass Hammer",
-                     "timeframe": "Before Solar Eclipse, in 8 sessions",
-                     "method": "minions",
-                     "refined": "Malshe Darkening wants the Forge-Glass Hammer before the Solar Eclipse, manipulating the Iron-Cantor's choir to do it."},
+        "plan_summary": (
+            "Six-act / 52-session arc — The Fracture of the Unmaker. Act I: "
+            "First Wrong Victory (Sylas falls). Act II: Deacons open the "
+            "world. Act III: Samael Branch — alternating timelines begin. "
+            "Act IV: Kin awaken — hive-mind fragments hunt the players. "
+            "Act V: Unmaker remembers — Azazel as the inevitable conclusion. "
+            "Act VI: Final shape of reality — Unmaking / Ascension / Binding "
+            "/ Samael Crown / Kin Rebellion endings."
+        ),
+        "theme": "The terror of being useful to the thing you oppose.",
+        "sentence": {
+            "someone": "Azazel & Samael (both)",
+            "wants": "to become the final Unmaker",
+            "timeframe": "across 52 sessions of overlapping timelines",
+            "method": "the Order builds the structure; the Kin are the body; the players unknowingly assemble both",
+            "refined": "Azazel wants to remember he is the Unmaker; Samael wants to take that role; the players must decide what kind of monster gets to hold reality together.",
+        },
         "milestones": [
-            {"title": "Find the First Sigil", "sequence": 1,
-             "obstacles": ["Mountain pass closed", "Order spies in Aurea"],
-             "resources_have": ["Mayoral writ"], "resources_needed": ["Climbing kit"]},
-            {"title": "Disrupt the Iron-Choir", "sequence": 2,
-             "obstacles": ["Frock's hidden Cantors"],
-             "resources_have": ["First Sigil"], "resources_needed": ["A counter-tone"]},
+            {"title": "Act I — The First Wrong Victory", "sequence": 1,
+             "obstacles": ["Black-glass omens in Eagle's Nest", "Sylas Stonefist of Aevum"],
+             "resources_have": ["Trust between the apprentices"],
+             "resources_needed": ["A relic that is secretly Kin"]},
+            {"title": "Act II — Deacons Open the World", "sequence": 2,
+             "obstacles": ["Vaelin's grief", "Morrigan's death-art", "Lyra's geometry", "Luminar's obedience-light"],
+             "resources_have": ["The locked artifact"],
+             "resources_needed": ["Inside-cult testimony"]},
+            {"title": "Act III — The Samael Branch", "sequence": 3,
+             "obstacles": ["Time stutters", "Alternate timelines diverge", "Eclipse Syndicate"],
+             "resources_have": ["A working enemy network"],
+             "resources_needed": ["Forbidden calculations from Samael"]},
+            {"title": "Act IV — The Kin Awaken", "sequence": 4,
+             "obstacles": ["The Kin develop preferences", "Aetheris erases history"],
+             "resources_have": ["Most of the Order broken"],
+             "resources_needed": ["A reason for the Kin to choose the players"]},
+            {"title": "Act V — The Unmaker Remembers", "sequence": 5,
+             "obstacles": ["Samael's betrayal", "Kin factional war"],
+             "resources_have": ["Sympathetic Kin"],
+             "resources_needed": ["A truth Azazel does not yet hold"]},
+            {"title": "Act VI — The Final Shape of Reality", "sequence": 6,
+             "obstacles": ["All timelines overlap", "Alternate selves arrive"],
+             "resources_have": ["The accumulated cost of every choice"],
+             "resources_needed": ["A decision the table can live with"]},
         ],
     },
     "encounter": {
-        "name": "Pass-of-Aurea Ambush",
-        "kind": "combat",
+        "name": "Eagle's Nest · The Sleeping Kin",
+        "kind": "social-then-combat",
         "plot_phase": "epic-7-milestones",
-        "environment": {"indoor": False, "weather": "snow squall", "light": "dim"},
-        "notes": "Frock baits the apprentices into the pass with a fake Mayoral writ.",
+        "environment": {"indoor": False, "weather": "still", "light": "dawn"},
+        "notes": (
+            "The dying tree's roots peel back to reveal what looks like a "
+            "porcelain woman. She is breathing — barely. The first cult "
+            "scout watches from the treeline. The party's first decision "
+            "cascades into Sylas Stonefist's storyline."
+        ),
         "npcs": [
-            {"name": "Frock the Iron-Cantor", "role": "henchman", "level": 4, "count": 1,
-             "intent": "Test the apprentices' resolve — humiliate, then withdraw."},
-            {"name": "Cantor Recruit", "role": "minion", "level": 2, "count": 3,
-             "intent": "Pin the apprentices long enough for Frock to escape."},
+            {"name": "Sleeping Kin (lookalike)", "role": "ambivalent", "level": 5, "count": 1,
+             "intent": "Wake. Listen for the others. Decide whether the players are kin or kindling."},
+            {"name": "Cult Scout", "role": "henchman", "level": 2, "count": 1,
+             "intent": "Witness, then run for Sylas."},
         ],
     },
 }
@@ -242,7 +409,31 @@ ARTISAN = {
 
 
 async def _seed_one(blob: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any]:
-    """Create one fully-interweaved demo campaign."""
+    """Create one fully-interweaved demo campaign — IDEMPOTENT.
+
+    If this user already owns a campaign with the same name AND
+    system_id, return the existing one instead of duplicating. Avoids
+    the 'click Deploy demo five times → 5 copies in your account'
+    failure mode the user previously hit.
+    """
+    existing = await db.campaigns.find_one(
+        {"gm_id": user["id"],
+         "name": blob["name"],
+         "system_id": blob["system_id"]},
+        {"_id": 0},
+    )
+    if existing:
+        node_count = await db.nodes.count_documents({"campaign_id": existing["id"]})
+        motive_count = await db.node_motives.count_documents({"campaign_id": existing["id"]})
+        return {
+            "id": existing["id"],
+            "name": existing["name"],
+            "system_id": existing["system_id"],
+            "nodes": node_count,
+            "motives": motive_count,
+            "milestones": len(blob.get("genesis", {}).get("milestones") or []),
+            "skipped_existing": True,
+        }
     cid = new_id()
     base_camp = {
         "id": cid,
@@ -397,71 +588,84 @@ def _evereantha_adapted(system_id: str) -> Dict[str, Any]:
     base["system_id"] = system_id
 
     if system_id == "dnd-5e":
-        base["name"] = "Evereantha · The Caldera Choir (D&D 5E adaptation)"
-        base["genre"] = "high fantasy"
+        base["name"] = "Evereantha · The Fracture of the Unmaker (D&D 5E adaptation)"
+        base["genre"] = "dark heroic fantasy with cosmic horror"
         base["player_primer"] = (
-            "You are Choir apprentices at a crossroads. The mountain sings "
-            "against the pact of the First Eclipse. Expect Bardic ritual, "
-            "Cleric-domain stakes, and Wizard-tier cypher dilemmas."
+            "You are villagers of Eagle's Nest at the threshold of a "
+            "52-session arc. The Order of the Darkening Star believes "
+            "the void can stop the Unmaker. They are wrong. Expect "
+            "Bardic warnings, Cleric-domain crises, Wizard-tier "
+            "calculations of which timeline is real."
         )
         base["damage_rating_baseline"] = 8
         # D&D-flavoured encounter: CR-scale NPCs matching the demo's tier.
         base["encounter"] = {
-            "name": "Pass-of-Aurea Ambush (SRD CR)",
-            "kind": "combat",
+            "name": "Eagle's Nest · The Sleeping Kin (SRD CR)",
+            "kind": "social-then-combat",
             "plot_phase": "epic-7-milestones",
-            "environment": {"indoor": False, "weather": "snowstorm", "light": "twilight"},
-            "notes": "Sister Quench strikes from cover. The party is level 4.",
+            "environment": {"indoor": False, "weather": "still", "light": "dawn"},
+            "notes": "The dying tree's roots peel back to reveal a porcelain woman, breathing barely. A cult scout watches from the treeline. Party is level 3.",
             "npcs": [
-                {"name": "Sister Quench", "role": "nemesis", "cr": "3", "count": 1,
-                 "intent": "Drop the apprentice carrying the Hammer-half hum."},
-                {"name": "Cult Acolytes (minions)", "role": "minion", "cr": "1/4", "count": 4,
-                 "intent": "Suppress the rear while Sister Quench picks targets."},
+                {"name": "Sleeping Kin (lookalike)", "role": "ambivalent", "cr": "5", "count": 1,
+                 "intent": "Wake. Decide if the players are kin or kindling."},
+                {"name": "Cult Scout (Order of the Darkening Star)", "role": "henchman", "cr": "1/2", "count": 1,
+                 "intent": "Witness, then run for Sylas Stonefist."},
             ],
         }
     elif system_id == "cypher":
-        base["name"] = "Evereantha · The Caldera Choir (Cypher adaptation)"
+        base["name"] = "Evereantha · The Fracture of the Unmaker (Cypher adaptation)"
         base["setting_genre"] = "fantasy"
-        base["genre"] = "fantasy"
+        base["genre"] = "dark fantasy with cosmic horror"
         base["player_primer"] = (
-            "You are Choir apprentices in a world where every sung form "
-            "is a cypher. Each Resonance rank maps to a tier; the "
-            "Forbidden Break is a Level-7 task (GM Intrusion favoured)."
+            "You are villagers of Eagle's Nest. Aurae magic is "
+            "Threading; Mortiscura is Chaining. The Butterfly Effect "
+            "Gauge governs how your past-changing acts ripple into the "
+            "present. Cypher level 5 = base difficulty for cosmic-horror "
+            "saves."
         )
         base["encounter"] = {
-            "name": "Pass-of-Aurea Ambush (Cypher levels)",
-            "kind": "combat",
+            "name": "Eagle's Nest · The Sleeping Kin (Cypher levels)",
+            "kind": "social-then-combat",
             "plot_phase": "epic-7-milestones",
-            "environment": {"indoor": False, "weather": "snowstorm", "light": "twilight"},
-            "notes": "Cypher difficulty 5 for the ambush roll; Sister Quench level 4.",
+            "environment": {"indoor": False, "weather": "still", "light": "dawn"},
+            "notes": "Cypher difficulty 5 for the perception roll; the Sleeping Kin is level 5.",
             "npcs": [
-                {"name": "Sister Quench", "role": "nemesis", "level": 4, "count": 1,
-                 "intent": "Silence the Hammer-half hum with one perfect chord."},
-                {"name": "Cult Acolytes", "role": "henchman", "level": 2, "count": 3,
-                 "intent": "Cover angles; drop cyphers on the rear."},
+                {"name": "Sleeping Kin (lookalike)", "role": "ambivalent", "level": 5, "count": 1,
+                 "intent": "Wake. Listen for the others. Decide whether the players are kin."},
+                {"name": "Cult Scout (Order of the Darkening Star)", "role": "henchman", "level": 2, "count": 1,
+                 "intent": "Witness without engaging. Run for Sylas at the first sign of force."},
             ],
         }
     elif system_id == "anime-5e":
-        base["name"] = "Evereantha · The Caldera Choir (Anime 5E hybrid)"
-        base["genre"] = "shōnen fantasy"
+        base["name"] = "Evereantha · The Fracture of the Unmaker (Anime 5E hybrid)"
+        base["genre"] = "shōnen-tinged dark fantasy with cosmic horror"
+        # Anime 5E is D&D 5E + BESM-style point-buy LAYER for genre
+        # powers — NOT Tri-Stat ability scores. Flavour the primer
+        # accordingly so the player picks the right mental model.
         base["player_primer"] = (
-            "You are Choir apprentices — each sung form is a personal "
-            "tune that powers your signature technique. Tri-Stat point "
-            "budget grants genre powers (e.g. Combat Mastery, Massive "
-            "Damage) on top of the d20 class chassis."
+            "You are villagers of Eagle's Nest. The d20 chassis runs "
+            "your class, level, hit dice, AC, and saves exactly as in "
+            "5E. The BESM-style point-buy layer sits on TOP of the "
+            "sheet — you can spend a point budget on signature genre "
+            "powers (e.g. Combat Mastery, Heightened Senses, Personal "
+            "Gear, Custom Technique) for shōnen flavour. Anime 5E does "
+            "NOT use Tri-Stat ability scores — Body / Mind / Soul are "
+            "absent here. The D&D SRD races, classes, feats and "
+            "backgrounds port directly into Anime 5E (one-way port — "
+            "Anime 5E content does NOT port back to a strict-5E table)."
         )
         base["primer_tier_suggest"] = 1
         base["encounter"] = {
-            "name": "Pass-of-Aurea Ambush (Hybrid CR/Tri-Stat)",
-            "kind": "combat",
+            "name": "Eagle's Nest · The Sleeping Kin (Anime 5E hybrid)",
+            "kind": "social-then-combat",
             "plot_phase": "epic-7-milestones",
-            "environment": {"indoor": False, "weather": "snowstorm", "light": "twilight"},
-            "notes": "Sister Quench: level 5 Idol · 2d6 sonic per Resonance rank.",
+            "environment": {"indoor": False, "weather": "still", "light": "dawn"},
+            "notes": "d20 SRD CR + a small BESM point-buy budget for the Kin's signature techniques.",
             "npcs": [
-                {"name": "Sister Quench", "role": "nemesis", "cr": "4", "count": 1,
-                 "intent": "Cut the Hammer-half chord with a single note."},
-                {"name": "Cult Acolytes", "role": "minion", "cr": "1/2", "count": 4,
-                 "intent": "Keep the apprentices pinned at the switchback."},
+                {"name": "Sleeping Kin (lookalike)", "role": "ambivalent", "cr": "5", "count": 1,
+                 "intent": "Wake. Decide whether the players are kin or kindling."},
+                {"name": "Cult Scout (Order of the Darkening Star)", "role": "henchman", "cr": "1/2", "count": 1,
+                 "intent": "Witness, then run for Sylas."},
             ],
         }
     return base

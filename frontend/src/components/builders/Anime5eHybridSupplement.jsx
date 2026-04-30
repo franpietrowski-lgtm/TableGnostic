@@ -1,14 +1,23 @@
 /**
- * Anime5eHybridSupplement — Tri-Stat point-buy layer for Anime 5E.
+ * Anime5eHybridSupplement — BESM-style point-buy layer for Anime 5E.
  *
  * Lives in its own file so both Dnd5e.jsx (which embeds it as the
  * optional hybrid card) and Anime5e.jsx (which composes the full
  * builder) can import it without creating a circular ESM cycle.
  *
- * The top sheet uses 5E mechanics (class/level/abilities/saves/skills),
- * and this card lets the player spend a separate Tri-Stat point budget
- * on Tri-Stat Attributes (e.g. Combat Mastery, Heightened Senses, Tough,
- * Personal Gear) for genre-flavoured powers that don't fit the 5E class.
+ * IMPORTANT — Anime 5E rules clarification (from the official
+ * Anime 5E hybrid release):
+ *   • Anime 5E is D&D 5E with a BESM-style point-buy LAYER on top.
+ *   • It is NOT Tri-Stat. Body / Mind / Soul ability scores are
+ *     absent. The d20 chassis runs class, level, hit dice, AC, and
+ *     saves exactly as in 5E.
+ *   • The point-buy layer is OPTIONAL flavour — it lets a player
+ *     spend a separate budget on signature genre powers (Combat
+ *     Mastery, Heightened Senses, Personal Gear, Custom Technique)
+ *     for shōnen colour the 5E class doesn't quite cover.
+ *   • The port is one-way: D&D SRD races, classes, feats, and
+ *     backgrounds import directly into Anime 5E. Anime 5E content
+ *     does NOT port back to a strict-5E table.
  *
  * Persists into `folio.anime5e_state` alongside `folio.dnd_state`.
  */
@@ -49,13 +58,15 @@ export function Anime5eHybridSupplement({ ch, setCh, ref_ }) {
       <div className="flex items-baseline justify-between flex-wrap gap-2">
         <div>
           <h3 className="h-arcane text-sm">
-            Tri-Stat Supplement
+            BESM Point-Buy Layer
             <span className="text-[9px] text-mist ml-2 uppercase tracking-widest">Anime 5E hybrid</span>
           </h3>
           <div className="text-[11px] text-mist/80 italic">
-            Point-buy attributes layered on top of your d20 sheet — for
-            genre powers, custom gear, and signature techniques the 5E
-            class doesn't cover.
+            Optional BESM-flavoured point-buy on top of the standard
+            5E sheet. Spend a budget on signature genre powers (Combat
+            Mastery, Heightened Senses, Personal Gear, Custom
+            Technique). The d20 class / level / saves / skills above
+            run normally — this layer is pure flavour customisation.
           </div>
         </div>
         <div className="text-right">
