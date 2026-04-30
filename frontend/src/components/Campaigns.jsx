@@ -54,7 +54,8 @@ export default function Campaigns() {
           {filtered.map((c) => (
             <Link key={c.id} to={`/app/campaigns/${c.id}`}
                   className="card-mystic p-5 transition hover:-translate-y-0.5"
-                  data-testid={`campaign-${c.id}`}>
+                  data-testid={`campaign-${c.id}`}
+                  data-campaign-tile={c.id}>
               <div className="flex items-center justify-between">
                 <span className="label-ref">{c.system}</span>
                 <span className="tag">{c.visibility === "public" ? <><Globe2 className="w-3 h-3"/> Public</> : <><Lock className="w-3 h-3"/> Private</>}</span>

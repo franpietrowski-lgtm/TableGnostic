@@ -23,6 +23,46 @@
 ### V5.1 — Atelier "Epic Campaign" 8th-phase tab (2026-04-27)
 **Trigger:** GMFran uploaded Guy Sclanders' follow-up book *Epic Campaigns: Digital Edition* (146 pp) and asked for a new tab inside the **"Forge the Master Plot"** Atelier page. The two planes (the existing 7-phase Genesis and the new Epic Campaign) are intentionally INDEPENDENT — usable in tandem, separately, or one-or-the-other; pure GM brainstorming kit. Implemented as `phase === 7` panel inside `CampaignGenesis.jsx`, alongside the existing seven phases. Backend: new `db.epic_campaigns` collection + `routes/epic_campaign.py` (GET/PUT/seed-codex). Frontend: new `EpicCampaignPanel.jsx` (11 sections — Plan/Constraints, Theme, Sentence, OGAS Nemesis, Villains, Expanding Goal, Milestones, Adventures, Seeds, Beginning, Climax — plus Tie-ins picker). The "Sync to Codex" action pushes the Nemesis + each Villain + each Seed into the World Codex as gm-only knowledge nodes; idempotent on re-run.
 
+### V6.2 — Delta-Drop + Character Rules-Compliance + Dual Approval (2026-04-30)
+
+Session continuation after previous agent ran out of context. Completed three inter-linked P0 items:
+
+**1. Delta-Drop — author-initiated cross-campaign updates**
+- `routes/deltas.py` (now registered in `server.py`) exposes full CRUD over `db.campaign_deltas`:
+  - `POST /api/campaigns/{cid}/deltas` — origin-only publish: snapshots current nodes / motives / epic / genesis, auto-increments version, broadcasts `delta:new` over WS to every clone room.
+  - `GET /api/campaigns/{cid}/deltas` — returns per-row status (`published` on origin, `pending`/`applied`/`deferred` on clones). Pending drops first on the clone side.
+  - `GET /api/campaigns/{cid}/deltas/{did}` — full bundle for preview.
+  - `POST /api/campaigns/{cid}/deltas/{did}/apply` — conservative non-destructive merge: nodes deduped by title, motives by `(node-title, motive-text)`, epic/genesis soft-applied only if the clone's copy is empty/un-refined. Returns counts (`added_nodes`, `added_motives`, `epic_applied`, `genesis_applied`).
+  - `POST /api/campaigns/{cid}/deltas/{did}/defer` — dismiss badge, keep drop in history.
+- Frontend `DeltaDropPanel.jsx` mounted in a new GM-only `Delta Drop` tab on `CampaignDetail.jsx`. Auto-detects origin vs clone; origin shows a publish form, clone shows pending/applied/deferred rows with Preview / Apply / Defer buttons and a preview modal showing counts + node & motive lists.
+
+**2. Character rules-compliance validator + dual approval**
+- `routes/character_validation.py` — new module. System-aware `_validate_character()` computes:
+  - **BESM 4E**: stats × 2 CP above baseline (4), attributes × cost_per_level − item-defect refunds, skills × cost_per_level, power-pack explicit costs, character defects refunded to pool. Flags over-budget (spent > campaign's `total_points`) and yellow-warns if ≥5 CP under-spent.
+  - **Anime 5E**: D&D chassis sanity (level 1-20) + BESM-style point-buy layer sum vs `folio.anime5e_state.point_budget`.
+  - **D&D 5E**: level 1-20 bound + class-set warning.
+  - **Cypher**: tier 1-6 bound + descriptor/type/focus set.
+- Endpoints:
+  - `GET /api/characters/{cid}/validate` — read-only audit (owner, GM, or member).
+  - `POST /api/characters/{cid}/app-validate` — stamps `approval.app_validated` on the character. Sheet-change invalidation: if the sheet has changed since the GM ratified, `gm_approved` resets to false with `gm_approval_stale_reason` set.
+  - `POST /api/characters/{cid}/approve-for-play` (GM-only) — ratifies. **Hard guard**: if `passes_rules=False` AND campaign has no `house_rules` declared, HTTP 400 — GM cannot accidentally approve an over-budget PC without a house-rule exception recorded.
+- **Session seat-take gate** (`routes/sessions.py`): seat-character now returns 409 if the PC isn't `approved_for_play`. `force=true` lets the GM override.
+- Frontend `CharacterApprovalPanel.jsx` mounted under the XP Approval Queue on the character sheet. Status badge, rules audit card with per-system breakdown, issues/advisories lists, app-internal + GM-ratification status row, Re-run Validator / GM Approve (+ note) / Revoke buttons, and a house-rules override notice card.
+
+**3. Anime5eSupplementView relabel**
+- `CharacterSheet.jsx` `Anime5eSupplementView` header copy rewritten per the V6.1 rename: "Tri-Stat Supplement · Anime 5E hybrid" → "BESM Point-Buy Layer · Anime 5E hybrid"; subhead now notes the one-way port from 5E. Closes the last V6.1 inconsistency surfaced by iter34.
+
+**Verification — `/app/test_reports/iteration_35.json`**
+- Backend: 15/15 pytest pass in `test_iter35_v62.py`. Delta-Drop CRUD + permissions + clone-only apply + idempotent dedup; validator BESM/Anime/D&D/Cypher; GM approval 400-guard when no house-rules; house-rules bypass; seat-character 409 gate + GM force override; V6.1 regression retained (seed-evereantha-suite 9 motives, pulse resolver).
+- Frontend: source-verified — all required testids present on DeltaDropPanel + CharacterApprovalPanel.
+
+**Deferred (session completed P0; P1 queue unchanged):**
+- Per-system PDF theming across all export paths.
+- Mobile sweep for PDF character sheets styled like core rulebooks.
+- "How to" interactive guide page with feature-interconnection map.
+- "Canon delta" panel to visualise divergence vs canonical BESM 4E.
+
+
 ### V6.1 — Evereantha canon rewrite + Idempotent seeding + Anime 5E rules clarification (2026-04-30)
 
 User-driven correction pass after V6.0.
