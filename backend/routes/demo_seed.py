@@ -581,7 +581,8 @@ async def _seed_one(blob: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any
             "nodes": len(blob.get("nodes", [])),
             "motives": len(blob.get("motives", [])),
             "milestones": len(blob.get("epic", {}).get("milestones", [])),
-            "encounter": blob.get("encounter", {}).get("name") or None}
+            "encounter": blob.get("encounter", {}).get("name") or None,
+            "skipped_existing": False}
 
 
 @router.post("/admin/seed-demo")
