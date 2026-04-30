@@ -23,6 +23,33 @@
 ### V5.1 — Atelier "Epic Campaign" 8th-phase tab (2026-04-27)
 **Trigger:** GMFran uploaded Guy Sclanders' follow-up book *Epic Campaigns: Digital Edition* (146 pp) and asked for a new tab inside the **"Forge the Master Plot"** Atelier page. The two planes (the existing 7-phase Genesis and the new Epic Campaign) are intentionally INDEPENDENT — usable in tandem, separately, or one-or-the-other; pure GM brainstorming kit. Implemented as `phase === 7` panel inside `CampaignGenesis.jsx`, alongside the existing seven phases. Backend: new `db.epic_campaigns` collection + `routes/epic_campaign.py` (GET/PUT/seed-codex). Frontend: new `EpicCampaignPanel.jsx` (11 sections — Plan/Constraints, Theme, Sentence, OGAS Nemesis, Villains, Expanding Goal, Milestones, Adventures, Seeds, Beginning, Climax — plus Tie-ins picker). The "Sync to Codex" action pushes the Nemesis + each Villain + each Seed into the World Codex as gm-only knowledge nodes; idempotent on re-run.
 
+### V6.5 — Spell Conversion Atlas + Live Spend Preview + Per-system PDF ornaments (2026-04-30)
+
+**Spell Conversion Atlas (62 entries, read-only reference)**
+- `/app/backend/system_data/spell_conversion_library.py` — hand-authored 62-entry library mapping D&D 5E spells & class features to BESM Attribute bundles with enhancement/limiter numeric values and SRD citations. Covers:
+  - 10 cantrips (every school: Evocation, Conjuration, Illusion, Transmutation, Enchantment, Necromancy-equivalents).
+  - 10 1st-level spells, 8 2nd-level, 8 3rd-level, 6 4th-level, and 10 spells spanning 5th→9th.
+  - 10 class features (Rage, Action Surge, Flurry of Blows, Lay On Hands, Favoured Enemy, Sneak Attack, Eldritch Blast, Wild Shape, Metamagic, Turn Undead).
+- `GET /api/reference/spell-conversions?max_level=N&school=X` — filterable endpoint; returns `{entries, total, returned, schools}`.
+- Frontend `SpellConversionAtlas` modal (opened via `reference-open-atlas-btn`) — school + level + text filters; each row shows the canonical spell, its BESM attribute conversion, every enhancement/limiter with numeric value tag, net CP, and source reference.
+
+**Live Spend Preview on Power Bundle template cards**
+- New `POST /api/characters/{cid}/simulate-import` — returns `{current_spent, current_cap, projected_spent, fits, headroom, summary}` for a hypothetical cost addition. Access-gated (owner/GM/member/admin).
+- Frontend `PowerBundleTemplatePicker` now has a **character picker** at the top (`bundle-preview-character-select`). Selecting a PC and hovering a template card triggers `/simulate-import` with the template's cost; card shows a green "OK (N spare)" or ember "OVER by N" tag live.
+
+**Per-system PDF ornaments**
+- `pdf_export.py` `chrome()` now draws a system-keyed glyph midway along the top+bottom rule of every body page: **diamond** (BESM 4E), **petal** (Anime 5E), **fleur** (D&D 5E), **circuit** (Cypher), **rule** (default). Pure-vector (ReportLab primitives), no image assets required. Style profiles `chapter_decoration` finally drive rendering.
+
+**Testing — `/app/test_reports/iteration_38.json`**
+- Backend pytest: **49/49 pass** (10 V6.5 + 19 V6.4 + 15 V6.2 + 5 V6.1). 789KB BESM PDF renders cleanly with new ornaments.
+- Frontend compile blocker (misplaced brace scoping SpellConversionAtlas inside PowerBundleTemplatePicker) caught by testing-agent and fixed in-place — all three component fns (PowerBundleTemplatePicker, SpellConversionAtlas, Row) now module-level siblings. Webpack compiles with warnings-only.
+
+**Nits flagged for next session**
+- `ReferenceEditor.jsx` now 933 lines — split SpellConversionAtlas + PowerBundleTemplatePicker + PowerBundleEditor into own files in the next SystemCharacterBuilders refactor sprint.
+- PDF export endpoint is `GET /campaigns/{cid}/export.pdf` (not POST /export-pdf) — doc note.
+- 2 unfixed exhaustive-deps warnings on refresh/template-load flows; low priority.
+
+
 ### V6.4 — Rules correctness + Power Pack/Bundle distinction + Anime 5E XP→CP + D&D-spell-mimic templates (2026-04-30)
 
 **Models (BESM Extras ch.3 compliance)**
