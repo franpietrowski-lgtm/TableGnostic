@@ -88,7 +88,7 @@ export function Anime5eHybridSupplement({ ch, setCh, ref_ }) {
         <select className="select"
                 onChange={(e) => { if (e.target.value) { addAttribute(e.target.value); e.target.value = ""; } }}
                 data-testid="anime5e-add-attribute">
-          <option value="">+ Add Tri-Stat Attribute…</option>
+          <option value="">+ Add BESM-style Attribute…</option>
           {(ref_.point_buy_attributes || []).map((a) => (
             <option key={a.name} value={a.name}>
               {a.name} ({a.cost_per_level} pts/lvl) — {a.blurb_role}
@@ -99,7 +99,7 @@ export function Anime5eHybridSupplement({ ch, setCh, ref_ }) {
 
       {buys.length === 0 ? (
         <div className="text-mist italic text-xs mt-3">
-          Pick a Tri-Stat Attribute above to add a point-buy power.
+          Pick a BESM-style attribute above to add a point-buy power.
         </div>
       ) : (
         <div className="mt-3 space-y-2">
@@ -132,8 +132,11 @@ export function Anime5eHybridSupplement({ ch, setCh, ref_ }) {
       )}
 
       <div className="text-[10px] text-mist/60 italic mt-3">
-        Anime 5E hybrid mode — the 5E class/level/slot mechanics drive your
-        d20 rolls; Tri-Stat point-buy adds genre-flavoured powers.
+        Anime 5E hybrid mode — the standard 5E class, level, hit dice,
+        AC, saves, and skills above drive your d20 rolls. This BESM
+        point-buy layer adds genre-flavoured powers and is one-way
+        compatible (5E content imports here; Anime 5E content does NOT
+        port back to a strict-5E table).
       </div>
     </div>
   );

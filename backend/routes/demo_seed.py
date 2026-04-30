@@ -15,7 +15,7 @@ Idempotent — running twice creates a SECOND copy, not duplicates inside
 the existing copy. The frontend Account page exposes this as a one-click
 "Deploy demo campaigns" button.
 """
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 
@@ -483,9 +483,29 @@ async def _seed_one(blob: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any
         name_to_node_id[n["title"]] = nid
 
     # NPC motives — keyed by node title → node_id, tagged to plot phases.
-    for npc_name, motive_text, phase, state in blob.get("motives", []):
+    # Lookup is prefix-tolerant: if a motive's npc_name is a clean prefix
+    # of a single node title (e.g. 'Lyra Earthheart — EarthMancer' for
+    # node 'Lyra Earthheart — Deaconess of the Elements / EarthMancer'),
+    # we still bind correctly. Avoids the silent-drop class of bug.
+    def _resolve_node_id(npc_name: str) -> Optional[str]:
         nid = name_to_node_id.get(npc_name)
+        if nid:
+            return nid
+        head = npc_name.split(" — ", 1)[0]
+        # Match by first segment before the em-dash; fall back to the
+        # raw prefix. Both halves let the seed author write a shorter
+        # display string and still bind unambiguously.
+        candidates = [
+            (t, n) for t, n in name_to_node_id.items()
+            if t.split(" — ", 1)[0] == head or t.startswith(head)
+        ]
+        return candidates[0][1] if len(candidates) == 1 else None
+
+    dropped: List[str] = []
+    for npc_name, motive_text, phase, state in blob.get("motives", []):
+        nid = _resolve_node_id(npc_name)
         if not nid:
+            dropped.append(npc_name)
             continue
         await db.node_motives.insert_one({
             "id": new_id(),
@@ -496,6 +516,14 @@ async def _seed_one(blob: Dict[str, Any], user: Dict[str, Any]) -> Dict[str, Any
             "author_id": user["id"], "author_name": user["name"],
             "created_at": _now(),
         })
+    if dropped:
+        # Surface seed-time data drift to the server log so future title
+        # divergences can't silently shave the motive count again.
+        import logging
+        logging.getLogger(__name__).warning(
+            "demo_seed: dropped %d motives (no matching node title): %s",
+            len(dropped), dropped,
+        )
 
     # Genesis 7-phase scaffold.
     genesis_doc = {

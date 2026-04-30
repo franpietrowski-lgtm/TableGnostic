@@ -23,7 +23,37 @@
 ### V5.1 — Atelier "Epic Campaign" 8th-phase tab (2026-04-27)
 **Trigger:** GMFran uploaded Guy Sclanders' follow-up book *Epic Campaigns: Digital Edition* (146 pp) and asked for a new tab inside the **"Forge the Master Plot"** Atelier page. The two planes (the existing 7-phase Genesis and the new Epic Campaign) are intentionally INDEPENDENT — usable in tandem, separately, or one-or-the-other; pure GM brainstorming kit. Implemented as `phase === 7` panel inside `CampaignGenesis.jsx`, alongside the existing seven phases. Backend: new `db.epic_campaigns` collection + `routes/epic_campaign.py` (GET/PUT/seed-codex). Frontend: new `EpicCampaignPanel.jsx` (11 sections — Plan/Constraints, Theme, Sentence, OGAS Nemesis, Villains, Expanding Goal, Milestones, Adventures, Seeds, Beginning, Climax — plus Tie-ins picker). The "Sync to Codex" action pushes the Nemesis + each Villain + each Seed into the World Codex as gm-only knowledge nodes; idempotent on re-run.
 
-### V6.0 — Session A: WS Pulse + Ingestion Preview + Anime5e DnD import + Evereantha cross-system + Dashboard redesign (2026-04-29)
+### V6.1 — Evereantha canon rewrite + Idempotent seeding + Anime 5E rules clarification (2026-04-30)
+
+User-driven correction pass after V6.0.
+
+**1. Idempotent seeding**
+- `routes/demo_seed.py` `_seed_one()` now does a lookup by `(gm_id, name, system_id)` BEFORE creating anything. If found, returns `skipped_existing: true` with the existing campaign id + live counts. End to "click Deploy → 5 copies in account".
+
+**2. Evereantha canon rewrite — "The Fracture of the Unmaker"**
+- Replaced the placeholder Caldera Choir setting with the canonical 52-session arc per the user's source PDF.
+- 43 codex nodes spanning: Continenta Aurea + Aetheris cosmology, Eagle's Nest / Gildenwood / Taurid Tor / Aevum Colosseum / Technopolis Lumina / 13th Temple, Order of the Darkening Star / Eclipse Syndicate / Singularity / Five Noble Houses, all 11 Deacons by name (Sylas Stonefist, Vaelin the Quiet, Morrigan Nightshade, Lyra Earthheart, Luminar, Rowena Wildwood, Augustus Blackpaw, Marcus Aurelius, Zephyr Windrider, Ignatius the Inferno, Azura Starlight), the cosmic principals Azazel/Samael/the Kin, Aurae & Mortiscura magic + Butterfly Effect Gauge.
+- 9 plot-phase-tagged motives. 6-act epic milestone arc.
+- System adaptations updated for D&D 5E / Cypher / Anime 5E (encounter NPCs are now Sleeping Kin + Cult Scout instead of the deprecated Sister Quench, properly setting up Sylas's Act-I storyline).
+
+**3. Motive resolver hardening (bug fix)**
+- The motive lookup table was matching by exact title only; the new long titles (`'Lyra Earthheart — Deaconess of the Elements / EarthMancer'`) silently dropped 3 of 9 motives. Lookup is now prefix-tolerant: matches by the segment before ` — `, falls back to startswith. Drop-events log a warning so the next divergence can't slip past.
+
+**4. Anime 5E rules clarification — Tri-Stat REMOVED**
+- Per the user's correction: Anime 5E is **D&D 5E with an OPTIONAL BESM-style point-buy LAYER on top**. It does NOT use Tri-Stat ability scores.
+- `system_data/anime5e_data.py` — module docstring rewritten; `ABILITIES` is now the standard 5E six (STR/DEX/CON/INT/WIS/CHA); `TRI_STAT_LEGACY_ABILITIES` retained for migration only; the 5 Anime-original classes (Adept/Champion/Idol/Pilot/Tinker) now use 5E ability names for primary/saves; `rule_note` rewritten.
+- `frontend/src/components/builders/Anime5eHybridSupplement.jsx` — UI strings: "Tri-Stat Supplement" → "BESM Point-Buy Layer", "+ Add Tri-Stat Attribute…" → "+ Add BESM-style Attribute…", footer disclaimer adds the one-way port note (5E content imports here; Anime 5E content does NOT port back to a strict-5E table).
+
+**Verification — `/app/test_reports/iteration_33.json`**
+- iter_33 found 1 backend issue (motive truncation at 6/9) + 2 frontend nits (3 leftover Tri-Stat strings). All fixed in this turn.
+- Curl smoke verify: deleted-and-reseeded canonical besm now reports 9/9 motives. 4-system suite all systems show 9 motives. Second-call idempotency: `skipped_existing: true` with same IDs.
+
+**Deferred to dedicated session(s):**
+- 🟠 Per-system PDF theming across all export paths (BESM ornate/serif, Anime 5E vivid, Cypher brutalist, D&D 5E parchment)
+- 🟡 Mobile sweep for CharacterSheet + PDF character sheets styled like core rulebooks
+- 🟡 "How to" interactive guide page with feature-interconnection map
+
+
 
 **Real-time Pulse nervous system**
 - `routes/ecosystem.py` — new `_pulse_tick(cid, kind, meta)` helper broadcasts `{type:'pulse:tick'}` to `campaign:{cid}` room.

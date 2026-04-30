@@ -196,13 +196,11 @@ class TestEvereanthaMotives:
                 f"Got: {labels}"
             )
 
-    def test_lyra_luminar_motives_dropped_known_bug(self, gm_client):
-        """Captures a real backend bug: seed motive npc_name uses a
-        truncated form that does NOT match the node title, so the
-        `if not nid: continue` clause in demo_seed.py:488 silently
-        drops Lyra and Luminar's motives. The pulse therefore returns
-        only Vaelin/Morrigan/Kin at epic-9-adventures (3 active),
-        not the canonical 5.
+    def test_lyra_luminar_motives_now_present_v61_fix(self, gm_client):
+        """V6.1 fix verified: prefix-tolerant resolver in demo_seed.py
+        now matches truncated motive npc_names ('Lyra Earthheart —
+        EarthMancer') against full node titles. Both Lyra and Luminar
+        motives must now appear in the pulse.
         """
         cid = getattr(pytest, "besm_cid", None)
         assert cid
@@ -211,13 +209,11 @@ class TestEvereanthaMotives:
             f"?plot_phase=epic-9-adventures",
             timeout=20)
         labels = " | ".join(m.get("node_label", "") for m in r.json().get("active_motives") or [])
-        dropped = [n for n in EXPECTED_MISSING_MOTIVE_NPCS if n not in labels]
-        # We expect them BOTH to be missing (dropped). If they appear,
-        # the bug was fixed and this test should be retired.
-        assert dropped == EXPECTED_MISSING_MOTIVE_NPCS, (
-            f"Lyra/Luminar motives now present — bug fixed! Update test. "
-            f"labels={labels}"
-        )
+        for npc in EXPECTED_MISSING_MOTIVE_NPCS:
+            assert npc in labels, (
+                f"V6.1 prefix-tolerant resolver regression: "
+                f"'{npc}' missing from pulse. labels={labels}"
+            )
 
 
 # ─────────── 5 — Anime 5E reference ───────────
