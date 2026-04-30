@@ -23,6 +23,48 @@
 ### V5.1 — Atelier "Epic Campaign" 8th-phase tab (2026-04-27)
 **Trigger:** GMFran uploaded Guy Sclanders' follow-up book *Epic Campaigns: Digital Edition* (146 pp) and asked for a new tab inside the **"Forge the Master Plot"** Atelier page. The two planes (the existing 7-phase Genesis and the new Epic Campaign) are intentionally INDEPENDENT — usable in tandem, separately, or one-or-the-other; pure GM brainstorming kit. Implemented as `phase === 7` panel inside `CampaignGenesis.jsx`, alongside the existing seven phases. Backend: new `db.epic_campaigns` collection + `routes/epic_campaign.py` (GET/PUT/seed-codex). Frontend: new `EpicCampaignPanel.jsx` (11 sections — Plan/Constraints, Theme, Sentence, OGAS Nemesis, Villains, Expanding Goal, Milestones, Adventures, Seeds, Beginning, Climax — plus Tie-ins picker). The "Sync to Codex" action pushes the Nemesis + each Villain + each Seed into the World Codex as gm-only knowledge nodes; idempotent on re-run.
 
+### V6.4 — Rules correctness + Power Pack/Bundle distinction + Anime 5E XP→CP + D&D-spell-mimic templates (2026-04-30)
+
+**Models (BESM Extras ch.3 compliance)**
+- `CharacterAttribute` gained `effective_level: Optional[int]` + `cost_modifier: Optional[int]`. Syntax `Flight Level 1 (4)` now round-trips cleanly.
+- Enhancements / Limiters may now be `{name, value, note}` rows OR bare strings (legacy). Value range warned beyond ±12 (Absolute Power supplement allowed — user's "Silver Age Sentinels" use case).
+- `CharacterDefect` gained a `value: int = 0` override for explicit CP refund (Absolute Power beyond canonical 1/2-pt scale).
+- `CharacterPowerPack` marked `kind: "power_pack"` — always-on narrative source-of-power bundle.
+- New `CharacterPowerBundle` — activatable spell-like packet: `invocation` ∈ {always-on / per-scene / per-charge / per-day / roll-to-invoke / energy-cost}; `charges_max`/`charges_current`; `energy_cost`; `cooldown`; `source_spell_name`/`source_spell_level` for D&D-spell mimicry.
+- `Character.power_bundles: List[CharacterPowerBundle]` — separate from `power_packs` (as the BESM Extras book distinguishes).
+- `Campaign.anime5e_xp_formula: Literal["flat","curve"]` — GM-picked conversion formula for the optional BESM point-buy layer on Anime 5E.
+
+**Validator upgrades (`/app/backend/routes/character_validation.py`)**
+- BESM breakdown now sums Enhancement/Limiter VALUE deltas (not just count). `effective_level = level + net_delta` with floor 1; `gross = max(1, cpl×level + net_delta×level)` so stacked limiters raise paid CP proportionally, stacked enhancements lower it.
+- Modifier-value out-of-range (|v| > 12) emits a warning line but does NOT fail the audit.
+- Power Bundle lines render with their invocation + charge metadata in the breakdown (`"activatable · per-charge · 3 charges"`).
+- `breakdown` now exposes `power_bundle_total` alongside `power_pack_total`, and `modifier_warnings` list.
+
+**New endpoints**
+- `GET /api/campaigns/{cid}/anime5e-xp-curve` — returns `{formula, cp_budget_at_level, curve[1..20]}`.
+- `GET /api/reference/power-bundle-templates?max_level=N` — returns the seeded starter library filtered by spell level.
+
+**Power Bundle starter library (`/app/backend/system_data/power_bundle_templates.py`)**
+- 10 templates seeded from the user-supplied `Anime_5E_Spell_Conversions.pdf`:
+  Dancing Lights (0), Cure Wounds (1), Enlarge/Reduce (2), Dispel Magic (3), Greater Invisibility (4), Insect Plague (5), Move Earth (6), Plane Shift (7), Control Weather (8), Meteor Swarm (9) — every spell school and every spell tier covered.
+- Each carries its canonical invocation mode, CP cost, component Attributes with enhancement/limiter value rows, and page-cited references.
+
+**Frontend**
+- Campaign Primer form: Anime 5E campaigns show an `Anime 5E XP → CP formula` radio (flat/curve) with tooltips. Persists on save.
+- Reference Editor: for `power_bundle` / `power_pack` tabs, GMs see an `Import from templates` button that opens a `PowerBundleTemplatePicker` modal with the 10 seeded cards (name · school · invocation · CP · charges/EP). Clicking a card drops a pre-populated Row into the draft editor for further customisation. Template testids now slugified (safe for selectors).
+
+**Rules-correctness pytest sweep — `/app/backend/tests/test_iter37_v64_rules.py`**
+- 19 new tests covering modifier-value math, out-of-range warning, power-pack vs bundle distinction, Anime 5E XP formula arithmetic at 9 level/formula combinations, curve endpoint, template filter, D&D level bound, Cypher tier bound, bundle-estimator vs validator cross-consistency, house-rules bypass, legacy string-tag compat.
+- 20 regression tests (V6.1 + V6.2) still pass. **Total: 39/39.**
+- Added `load_dotenv` to `tests/conftest.py` so direct-import helpers resolve MONGO_URL cleanly.
+
+**Testing agent verification — `/app/test_reports/iteration_37.json`**
+- Backend: 100% (39/39). Frontend smoke: toggle persists on Anime campaigns, hidden on others; template picker opens with all 10 seeded entries; filter input present.
+
+**Stashed**
+- `/app/memory/references/Anime_5E_Spell_Conversions.pdf` retained for future template expansion.
+
+
 ### V6.3 — Epic panel crash fix + System-label correctness + Cypher dynamics + Custom Reference expansion (2026-04-30)
 
 **Bugs fixed**

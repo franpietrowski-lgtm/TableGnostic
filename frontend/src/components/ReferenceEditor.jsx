@@ -290,7 +290,7 @@ function PowerBundleTemplatePicker({ onPick, onClose }) {
           {filtered.map((t) => (
             <button key={t.name} onClick={() => onPick(t)}
                     className="text-left card-mystic p-3 hover:-translate-y-0.5 transition"
-                    data-testid={`bundle-template-${t.source_spell_name.replace(/\s+/g, '-').toLowerCase()}`}>
+                    data-testid={`bundle-template-${t.source_spell_name.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}`}>
               <div className="flex items-baseline justify-between gap-2">
                 <span className="font-ui text-parchment text-sm">{t.name}</span>
                 <span className="text-[10px] text-mist uppercase tracking-widest">
