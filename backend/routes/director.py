@@ -142,16 +142,26 @@ async def _gather_npc_pool(cid: str) -> List[Dict[str, Any]]:
                 "notes": v.get("notes", ""),
             })
 
-    # Codex — `npc` nodes.
-    cursor = db.nodes.find({"campaign_id": cid, "type": "npc"}, {"_id": 0})
+    # Codex — `npc` nodes (people) AND `creature` nodes (monsters/beasts).
+    # V6.11 — separate categories so the GM picker can group People vs.
+    # Beasts. Creatures from older campaigns may be tagged `npc` with
+    # `fields.kind == "creature"`; honour both.
+    cursor = db.nodes.find(
+        {"campaign_id": cid, "type": {"$in": ["npc", "creature"]}}, {"_id": 0},
+    )
     async for nd in cursor:
         key = f"codex:{(nd.get('title') or '').strip().lower()}"
         if not nd.get("title") or key in seen:
             continue
         seen.add(key)
+        is_creature = (
+            nd.get("type") == "creature"
+            or (nd.get("fields") or {}).get("kind") == "creature"
+        )
         pool.append({
             "name": nd["title"], "role": "neutral",
-            "source": "codex", "source_id": nd["id"],
+            "source": "creatures" if is_creature else "codex",
+            "source_id": nd["id"],
             "intent": (nd.get("fields") or {}).get("intent") or "",
             "notes": nd.get("content", "")[:200],
         })

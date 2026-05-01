@@ -21,6 +21,7 @@ const CampaignGenesis = lazy(() => import("./components/CampaignGenesis"));
 const Discover        = lazy(() => import("./components/Discover"));
 const Account         = lazy(() => import("./components/Account"));
 const DirectorConsole = lazy(() => import("./components/DirectorConsole"));
+const HowToGuide      = lazy(() => import("./components/HowToGuide"));
 
 function Protected({ children }) {
   const { user, loading } = useAuth();
@@ -81,6 +82,7 @@ export default function App() {
             <Route path="/app/reference" element={<Suspense fallback={<RouteFallback/>}><Reference /></Suspense>} />
             <Route path="/app/account" element={<Suspense fallback={<RouteFallback/>}><Account /></Suspense>} />
             <Route path="/app/campaigns/:id/director" element={<Suspense fallback={<RouteFallback/>}><DirectorConsole /></Suspense>} />
+            <Route path="/app/help" element={<Suspense fallback={<RouteFallback/>}><HowToGuide /></Suspense>} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

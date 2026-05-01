@@ -74,6 +74,29 @@ async def list_sessions(cid: str, user: dict = Depends(get_current_user)):
     return rows
 
 
+@router.put("/campaigns/{cid}/sessions/reorder")
+async def reorder_sessions(cid: str,
+                           ordered_ids: list[str],
+                           user: dict = Depends(get_current_user)):
+    """V6.11 — set the GM-defined timeline order. Accepts a list of session
+    IDs in the desired order; assigns sequence_index 0..N-1 accordingly.
+    Sessions not in the payload keep their existing sequence_index (or
+    None). GM/admin only.
+    """
+    camp = await db.campaigns.find_one({"id": cid}, {"_id": 0})
+    if not camp:
+        raise HTTPException(404, "Campaign not found")
+    if camp["gm_id"] != user["id"] and user.get("role") != "admin":
+        raise HTTPException(403, "Only GM/admin may reorder sessions")
+    for idx, sid in enumerate(ordered_ids or []):
+        await db.sessions.update_one(
+            {"id": sid, "campaign_id": cid},
+            {"$set": {"sequence_index": idx}},
+        )
+    rows = await db.sessions.find({"campaign_id": cid}, {"_id": 0}).to_list(200)
+    return rows
+
+
 @router.get("/sessions/{sid}")
 async def get_session(sid: str, user: dict = Depends(get_current_user)):
     s = await db.sessions.find_one({"id": sid}, {"_id": 0})

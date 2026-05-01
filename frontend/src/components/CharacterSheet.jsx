@@ -7,6 +7,7 @@ import XPApprovalQueue, { XPSpendForm } from "./XPApprovalQueue";
 import CharacterApprovalPanel from "./CharacterApprovalPanel";
 import CompanionAssignPanel from "./CompanionAssignPanel";
 import CharacterStatusRings from "./CharacterStatusRings";
+import CharacterPortrait from "./CharacterPortrait";
 import DndSheetView from "./sheets/DndSheetView";
 import CypherSheetView from "./sheets/CypherSheetView";
 import { CharacterJournal } from "./sheets/sheetCommon";
@@ -45,6 +46,20 @@ export default function CharacterSheet() {
 
   if (err) return <div className="p-10 text-ember">{err}</div>;
   if (!ch) return <div className="p-10 text-mist">Summoning…</div>;
+
+  // V6.11 — owner / GM may patch a single attribute / skill / defect's
+  // level inline on the sheet (no need to re-enter the builder for a quick
+  // tweak). Recomputes total CP server-side.
+  const canEditMech = !!user && (user.id === ch.owner_id || campaign?.is_gm);
+  const patchListItem = async (listKey, idx, patch) => {
+    const list = (ch[listKey] || []).map((row, i) => i === idx ? { ...row, ...patch } : row);
+    try {
+      const { data } = await api.put(`/characters/${ch.id}`, { ...ch, [listKey]: list });
+      setCh(data);
+    } catch (e) {
+      alert(formatApiErrorDetail(e.response?.data?.detail) || e.message);
+    }
+  };
 
   // Sheet roll = always posts a /roll line into the campaign's first PBP
   // channel (the "macro chat") so the table sees it immediately. If a live
@@ -147,7 +162,9 @@ export default function CharacterSheet() {
         ← Campaign
       </Link>
       <div className="mt-3 flex items-start justify-between flex-wrap gap-4">
-        <div>
+        <div className="flex items-start gap-5 flex-1 min-w-0">
+          <CharacterPortrait character={ch} canEdit={canEditMech} onUploaded={load}/>
+          <div className="min-w-0 flex-1">
           <div className="label-ref mb-1" data-testid="sheet-system-label">
             {(() => {
               // V6.3 — system label is driven by the CAMPAIGN's system_id,
@@ -212,6 +229,7 @@ export default function CharacterSheet() {
               companions={ch.companion_owners || []}
               onChanged={load}/>
           )}
+          </div>
         </div>
         <div className="flex gap-2">
           <button onClick={async () => {
@@ -325,7 +343,15 @@ export default function CharacterSheet() {
                                 page={a.page} note={a.note}
                                 book={a.page ? "BESM 4E" : "Custom"}/>
                       <span className="text-gold ml-2" title="Assigned Level — what the player paid points for">
-                        ×{a.level} <span className="text-gold/60 text-[10px] font-ui">assigned</span>
+                        ×{canEditMech ? (
+                          <input type="number" min={1} max={20}
+                                 value={a.level || 1}
+                                 onChange={(e) => patchListItem("attributes", i, { level: Math.max(1, +e.target.value || 1) })}
+                                 className="bg-transparent border-b border-gold/40 w-10 text-center font-display text-gold focus:outline-none focus:border-gold"
+                                 data-testid={`attr-level-edit-${i}`}
+                                 title="Click to set assigned Level — cost recomputes on save"/>
+                        ) : a.level}
+                        <span className="text-gold/60 text-[10px] font-ui">assigned</span>
                       </span>
                       {effDelta !== 0 && (
                         <span className="ml-2 text-arcane-light text-[11px] font-ui uppercase tracking-widest"
@@ -393,7 +419,15 @@ export default function CharacterSheet() {
                                 page={d.page} note={d.note} category={d.category}
                                 book={d.page ? "BESM 4E" : "Custom"}/>
                       <span className="text-ember ml-2" title="Rank — narrative severity">
-                        ×{d.rank} <span className="text-ember/60 text-[10px] font-ui">rank</span>
+                        ×{canEditMech ? (
+                          <input type="number" min={1} max={6}
+                                 value={d.rank || 1}
+                                 onChange={(e) => patchListItem("defects", i, { rank: Math.max(1, +e.target.value || 1) })}
+                                 className="bg-transparent border-b border-ember/40 w-10 text-center font-display text-ember focus:outline-none"
+                                 data-testid={`defect-rank-edit-${i}`}
+                                 title="Click to set Rank — refund recomputes on save"/>
+                        ) : d.rank}
+                        <span className="text-ember/60 text-[10px] font-ui">rank</span>
                       </span>
                     </div>
                     {d.note && (
@@ -428,7 +462,14 @@ export default function CharacterSheet() {
                            data-testid={`skill-display-${i}`}>{s.display_name}</div>
                     )}
                     <div className="text-sm text-parchment font-ui">
-                      {s.group} <span className="text-gold" title="Group Level">×{s.level}</span>
+                      {s.group} <span className="text-gold" title="Group Level">×{canEditMech ? (
+                        <input type="number" min={1} max={10}
+                               value={s.level || 1}
+                               onChange={(e) => patchListItem("skills", i, { level: Math.max(1, +e.target.value || 1) })}
+                               className="bg-transparent border-b border-gold/40 w-10 text-center font-display text-gold focus:outline-none"
+                               data-testid={`skill-level-edit-${i}`}
+                               title="Click to set Level — cost recomputes on save"/>
+                      ) : s.level}</span>
                       <span className="text-gold/50 text-[10px] ml-1 font-ui">assigned</span>
                       {s.cost_per_level ? (
                         <span className="text-gold/60 text-[10px] ml-2 font-ui uppercase tracking-widest">

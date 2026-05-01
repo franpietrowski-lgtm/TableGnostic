@@ -32,7 +32,7 @@ function SpellConversionAtlas({ onClose, onConvert }) {
     || (r.short_description || "").toLowerCase().includes(search.toLowerCase()));
 
   return (
-    <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4"
+    <div className="fixed inset-0 bg-void/90 backdrop-blur-md z-50 flex items-center justify-center p-4"
          onClick={onClose} data-testid="spell-conversion-atlas">
       <div className="card-mystic p-6 max-w-5xl w-full max-h-[88vh] overflow-y-auto"
            onClick={(e) => e.stopPropagation()}>

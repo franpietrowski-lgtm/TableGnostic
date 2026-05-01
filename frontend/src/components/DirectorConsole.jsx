@@ -31,6 +31,7 @@ export default function DirectorConsole() {
   const [doc, setDoc] = useState(null);
   const [characters, setCharacters] = useState([]);
   const [campaign, setCampaign] = useState(null);
+  const [sessions, setSessions] = useState([]);  // V6.11 — session picker
   const [activeIdx, setActiveIdx] = useState(0);
   const [analysis, setAnalysis] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -40,10 +41,11 @@ export default function DirectorConsole() {
   const load = async () => {
     setErr("");
     try {
-      const [d, ch, c] = await Promise.all([
+      const [d, ch, c, s] = await Promise.all([
         api.get(`/director/${cid}`).then((r) => r.data),
         api.get(`/campaigns/${cid}/characters`).then((r) => r.data || []),
         api.get(`/campaigns/${cid}`).then((r) => r.data),
+        api.get(`/campaigns/${cid}/sessions`).then((r) => r.data || []).catch(() => []),
       ]);
       // Lazily ensure at least one encounter exists.
       if (!d.encounters || d.encounters.length === 0) {
@@ -54,6 +56,19 @@ export default function DirectorConsole() {
       setDoc(d);
       setCharacters(ch);
       setCampaign(c);
+      // V6.11 — sessions are displayed in the GM-arranged timeline order
+      // (use sequence_index if set, else scheduled_at, else created_at).
+      // This honours backstory / prologue / time-shenanigans sessions
+      // whose timeline position diverges from their actual play date.
+      const ordered = (s || []).slice().sort((a, b) => {
+        const ai = a.sequence_index ?? null;
+        const bi = b.sequence_index ?? null;
+        if (ai !== null && bi !== null) return ai - bi;
+        const ta = new Date(a.scheduled_at || a.played_at || a.created_at || 0).getTime();
+        const tb = new Date(b.scheduled_at || b.played_at || b.created_at || 0).getTime();
+        return ta - tb;
+      });
+      setSessions(ordered);
     } catch (e) {
       setErr(formatApiErrorDetail(e.response?.data?.detail) || e.message);
     }
@@ -260,21 +275,37 @@ export default function DirectorConsole() {
                  data-testid="director-current-location"/>
         </div>
         <div className="flex-1 min-w-0">
-          <div className="label-ref mb-1">Live Atelier phase</div>
-          <select className="select" value={doc.current_phase_ref || ""}
-                  onChange={(e) => setDoc({ ...doc, current_phase_ref: e.target.value })}
-                  data-testid="director-phase-ref">
-            <option value="">— pick —</option>
-            <option value="genesis-1-sentence">Genesis · 1 — The Sentence</option>
-            <option value="genesis-3-nemesis">Genesis · 3 — Nemesis Design</option>
-            <option value="genesis-4-plot">Genesis · 4 — Master Plot</option>
-            <option value="genesis-5-adventures">Genesis · 5 — Adventure Outlines</option>
-            <option value="genesis-6-bookends">Genesis · 6 — Beginning &amp; Ending</option>
-            <option value="epic-2-theme">Epic · Theme & Sentence</option>
-            <option value="epic-7-milestones">Epic · 7 — Milestones</option>
-            <option value="epic-8-adventures">Epic · 8 — Adventures (mode + type)</option>
-            <option value="epic-11-climax">Epic · 11 — Climax & Ending</option>
+          <div className="label-ref mb-1">Active session</div>
+          <select className="select"
+                  value={doc.current_session_id || ""}
+                  onChange={(e) => {
+                    const sid = e.target.value;
+                    const sess = sessions.find((x) => x.id === sid);
+                    setDoc({
+                      ...doc,
+                      current_session_id: sid,
+                      // Keep the legacy phase ref in sync if the session
+                      // declares a plot phase, so all downstream Pulse +
+                      // ecosystem queries continue to work.
+                      current_phase_ref: sess?.plot_phase || doc.current_phase_ref || "",
+                    });
+                  }}
+                  data-testid="director-session-picker"
+                  title="Sessions appear in their GM-defined timeline position — supports prologues, backstory beats, and time-shenanigans sessions whose play-date diverges from narrative order.">
+            <option value="">— pick a session —</option>
+            {sessions.map((s, i) => (
+              <option key={s.id} value={s.id}>
+                #{i + 1} · {s.name || "Untitled"}
+                {s.plot_phase ? ` · ${s.plot_phase}` : ""}
+                {s.scheduled_at ? ` · ${new Date(s.scheduled_at).toLocaleDateString()}` : ""}
+              </option>
+            ))}
           </select>
+          <div className="text-[10px] text-mist/70 italic mt-1">
+            Drives the Ecosystem Pulse below. Sessions are ordered by their
+            timeline position (drag-reorder on the Timeline panel), not by
+            play date — supporting prologues + backstory.
+          </div>
         </div>
       </div>
 
@@ -421,17 +452,22 @@ export default function DirectorConsole() {
 
 function NpcPool({ pool, onPick }) {
   const grouped = useMemo(() => {
-    const out = { genesis: [], epic: [], codex: [] };
+    const out = { genesis: [], epic: [], codex: [], creatures: [] };
     (pool || []).forEach((p) => { (out[p.source] || (out[p.source] = [])).push(p); });
     return out;
   }, [pool]);
   return (
     <div className="card-mystic p-4 self-start sticky top-4" data-testid="director-npc-pool">
-      <div className="label-ref mb-2">NPC Pool</div>
+      <div className="label-ref mb-2">NPC &amp; Creature Pool</div>
       <div className="text-[10px] text-mist/70 italic mb-3">
         Drag-pick from your Atelier. Click adds to the active encounter.
       </div>
-      {Object.entries({ genesis: "Genesis seeds", epic: "Epic Campaign", codex: "Codex" }).map(([k, label]) => {
+      {Object.entries({
+        genesis: "Genesis seeds",
+        epic: "Epic Campaign",
+        codex: "Codex · People",
+        creatures: "Codex · Creatures & Beasts",
+      }).map(([k, label]) => {
         const items = grouped[k] || [];
         if (items.length === 0) return null;
         return (
@@ -466,70 +502,100 @@ function NpcPool({ pool, onPick }) {
 function NpcRow({ n, idx, systemId, onPatch, onRemove }) {
   return (
     <div className="border border-gold/15 rounded-sm p-3" data-testid={`director-npc-${idx}`}>
-      <div className="grid sm:grid-cols-[1fr_120px_90px_24px] gap-2 items-center">
-        <input className="input" value={n.name}
-               onChange={(e) => onPatch({ name: e.target.value })}
-               placeholder="NPC name"
-               data-testid={`director-npc-${idx}-name`}/>
-        <select className="select" value={n.role || "minion"}
-                onChange={(e) => onPatch({ role: e.target.value })}
-                data-testid={`director-npc-${idx}-role`}>
-          <option value="minion">Minion</option>
-          <option value="henchman">Henchman</option>
-          <option value="villain">Villain</option>
-          <option value="nemesis">Nemesis</option>
-          <option value="ally">Ally</option>
-        </select>
-        <select className="select text-xs" value={n.state || "active"}
-                onChange={(e) => onPatch({ state: e.target.value })}
-                data-testid={`director-npc-${idx}-state`}>
-          <option value="active">Active</option>
-          <option value="wounded">Wounded</option>
-          <option value="bloodied">Bloodied</option>
-          <option value="fled">Fled</option>
-          <option value="down">Down</option>
-        </select>
-        <button onClick={onRemove} className="text-ember/60 hover:text-ember"
+      <div className="grid sm:grid-cols-[1fr_120px_90px_24px] gap-2 items-end">
+        <div>
+          <div className="label-ref text-[9px] mb-1">NPC name</div>
+          <input className="input" value={n.name}
+                 onChange={(e) => onPatch({ name: e.target.value })}
+                 placeholder="e.g. Sleeping Kin (lookalike)"
+                 data-testid={`director-npc-${idx}-name`}/>
+        </div>
+        <div>
+          <div className="label-ref text-[9px] mb-1">Role</div>
+          <select className="select" value={n.role || "minion"}
+                  onChange={(e) => onPatch({ role: e.target.value })}
+                  data-testid={`director-npc-${idx}-role`}>
+            <option value="minion">Minion</option>
+            <option value="henchman">Henchman</option>
+            <option value="villain">Villain</option>
+            <option value="nemesis">Nemesis</option>
+            <option value="ally">Ally</option>
+          </select>
+        </div>
+        <div>
+          <div className="label-ref text-[9px] mb-1">State</div>
+          <select className="select text-xs" value={n.state || "active"}
+                  onChange={(e) => onPatch({ state: e.target.value })}
+                  data-testid={`director-npc-${idx}-state`}>
+            <option value="active">Active</option>
+            <option value="wounded">Wounded</option>
+            <option value="bloodied">Bloodied</option>
+            <option value="fled">Fled</option>
+            <option value="down">Down</option>
+          </select>
+        </div>
+        <button onClick={onRemove} className="text-ember/60 hover:text-ember mb-2"
                 data-testid={`director-npc-${idx}-remove`}>
           <X className="w-4 h-4"/>
         </button>
       </div>
-      <div className="grid sm:grid-cols-[1fr_120px_80px] gap-2 mt-2">
-        <input className="input" placeholder="Location"
-               value={n.location || ""}
-               onChange={(e) => onPatch({ location: e.target.value })}
-               data-testid={`director-npc-${idx}-location`}/>
-        <input className="input" placeholder="Current intent"
-               value={n.intent || ""}
-               onChange={(e) => onPatch({ intent: e.target.value })}
-               data-testid={`director-npc-${idx}-intent`}/>
-        <input className="input text-center" type="number" min={1}
-               value={n.count || 1}
-               onChange={(e) => onPatch({ count: Math.max(1, +e.target.value || 1) })}
-               title="Count"
-               data-testid={`director-npc-${idx}-count`}/>
+      <div className="grid sm:grid-cols-[1fr_140px_90px] gap-2 mt-2 items-end">
+        <div>
+          <div className="label-ref text-[9px] mb-1">Location in scene</div>
+          <input className="input" placeholder="e.g. Threshold of the cave"
+                 value={n.location || ""}
+                 onChange={(e) => onPatch({ location: e.target.value })}
+                 data-testid={`director-npc-${idx}-location`}/>
+        </div>
+        <div>
+          <div className="label-ref text-[9px] mb-1">Current intent</div>
+          <input className="input" placeholder="e.g. Wake. Listen for footsteps."
+                 value={n.intent || ""}
+                 onChange={(e) => onPatch({ intent: e.target.value })}
+                 data-testid={`director-npc-${idx}-intent`}/>
+        </div>
+        <div>
+          <div className="label-ref text-[9px] mb-1">Count</div>
+          <input className="input text-center" type="number" min={1}
+                 value={n.count || 1}
+                 onChange={(e) => onPatch({ count: Math.max(1, +e.target.value || 1) })}
+                 title="How many of this NPC stand together (e.g. a pack of 3 wolves)."
+                 data-testid={`director-npc-${idx}-count`}/>
+        </div>
       </div>
-      {/* System-specific stat-block hint */}
-      <div className="grid sm:grid-cols-3 gap-2 mt-2">
+      {/* System-specific stat-block hint with explicit labels. */}
+      <div className="grid sm:grid-cols-3 gap-2 mt-2 items-end">
         {systemId === "dnd-5e" && (
-          <input className="input" placeholder="CR (e.g. 1, 1/4, 5)"
-                 value={n.cr || ""}
-                 onChange={(e) => onPatch({ cr: e.target.value })}
-                 data-testid={`director-npc-${idx}-cr`}/>
+          <div>
+            <div className="label-ref text-[9px] mb-1">Challenge Rating</div>
+            <input className="input" placeholder="1, 1/4, 5, etc."
+                   value={n.cr || ""}
+                   onChange={(e) => onPatch({ cr: e.target.value })}
+                   title="D&D 5E Challenge Rating. Drives the CR Panel's party-vs-foe math."
+                   data-testid={`director-npc-${idx}-cr`}/>
+          </div>
         )}
         {(systemId === "cypher" || systemId === "anime-5e") && (
-          <input className="input" type="number" min={1} max={10}
-                 placeholder="Level (1-10)"
-                 value={n.level || ""}
-                 onChange={(e) => onPatch({ level: +e.target.value || 0 })}
-                 data-testid={`director-npc-${idx}-level`}/>
+          <div>
+            <div className="label-ref text-[9px] mb-1">Level (1-10)</div>
+            <input className="input" type="number" min={1} max={10}
+                   placeholder="e.g. 4"
+                   value={n.level || ""}
+                   onChange={(e) => onPatch({ level: +e.target.value || 0 })}
+                   title={systemId === "cypher" ? "Cypher creature level — TN = level × 3." : "Anime 5E foe tier."}
+                   data-testid={`director-npc-${idx}-level`}/>
+          </div>
         )}
         {(systemId === "besm-4e" || systemId === "anime-5e") && (
-          <input className="input" type="number" min={0}
-                 placeholder="CP (point total)"
-                 value={n.total_points || ""}
-                 onChange={(e) => onPatch({ total_points: +e.target.value || 0 })}
-                 data-testid={`director-npc-${idx}-cp`}/>
+          <div>
+            <div className="label-ref text-[9px] mb-1">Total CP (point budget)</div>
+            <input className="input" type="number" min={0}
+                   placeholder="e.g. 80"
+                   value={n.total_points || ""}
+                   onChange={(e) => onPatch({ total_points: +e.target.value || 0 })}
+                   title="BESM character points spent on this NPC. Compare to PC budget for parity."
+                   data-testid={`director-npc-${idx}-cp`}/>
+          </div>
         )}
       </div>
     </div>

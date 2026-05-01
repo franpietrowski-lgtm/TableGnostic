@@ -35,6 +35,8 @@ MAP_DIR = UPLOAD_ROOT / "maps"
 MAP_DIR.mkdir(parents=True, exist_ok=True)
 AVATAR_DIR = UPLOAD_ROOT / "avatars"
 AVATAR_DIR.mkdir(parents=True, exist_ok=True)
+PORTRAIT_DIR = UPLOAD_ROOT / "portraits"
+PORTRAIT_DIR.mkdir(parents=True, exist_ok=True)
 
 ALLOWED_IMAGE_TYPES = {
     "image/png": ".png",
@@ -145,4 +147,59 @@ async def upload_avatar(
     # Persist on the user record so /api/auth/me returns it directly.
     from core.db import db as _db
     await _db.users.update_one({"id": user["id"]}, {"$set": {"avatar_url": url}})
+    return {"url": url, "bytes": written, "content_type": ctype}
+
+
+@router.post("/character-portrait/{character_id}")
+async def upload_character_portrait(
+    character_id: str,
+    file: UploadFile = File(...),
+    user: dict = Depends(get_current_user),
+):
+    """V6.11 — character portrait / character art upload. Owner of the
+    character or the campaign GM may set the portrait. Stored at
+    /api/uploads/portraits/{character_id}.{ext}, persisted on the
+    character document as `portrait_url`. 4 MB cap.
+    """
+    from core.db import db as _db
+    ch = await _db.characters.find_one({"id": character_id}, {"_id": 0})
+    if not ch:
+        raise HTTPException(404, "Character not found")
+    camp = await _db.campaigns.find_one({"id": ch["campaign_id"]}, {"_id": 0})
+    is_owner = ch.get("owner_id") == user["id"]
+    is_gm = camp and (camp["gm_id"] == user["id"] or user.get("role") == "admin")
+    if not (is_owner or is_gm):
+        raise HTTPException(403, "Only the character's owner or the GM may set portrait")
+    ctype = (file.content_type or "").lower()
+    ext = ALLOWED_IMAGE_TYPES.get(ctype)
+    if not ext:
+        raise HTTPException(400, f"Unsupported image type '{ctype}'. Use PNG, JPEG, or WEBP.")
+    PORTRAIT_MAX = 4 * 1024 * 1024
+    out = PORTRAIT_DIR / f"{character_id}{ext}"
+    written = 0
+    with out.open("wb") as fh:
+        while True:
+            chunk = await file.read(512 * 1024)
+            if not chunk:
+                break
+            written += len(chunk)
+            if written > PORTRAIT_MAX:
+                fh.close()
+                try:
+                    out.unlink()
+                except OSError:
+                    pass
+                raise HTTPException(413, f"Portrait exceeds {PORTRAIT_MAX // (1024 * 1024)} MB cap.")
+            fh.write(chunk)
+    # Clear prior with different extension.
+    for sib in PORTRAIT_DIR.glob(f"{character_id}.*"):
+        if sib.name != out.name:
+            try:
+                sib.unlink()
+            except OSError:
+                pass
+    url = f"/api/uploads/portraits/{character_id}{ext}"
+    await _db.characters.update_one(
+        {"id": character_id}, {"$set": {"portrait_url": url}},
+    )
     return {"url": url, "bytes": written, "content_type": ctype}

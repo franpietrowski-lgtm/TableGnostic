@@ -93,9 +93,6 @@ export default function CampaignDetail() {
               <Copy className="w-4 h-4"/> Clone
             </button>
           )}
-          {camp.is_gm && <Link to={`/app/campaigns/${id}/genesis`} className="btn" data-testid="genesis-btn">
-            <Wand2 className="w-4 h-4"/> Atelier
-          </Link>}
           {camp.is_gm && <Link to={`/app/campaigns/${id}/director`} className="btn" data-testid="director-btn"
                               title="GM Director's Console — pull NPCs from your Atelier into encounters, judge Challenge Rating, get tactical suggestions.">
             <Wand2 className="w-4 h-4"/> Director

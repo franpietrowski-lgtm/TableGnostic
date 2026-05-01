@@ -518,7 +518,7 @@ export default function ChannelsPanel({ campaign, user }) {
 
       {/* Thread drawer */}
       {openThreadFor && (
-        <div className="fixed inset-0 z-50 bg-void/80 flex justify-end" data-testid="thread-drawer">
+        <div className="fixed inset-0 z-50 bg-void/90 backdrop-blur-md flex justify-end" data-testid="thread-drawer">
           <div className="w-full md:w-[420px] h-full bg-void/95 border-l border-gold/30 flex flex-col">
             <div className="flex items-center justify-between p-3 border-b border-gold/10">
               <div className="min-w-0">

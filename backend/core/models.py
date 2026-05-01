@@ -344,6 +344,10 @@ class SessionIn(BaseModel):
     # views can correlate cross-system activity.
     plot_phase: Optional[str] = None
     location: Optional[str] = None  # free-text in-fiction location
+    # V6.11 — explicit timeline position (drag-reorder on the Timeline
+    # panel). Lets prologues / backstory / time-shenanigans sessions sit
+    # at any position in the narrative spine, regardless of play date.
+    sequence_index: Optional[int] = None
 
 
 class ChatIn(BaseModel):

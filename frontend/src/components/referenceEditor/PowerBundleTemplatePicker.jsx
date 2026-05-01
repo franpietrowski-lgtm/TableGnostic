@@ -33,7 +33,7 @@ function PowerBundleTemplatePicker({ onPick, onClose, campaignId }) {
     || (t.school || "").toLowerCase().includes(filter.toLowerCase()));
 
   return (
-    <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4"
+    <div className="fixed inset-0 bg-void/90 backdrop-blur-md z-50 flex items-center justify-center p-4"
          onClick={onClose} data-testid="bundle-template-picker">
       <div className="card-mystic p-6 max-w-4xl w-full max-h-[85vh] overflow-y-auto"
            onClick={(e) => e.stopPropagation()}>

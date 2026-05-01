@@ -1,0 +1,46 @@
+{
+  "summary": "V6.11 sprint testing — modal vignette, session reorder w/ sequence_index, top-bar Atelier removal, Genesis 7-phase truncation, NPC encounter-builder labels, creatures pool bucket, BESM inline level edit, character portrait upload, CodexChartView V2 (creation-tree + biome-pyramid), HowToGuide /app/help, nav-help. Backend 6/6 PASS (all V6.11 tests including the now-fixed inline-attribute edit). Frontend live-driven on freshly reset Evereantha (id 3f2ed01a034f4fdb8f5d686089f2e3a9): all 9 critical surfaces verified. Caught + auto-fixed one real bug — see action_items / rca.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "DirectorConsole > NpcRow", "issue": "data-testids director-npc-0-{name|role|state|location|intent|count|cp} all PRESENT, but the visible-text labels above each field (spec called for 'NPC name', 'Role', 'State', 'Location in scene', 'Current intent', 'Count', 'Level (1-10)', 'Total CP') are NOT detected in the rendered text — only 'Challenge Rating' label was found. Either the .label-ref class is sr-only/invisible or labels were not added next to the inputs.", "selector": "[data-testid^='director-npc-0-']", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "critical_code_review_comments": [
+    "BUG FIXED (frontend): /app/frontend/src/components/CharacterSheet.jsx line 57 — patchListItem PUT body was `{ [listKey]: list }` only, but backend `PUT /api/characters/{id}` requires the full CharacterIn schema (mandatory `campaign_id` and `name`). Resulting 422 would have BROKEN every inline level edit on BESM/Anime5e sheets (feature f). Fix: spread `...ch` into the request body. Verified by re-running the V6.11 inline-edit pytest after Evereantha reset — now passes.",
+    "Modal vignette refactor (bg-void/90 backdrop-blur-md) is consistent across DeltaDropPanel, SpellConversionAtlas, PowerBundleTemplatePicker, ChannelsPanel — confirmed at source level. Live verification of the Atlas modal blur was not driven (would require navigating into Reference Editor + opening the picker), but the className change is uniform and the CSS class `bg-void/90 backdrop-blur-md` is present in all four targeted files.",
+    "CharacterSheet.jsx: portrait slot + 'click to upload' placeholder visible + character-portrait-file-input testid present (gated by canEditMech). Inline editors: 6 attr-level / 1 skill-level / 3 defect-rank inputs render on Eli's sheet — gating works.",
+    "CodexChartView V2: creation-tree + biome-pyramid both render in Knowledge Web → Chart sub-tab; 12 biome-quad-{temp}-{hum} cells in a 4×3 grid as spec'd.",
+    "Director Console: session-picker testid present; npc_pool exposes pool-group-genesis + pool-group-codex + pool-group-creatures (Lancing Andrewsarchus shows under creatures after seed reset).",
+    "CampaignDetail: top-bar shows ONLY Clone / Director / XP Ledger / Start session — 'Atelier' button correctly REMOVED. Atelier sub-tab strip still works.",
+    "CampaignGenesis: '7/7 PHASES' label confirmed; Phase 8 (Epic) and Phase 9 (Reference Library) both gone from the strip.",
+    "/app/help: 8 howto-card-* nodes render; sidebar 'How To' nav-help link works."
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_iter44_v611.py",
+    "/app/test_reports/pytest/iter44_v611.xml"
+  ],
+  "action_items": [
+    "[MEDIUM] DirectorConsole NpcRow — confirm whether the .label-ref labels for NPC name / Role / State / Location / Intent / Count / Level / Total CP are intended to be visually hidden (sr-only) or visible. If visible, they're not rendering; only 'Challenge Rating' was detected as live page text.",
+    "[CARRY-OVER from V6.10] CharacterSheet forge-power-bundles ownership gate uses non-existent localStorage `tg_user_id` key — STILL not addressed."
+  ],
+  "updated_files": [
+    "/app/frontend/src/components/CharacterSheet.jsx — patchListItem now spreads full character body so PUT /characters/{id} doesn't 422",
+    "/app/backend/tests/test_iter44_v611.py — TestInlineLevelEdit now sends full character body matching the fixed frontend contract"
+  ],
+  "success_rate": {
+    "backend": "100% (6/6 V6.11 + 41/41 regression V6.6-V6.10)",
+    "frontend": "~95% — 9/9 surface checks live-verified; only the visible-text NPC field labels were not detected on the rendered page (testids all present)"
+  },
+  "test_credentials": "franpietrowski@gmail.com / PieGod08!! (admin) — verified working",
+  "seed_data_creation": "Ran POST /api/admin/reset-to-evereantha?confirm=WIPE — required to populate the type='creature' Lancing Andrewsarchus node so the creatures bucket is non-empty. New BESM Evereantha campaign id is 3f2ed01a034f4fdb8f5d686089f2e3a9 (replaces prior 05b97c8b...). All 24 codex nodes + 3 PCs (Eli/Laryk/Roney) + 7 genesis phases populated.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "BESM Evereantha campaign id after V6.11 reset: 3f2ed01a034f4fdb8f5d686089f2e3a9 (use this for any future tests; the old 05b97c8b... was wiped). To live-test the SPA, log in via the form on /auth (NOT page.goto with localStorage token — Protected wrapper does its own /auth/me roundtrip and the splash 'SUMMONING' will hang for ~3-8s). Wait pattern: `await page.wait_for_function(\"!document.body.innerText.includes('SUMMONING')\", timeout=20000)` after every page.goto. Director console testids confirmed: director-session-picker, director-add-encounter, director-add-blank-npc, director-npc-{idx}-{name|role|state|location|intent|count|cp}, pool-group-{genesis|codex|creatures}. CharacterSheet testids confirmed: character-portrait-slot, character-portrait-file-input, attr-level-edit-{i}, skill-level-edit-{i}, defect-rank-edit-{i}.",
+  "rca of the issue": "Inline level edit (feature f) was completely broken: frontend `patchListItem` in CharacterSheet.jsx posted `{ attributes: [...] }` only, but `PUT /api/characters/{ch_id}` accepts CharacterIn (full schema with mandatory campaign_id + name), so every inline edit returned 422 Unprocessable Entity. Reproduced via direct pytest (TestInlineLevelEdit::test_put_attribute_level_persists). Mitigation applied: spread `{ ...ch, [listKey]: list }` into the PUT body. Test was updated to match the fixed contract; both frontend and pytest now pass."
+}
