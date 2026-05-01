@@ -32,6 +32,18 @@ export default function CharacterSheet() {
       .replace("#", "");
     return ["identity", "mechanics", "inventory", "history"].includes(h) ? h : "mechanics";
   });
+  // Sync sheetTab when the URL hash changes mid-session (browser back/forward,
+  // or programmatic hash updates from other components).
+  useEffect(() => {
+    const onHash = () => {
+      const h = (window.location.hash || "").replace("#", "");
+      if (["identity", "mechanics", "inventory", "history"].includes(h)) {
+        setSheetTab(h);
+      }
+    };
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
 
   const load = async () => {
     try {
