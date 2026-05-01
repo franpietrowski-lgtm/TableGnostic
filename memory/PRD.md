@@ -14,6 +14,32 @@
 
 ## 2. Implemented (cumulative, condensed)
 
+### V6.12 — Timeline drag-reorder UI + Reference Editor 5-group layout + SessionView mobile sweep (2026-05-01)
+
+**P1 — Timeline click-and-drag session reorder (UI)**
+- `TimelinePanel.jsx` — GMs can drag any session column onto another to reorder the spine. Optimistic local reorder before PUT; `timeline-save-hint` shows "Saving spine order…" → "Timeline order saved." (2.5s). Non-GM users have `draggable={false}`. Sessions sort by `sequence_index` first (honouring V6.11 backstory/prologue), falling back to date.
+- Backend `PUT /api/campaigns/{cid}/sessions/reorder` (V6.11) already existed.
+- Verified live: 8 draggable session columns render on Evereantha's BESM campaign.
+
+**DESIGN_AUDIT P0 #5 — Reference Editor 5-group visual layout**
+- `ReferenceEditor.jsx` — 22 kinds grouped into 5 thematic categories with coloured dots + dedicated rows:
+  - Mechanics (Attributes · Skills · Defects · Enhancements · Limiters) — `#C8A34A`
+  - Bundles & Packs (Power Pack · Power Bundle) — `#7A4FBF`
+  - Content (Spells · Feats · Backgrounds · Class Features · Race Traits) — `#E03A8E`
+  - Cypher (Type · Descriptor · Focus · Cypher Ability · Cypher Item · Artifact) — `#3FAA62`
+  - Items & Rules (Weapons · Armor · Items · Companions · Custom Rules) — `#3F8FAA`
+- Active tab gets a matching coloured underline (inset box-shadow). System-aware ordering still respected — groups with no visible kinds for the active system are hidden (e.g. BESM hides Content + Cypher groups).
+
+**Mobile sweep — session-running page**
+- `SessionView.jsx` chat header — action buttons (Map/XP/Recap) collapse to icon-only on narrow screens (`hidden sm:inline` text spans). Title uses `text-lg sm:text-xl md:text-2xl` + `truncate`. Recap-style select scales to `text-[11px] sm:text-xs`. Whole row wraps cleanly.
+- Recap modal — responsive padding `p-2 sm:p-6`, `my-3 sm:my-10`; title `text-lg sm:text-2xl` + `truncate`.
+- Battlemap overlay — responsive padding `p-1 sm:p-3 md:p-6`; backdrop-blur upgraded to `blur-md`.
+
+**Testing — `/app/test_reports/iteration_45.json`**
+- Frontend: ReferenceEditor 5-group + SessionView mobile — 100% live-verified (viewport 390 & 1920). TimelinePanel drag UI — code-clean + smoke-verified via direct Playwright run (8/8 draggable columns).
+- Backend regression: V6.11 sessions/reorder endpoint still 100% passing.
+
+
 ### V6.11 — User-feedback batch: modal vignette + Director session picker + worldbuilding chart V2 + character portrait + how-to guide (2026-05-01)
 
 **Batch 1 — UX hygiene & architecture cleanup**
