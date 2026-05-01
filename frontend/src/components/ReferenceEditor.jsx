@@ -140,6 +140,35 @@ export default function ReferenceEditor({ campaignId, isGm, systemId }) {
   };
   useEffect(() => { refresh(); }, [campaignId, tab]);
 
+  // V6.13 — Alt+M / Alt+B / Alt+C / Alt+Y / Alt+I keyboard shortcuts jump
+  // to the first visible kind of each group. Honours SYSTEM_KIND_ORDER so
+  // besm-only authors never get trapped in the Content / Cypher groups.
+  useEffect(() => {
+    const groupKeyByHotkey = {
+      m: "mechanics", b: "bundles", c: "content",
+      y: "cypher", i: "items_rules",
+    };
+    const onKey = (ev) => {
+      if (!ev.altKey || ev.metaKey || ev.ctrlKey) return;
+      const target = ev.target;
+      const isEditable = target && (target.tagName === "INPUT"
+        || target.tagName === "TEXTAREA" || target.isContentEditable);
+      if (isEditable) return;
+      const gk = groupKeyByHotkey[ev.key?.toLowerCase()];
+      if (!gk) return;
+      const ordered = SYSTEM_KIND_ORDER[systemId] || KIND_KEYS;
+      const group = KIND_GROUPS.find((g) => g.key === gk);
+      if (!group) return;
+      const firstVisible = group.kinds.find((k) => ordered.includes(k));
+      if (firstVisible) {
+        ev.preventDefault();
+        setTab(firstVisible);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [systemId]);
+
   const blank = () => ({
     kind: tab, name: "", summary: "", page: "",
     book: systemId || "besm-4e", cost: "", fields: {},
@@ -215,15 +244,19 @@ export default function ReferenceEditor({ campaignId, isGm, systemId }) {
           const ordered = (SYSTEM_KIND_ORDER[systemId] || KIND_KEYS);
           const visible = g.kinds.filter((k) => ordered.includes(k));
           if (visible.length === 0) return null;
+          const hotkey = { mechanics: "M", bundles: "B", content: "C",
+                           cypher: "Y", items_rules: "I" }[g.key];
           return (
             <div key={g.key} className="flex items-center gap-2 flex-wrap"
                  data-testid={`reference-group-${g.key}`}>
               <div className="text-[9px] uppercase tracking-widest font-ui min-w-[84px]"
                    style={{ color: g.color }}
-                   title={`${g.label} · ${visible.length} kind${visible.length === 1 ? "" : "s"}`}>
+                   title={`${g.label} · ${visible.length} kind${visible.length === 1 ? "" : "s"} · shortcut Alt+${hotkey}`}>
                 <span className="inline-block w-2 h-2 rounded-full mr-1.5 align-middle"
                       style={{ backgroundColor: g.color }}/>
                 {g.label}
+                <kbd className="ml-1.5 text-[8px] border border-gold/20 rounded-sm px-1 py-0 text-mist/60 normal-case tracking-normal"
+                     title={`Jump to ${g.label} — Alt+${hotkey}`}>⌥{hotkey}</kbd>
               </div>
               <div className="flex flex-wrap gap-1 flex-1">
                 {visible.map((k) => (

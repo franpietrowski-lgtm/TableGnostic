@@ -798,6 +798,59 @@ function InviteTab({ camp, onRefresh }) {
             : "Private campaign — only this link grants a seat."}
         </div>
       </div>
+      <CanonPublishCard camp={camp} onRefresh={onRefresh}/>
+    </div>
+  );
+}
+
+function CanonPublishCard({ camp, onRefresh }) {
+  const [pub, setPub] = useState(!!camp.canon_published);
+  const [blurb, setBlurb] = useState(camp.canon_blurb || "");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const save = async () => {
+    setBusy(true); setErr("");
+    try {
+      if (pub) {
+        await api.post(`/campaigns/${camp.id}/canon-publish`, { blurb });
+      } else {
+        await api.delete(`/campaigns/${camp.id}/canon-publish`);
+      }
+      onRefresh && onRefresh();
+    } catch (e) {
+      setErr(formatApiErrorDetail(e.response?.data?.detail) || e.message);
+    } finally { setBusy(false); }
+  };
+  return (
+    <div className="card-mystic p-5 mt-4" data-testid="canon-publish-card">
+      <div className="label-ref mb-2">Publish to Canon Registry</div>
+      <div className="text-[11px] text-mist/80 italic mb-3">
+        Lets fellow GMs discover this campaign's Delta Drops from
+        <code> /app/canon</code>. Players + seat data stay private; only the
+        campaign name, system, blurb, and delta-drop count are exposed.
+      </div>
+      <label className="flex items-center gap-2 text-sm text-parchment cursor-pointer">
+        <input type="checkbox" checked={pub}
+               onChange={(e) => setPub(e.target.checked)}
+               data-testid="canon-publish-checkbox"/>
+        <span>Publish this campaign to the Canon Registry</span>
+      </label>
+      {pub && (
+        <textarea
+          className="input mt-3 min-h-[70px] text-sm"
+          placeholder="One-sentence pitch for the registry card (max 500 chars)"
+          maxLength={500}
+          value={blurb}
+          onChange={(e) => setBlurb(e.target.value)}
+          data-testid="canon-publish-blurb"/>
+      )}
+      <div className="flex items-center gap-3 mt-3">
+        <button onClick={save} disabled={busy} className="btn btn-primary text-xs"
+                data-testid="canon-publish-save">
+          {busy ? "Saving…" : pub ? "Publish" : "Unpublish"}
+        </button>
+        {err && <span className="text-ember text-[11px]" data-testid="canon-publish-error">{err}</span>}
+      </div>
     </div>
   );
 }

@@ -941,6 +941,12 @@ def _build_pdf(camp: Dict[str, Any], chapters_data: List[Dict[str, Any]],
             cypher_state = folio.get("cypher_state") if camp_system == "cypher" else None
             dnd_state = folio.get("dnd_state") if camp_system == "dnd-5e" else None
 
+            # V6.13 — embed character portrait (uploaded via
+            # /api/uploads/character-portrait/{cid}) when present. We
+            # resolve the /api/uploads/portraits/{cid}.{ext} URL to the
+            # local uploads directory so reportlab can render it inline.
+            _render_character_portrait(flow, ch)
+
             if cypher_state:
                 _render_cypher_pc_sheet(flow, ch, cypher_state, p, body_first, session_title)
             elif dnd_state:
@@ -1192,6 +1198,39 @@ def _html_escape(text: str) -> str:
 
 
 # ─────────────────────── Endpoint ───────────────────────
+
+def _render_character_portrait(flow, ch):
+    """V6.13 — embed the character's portrait inline in the appendix.
+
+    Silently no-op if no portrait_url is set or the file can't be read
+    (the sheet still renders without it).
+    """
+    portrait_url = ch.get("portrait_url")
+    if not portrait_url or not portrait_url.startswith("/api/uploads/"):
+        return
+    from pathlib import Path
+    from reportlab.platypus import Image, Spacer
+    from reportlab.lib.units import inch
+    upload_root = Path(os.environ.get("UPLOAD_DIR", "/app/uploads"))
+    # portrait_url format: /api/uploads/portraits/{cid}.{ext}
+    rel = portrait_url.replace("/api/uploads/", "", 1)
+    candidate = upload_root / rel
+    if not candidate.exists() or not candidate.is_file():
+        return
+    try:
+        # Scale to a tidy 1.6" × 2.1" portrait frame so it sits on the
+        # opening line of the character appendix without dominating the
+        # page. Landscape / square images get the same box — reportlab
+        # preserves aspect ratio within width/height constraints.
+        img = Image(str(candidate), width=1.6 * inch, height=2.1 * inch,
+                    kind="proportional")
+        img.hAlign = "LEFT"
+        flow.append(img)
+        flow.append(Spacer(1, 0.08 * inch))
+    except Exception:
+        # Bad image file — just skip; sheet still renders fine.
+        return
+
 
 def _render_besm_pc_sheet(flow, ch, p, body_first, session_title):
     """Tri-Stat / point-buy character appendix (BESM 4E + Anime 5E)."""

@@ -1,7 +1,8 @@
 import React, { useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../lib/api";
-import { Scroll, LayoutGrid, BookOpen, LogOut, UserCircle2, Compass, Menu, X, User, HelpCircle } from "lucide-react";
+import { Scroll, LayoutGrid, BookOpen, LogOut, UserCircle2, Compass, Menu, X, User, HelpCircle, Sparkles } from "lucide-react";
+import CmdKPalette from "./CmdKPalette";
 
 const Sigil = ({ size = 32 }) => (
   <svg viewBox="0 0 120 120" style={{ width: size, height: size }}
@@ -23,6 +24,7 @@ const NAV = [
   { to: "/app/campaigns", icon: Scroll, label: "Campaigns", testid: "nav-campaigns" },
   { to: "/app/discover", icon: Compass, label: "Discover", testid: "nav-discover" },
   { to: "/app/reference", icon: BookOpen, label: "Reference", testid: "nav-reference" },
+  { to: "/app/canon", icon: Sparkles, label: "Canon", testid: "nav-canon" },
   { to: "/app/help", icon: HelpCircle, label: "How To", testid: "nav-help" },
   { to: "/app/account", icon: User, label: "Account", testid: "nav-account" },
 ];
@@ -122,6 +124,9 @@ export default function Shell() {
         </div>
         <AppFooter/>
       </main>
+
+      {/* V6.13 — Cmd-K / Ctrl-K global search palette */}
+      <CmdKPalette/>
 
       {/* MOBILE BOTTOM NAV */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-30 flex border-t border-gold/15 bg-void/90 backdrop-blur">

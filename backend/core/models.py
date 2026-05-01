@@ -110,6 +110,11 @@ class CampaignIn(BaseModel):
     #                                 else 12 if level ≤ 10
     #                                 else 15) (sharper mid-tier bump)
     anime5e_xp_formula: Literal["flat", "curve"] = "flat"
+    # V6.13 — Canon Registry. GMs may publish their campaign to the public
+    # Canon Registry so fellow GMs can discover its Delta Drops and
+    # subscribe. Does NOT expose player seats — that's `visibility=public`.
+    canon_published: bool = False
+    canon_blurb: str = ""   # short pitch shown on the registry card
 
 
 class CampaignOut(CampaignIn):
