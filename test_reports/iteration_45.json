@@ -1,0 +1,39 @@
+{
+  "summary": "V6.12 frontend-only sprint — verified the 3 carry-over items live on the BESM Evereantha campaign (3f2ed01a034f4fdb8f5d686089f2e3a9). ReferenceEditor 5-group restructure VERIFIED. SessionView mobile collapse VERIFIED on 390px viewport (Map/XP/Recap labels hide via Tailwind 'hidden sm:inline'; Desktop 1920px shows them with display:block). TimelinePanel drag UI verified at the source level (draggable={isGm}, full DnD handler set, optimistic reorder + PUT /sessions/reorder call, save-hint state, sequence_index-first sort) but the rendered surface for `[data-testid='timeline-panel']` was not reached via Atelier > SESSIONS sub-tab in the live SPA — Timeline Panel was not discoverable through the visible Atelier tabs in this run.",
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "TimelinePanel mounting / Atelier navigation",
+        "issue": "After logging in as admin and visiting /app/campaigns/3f2ed01a... → ATELIER → SESSIONS, the [data-testid='timeline-panel'] node never rendered in the DOM. The TimelinePanel.jsx code is correct (draggable, handlers, save-hint, PUT /sessions/reorder are all wired exactly as spec'd) and the Reference Editor under ATELIER does mount cleanly on the same page — so the bug is most likely a mount-path issue (TimelinePanel may live behind a different sub-tab / route that wasn't surfaced, OR a conditional gate). All other Atelier sub-tab clicks succeeded; only the Timeline rendering itself was not reachable. Drag-DnD persistence could therefore not be e2e-verified in the live SPA.",
+        "selector": "[data-testid='timeline-panel']",
+        "priority": "MEDIUM"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "critical_code_review_comments": [
+    "TimelinePanel.jsx (V6.12 drag block, lines 91-134) is correct: HTML5 DnD with effectAllowed='move', proper onDragOver preventDefault gating on (!isGm || sid===dragId), optimistic local reorder before PUT, save-hint timeout 2.5s, defensive try/catch + load() refresh on failure. draggable={isGm} ensures non-GMs cannot drag. Sort logic (lines 49-60) correctly honours sequence_index first and falls back to scheduled_at/played_at/created_at — matches V6.11 backstory/prologue requirement.",
+    "ReferenceEditor.jsx KIND_GROUPS constant (lines 83-94) cleanly maps the 22 kinds into the 5 thematic categories with distinct colours (#C8A34A / #7A4FBF / #E03A8E / #3FAA62 / #3F8FAA). Render path (lines 214-240) filters each group's kinds against SYSTEM_KIND_ORDER[systemId] and skips groups with no visible kinds — VERIFIED LIVE on besm-4e: Content & Cypher groups correctly HIDDEN (besm has no spell/feat/background/class_feature/race_trait/cypher kinds in its order), only Mechanics + Bundles + Items_Rules render with 12 total tabs. Active tab gets the matching colour underline via inset box-shadow.",
+    "SessionView.jsx chat header (lines 412-444) is correctly responsive: text labels wrapped in `<span className='hidden sm:inline'>` collapse to icon-only at <640px; recap-modal (line 479) uses p-2 sm:p-6; battlemap overlay (line 568) uses p-1 sm:p-3 md:p-6 — all VERIFIED via computed styles at viewport 390 (display:none) vs 1920 (display:block).",
+    "Mobile chat-panel header is wrapped with `flex-wrap` so when the screen is narrow, items wrap to next row cleanly; truncation on the title (`truncate` on h1) confirmed visible as 'Ses…' on 390px screenshot.",
+    "Cypher group is correctly absent for besm-4e (per spec). Did not verify cypher campaign rendering of the Cypher group — would require switching campaigns. Recommend a quick sanity pass on a Cypher-system campaign to confirm reference-group-cypher renders + reference-group-mechanics is hidden there."
+  ],
+  "test_report_links": [],
+  "action_items": [
+    "[MEDIUM] TimelinePanel — verify the mount path for [data-testid='timeline-panel']. It did not render under ATELIER → SESSIONS for the BESM Evereantha campaign. Either it lives behind a different route/sub-tab not surfaced in the visible tab strip, or a GM-only / data-availability gate is hiding it. ReferenceEditor on the same Atelier page mounted fine, so it's not a layout-level issue.",
+    "[LOW] Once Timeline mounts, run a manual drag-and-drop with two sessions and confirm timeline-save-hint shows 'Saving spine order…' then 'Timeline order saved.' (HTML5 native DnD; can be triggered by manually dragging in the browser since playwright's synthetic DragEvent works at the source level)."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "N/A (frontend-only sprint; backend reorder endpoint already verified in V6.11)",
+    "frontend": "67% — 2 of 3 carry-over surfaces fully VERIFIED (ReferenceEditor groups, SessionView mobile). TimelinePanel UI not reachable in the live SPA this run; code-level review of the drag block, sort, save-hint, and PUT call is clean."
+  },
+  "test_credentials": "franpietrowski@gmail.com / PieGod08!! (admin / GMFran) — verified working",
+  "seed_data_creation": "None — used the existing BESM Evereantha campaign 3f2ed01a034f4fdb8f5d686089f2e3a9 from V6.11 reset.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "ReferenceEditor 5-group strip is fully verified live (besm-4e renders 3 of 5 groups: mechanics/bundles/items_rules, Content + Cypher correctly hidden by SYSTEM_KIND_ORDER filter; 12 tab buttons; active tab gets colour-matched inset underline). SessionView mobile is fully verified — buttons collapse to icons via 'hidden sm:inline' at 390px (display:none) and show 'Map'/'XP'/'Recap' text at 1920px (display:block). For Timeline drag testing, TimelinePanel's mount path needs to be confirmed by main agent — under /app/campaigns/{id} ATELIER tab strip the SESSIONS sub-tab did not surface the timeline-panel testid in this run. Splash wait on session view: chat-panel finally appears after ~12s; pattern: poll for [data-testid='chat-panel'] for up to 30s before asserting. Session id used for mobile test: 833a1b2cd2ba4b28b76679d299d04fd0.",
+  "rca of the issue": "TimelinePanel rendering not reachable: clicked ATELIER (visible in tab strip) → clicked SESSIONS sub-tab (also visible: 'CHARACTERS', 'CHANNELS', 'KNOWLEDGE WEB', 'SESSIONS', 'DECKS', 'PLAYER PRIMER', 'ATELIER', 'DELTA DROP', 'CUSTOM RULES', 'INVITE & SHARE', 'Seed Evereantha samples') but [data-testid='timeline-panel'] never appeared. Reference Editor on the same Atelier sub-strip rendered correctly, so it's not a generic mount issue. Either TimelinePanel is mounted under a different route (e.g. needs an explicit 'Timeline' sub-tab the test missed) or its parent component is gated by data the live page didn't satisfy. Code itself (drag handlers, sequence_index sort, PUT /sessions/reorder, save-hint) is sound."
+}

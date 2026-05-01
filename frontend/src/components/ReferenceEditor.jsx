@@ -77,6 +77,24 @@ const SYSTEM_KIND_LABELS = {
   },
 };
 const KIND_KEYS = Object.keys(KIND_LABELS);
+// V6.12 — visual grouping of the 22 kinds into 5 thematic categories so
+// authors don't face a 22-button wall (per DESIGN_AUDIT P0 #5). Each
+// group renders as its own strip with a category header.
+const KIND_GROUPS = [
+  { key: "mechanics",      label: "Mechanics",       color: "#C8A34A",
+    kinds: ["attribute", "skill", "defect", "enhancement", "limiter"] },
+  { key: "bundles",        label: "Bundles & Packs", color: "#7A4FBF",
+    kinds: ["power_pack", "power_bundle"] },
+  { key: "content",        label: "Content",         color: "#E03A8E",
+    kinds: ["spell", "feat", "background", "class_feature", "race_trait"] },
+  { key: "cypher",         label: "Cypher",          color: "#3FAA62",
+    kinds: ["type", "descriptor", "focus", "cypher_ability", "cypher_item", "artifact"] },
+  { key: "items_rules",    label: "Items & Rules",   color: "#3F8FAA",
+    kinds: ["weapon", "armor", "item", "companion", "custom"] },
+];
+// Resolve a kind to its group (for category-header styling on the Row).
+const GROUP_OF_KIND = {};
+for (const g of KIND_GROUPS) for (const k of g.kinds) GROUP_OF_KIND[k] = g;
 // V6.3 — system-aware tab ordering. Only expose kinds that make mechanical
 // sense for the active system; avoids a BESM GM having to scroll past 15
 // Cypher-only kinds to find Attributes.
@@ -191,15 +209,35 @@ export default function ReferenceEditor({ campaignId, isGm, systemId }) {
           </div>
         )}
       </div>
-      <div className="flex flex-wrap gap-1 mb-3 border-b border-gold/10 pb-2"
+      <div className="mb-3 border-b border-gold/10 pb-2 space-y-2"
            data-testid="reference-tabs">
-        {(SYSTEM_KIND_ORDER[systemId] || KIND_KEYS).map((k) => (
-          <button key={k} onClick={() => setTab(k)}
-                  className={`text-[10px] px-2 py-1 rounded-sm font-ui uppercase tracking-widest transition-colors ${tab === k ? "bg-gold/15 text-gold-bright border border-gold/30" : "text-mist hover:bg-gold/5"}`}
-                  data-testid={`reference-tab-${k}`}>
-            {labelOf(k)}
-          </button>
-        ))}
+        {KIND_GROUPS.map((g) => {
+          const ordered = (SYSTEM_KIND_ORDER[systemId] || KIND_KEYS);
+          const visible = g.kinds.filter((k) => ordered.includes(k));
+          if (visible.length === 0) return null;
+          return (
+            <div key={g.key} className="flex items-center gap-2 flex-wrap"
+                 data-testid={`reference-group-${g.key}`}>
+              <div className="text-[9px] uppercase tracking-widest font-ui min-w-[84px]"
+                   style={{ color: g.color }}
+                   title={`${g.label} · ${visible.length} kind${visible.length === 1 ? "" : "s"}`}>
+                <span className="inline-block w-2 h-2 rounded-full mr-1.5 align-middle"
+                      style={{ backgroundColor: g.color }}/>
+                {g.label}
+              </div>
+              <div className="flex flex-wrap gap-1 flex-1">
+                {visible.map((k) => (
+                  <button key={k} onClick={() => setTab(k)}
+                          className={`text-[10px] px-2 py-1 rounded-sm font-ui uppercase tracking-widest transition-colors border ${tab === k ? "bg-gold/15 text-gold-bright border-gold/30" : "border-transparent text-mist hover:bg-gold/5 hover:border-gold/20"}`}
+                          style={tab === k ? { borderColor: g.color + "80", boxShadow: `inset 0 -2px 0 0 ${g.color}` } : undefined}
+                          data-testid={`reference-tab-${k}`}>
+                    {labelOf(k)}
+                  </button>
+                ))}
+              </div>
+            </div>
+          );
+        })}
       </div>
       {err && <div className="text-ember text-xs mb-2">{err}</div>}
       {draft && (

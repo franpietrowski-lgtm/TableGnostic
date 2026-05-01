@@ -30,6 +30,11 @@ export default function TimelinePanel({ campId, systemId, isGm }) {
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(true);
   const [hovered, setHovered] = useState(null);
+  // V6.12 — drag-reorder state for GM session placement on the spine.
+  const [dragId, setDragId] = useState(null);
+  const [dropTarget, setDropTarget] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [saveHint, setSaveHint] = useState("");
   const containerRef = useRef(null);
   const vibe = SYSTEM_VIBES[systemId] || SYSTEM_VIBES["besm-4e"];
 
@@ -42,6 +47,13 @@ export default function TimelinePanel({ campId, systemId, isGm }) {
         api.get(`/campaigns/${campId}/timeline-markers`).then((r) => r.data).catch(() => []),
       ]);
       const ordered = (s || []).slice().sort((a, b) => {
+        // V6.12 — honour GM-defined sequence_index first (prologues,
+        // backstory, time-shenanigans sessions). Fall back to date order.
+        const ai = a.sequence_index ?? null;
+        const bi = b.sequence_index ?? null;
+        if (ai !== null && bi !== null) return ai - bi;
+        if (ai !== null) return -1;
+        if (bi !== null) return 1;
         const ta = new Date(a.scheduled_at || a.played_at || a.created_at || 0).getTime();
         const tb = new Date(b.scheduled_at || b.played_at || b.created_at || 0).getTime();
         return ta - tb;
@@ -76,6 +88,51 @@ export default function TimelinePanel({ campId, systemId, isGm }) {
     }
   };
 
+  // ── V6.12: drag-reorder ───────────────────────────────────────────
+  const onDragStart = (sid) => (ev) => {
+    if (!isGm) return;
+    setDragId(sid);
+    try { ev.dataTransfer.effectAllowed = "move"; } catch (_) {}
+    try { ev.dataTransfer.setData("text/plain", sid); } catch (_) {}
+  };
+  const onDragOver = (sid) => (ev) => {
+    if (!isGm || !dragId || sid === dragId) return;
+    ev.preventDefault();
+    setDropTarget(sid);
+  };
+  const onDragLeave = () => setDropTarget(null);
+  const onDrop = (sid) => async (ev) => {
+    ev.preventDefault();
+    if (!isGm || !dragId || sid === dragId) {
+      setDragId(null); setDropTarget(null);
+      return;
+    }
+    // Compute new order: move dragId before sid in the current list.
+    const ids = sessions.map((x) => x.id);
+    const srcIdx = ids.indexOf(dragId);
+    const tgtIdx = ids.indexOf(sid);
+    if (srcIdx === -1 || tgtIdx === -1) return;
+    const next = ids.slice();
+    next.splice(srcIdx, 1);
+    const insertAt = next.indexOf(sid);
+    next.splice(insertAt + (srcIdx < tgtIdx ? 1 : 0), 0, dragId);
+    // Optimistically reorder in UI, persist, then refresh.
+    const localOrdered = next.map((id) => sessions.find((x) => x.id === id)).filter(Boolean);
+    setSessions(localOrdered);
+    setDragId(null); setDropTarget(null);
+    setSaving(true); setSaveHint("Saving spine order…");
+    try {
+      await api.put(`/campaigns/${campId}/sessions/reorder`, next);
+      setSaveHint("Timeline order saved.");
+      setTimeout(() => setSaveHint(""), 2500);
+      load();
+    } catch (e) {
+      setSaveHint(formatApiErrorDetail(e.response?.data?.detail) || "Reorder failed.");
+      load();
+    } finally { setSaving(false); }
+  };
+  const onDragEnd = () => { setDragId(null); setDropTarget(null); };
+
   if (loading) return <div className="text-mist text-xs italic">Drawing the timeline…</div>;
   if (err) return <div className="text-ember text-xs">{err}</div>;
 
@@ -92,12 +149,19 @@ export default function TimelinePanel({ campId, systemId, isGm }) {
           </div>
           <div className="text-[11px] text-mist italic">
             Sessions on the spine; encounters cluster above, codex pins below. Hover any node to inspect.
+            {isGm && <span className="ml-1 text-gold-bright">· Drag a session to reorder the spine.</span>}
           </div>
         </div>
-        <button onClick={load} className="btn btn-ghost text-xs"
-                data-testid="timeline-refresh-btn">
-          <RefreshCw className="w-3 h-3"/> Refresh
-        </button>
+        <div className="flex items-center gap-3">
+          {saveHint && (
+            <span className={`text-[11px] italic ${saving ? "text-mist" : "text-gold-bright"}`}
+                  data-testid="timeline-save-hint">{saveHint}</span>
+          )}
+          <button onClick={load} className="btn btn-ghost text-xs"
+                  data-testid="timeline-refresh-btn">
+            <RefreshCw className="w-3 h-3"/> Refresh
+          </button>
+        </div>
       </div>
 
       {totalCount === 0 ? (
@@ -118,11 +182,19 @@ export default function TimelinePanel({ campId, systemId, isGm }) {
               const enc = encountersBySession(s.id);
               const mks = markersBySession(s.id);
               const isHovered = hovered === s.id;
+              const isDragging = dragId === s.id;
+              const isDropTarget = dropTarget === s.id;
               return (
                 <div key={s.id}
-                     className="relative flex flex-col items-center"
+                     className={`relative flex flex-col items-center transition-transform ${isDragging ? "opacity-50 scale-95" : ""} ${isDropTarget ? "ring-2 ring-gold rounded-sm" : ""}`}
                      style={{ minWidth: 120 }}
                      data-testid={`timeline-session-${s.id}`}
+                     draggable={isGm}
+                     onDragStart={onDragStart(s.id)}
+                     onDragOver={onDragOver(s.id)}
+                     onDragLeave={onDragLeave}
+                     onDrop={onDrop(s.id)}
+                     onDragEnd={onDragEnd}
                      onMouseEnter={() => setHovered(s.id)}
                      onMouseLeave={() => setHovered(null)}>
                   {/* Encounters above the spine */}

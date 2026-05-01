@@ -412,33 +412,34 @@ export default function SessionView() {
       {/* CENTER: Chat */}
       <div className={`card-mystic p-4 md:p-5 flex flex-col min-h-[60vh] md:min-h-0 ${mobilePane === "chat" ? "flex" : "hidden md:flex"}`}
            data-testid="chat-panel">
-        <div className="flex items-center justify-between mb-3">
-          <div>
+        <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
+          <div className="min-w-0 flex-1">
             <div className="label-ref">Live Session</div>
-            <h1 className="font-display text-2xl tracking-wide text-parchment">{session.title}</h1>
+            <h1 className="font-display text-lg sm:text-xl md:text-2xl tracking-wide text-parchment truncate">{session.title}</h1>
           </div>
-          <div className="flex items-center gap-2">
-            <button onClick={() => setMapOpen(true)} className="btn btn-ghost text-xs"
+          <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap justify-end">
+            <button onClick={() => setMapOpen(true)} className="btn btn-ghost text-[11px] sm:text-xs"
                     data-testid="open-battlemap-btn" title="Open the battlemap">
-              <MapIcon className="w-3 h-3"/> Map
+              <MapIcon className="w-3 h-3"/> <span className="hidden sm:inline">Map</span>
             </button>
             {campaign && (campaign.gm_id === user?.id || user?.role === "admin") && (
-              <button onClick={() => setXpOpen(true)} className="btn btn-ghost text-xs"
+              <button onClick={() => setXpOpen(true)} className="btn btn-ghost text-[11px] sm:text-xs"
                       data-testid="open-xp-btn" title="Award session XP (BESM 4E p.232)">
-                <Sparkles className="w-3 h-3"/> XP
+                <Sparkles className="w-3 h-3"/> <span className="hidden sm:inline">XP</span>
               </button>
             )}
-            <select className="select w-auto text-xs" value={recapStyle}
-                    onChange={(e) => setRecapStyle(e.target.value)} data-testid="recap-style">
+            <select className="select w-auto text-[11px] sm:text-xs" value={recapStyle}
+                    onChange={(e) => setRecapStyle(e.target.value)} data-testid="recap-style"
+                    title="Recap style">
               <option value="narrative">Narrative</option>
               <option value="bullet">Bulleted</option>
               <option value="in-character">In-character</option>
             </select>
-            <button onClick={generateRecap} disabled={recapBusy} className="btn btn-ghost text-xs"
-                    data-testid="recap-btn">
-              <ScrollText className="w-3 h-3"/> {recapBusy ? "Inscribing…" : "Recap"}
+            <button onClick={generateRecap} disabled={recapBusy} className="btn btn-ghost text-[11px] sm:text-xs"
+                    data-testid="recap-btn" title="Generate Loremaster recap">
+              <ScrollText className="w-3 h-3"/> <span className="hidden sm:inline">{recapBusy ? "Inscribing…" : "Recap"}</span>
             </button>
-            <span className="tag">{session.status}</span>
+            <span className="tag hidden sm:inline-flex">{session.status}</span>
           </div>
         </div>
         <div className="divider-sigil"/>
@@ -475,13 +476,14 @@ export default function SessionView() {
       </div>
 
       {recap && (
-        <div className="fixed inset-0 z-50 bg-void/80 backdrop-blur-sm flex items-start justify-center p-6 overflow-auto" data-testid="recap-modal">          <div className="card-mystic sigil-ring w-full max-w-2xl p-7 my-10">
-            <div className="flex items-center justify-between mb-3">
-              <div>
+        <div className="fixed inset-0 z-50 bg-void/90 backdrop-blur-md flex items-start justify-center p-2 sm:p-6 overflow-auto" data-testid="recap-modal">
+          <div className="card-mystic sigil-ring w-full max-w-2xl p-4 sm:p-7 my-3 sm:my-10">
+            <div className="flex items-center justify-between mb-3 gap-2">
+              <div className="min-w-0">
                 <div className="label-ref flex items-center gap-2"><Sparkles className="w-3 h-3"/> Loremaster's recap</div>
-                <h2 className="font-display text-2xl text-parchment tracking-wide mt-1">{session.title}</h2>
+                <h2 className="font-display text-lg sm:text-2xl text-parchment tracking-wide mt-1 truncate">{session.title}</h2>
               </div>
-              <button onClick={() => setRecap(null)} className="btn btn-ghost p-2"><X className="w-4 h-4"/></button>
+              <button onClick={() => setRecap(null)} className="btn btn-ghost p-2 flex-shrink-0"><X className="w-4 h-4"/></button>
             </div>
             <div className="divider-sigil mb-4"/>
             {recap.error ? (
@@ -563,7 +565,7 @@ export default function SessionView() {
 
       {/* Battlemap overlay — full-screen when toggled by the map button */}
       {mapOpen && (
-        <div className="fixed inset-0 z-40 bg-void/90 backdrop-blur-sm flex items-stretch justify-center p-3 md:p-6 overflow-auto"
+        <div className="fixed inset-0 z-40 bg-void/90 backdrop-blur-md flex items-stretch justify-center p-1 sm:p-3 md:p-6 overflow-auto"
              data-testid="battlemap-overlay">
           <div className="w-full max-w-6xl">
             <Battlemap
