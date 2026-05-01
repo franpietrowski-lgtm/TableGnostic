@@ -14,6 +14,30 @@
 
 ## 2. Implemented (cumulative, condensed)
 
+### V6.13 — Public Canon Registry + Cmd-K global search + Portrait in PDF + Reference Editor Alt-shortcuts (2026-05-01)
+
+**P2 — Public Canon Registry**
+- New collection `canon_subscriptions` (user_id, campaign_id). `Campaign.canon_published` (bool) + `canon_blurb` (str ≤500).
+- Backend `routes/canon_registry.py` — `GET /api/canon-registry` (public), `POST/DELETE /api/campaigns/{cid}/canon-publish` (GM-only), `POST/DELETE /api/canon-registry/{cid}/subscribe`, `GET /api/canon-registry/subscriptions`.
+- `CanonRegistry.jsx` at `/app/canon` — public-ish discovery page showing every published campaign as a card with name/system/blurb/GM/member-count/delta-drop-count/subscriber-count. Signed-in users get a `canon-toggle-{cid}` Follow button; "You follow N canons" pill strip at the top; login prompt on non-auth follow. Empty-state with CTA.
+- GM-side `CanonPublishCard` in CampaignDetail Invite tab — checkbox + blurb textarea + persist. Clear UX copy: "Lets fellow GMs discover this campaign's Delta Drops. Players + seat data stay private."
+- Sidebar nav `nav-canon` between Reference and How-To.
+
+**P2 — Cmd-K global search palette**
+- Backend `routes/search.py` — `GET /api/search?q=<≥2chars>` — substring-match across user-visible campaigns + codex nodes + characters + sessions. Capped at 40 results.
+- `CmdKPalette.jsx` mounted on Shell — `Cmd+K` (mac) / `Ctrl+K` (pc) opens a search overlay anywhere in `/app/*`. Debounced fetch (180ms). Results grouped by type with coloured accents + icons. Keyboard-nav (↑/↓, Enter to open, Esc to close). Mouse-hover also updates cursor.
+
+**P1 — Character portrait in PDF export**
+- `routes/pdf_export.py` — `_render_character_portrait()` helper embeds the uploaded portrait (from `/api/uploads/portraits/{cid}.*`) as a 1.6" × 2.1" proportional Image at the top of each character appendix. Silently skips if missing / unreadable.
+
+**Improvement — Reference Editor Alt-shortcuts**
+- Alt+M / Alt+B / Alt+C / Alt+Y / Alt+I jump tab to the first visible kind of each group (Mechanics / Bundles & Packs / Content / Cypher / Items & Rules). Listener gated against inputs/textareas/contentEditable so typing never triggers. `<kbd>⌥M</kbd>` style hints render next to each group label.
+
+**Testing — `/app/test_reports/iteration_46.json`**
+- Backend 8/9 V6.13 (1 skip: needs session seed) + 20/28 V6.9-V6.13 regression pass (8 seed-dependent skips retained).
+- Frontend 100% — Canon Registry, CanonPublishCard, Cmd-K palette, Alt-shortcuts all live-verified.
+
+
 ### V6.12 — Timeline drag-reorder UI + Reference Editor 5-group layout + SessionView mobile sweep (2026-05-01)
 
 **P1 — Timeline click-and-drag session reorder (UI)**
