@@ -23,6 +23,45 @@
 ### V5.1 — Atelier "Epic Campaign" 8th-phase tab (2026-04-27)
 **Trigger:** GMFran uploaded Guy Sclanders' follow-up book *Epic Campaigns: Digital Edition* (146 pp) and asked for a new tab inside the **"Forge the Master Plot"** Atelier page. The two planes (the existing 7-phase Genesis and the new Epic Campaign) are intentionally INDEPENDENT — usable in tandem, separately, or one-or-the-other; pure GM brainstorming kit. Implemented as `phase === 7` panel inside `CampaignGenesis.jsx`, alongside the existing seven phases. Backend: new `db.epic_campaigns` collection + `routes/epic_campaign.py` (GET/PUT/seed-codex). Frontend: new `EpicCampaignPanel.jsx` (11 sections — Plan/Constraints, Theme, Sentence, OGAS Nemesis, Villains, Expanding Goal, Milestones, Adventures, Seeds, Beginning, Climax — plus Tie-ins picker). The "Sync to Codex" action pushes the Nemesis + each Villain + each Seed into the World Codex as gm-only knowledge nodes; idempotent on re-run.
 
+### V6.8 — Genesis/Epic Atelier split + Timeline + Cypher fuzzy + NPC save + Codex chart view (2026-04-30)
+
+**Atelier sub-tab navigation**
+- `AtelierTab.jsx` now exposes 5 sub-tabs: **Workshop** (legacy: ingestion + XP queue + Session 0 + Arcs + Continuity), **Genesis (7 Phases)** (deep-link to the standalone `/genesis` page), **Epic Campaign** (mounts `EpicCampaignPanel` directly), **Timeline** (new), **References** (mounts `ReferenceEditor`).
+- Default sub-tab is `workshop` so legacy users land on the original surface.
+- URL query param `?atelier={key}` deep-links to a chosen sub-tab.
+
+**TimelinePanel — graphical session/encounter tracker**
+- New `TimelinePanel.jsx` — horizontal spine with sessions ordered by `scheduled_at`/`played_at`/`created_at` as glyph nodes. Encounters (codex nodes with type `encounter`/`set-piece` + `session_id` link) cluster above their parent session.
+- System-themed: BESM gold lozenge `◆`, Anime 5E magenta `●`, D&D fleur `❦`, Cypher teal `▣`. Soft glow on hover.
+- Empty-state copy + GM tip line. Drag-to-reorder noted as next-sprint follow-on.
+
+**Cypher Suggest fuzzy + free-text keywords**
+- `_score_entry()` now does case-insensitive substring matching on entry name+summary, returning `matched_hints` (codex-derived) AND `matched_keywords` (user-typed).
+- Endpoint accepts new `keywords` query (comma-separated) — score boost +2 per match. Response echoes `free_keywords` for UI debugging.
+
+**NPC save-onto-node**
+- `POST /api/campaigns/{cid}/npcs/{nid}/generate-sheet?save=true` now persists `stat_block` + `stat_block_threat_tier` + bumps `updated_at` on the codex node. Default `save=false` keeps the V6.7 non-mutating draft behaviour. GM-only.
+
+**Codex Chart View (per user reference image)**
+- New `CodexChartView.jsx` — two stacked surfaces:
+  1. **Geography & Biome Flow**: locations grouped by `fields.biome`/`fields.climate` into vertical lanes with population callouts.
+  2. **Worldbuilding Pillars**: 5-pillar grid (Population & Culture · Geography & Biome · Magic & Mystery · Technology & Crafts · History & Mythology). Auto-infers from node type if `fields.pillar` not set.
+- Codex tab gained 3 view-mode buttons (List / Graph / Chart).
+- Read-only; no schema changes (uses `fields[]` already supported).
+
+**Testing — `/app/test_reports/iteration_41.json`**
+- Backend: 19/19 (8 V6.8 + 11 V6.7) + 80/80 broader regression. **Zero defects.**
+- Frontend: 24/24 testid + behavioural assertions pass — all 5 atelier sub-tabs, all 3 codex view modes, timeline + chart populate end-to-end.
+- Two micro-fixes applied post-test: `node.updated_at` bumped on save-block; `CharacterSheet.jsx` ownership gate confirmed already on `useAuth()` (V6.7 fix re-verified).
+
+**Deferred to next session (Sprint after — already on roadmap)**
+- Token-placement system (GM-can-move-all + player-only-own + companions; auto status rings; map-scale-aware sizing).
+- Refactor sprint: CharacterSheet (1411) / CampaignDetail (1656) / ReferenceEditor (971) → split-by-tab files.
+- Artisan / Evereantha system-protected seed across all 4 systems (NPCs auto-sheets; name-clash protection for cross-system terms).
+- Character-sheet PDF in campaign export bundle (currently character-only download).
+- Public canon registry on landing page (discover + subscribe to Delta Drops).
+
+
 ### V6.7 — Soft party cap + BESM CR kit + NPC sheet generator + Power Bundle on sheet + Design Audit (2026-04-30)
 
 **Soft party cap of 6 (warn, allow)**

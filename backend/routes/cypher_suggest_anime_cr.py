@@ -21,7 +21,7 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from core.db import db
+from core.db import db, now_iso
 from core.security import get_current_user
 from system_data.cypher_data import REFERENCE as CYPHER_REF
 
@@ -502,7 +502,8 @@ async def generate_npc_sheet(
         await db.nodes.update_one(
             {"id": node_id, "campaign_id": campaign_id},
             {"$set": {"stat_block": block,
-                       "stat_block_threat_tier": threat_tier}},
+                       "stat_block_threat_tier": threat_tier,
+                       "updated_at": now_iso()}},
         )
         return {"node_id": node_id, "stat_block": block, "saved": True}
     return {"node_id": node_id, "stat_block": block, "saved": False}
