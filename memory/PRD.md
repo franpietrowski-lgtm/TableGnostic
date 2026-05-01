@@ -14,6 +14,33 @@
 
 ## 2. Implemented (cumulative, condensed)
 
+### V6.15 — Multi-system CR-engine parity + Interactive How-To tours (2026-05-01)
+
+**P2 — D&D 5E / Cypher encounter-balancer parity with BESM/Anime 5E**
+- `core/cr_engine.py` — added four shared suggestion-enrichment helpers called from all three analysers (`analyse_dnd` / `analyse_cypher` / `analyse_besm`), bringing every system to parity on advice depth regardless of ruleset:
+  - `_env_suggestions(env, system_id)` — translates `{indoor, weather, light, hazard}` flags into tactical levers (LOS breaks, fog → ranged penalty, dim → darkvision edge, hazard → ticking clock). All four systems now consume env identically.
+  - `_role_mix_suggestions(npcs, rating)` — minion-only / leader-only / solo-boss compositions each produce a targeted nudge (promote to henchman, add rank-and-file, add Lair/Phase-2 beat).
+  - `_party_spread_suggestions(party, system_id)` — warns when level (D&D), tier (Cypher), or CP (BESM/Anime) spread is wide enough to unbalance fairness; recommends parallel objectives or borrowed Cyphers.
+  - `_tune_to_target_*` per system — concrete deltas ("trim ≈ 700 adj. XP to drop from Deadly to Hard", "shave ≈ 45 NPC CP to land in Hard", "drop encounter level by 2 to land in Hard"). New suggestion `kind: "tune"`.
+- Seeded encounter now yields 3–6 actionable suggestions per system (unit-tested band).
+- Frontend `DirectorConsole.jsx` `CrPanel` required no changes — suggestions are rendered generically by `kind`/`icon`/`label`/`delta`.
+
+**P1 — Interactive How-To guided tours**
+- `GuidedTour.jsx` (new) — overlay engine using `createPortal` to `document.body`:
+  - 4-rect dim spotlight around the target (`getBoundingClientRect` + gold pulse border); auto-repositions on scroll/resize via `ResizeObserver` + rAF.
+  - Auto-placed tooltip (top/right/bottom/left) picking the side with most space; Prev / Next / Skip; ESC closes.
+  - Route-aware: each step can declare `route: "/app/..."` — engine `nav()`s first, then waits up to 4s for `step.selector` to appear (poll every 300ms). Optional steps silently skip when target is absent (role-gated controls).
+  - Comma-separated fallback selectors supported ("sel-a, sel-b").
+- `TourProvider.jsx` (new) — React context mounted **inside `Shell` above the `<Outlet/>`**, so the active tour survives route changes (the critical design decision — earlier placement inside `HowToGuide` had the tour dying on first nav). Exposes `useTour().launch(tourId, ctx)` / `stop()` / `active`.
+- `tours.js` (new) — registry for 6 tours: `welcome`, `campaign-from-scratch`, `director-console`, `knowledge-web`, `live-session`, `build-character`. Each step: `{ selector, title, body, route?, placement?, optional? }`. `needsCampaign: true` tours receive `{cid}` substitution via `reifyTour()`.
+- `HowToGuide.jsx` — refactored to call `useTour().launch()` from per-card "Launch tour" CTAs. Campaign-scoped tours open a picker modal (`tour-campaign-picker`) listing the user's campaigns when more than one exists; single-campaign users go straight in. "Take the orientation tour" CTA at the bottom launches the `welcome` tour.
+- `Shell.jsx` — wraps children with `<TourProvider>` so the overlay persists app-wide.
+
+**Testing — `/app/test_reports/iteration_48.json`**
+- Backend 22/22 in `tests/test_iter48_v615_cr_parity.py` (env levers × 3 systems, role-mix × 3, party-spread × 3, tune-to-target × 4, backward-compat × 6, dispatcher × 2, suggestion-count parity × 3).
+- Frontend 100% acceptance — welcome tour walks all 5 steps (sidebar → Campaigns → Reference → Canon → How-To), STEP n/5 indicator, Prev/Next/ESC/X all working, spotlight follows target across route changes. Director-Console tour confirmed to navigate from `/app/help` to `/app/campaigns/{cid}/director` mid-tour and continue spotlighting director-console → director-session-picker → director-npc-pool → director-encounter-editor → cr-panel without dropping state.
+
+
 ### V6.13 — Public Canon Registry + Cmd-K global search + Portrait in PDF + Reference Editor Alt-shortcuts (2026-05-01)
 
 **P2 — Public Canon Registry**

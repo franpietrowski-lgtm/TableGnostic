@@ -229,7 +229,8 @@ export default function GuidedTour({ tour, onClose }) {
           )}
         </div>
         <div className="mt-4 flex items-center justify-between">
-          <div className="text-[10px] tracking-widest uppercase text-mist">
+          <div className="text-[10px] tracking-widest uppercase text-mist"
+               data-testid="guided-tour-step-indicator">
             Step {idx + 1} / {total}
           </div>
           <div className="flex items-center gap-2">
