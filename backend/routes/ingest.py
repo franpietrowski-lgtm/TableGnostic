@@ -52,7 +52,8 @@ from core.security import get_current_user
 
 router = APIRouter(prefix="/api", tags=["ingest"])
 
-MAX_BYTES = 24 * 1024 * 1024  # 24 MB
+MAX_BYTES = 64 * 1024 * 1024  # 64 MB — V6.16 raise (was 24 MB) so a single
+# campaign-bible upload can carry old + new Evereantha + Artisan Tale combined.
 
 # Map sniffed content-type / extension → parser. Keep extension as fallback
 # because some clients don't set the right content-type.
@@ -99,9 +100,16 @@ def _parse_to_text(filename: str, content_type: str, data: bytes) -> str:
     raise HTTPException(400, f"Unsupported file type '{ct}' / .{ext}. Use PDF / MD / TXT / RTF / DOCX.")
 
 
-def _truncate_for_llm(text: str, hard_cap_chars: int = 60_000) -> str:
-    """Claude has plenty of context, but the EMERGENT key is shared. Cap
-    the input so a 200-page rulebook doesn't cost hundreds of dollars."""
+def _truncate_for_llm(text: str, hard_cap_chars: int = 240_000) -> str:
+    """Claude Sonnet 4.5 has a 200k-token context (~600k chars). The
+    EMERGENT key is shared, so we cap input at 240k chars (≈ 80k tokens)
+    per call — comfortably enough for a 1.5×Evereantha+Artisan-Tale doc
+    while keeping per-call cost predictable. V6.16 raised from 60k.
+
+    For larger files, prefer the Atelier Intake Template (markdown
+    `## SECTION` blocks) — the chunked endpoint splits by section so each
+    Claude call gets focused context instead of a single big-truncated read.
+    """
     if len(text) <= hard_cap_chars:
         return text
     head = text[: int(hard_cap_chars * 0.6)]

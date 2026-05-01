@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { api, formatApiErrorDetail } from "../lib/api";
-import { Map, Network, RefreshCw, Pin } from "lucide-react";
+import { Map, Network, RefreshCw, Pin, Check, X as XIcon, ChevronLeft, ChevronRight } from "lucide-react";
 
 /**
  * CodexChartView V2 — V6.11 worldbuilding chart redesigned per user spec.
@@ -87,6 +87,7 @@ export default function CodexChartView({ campId, isGm }) {
   const [activeSessionId, setActiveSessionId] = useState("");
   const [pinningId, setPinningId] = useState("");
   const [pinFeedback, setPinFeedback] = useState("");
+  const [draftPin, setDraftPin] = useState(null);  // V6.16 — preview before commit
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(true);
 
@@ -115,29 +116,45 @@ export default function CodexChartView({ campId, isGm }) {
   };
   useEffect(() => { load(); /* eslint-disable-next-line */ }, [campId]);
 
-  const dropMarkerOnTimeline = async (node) => {
+  // V6.16 — clicking a node now opens a confirm preview rather than
+  // committing immediately. Lets the GM see WHICH session it lands on
+  // (visible mini-timeline strip) and shuffle it before persisting.
+  const openDraftPin = (node) => {
     if (!isGm) return;
-    if (!activeSessionId) {
-      setPinFeedback("Pick a session first.");
+    if (sessions.length === 0) {
+      setPinFeedback("This campaign has no sessions yet — schedule one first.");
+      setTimeout(() => setPinFeedback(""), 4000);
       return;
     }
+    // Default to the picker's active session (or the first one).
+    const targetSid = activeSessionId || sessions[0].id;
+    setDraftPin({ node, sessionId: targetSid });
+  };
+
+  const commitDraftPin = async () => {
+    if (!draftPin) return;
+    const { node, sessionId } = draftPin;
     setPinningId(node.id); setPinFeedback("");
     try {
       await api.post(`/campaigns/${campId}/timeline-markers`, {
-        session_id: activeSessionId,
+        session_id: sessionId,
         codex_node_id: node.id,
         label: node.title,
         kind: "node",
         color: node.fields?.color || "#C8A34A",
       });
-      const sess = sessions.find((s) => s.id === activeSessionId);
+      const sess = sessions.find((s) => s.id === sessionId);
       setPinFeedback(`Pinned "${node.title}" → ${sess?.name || "session"}.`);
       try { window.dispatchEvent(new CustomEvent("tg:timeline-marker-added", { detail: { campId } })); } catch (_) {}
       setTimeout(() => setPinFeedback(""), 4000);
+      setDraftPin(null);
     } catch (e) {
       setPinFeedback(formatApiErrorDetail(e.response?.data?.detail) || "Pin failed.");
     } finally { setPinningId(""); }
   };
+
+  // Legacy entry point kept for callers that still pass directly.
+  const dropMarkerOnTimeline = openDraftPin;
 
   // ── World Creation Tree buckets ────────────────────────────────────────
   const treeBuckets = useMemo(() => {
@@ -192,15 +209,15 @@ export default function CodexChartView({ campId, isGm }) {
 
   // Reusable clickable tag for tree leaves
   const NodeChip = ({ n, color }) => {
-    const clickable = isGm && activeSessionId;
+    const clickable = isGm && sessions.length > 0;
     return (
       <button
-        onClick={() => clickable && dropMarkerOnTimeline(n)}
+        onClick={() => clickable && openDraftPin(n)}
         className={`text-[10px] font-ui px-1.5 py-0.5 rounded-sm border truncate max-w-full ${clickable ? "cursor-pointer hover:bg-gold/10 transition-colors" : "cursor-default"}`}
         style={{ borderColor: (color || "#C8A34A") + "55",
                  color: color || "#C8A34A",
                  background: (color || "#C8A34A") + "0c" }}
-        title={clickable ? `Click to pin "${n.title}" on Timeline` : n.title}
+        title={clickable ? `Click to pin "${n.title}" on Timeline` : (sessions.length === 0 ? "Schedule a session first to enable pinning." : n.title)}
         data-testid={`codex-tree-node-${n.id}`}
       >
         {pinningId === n.id ? "…" : n.title}
@@ -226,13 +243,13 @@ export default function CodexChartView({ campId, isGm }) {
 
   return (
     <div className="space-y-4" data-testid="codex-chart-view">
-      {/* ─── Pin-to-Timeline session picker ─── */}
+      {/* ─── Pin-to-Timeline session picker (default target) ─── */}
       {isGm && (
         <div className="card-mystic p-3 flex items-center justify-between flex-wrap gap-3"
              data-testid="codex-chart-pin-bar">
           <div className="flex items-center gap-2 text-[11px]">
             <Pin className="w-3.5 h-3.5 text-gold"/>
-            <span className="text-mist">Pin nodes to Timeline at session:</span>
+            <span className="text-mist">Default session for new pins:</span>
             <select
               value={activeSessionId}
               onChange={(e) => setActiveSessionId(e.target.value)}
@@ -247,6 +264,9 @@ export default function CodexChartView({ campId, isGm }) {
                 </option>
               ))}
             </select>
+            <span className="text-[10px] text-mist/60 italic">
+              Click any node — a confirm panel lets you reposition before saving.
+            </span>
           </div>
           {pinFeedback && (
             <div className="text-[11px] text-gold-bright italic"
@@ -399,6 +419,178 @@ export default function CodexChartView({ campId, isGm }) {
             <div>Balanced</div>
             <div>Dry</div>
           </div>
+        </div>
+      </div>
+
+      {/* V6.16 — Pin confirm panel with visible mini-timeline strip */}
+      {draftPin && (
+        <PinConfirmPanel
+          draft={draftPin}
+          sessions={sessions}
+          busy={pinningId === draftPin.node.id}
+          onPickSession={(sid) => setDraftPin((d) => d && { ...d, sessionId: sid })}
+          onConfirm={commitDraftPin}
+          onCancel={() => setDraftPin(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * V6.16 — PinConfirmPanel
+ *
+ * Floating modal that appears after a GM clicks any codex node to drop a
+ * Timeline marker. Renders a horizontal mini-timeline strip showing every
+ * session in the campaign as a pill (the visible "timeline graphic" the
+ * GM pins onto), with the candidate session highlighted. The GM can:
+ *   • Click any session pill (or use the ◀ ▶ chevrons) to retarget
+ *   • Confirm to commit the pin
+ *   • Cancel to discard the draft
+ *
+ * The strip auto-scrolls the picked session into view on retarget.
+ */
+function PinConfirmPanel({ draft, sessions, busy, onPickSession, onConfirm, onCancel }) {
+  const { node, sessionId } = draft;
+  const idx = Math.max(0, sessions.findIndex((s) => s.id === sessionId));
+  const targetSess = sessions[idx];
+  const stripRef = React.useRef(null);
+
+  React.useEffect(() => {
+    const el = stripRef.current?.querySelector(`[data-pin-strip-idx="${idx}"]`);
+    try { el?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" }); } catch (_) {}
+  }, [idx]);
+
+  React.useEffect(() => {
+    const onKey = (e) => {
+      if (e.key === "Escape") onCancel();
+      if (e.key === "Enter") onConfirm();
+      if (e.key === "ArrowLeft" && idx > 0) onPickSession(sessions[idx - 1].id);
+      if (e.key === "ArrowRight" && idx < sessions.length - 1) onPickSession(sessions[idx + 1].id);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [idx, sessions, onPickSession, onConfirm, onCancel]);
+
+  const dotColor = node.fields?.color || "#C8A34A";
+
+  return (
+    <div className="fixed inset-0 z-[8800] bg-void/80 backdrop-blur-sm flex items-end sm:items-center justify-center p-3 sm:p-6"
+         data-testid="pin-confirm-overlay" onClick={onCancel}>
+      <div className="card-mystic w-full max-w-3xl p-5 sm:p-6"
+           onClick={(e) => e.stopPropagation()}
+           data-testid="pin-confirm-panel">
+        <div className="flex items-baseline justify-between gap-3 mb-3">
+          <div className="min-w-0 flex-1">
+            <div className="text-[10px] tracking-widest uppercase text-gold-bright flex items-center gap-1.5">
+              <Pin className="w-3 h-3" /> Pin to Timeline
+            </div>
+            <div className="font-display text-xl text-parchment mt-0.5 truncate">
+              {node.title}
+            </div>
+            <div className="text-[11px] text-mist italic">
+              Drops a marker on the campaign Timeline at the picked session.
+              Pin a place, NPC, faction, or moment so future you knows when it entered the story.
+            </div>
+          </div>
+          <button onClick={onCancel} className="text-mist hover:text-ember shrink-0"
+                  data-testid="pin-confirm-cancel" title="Cancel (ESC)">
+            <XIcon className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Visible mini-timeline strip — every session as a tappable pill. */}
+        <div className="mt-2">
+          <div className="flex items-center justify-between mb-1.5">
+            <div className="label-ref text-[10px]">Timeline</div>
+            <div className="text-[10px] text-mist tracking-widest uppercase">
+              Session {idx + 1} of {sessions.length}
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => idx > 0 && onPickSession(sessions[idx - 1].id)}
+              disabled={idx === 0}
+              className="btn btn-ghost p-1 disabled:opacity-30"
+              data-testid="pin-confirm-prev"
+              title="Previous session">
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+
+            <div ref={stripRef}
+                 className="flex-1 flex items-center gap-2 overflow-x-auto py-2 px-1 border-y border-gold/15 bg-void/40 rounded-sm"
+                 data-testid="pin-confirm-strip">
+              {sessions.map((s, i) => {
+                const picked = i === idx;
+                return (
+                  <button key={s.id}
+                          data-pin-strip-idx={i}
+                          data-testid={`pin-confirm-strip-${i}`}
+                          onClick={() => onPickSession(s.id)}
+                          title={s.name || `Session ${i + 1}`}
+                          className={`group relative flex flex-col items-center min-w-[120px] px-3 py-2 rounded-sm border transition-all ${
+                            picked
+                              ? "bg-gold/15 text-gold-bright border-gold"
+                              : "bg-void/40 text-mist border-gold/20 hover:border-gold/50 hover:bg-gold/5"
+                          }`}>
+                    {/* The candidate marker drop — only on picked. */}
+                    {picked && (
+                      <span className="absolute -top-2 left-1/2 -translate-x-1/2 w-3 h-3 rounded-full border-2 border-void"
+                            style={{ background: dotColor }}
+                            data-testid={`pin-confirm-marker-${i}`}/>
+                    )}
+                    <span className="text-[10px] tracking-widest uppercase text-mist">#{i + 1}</span>
+                    <span className="text-xs font-ui truncate max-w-[110px]">
+                      {s.name || "untitled"}
+                    </span>
+                    {s.scheduled_at && (
+                      <span className="text-[9px] text-mist/70 mt-0.5">
+                        {new Date(s.scheduled_at).toLocaleDateString()}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+
+            <button
+              onClick={() => idx < sessions.length - 1 && onPickSession(sessions[idx + 1].id)}
+              disabled={idx >= sessions.length - 1}
+              className="btn btn-ghost p-1 disabled:opacity-30"
+              data-testid="pin-confirm-next"
+              title="Next session">
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="text-[10px] text-mist/70 italic mt-1.5">
+            ◀ ▶ to walk · Enter to confirm · ESC to cancel
+          </div>
+        </div>
+
+        {/* Summary line */}
+        <div className="mt-4 p-3 rounded-sm border border-gold/20 bg-void/30 flex items-center gap-2.5"
+             data-testid="pin-confirm-summary">
+          <span className="inline-block w-3 h-3 rounded-full shrink-0" style={{ background: dotColor }} />
+          <div className="text-[12px] text-parchment leading-snug flex-1 min-w-0">
+            <b className="text-gold-bright">{node.title}</b>
+            <span className="text-mist"> will be pinned to </span>
+            <b>{targetSess?.name || "this session"}</b>
+            {targetSess?.scheduled_at && (
+              <span className="text-mist/80"> · {new Date(targetSess.scheduled_at).toLocaleDateString()}</span>
+            )}
+            .
+          </div>
+        </div>
+
+        <div className="mt-4 flex items-center justify-end gap-2">
+          <button onClick={onCancel} className="btn btn-ghost text-xs" data-testid="pin-confirm-cancel-btn">
+            Cancel
+          </button>
+          <button onClick={onConfirm} disabled={busy} className="btn btn-primary text-xs"
+                  data-testid="pin-confirm-confirm-btn">
+            <Check className="w-3 h-3" /> {busy ? "Pinning…" : "Confirm pin"}
+          </button>
         </div>
       </div>
     </div>

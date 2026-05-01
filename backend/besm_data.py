@@ -682,8 +682,9 @@ GAME_SYSTEMS = [
             "All rights reserved under international law."
         ),
         "links": ["http://Anime5E.com"],
-        # Anime 5E uses the Tri-Stat Emporium combined-logo cover requirement.
-        "logo_url": "https://customer-assets.emergentagent.com/job_rules-forge/artifacts/yhzl2ww7_Tri-Stat%20Emporium%20BESM%20Logo%20300dpi.png",
+        # Anime 5E uses its own Tri-Stat Emporium logo (distinct from BESM 4E).
+        # File served from /app/frontend/public/system-logos/.
+        "logo_url": "/system-logos/anime5e-tristat-emporium.png",
         "supported": True,  # System is data-scaffolded V3.6; full Reference / Builder lands V3.7
         "blurb": "Open-licensed (OGL) d20 5E-compatible system tuned for anime / pulp action. Classes, races, and feats. Mechanics scaffolded — full reference & builder coming next batch.",
     },

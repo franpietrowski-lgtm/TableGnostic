@@ -200,8 +200,8 @@ export default function Dashboard() {
               <Link key={c.id} to={`/app/campaigns/${c.id}`}
                     className="card-mystic p-4 transition hover:-translate-y-0.5 hover:border-gold/60"
                     data-testid={`campaign-card-${c.id}`}>
-                <div className="flex items-baseline justify-between gap-2">
-                  <SystemBadge systemId={c.system_id}/>
+                <div className="flex items-center justify-between gap-2">
+                  <SystemBadge systemId={c.system_id} compact />
                   <span className="text-[9px] font-ui uppercase tracking-widest text-mist">
                     {c.is_gm ? "GM" : "Player"}
                   </span>
@@ -210,6 +210,7 @@ export default function Dashboard() {
                 <div className="text-xs text-mist mt-1 line-clamp-2 h-8">
                   {c.description || <span className="italic">No description yet.</span>}
                 </div>
+                <SystemBadge systemId={c.system_id} />
                 <div className="flex items-center justify-between mt-3">
                   <span className="tag text-[9px]">{c.visibility}</span>
                   <span className="text-[10px] text-gold/70 font-ui flex items-center gap-1">

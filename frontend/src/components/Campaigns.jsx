@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api, formatApiErrorDetail, useAuth } from "../lib/api";
 import { Plus, Scroll, X, Users, Lock, Globe2 } from "lucide-react";
+import SystemBadge from "./SystemBadge";
 
 export default function Campaigns() {
   const { user } = useAuth();
@@ -56,12 +57,13 @@ export default function Campaigns() {
                   className="card-mystic p-5 transition hover:-translate-y-0.5"
                   data-testid={`campaign-${c.id}`}
                   data-campaign-tile={c.id}>
-              <div className="flex items-center justify-between">
-                <span className="label-ref">{c.system}</span>
+              <div className="flex items-center justify-between gap-2">
+                <SystemBadge systemId={c.system_id} systemName={c.system} compact />
                 <span className="tag">{c.visibility === "public" ? <><Globe2 className="w-3 h-3"/> Public</> : <><Lock className="w-3 h-3"/> Private</>}</span>
               </div>
               <div className="font-display text-xl text-parchment mt-2">{c.name}</div>
               <div className="text-sm text-mist mt-1 line-clamp-2 font-body">{c.description || "—"}</div>
+              <SystemBadge systemId={c.system_id} systemName={c.system} />
               <div className="mt-4 flex items-center justify-between">
                 <span className="text-xs text-gold/70 font-ui">{c.power_level}</span>
                 <span className="text-xs text-mist font-ui flex items-center gap-1">
