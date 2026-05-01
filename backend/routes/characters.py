@@ -184,6 +184,31 @@ async def revoke_companion_owner(ch_id: str, player_id: str,
     return _decorate(fresh)
 
 
+@router.get("/characters/{cid}/effects")
+async def list_character_effects(cid: str, user: dict = Depends(get_current_user)):
+    """V6.10 — return all currently-ACTIVE effects (status rings) targeting
+    this character across every session of the character's campaign. Used
+    by the sheet to mirror the live battlemap status rings so the player
+    sees their condition without having to open the map.
+    """
+    ch = await db.characters.find_one({"id": cid}, {"_id": 0, "campaign_id": 1, "owner_id": 1})
+    if not ch:
+        raise HTTPException(404, "Character not found")
+    camp = await db.campaigns.find_one({"id": ch["campaign_id"]}, {"_id": 0})
+    if not camp:
+        raise HTTPException(404, "Campaign not found")
+    if (camp["gm_id"] != user["id"]
+            and ch.get("owner_id") != user["id"]
+            and user["id"] not in camp.get("member_ids", [])
+            and user.get("role") != "admin"):
+        raise HTTPException(403, "Not at this table")
+    rows = await db.effects.find(
+        {"target_character_id": cid, "active": True},
+        {"_id": 0},
+    ).sort("created_at", -1).to_list(50)
+    return sanitize(rows)
+
+
 @router.post("/characters/{cid}/journal")
 async def add_journal_entry(cid: str, body: JournalEntryIn,
                             user: dict = Depends(get_current_user)):

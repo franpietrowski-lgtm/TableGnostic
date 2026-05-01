@@ -706,6 +706,10 @@ async def seed_evereantha_suite(user: Dict[str, Any] = Depends(get_current_user)
     system (besm-4e, dnd-5e, cypher, anime-5e). Gives the GM/admin a
     parallel-world testbed for cross-system compatibility + adaptation
     review. Four GM-only campaigns in one call.
+
+    V6.10 — every NPC / creature node now lands with an auto-generated
+    system-appropriate stat block (no manual click-through), via the new
+    bulk auto-generator. Skipped on cloned campaigns (skipped_existing).
     """
     if user.get("role") not in ("gm", "admin"):
         raise HTTPException(403, "GM/admin only.")
@@ -713,4 +717,36 @@ async def seed_evereantha_suite(user: Dict[str, Any] = Depends(get_current_user)
     out.append(await _seed_one(EVEREANTHA, user))  # besm-4e canonical
     for sid in ("dnd-5e", "cypher", "anime-5e"):
         out.append(await _seed_one(_evereantha_adapted(sid), user))
-    return {"deployed": out, "suite": "evereantha-cross-system"}
+    # Auto-generate stat blocks for every freshly-seeded campaign.
+    from routes.cypher_suggest_anime_cr import _build_stat_block
+    auto_summary: List[Dict[str, Any]] = []
+    for entry in out:
+        if entry.get("skipped_existing"):
+            continue
+        cid = entry["id"]
+        camp = await db.campaigns.find_one({"id": cid}, {"_id": 0})
+        if not camp:
+            continue
+        sys_id = camp.get("system_id")
+        pc_cp = int(camp.get("total_points") or 120)
+        nodes = await db.nodes.find(
+            {"campaign_id": cid, "type": {"$in": ["npc", "creature"]}}, {"_id": 0},
+        ).to_list(500)
+        gen = 0
+        for n in nodes:
+            if n.get("stat_block"):
+                continue
+            tier = ((n.get("fields") or {}).get("threat_tier") or "equal").lower()
+            block = _build_stat_block(sys_id, n.get("title") or "Unnamed", tier, pc_cp)
+            if block is None:
+                continue
+            await db.nodes.update_one(
+                {"id": n["id"], "campaign_id": cid},
+                {"$set": {"stat_block": block,
+                          "stat_block_threat_tier": tier,
+                          "updated_at": now_iso()}},
+            )
+            gen += 1
+        auto_summary.append({"campaign_id": cid, "system_id": sys_id, "auto_npc_sheets": gen})
+    return {"deployed": out, "suite": "evereantha-cross-system",
+            "auto_generated_npc_sheets": auto_summary}

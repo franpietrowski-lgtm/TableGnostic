@@ -948,6 +948,23 @@ def _build_pdf(camp: Dict[str, Any], chapters_data: List[Dict[str, Any]],
             else:
                 _render_besm_pc_sheet(flow, ch, p, body_first, session_title)
 
+            # V6.10 — folio.journal entries inline with the character sheet
+            # so the chronicle preserves each PC's diary alongside their
+            # mechanics. Read-only excerpts; one paragraph per entry.
+            entries = (folio.get("journal") or [])
+            if isinstance(entries, list) and entries:
+                flow.append(Spacer(1, 0.15 * inch))
+                flow.append(Paragraph("Character Journal", session_title))
+                flow.append(_thin_rule(rule))
+                for ej in entries[:80]:
+                    when = ej.get("created_at", "")[:19].replace("T", " ") if ej.get("created_at") else ""
+                    by = ej.get("by_name") or "—"
+                    head = f"<font size='8' color='{p['muted']}'>{_html_escape(when)} · {_html_escape(by)}</font>"
+                    text = _html_escape((ej.get("text") or "").strip())
+                    flow.append(Paragraph(head, body_first))
+                    flow.append(Paragraph(text, body_first))
+                    flow.append(Spacer(1, 0.06 * inch))
+
     # ── Custom Reference Appendix (GM-editable weapons/armor/items/companions) ──
     if extras and extras.get("reference"):
         flow.append(PageBreak())
@@ -969,6 +986,65 @@ def _build_pdf(camp: Dict[str, Any], chapters_data: List[Dict[str, Any]],
                     body_first))
                 if r.get("summary"):
                     flow.append(Paragraph(_html_escape(r["summary"]), body))
+            flow.append(Spacer(1, 0.1 * inch))
+
+    # ── Timeline Appendix (V6.10) — codex pins clustered by session.
+    timeline_markers = (extras or {}).get("timeline_markers") or []
+    if timeline_markers:
+        flow.append(PageBreak())
+        flow.append(Paragraph("Appendix · Campaign Timeline", chapter_title))
+        flow.append(_thin_rule(rule))
+        flow.append(Paragraph(
+            "Pins dropped on the Codex Chart by the GM, anchored to the session that introduced them. "
+            "Use this to retrace which world elements entered the story on which night.",
+            italic,
+        ))
+        # Group by session_id (preserve order of `sessions_for_timeline`)
+        sess_lookup = {s["id"]: s for s in (extras or {}).get("sessions_for_timeline", [])}
+        by_session = {}
+        for m in timeline_markers:
+            by_session.setdefault(m["session_id"], []).append(m)
+        for sid, marks in by_session.items():
+            sess = sess_lookup.get(sid, {})
+            sname = sess.get("name") or sess.get("title") or "Session"
+            sdate = (sess.get("scheduled_at") or sess.get("played_at") or "")[:10]
+            head = f"<b>{_html_escape(sname)}</b>"
+            if sdate:
+                head += f"  <font size='8' color='{p['muted']}'>{_html_escape(sdate)}</font>"
+            flow.append(Paragraph(head, session_title))
+            for mk in marks:
+                bullet = f"· <b>{_html_escape(mk.get('label','?'))}</b>"
+                if mk.get("kind") and mk["kind"] != "node":
+                    bullet += f"  <font size='8' color='{p['muted']}'>[{_html_escape(mk['kind'])}]</font>"
+                flow.append(Paragraph(bullet, body_first))
+            flow.append(Spacer(1, 0.08 * inch))
+
+    # ── Chat-Transcript Appendix (V6.10) — full conversation logs by session.
+    chat_logs_by_session = (extras or {}).get("chat_logs_by_session") or {}
+    if chat_logs_by_session:
+        flow.append(PageBreak())
+        flow.append(Paragraph("Appendix · Chat Transcripts", chapter_title))
+        flow.append(_thin_rule(rule))
+        flow.append(Paragraph(
+            "Verbatim chat logs from each session — narration, dice, journal lines, and table chatter. "
+            "Useful for fact-checking recaps and resolving disputes long after the night is done.",
+            italic,
+        ))
+        sess_lookup2 = {s["id"]: s for s in (extras or {}).get("sessions_for_timeline", [])}
+        for sid, logs in chat_logs_by_session.items():
+            sess = sess_lookup2.get(sid, {})
+            sname = sess.get("name") or sess.get("title") or "Session"
+            flow.append(Paragraph(_html_escape(sname), session_title))
+            for c in logs[:200]:
+                speaker = c.get("speaker") or c.get("by_name") or "?"
+                kind = c.get("kind", "chat")
+                msg = (c.get("body") or c.get("text") or "").strip()
+                if not msg:
+                    continue
+                line = f"<b>{_html_escape(speaker)}:</b> {_html_escape(msg)}"
+                if kind != "chat":
+                    line = f"<font size='8' color='{p['muted']}'>[{_html_escape(kind)}]</font> {line}"
+                flow.append(Paragraph(line, body_first))
             flow.append(Spacer(1, 0.1 * inch))
 
     # ── Legal footer page
@@ -1396,6 +1472,21 @@ async def export_pdf(cid: str, mode: str = "campaign",
         {"campaign_id": cid}, {"_id": 0}
     ).sort("kind", 1).to_list(500)
     extras = {"nodes": nodes, "characters": chars, "reference": refs}
+    # V6.10 — chronicle bundle expansion: timeline pins + chat transcripts.
+    timeline_markers = await db.timeline_markers.find(
+        {"campaign_id": cid}, {"_id": 0}
+    ).sort("created_at", 1).to_list(500)
+    chat_logs_by_session = {}
+    for s in sessions:
+        sid = s["id"]
+        logs = await db.chat_logs.find(
+            {"session_id": sid}, {"_id": 0}
+        ).sort("created_at", 1).to_list(500)
+        if logs:
+            chat_logs_by_session[sid] = logs
+    extras["timeline_markers"] = timeline_markers
+    extras["chat_logs_by_session"] = chat_logs_by_session
+    extras["sessions_for_timeline"] = sessions
     pdf_bytes = _build_pdf(camp, chapters_data, profile, gm_user, extras)
     # Header values must be latin-1 safe; strip non-ASCII from filename.
     raw_name = (camp.get("name") or "campaign").replace(" ", "_")

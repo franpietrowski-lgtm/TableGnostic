@@ -507,3 +507,120 @@ async def generate_npc_sheet(
         )
         return {"node_id": node_id, "stat_block": block, "saved": True}
     return {"node_id": node_id, "stat_block": block, "saved": False}
+
+
+@router.post("/campaigns/{campaign_id}/npcs/auto-generate-all")
+async def auto_generate_all_npc_sheets(
+    campaign_id: str,
+    threat_tier: str = "equal",
+    overwrite: bool = False,
+    user: dict = Depends(get_current_user),
+):
+    """V6.10 — bulk-generate stat blocks for every NPC / creature codex node
+    in this campaign that doesn't already have one. Returns counts.
+
+    Designed for the Evereantha / Artisan demo seeders so every NPC arrives
+    with a play-ready system-appropriate sheet. Pass `overwrite=true` to
+    regenerate even nodes that already have a stat_block.
+    """
+    camp = await db.campaigns.find_one({"id": campaign_id}, {"_id": 0})
+    if not camp:
+        raise HTTPException(404, "Campaign not found")
+    if camp["gm_id"] != user["id"] and user.get("role") != "admin":
+        raise HTTPException(403, "GM/admin only.")
+    sys_id = camp.get("system_id")
+    if sys_id not in ("besm-4e", "anime-5e", "dnd-5e", "cypher"):
+        raise HTTPException(400, f"Cannot auto-generate for system: {sys_id}")
+
+    # Pick up NPC + creature nodes; skip ones already populated unless asked.
+    query = {"campaign_id": campaign_id, "type": {"$in": ["npc", "creature"]}}
+    nodes = await db.nodes.find(query, {"_id": 0}).to_list(500)
+    pc_cp = int(camp.get("total_points") or 120)
+
+    generated, skipped = 0, 0
+    by_tier = {}  # tally
+    for n in nodes:
+        if n.get("stat_block") and not overwrite:
+            skipped += 1
+            continue
+        # Re-use the same logic as the single-node generator. To avoid a
+        # recursive HTTP call we inline the dispatch by system_id.
+        name = n.get("title") or "Unnamed"
+        # Per-node threat tier override via fields.threat_tier; fallback
+        # to the bulk-call default.
+        tier = ((n.get("fields") or {}).get("threat_tier") or threat_tier).lower()
+        block = _build_stat_block(sys_id, name, tier, pc_cp)
+        if block is None:
+            skipped += 1
+            continue
+        await db.nodes.update_one(
+            {"id": n["id"], "campaign_id": campaign_id},
+            {"$set": {"stat_block": block,
+                      "stat_block_threat_tier": tier,
+                      "updated_at": now_iso()}},
+        )
+        generated += 1
+        by_tier[tier] = by_tier.get(tier, 0) + 1
+    return {
+        "campaign_id": campaign_id,
+        "system_id": sys_id,
+        "candidates": len(nodes),
+        "generated": generated,
+        "skipped_already_populated": skipped if not overwrite else 0,
+        "by_tier": by_tier,
+    }
+
+
+def _build_stat_block(sys_id: str, name: str, threat_tier: str, pc_cp: int):
+    """Pure-Python re-export of the per-system block math used by both the
+    single-node generator and the bulk auto-generator. Keep in lockstep
+    with the body of `generate_npc_sheet` above.
+    """
+    if sys_id == "besm-4e":
+        ratio = {"underling": 0.5, "equal": 1.0, "boss": 1.5, "demigod": 2.5}.get(
+            threat_tier, 1.0)
+        cp = int(pc_cp * ratio)
+        stat_pool = max(2, cp * 30 // 100 // 6)
+        return {
+            "system_id": "besm-4e", "name": name, "threat_tier": threat_tier,
+            "total_cp": cp,
+            "stats": {"body": 4 + stat_pool, "mind": 4 + stat_pool // 2,
+                       "soul": 4 + stat_pool // 2},
+            "attributes": [
+                {"name": "Combat Mastery", "level": max(1, cp // 30),
+                 "cost_per_level": 4, "enhancements": [], "limiters": []},
+                {"name": "Tough", "level": max(1, cp // 40),
+                 "cost_per_level": 2, "enhancements": [], "limiters": []},
+            ],
+            "skills": [
+                {"group": "Combat", "level": max(1, cp // 25), "cost_per_level": 2},
+            ],
+            "summary": f"{threat_tier.title()}-tier BESM 4E foe at {cp} CP.",
+        }
+    if sys_id in ("anime-5e", "dnd-5e"):
+        cr_by_tier = {"underling": "1/4", "equal": "2", "boss": "5", "demigod": "12"}
+        cr = cr_by_tier.get(threat_tier, "2")
+        return {
+            "system_id": sys_id, "name": name, "threat_tier": threat_tier,
+            "cr": cr,
+            "ac": 12 if cr in ("1/4", "1/2") else (14 if cr in ("1", "2", "3") else 17),
+            "hp": {"underling": 13, "equal": 45, "boss": 110, "demigod": 280}.get(
+                threat_tier, 45),
+            "abilities": {"STR": 12, "DEX": 14, "CON": 12, "INT": 10, "WIS": 12, "CHA": 10},
+            "actions": [
+                {"name": "Multiattack", "desc": "Foe makes 2 attacks." if cr not in ("1/4", "1/2") else "—"},
+                {"name": "Strike", "desc": "+5 to hit, 1d8+3 damage."},
+            ],
+            "summary": f"{threat_tier.title()}-tier {sys_id} foe at CR {cr}.",
+        }
+    if sys_id == "cypher":
+        level = {"underling": 2, "equal": 4, "boss": 6, "demigod": 8}.get(
+            threat_tier, 4)
+        return {
+            "system_id": "cypher", "name": name, "threat_tier": threat_tier,
+            "level": level, "target_number": 3 * level,
+            "health": level * 4, "damage": max(2, level - 1),
+            "armor": 0 if level < 4 else 1, "modifications": [],
+            "summary": f"{threat_tier.title()}-tier Cypher creature at Level {level}.",
+        }
+    return None
