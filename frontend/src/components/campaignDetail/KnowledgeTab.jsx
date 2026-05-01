@@ -7,6 +7,7 @@ import { api, formatApiErrorDetail } from "../../lib/api";
 import KnowledgeGraph from "../KnowledgeGraph";
 import CodexChartView from "../CodexChartView";
 import { NODE_TYPES, NODE_TEMPLATES, colorForType, labelForType } from "../../lib/nodeTemplates";
+import ConvertNodeButton from "../ConvertNodeButton";
 function KnowledgeTab({ camp, nodes, edges, onRefresh }) {
   const [view, setView] = useState("list"); // list | graph | chart
   const [showNew, setShowNew] = useState(false);
@@ -306,6 +307,12 @@ function NodeDetail({ node, camp, onClose, onSetVisibility, onRemove }) {
           </button>
         </div>
       )}
+      {/* V6.16.4 — Cross-system Port button (creature nodes only).
+          Visible to any viewer (server enforces GM/admin) because the
+          modal surfaces eligible campaigns based on is_gm. */}
+      <div className="mt-3 flex justify-end" data-testid="node-detail-port-wrap">
+        <ConvertNodeButton node={node}/>
+      </div>
     </div>
   );
 }

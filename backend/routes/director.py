@@ -95,9 +95,17 @@ def _stamp_ids(doc: Dict[str, Any]) -> None:
 
 
 async def _gather_npc_pool(cid: str) -> List[Dict[str, Any]]:
-    """Walk Genesis seed_npcs[], Epic Campaign nemesis+villains, and Codex
-    `npc`-typed nodes — return one normalised list the GM can drag into an
-    encounter without retyping anything."""
+    """Walk Genesis seed_npcs[], Epic Campaign nemesis+villains, Codex
+    `npc`/`creature` nodes, AND campaign characters (PCs) — return one
+    normalised list the GM can drag into an encounter without retyping
+    anything.
+
+    V6.16.4 — unified "Entities" model. PCs, NPCs, creatures, monsters
+    all populate the same pool; the UI filters by sub-kind. Populating
+    PCs here lets the Director plant a "Kidnapped player character" or
+    a "Morally-grey PC turncoat" NPC beat into an encounter without
+    duplicating the sheet.
+    """
     pool: List[Dict[str, Any]] = []
     seen: set[str] = set()
 
@@ -111,7 +119,7 @@ async def _gather_npc_pool(cid: str) -> List[Dict[str, Any]]:
             seen.add(key)
             pool.append({
                 "name": n["name"], "role": "ally",
-                "source": "genesis", "source_id": None,
+                "source": "genesis", "kind": "npc", "source_id": None,
                 "intent": n.get("role") or n.get("description") or "",
                 "notes": n.get("relationship") or "",
             })
@@ -124,7 +132,7 @@ async def _gather_npc_pool(cid: str) -> List[Dict[str, Any]]:
             seen.add(f"epic:{nem['name'].strip().lower()}")
             pool.append({
                 "name": nem["name"], "role": "nemesis",
-                "source": "epic", "source_id": nem.get("id"),
+                "source": "epic", "kind": "npc", "source_id": nem.get("id"),
                 "intent": nem.get("goal", ""),
                 "notes": nem.get("notes", ""),
             })
@@ -137,14 +145,13 @@ async def _gather_npc_pool(cid: str) -> List[Dict[str, Any]]:
             seen.add(key)
             pool.append({
                 "name": v["name"], "role": v.get("role") or "villain",
-                "source": "epic", "source_id": v.get("id"),
+                "source": "epic", "kind": "npc", "source_id": v.get("id"),
                 "intent": v.get("goal", ""),
                 "notes": v.get("notes", ""),
             })
 
     # Codex — `npc` nodes (people) AND `creature` nodes (monsters/beasts).
-    # V6.11 — separate categories so the GM picker can group People vs.
-    # Beasts. Creatures from older campaigns may be tagged `npc` with
+    # Creatures from older campaigns may be tagged `npc` with
     # `fields.kind == "creature"`; honour both.
     cursor = db.nodes.find(
         {"campaign_id": cid, "type": {"$in": ["npc", "creature"]}}, {"_id": 0},
@@ -161,9 +168,28 @@ async def _gather_npc_pool(cid: str) -> List[Dict[str, Any]]:
         pool.append({
             "name": nd["title"], "role": "neutral",
             "source": "creatures" if is_creature else "codex",
+            "kind": "creature" if is_creature else "npc",
             "source_id": nd["id"],
             "intent": (nd.get("fields") or {}).get("intent") or "",
             "notes": nd.get("content", "")[:200],
+        })
+
+    # V6.16.4 — Campaign characters (PCs). Surface them in the Entities
+    # pool so the GM can stage PC-adjacent beats (a captured PC, a PC's
+    # NPC ally from their backstory, a rival guild PC from another party).
+    ch_cursor = db.characters.find(
+        {"campaign_id": cid}, {"_id": 0, "id": 1, "name": 1, "concept": 1, "owner_name": 1},
+    )
+    async for ch in ch_cursor:
+        key = f"pc:{(ch.get('name') or '').strip().lower()}"
+        if not ch.get("name") or key in seen:
+            continue
+        seen.add(key)
+        pool.append({
+            "name": ch["name"], "role": "ally",
+            "source": "pcs", "kind": "pc", "source_id": ch["id"],
+            "intent": ch.get("concept", "") or "",
+            "notes": f"Owned by {ch.get('owner_name', 'unknown')}" if ch.get("owner_name") else "",
         })
 
     return pool

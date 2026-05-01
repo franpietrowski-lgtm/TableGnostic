@@ -4,6 +4,7 @@ import { Plus, X, BookOpen, AlertCircle, Edit3, Save } from "lucide-react";
 import PowerBundleTemplatePicker from "./referenceEditor/PowerBundleTemplatePicker";
 import SpellConversionAtlas from "./referenceEditor/SpellConversionAtlas";
 import PowerBundleEditor from "./referenceEditor/PowerBundleEditor";
+import ConvertReferenceButton from "./ConvertReferenceButton";
 
 /**
  * ReferenceEditor — V4.4 Phase I.
@@ -495,6 +496,7 @@ function Row({ row, onChange, onSave, onCancel, busy, systemId, editing, onEdit,
         </div>
         <div className="flex gap-1.5 flex-shrink-0">
           {onEdit && <button onClick={onEdit} className="text-mist/70 hover:text-gold p-1"><Edit3 className="w-3 h-3"/></button>}
+          <ConvertReferenceButton entry={row} sourceSystem={systemId}/>
           {onRemove && <button onClick={onRemove} className="text-ember/70 hover:text-ember p-1"><X className="w-3 h-3"/></button>}
         </div>
       </div>

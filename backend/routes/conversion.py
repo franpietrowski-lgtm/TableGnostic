@@ -64,11 +64,14 @@ async def convert_content(body: ConvertContentIn,
                           user: dict = Depends(get_current_user)):
     """Translate one mechanic between any two supported systems.
 
-    GM/admin only — players can read converted content via the
-    Reference page after a GM commits it.
+    Preview-only (no DB write) — returns the canonical target-system
+    shape for the caller to paste/share/validate. V6.16.4: opened to
+    any authenticated user so players can pull cross-system reference
+    content on-demand. GM approval is still required to publish the
+    translated entry into the target campaign's reference library.
     """
-    if user.get("role") not in ("gm", "admin"):
-        raise HTTPException(403, "GM/admin only — players cannot trigger conversions.")
+    if not user:
+        raise HTTPException(401, "Authentication required.")
     validate_systems(body.source_system, body.target_system)
     if body.source_system == body.target_system:
         return {

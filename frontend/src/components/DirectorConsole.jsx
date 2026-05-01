@@ -451,24 +451,62 @@ export default function DirectorConsole() {
 // ────────────────────── sub-components ──────────────────────
 
 function NpcPool({ pool, onPick }) {
+  // V6.16.4 — Unified "Entities" pool. PCs, NPCs, creatures, and genesis
+  // seeds all surface in one list, grouped by origin so the GM can
+  // distinguish a "Codex Creature" drop from a "Player Character" walk-on.
+  // The pool is filtered client-side when the GM clicks a sub-kind chip.
+  const [filter, setFilter] = useState("all");
   const grouped = useMemo(() => {
-    const out = { genesis: [], epic: [], codex: [], creatures: [] };
+    const out = { genesis: [], epic: [], codex: [], creatures: [], pcs: [] };
     (pool || []).forEach((p) => { (out[p.source] || (out[p.source] = [])).push(p); });
     return out;
   }, [pool]);
+
+  const kindCounts = useMemo(() => {
+    const c = { all: 0, pc: 0, npc: 0, creature: 0 };
+    (pool || []).forEach((p) => {
+      c.all += 1;
+      const k = p.kind || "npc";
+      c[k] = (c[k] || 0) + 1;
+    });
+    return c;
+  }, [pool]);
+
+  const passesFilter = (p) => filter === "all" || (p.kind || "npc") === filter;
+
   return (
     <div className="card-mystic p-4 self-start sticky top-4" data-testid="director-npc-pool">
-      <div className="label-ref mb-2">NPC &amp; Creature Pool</div>
-      <div className="text-[10px] text-mist/70 italic mb-3">
-        Drag-pick from your Atelier. Click adds to the active encounter.
+      <div className="label-ref mb-2">Entities</div>
+      <div className="text-[10px] text-mist/70 italic mb-2">
+        Every PC, NPC, and creature your campaign knows about. Click to add to the active encounter.
+      </div>
+      {/* Kind filter chips */}
+      <div className="flex flex-wrap gap-1.5 mb-3" data-testid="pool-kind-filters">
+        {[
+          ["all",      "All"],
+          ["pc",       "PCs"],
+          ["npc",      "NPCs"],
+          ["creature", "Creatures"],
+        ].map(([k, label]) => (
+          <button key={k} onClick={() => setFilter(k)}
+                  className={`text-[10px] font-ui uppercase tracking-widest px-2 py-0.5 rounded-sm border transition ${
+                    filter === k
+                      ? "bg-gold/15 text-gold-bright border-gold"
+                      : "bg-void/40 text-mist border-gold/20 hover:border-gold/50"
+                  }`}
+                  data-testid={`pool-kind-filter-${k}`}>
+            {label} · {kindCounts[k] || 0}
+          </button>
+        ))}
       </div>
       {Object.entries({
+        pcs: "Player Characters",
         genesis: "Genesis seeds",
         epic: "Epic Campaign",
         codex: "Codex · People",
         creatures: "Codex · Creatures & Beasts",
       }).map(([k, label]) => {
-        const items = grouped[k] || [];
+        const items = (grouped[k] || []).filter(passesFilter);
         if (items.length === 0) return null;
         return (
           <div key={k} className="mb-3" data-testid={`pool-group-${k}`}>
@@ -491,8 +529,8 @@ function NpcPool({ pool, onPick }) {
       })}
       {(pool || []).length === 0 && (
         <div className="text-[11px] text-mist italic">
-          No NPCs seeded yet. Forge some in the Atelier — Genesis Phase 5 (Supporting Cast)
-          or the Epic Campaign tab — and they'll appear here.
+          No entities yet. Forge PCs in Characters, NPCs in the Atelier (Genesis Phase 5
+          or Epic Campaign), and creatures in the Codex — they'll all appear here.
         </div>
       )}
     </div>

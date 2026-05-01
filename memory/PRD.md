@@ -14,6 +14,30 @@
 
 ## 2. Implemented (cumulative, condensed)
 
+### V6.16.4 — Entities unification + Section-aware ingest + Convert buttons for nodes and references (2026-05-01)
+
+**Entities unification (Director's Console + Encounter Builder)**
+- Backend `_gather_npc_pool` in `routes/director.py` now includes campaign characters (PCs) alongside Genesis seeds, Epic Campaign NPCs, Codex people, and Codex creatures. Each pool entry carries a `kind` field: `pc | npc | creature`.
+- Frontend `NpcPool` in `DirectorConsole.jsx` relabelled **Entities**; renders a kind-filter chip row (All / PCs / NPCs / Creatures with live counts) + a new "Player Characters" group at the top of the list. Verified live: 4 PCs + 15 NPCs + 1 Creature = 20 entities total on the Maiden Adventure, with filter-by-kind correctly narrowing the group display.
+
+**Section-aware ingest chunking (`routes/ingest.py`)**
+- New helpers: `_looks_like_intake_template`, `_split_by_section`, `_call_claude_section`, `_call_claude_sectioned`, `_call_claude_auto`. Intake-template-shaped markdown (3+ canonical `## HEADINGS`) gets split on `## HEADING` and each block fires a single focused Claude call with a section-bias hint (`## CHARACTERS` → kind=npc bias, `## LOCATIONS` → kind=location, etc.).
+- `INTAKE_SECTION_MAP` covers the canonical intake headings with skip-rules for Index + Compliance boilerplate.
+- Cap-at-150 on sectioned output (vs 60 for single-shot) since sectioned ingest yields richer material without any single truncation.
+- Response stamped with `ingest_mode: "sectioned"` and `section_counts: {...}` for GM transparency.
+- Unstructured markdown falls back to the existing single-shot path (`ingest_mode: "single-shot"`).
+
+**G3 — Creature node "Port to…" CTA (`ConvertNodeButton.jsx`)**
+- New 200-line component. Lives on NodeDetail for creature-kind nodes. Opens a modal listing the viewer's other GM-owned campaigns (with colored system pills). Fires `POST /api/convert/creature` and on success surfaces caveats + "Open target campaign" CTA.
+- Wired into `campaignDetail/KnowledgeTab.jsx` NodeDetail footer.
+
+**G2 — Reference Library Convert (`ConvertReferenceButton.jsx`)**
+- New 240-line component. Tiny ⚡ wand button next to each reference entry's Edit/Delete. Opens a modal where the viewer picks a target system (any of the other 3); fires `POST /api/convert/content` (now player-accessible preview-only) and renders the translated payload JSON with a Copy-to-clipboard shortcut.
+- Backend `/api/convert/content` gate relaxed from "GM/admin only" to "authenticated" — safe because the endpoint is preview-only (no DB write). GM approval remains required to publish a translated reference back into the campaign library.
+- Wired into `ReferenceEditor.jsx` row-render block via the shared row helper.
+
+**Tests — `tests/test_iter51_v616_4_sectioned.py`** (7 new tests for section splitting + intake detection + map coverage). Cumulative: 58/58 backend pytest pass.
+
 ### V6.16.3 — Conversion engine refactor + creature port endpoint (2026-05-01)
 
 **Refactor — split the converter module**

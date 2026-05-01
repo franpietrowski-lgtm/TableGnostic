@@ -212,6 +212,13 @@ Top-level shape:
 
 
 async def _call_claude(filename: str, system_id: Optional[str], text: str) -> Dict[str, Any]:
+    """One-shot Claude call over a (possibly truncated) text blob.
+
+    For large intake-template-shaped documents prefer
+    `_call_claude_sectioned` which splits by `## SECTION` header and
+    fires one focused call per block — higher fidelity, no truncation,
+    cost ~ N×small instead of 1×large.
+    """
     if not EMERGENT_LLM_KEY:
         raise HTTPException(503, "LLM key not configured")
     addendum = SYSTEM_ADDENDUM.get(system_id or "besm-4e", SYSTEM_ADDENDUM["besm-4e"])
@@ -279,6 +286,202 @@ async def _call_claude(filename: str, system_id: Optional[str], text: str) -> Di
         })
     parsed["suggestions"] = out_sugs
     return parsed
+
+
+# ─────────────────────── V6.16.4 — Section-aware chunking ───────────────────────
+
+# Intake Template heading → canonical ingest `kind` bias. Used by
+# `_call_claude_sectioned` to tag each Claude call with a target kind so
+# the model doesn't have to guess at "is this an NPC section or a lore
+# section?" on every block.
+INTAKE_SECTION_MAP = {
+    "campaign overview":  "lore",
+    "system rules notes": "house_rule",
+    "characters":         "npc",
+    "npcs":               "npc",
+    "characters / npcs":  "npc",
+    "locations":          "location",
+    "factions":           "faction",
+    "creatures":          "creature",
+    "monsters":           "creature",
+    "lore":               "lore",
+    "history":            "lore",
+    "lore / history":     "lore",
+    "quests":             "quest",
+    "arc hooks":          "quest",
+    "quests / arc hooks": "quest",
+    "custom reference":   "attribute",
+    "timeline":           "lore",
+    "timeline beats":     "lore",
+    "session briefs":     "quest",
+    "index":              None,       # skip — dedup-only metadata
+    "compliance reminder": None,       # skip — doc boilerplate
+}
+
+
+def _looks_like_intake_template(text: str) -> bool:
+    """Heuristic — intake templates have at least 3 of the canonical
+    headings. Stops us chunking arbitrary markdown that happens to have
+    `##` headers (a novel excerpt, a blog post, etc.)."""
+    lowered = text.lower()
+    hits = 0
+    for label in ("## characters", "## locations", "## factions",
+                  "## creatures", "## lore", "## history", "## quests",
+                  "## session briefs", "## custom reference"):
+        if label in lowered:
+            hits += 1
+    return hits >= 3
+
+
+def _split_by_section(text: str) -> List[Dict[str, Any]]:
+    """Split on `## HEADING` markdown headers (exactly two hashes +
+    space). Returns a list of `{heading, body}` blocks. Content before
+    the first `##` is attached to a synthetic "campaign overview"
+    heading so the preamble isn't lost.
+    """
+    parts: List[Dict[str, Any]] = []
+    current_heading = "Campaign Overview"
+    current_body: List[str] = []
+    for line in text.splitlines():
+        m = re.match(r"^##\s+(.+)$", line)
+        if m:
+            body_text = "\n".join(current_body).strip()
+            if body_text:
+                parts.append({"heading": current_heading, "body": body_text})
+            current_heading = m.group(1).strip()
+            current_body = []
+        else:
+            current_body.append(line)
+    tail = "\n".join(current_body).strip()
+    if tail:
+        parts.append({"heading": current_heading, "body": tail})
+    return parts
+
+
+async def _call_claude_section(filename: str, system_id: Optional[str],
+                                heading: str, body: str,
+                                bias_kind: Optional[str]) -> List[Dict[str, Any]]:
+    """Fire one focused Claude call for a single template section and
+    return the raw suggestion list (already kind-validated).
+    """
+    addendum = SYSTEM_ADDENDUM.get(system_id or "besm-4e", SYSTEM_ADDENDUM["besm-4e"])
+    bias = (
+        f"\n# Section bias: this block comes from the intake template "
+        f"section '## {heading}'. Suggestions should heavily favour "
+        f"kind='{bias_kind}' unless the body clearly says otherwise.\n"
+        if bias_kind else ""
+    )
+    user_prompt = (
+        f"# Source file: {filename}\n"
+        f"# Target system: {system_id or 'besm-4e (default)'}\n"
+        f"# System addendum:\n{addendum}\n"
+        f"{bias}"
+        f"# SECTION: ## {heading}\n\n"
+        f"{_truncate_for_llm(body, hard_cap_chars=80_000)}\n\n"
+        f"Produce the JSON document per the hard rules + system addendum "
+        f"+ section bias above. Return the canonical {{summary, "
+        f"detected_kind_counts, suggestions[]}} shape."
+    )
+    try:
+        from emergentintegrations.llm.chat import LlmChat, UserMessage
+        chat = LlmChat(
+            api_key=EMERGENT_LLM_KEY,
+            session_id=f"ingest-sec-{filename[:20]}-{heading[:12]}",
+            system_message=SYSTEM_PROMPT,
+        ).with_model("anthropic", "claude-sonnet-4-5-20250929")
+        raw = await chat.send_message(UserMessage(text=user_prompt))
+    except Exception as e:
+        raise HTTPException(502, f"Claude section call failed ({heading}): {e}")
+    cleaned = raw.strip()
+    if cleaned.startswith("```"):
+        cleaned = re.sub(r"^```[a-zA-Z]*\n?", "", cleaned)
+        cleaned = re.sub(r"\n?```$", "", cleaned)
+    try:
+        parsed = json.loads(cleaned)
+    except Exception:
+        m = re.search(r"\{[\s\S]*\}", cleaned)
+        if not m:
+            return []
+        try:
+            parsed = json.loads(m.group(0))
+        except Exception:
+            return []
+    return parsed.get("suggestions", []) if isinstance(parsed, dict) else []
+
+
+async def _call_claude_sectioned(filename: str, system_id: Optional[str],
+                                  text: str) -> Dict[str, Any]:
+    """Section-aware ingest. Splits the document by `## HEADING` and
+    fires one Claude call per block. Results are merged into the
+    standard {summary, detected_kind_counts, suggestions[]} shape.
+
+    Only fires when `_looks_like_intake_template(text)` returns True —
+    for unstructured markdown / PDF extract we fall back to the
+    one-shot `_call_claude` path.
+    """
+    if not EMERGENT_LLM_KEY:
+        raise HTTPException(503, "LLM key not configured")
+    sections = _split_by_section(text)
+    all_sugs: List[Dict[str, Any]] = []
+    section_counts: Dict[str, int] = {}
+    for sec in sections:
+        key = sec["heading"].lower().strip()
+        bias_kind = INTAKE_SECTION_MAP.get(key, "lore")
+        if bias_kind is None:  # explicit skip (Index / Compliance)
+            continue
+        if not sec["body"] or len(sec["body"]) < 40:
+            continue
+        sugs = await _call_claude_section(
+            filename, system_id, sec["heading"], sec["body"], bias_kind,
+        )
+        section_counts[sec["heading"]] = len(sugs)
+        all_sugs.extend(sugs)
+
+    # Apply the same normalisation the one-shot path does — kind
+    # validation, field caps, cap-at-150 (vs. 60 for single-shot because
+    # sectioned ingest yields more material).
+    valid_kinds = {"attribute", "power_pack", "power_bundle", "item", "weapon",
+                   "skill", "npc", "location", "lore", "quest",
+                   "creature", "faction", "house_rule"}
+    out_sugs: List[Dict[str, Any]] = []
+    for s in all_sugs[:150]:
+        if not isinstance(s, dict):
+            continue
+        kind = s.get("kind", "lore")
+        if kind not in valid_kinds:
+            kind = "lore"
+        out_sugs.append({
+            "kind": kind,
+            "title": (s.get("title") or "Untitled")[:120],
+            "summary": (s.get("summary") or "")[:300],
+            "fields": s.get("fields") or {},
+            "atelier_phase": int(s.get("atelier_phase") or 4),
+            "target_arc": s.get("target_arc"),
+            "source_ref": s.get("source_ref") or "",
+            "accepted": False,
+        })
+    detected = {}
+    for s in out_sugs:
+        detected[s["kind"]] = detected.get(s["kind"], 0) + 1
+    return {
+        "summary": (f"Section-aware ingest of {len(section_counts)} "
+                    f"intake-template blocks → {len(out_sugs)} suggestions."),
+        "detected_kind_counts": detected,
+        "suggestions": out_sugs,
+        "section_counts": section_counts,  # transparency for the GM
+        "ingest_mode": "sectioned",
+    }
+
+
+async def _call_claude_auto(filename: str, system_id: Optional[str],
+                             text: str) -> Dict[str, Any]:
+    """Dispatch entry point — section-aware when the document smells
+    like the intake template, single-shot otherwise."""
+    if _looks_like_intake_template(text):
+        return await _call_claude_sectioned(filename, system_id, text)
+    out = await _call_claude(filename, system_id, text)
+    out.setdefault("ingest_mode", "single-shot")
+    return out
 
 
 # ─────────────────────── Endpoints ───────────────────────
@@ -355,7 +558,7 @@ async def create_ingestion(cid: str,
     text = _parse_to_text(file.filename, file.content_type or "", raw)
     if not text:
         raise HTTPException(400, "Could not extract text from file.")
-    parsed = await _call_claude(file.filename, camp.get("system_id"), text)
+    parsed = await _call_claude_auto(file.filename, camp.get("system_id"), text)
 
     doc = {
         "id": new_id(),
