@@ -14,6 +14,39 @@
 
 ## 2. Implemented (cumulative, condensed)
 
+### V6.9 — Timeline ↔ Codex bridge + Companion seats + Token size cycler (2026-05-01)
+
+**Timeline ↔ Codex Chart bridge (P0 #1)**
+- New `routes/timeline_markers.py` — `db.timeline_markers` collection. CRUD endpoints:
+  - `GET /api/campaigns/{cid}/timeline-markers` — members can read.
+  - `POST /api/campaigns/{cid}/timeline-markers` — GM-only. Validates `session_id` and optional `codex_node_id` belong to the campaign (400 on mismatch). Stores `{label, kind, color, codex_node_id, session_id}`.
+  - `DELETE /api/campaigns/{cid}/timeline-markers/{mid}` — GM-only.
+- `CodexChartView.jsx` — Each chart-node row is now click-target on GM-owned campaigns. New `codex-chart-pin-bar` strip at the top with an active-session selector (`codex-chart-active-session`). Clicking a node POSTs a marker, fires a `tg:timeline-marker-added` window event, and shows `codex-chart-pin-feedback` toast.
+- `TimelinePanel.jsx` — Loads markers alongside sessions. Each session column renders a stack of `timeline-marker-{mid}` badges below the spine; GMs see an `X` to remove. Listens for `tg:timeline-marker-added` events to refresh live without a page reload.
+
+**Companion seats + token-move parity (P0 #2)**
+- `CharacterIn.companion_owners: List[str]` — new model field.
+- `routes/characters.py`:
+  - `POST /api/characters/{ch_id}/companions?player_id=X` — GM/admin assigns.
+  - `DELETE /api/characters/{ch_id}/companions/{player_id}` — GM/admin revokes.
+- `routes/battlemap.py` — `upsert_token` now accepts ANY `companion_owners[]` user as a valid mover, in addition to the actual `owner_id`. GM still moves all tokens.
+- `CompanionAssignPanel.jsx` (new GM-only widget) mounted on the character sheet under the Approval Panel. Lists campaign members, lets GM `Plus`/`X` to assign or revoke companion seats. Excludes the actual owner from the picker.
+
+**Battlemap token-size cycler**
+- Tokens already scaled with `grid.size_px`. Added a single keystroke discovery: GM can **Shift+right-click** any token to cycle its grid size (1 → 2 → 3 → 4 → 1). Helper-text strip below the canvas updated. Plain right-click still removes (V5.5 behaviour preserved).
+
+**Testing — `/app/test_reports/iteration_42.json`**
+- Backend: **7/7 V6.9 + 31/31 regression** (V6.6/6.7/6.8 still green). `/app/backend/tests/test_iter42_v69.py` + extended `test_iter42_v69_extra.py` (testing-agent-authored: real-second-user companion assign/revoke + battlemap can-move-after-assign / 403-after-revoke).
+- Frontend: TimelinePanel live render verified. CodexChartView + CompanionAssignPanel testids verified by source grep + smoke screenshot.
+
+**Deferred to next session (per user, scope)**
+- Refactor sprint (4052 lines across 3 files): `CharacterSheet.jsx` (1411), `CampaignDetail.jsx` (1670), `ReferenceEditor.jsx` (971). Documented as critical hygiene — too large to attempt mid-feature-batch safely. Recommended dedicated sprint with full testing-agent regression after each split.
+- Auto-status rings on character sheet driven by check outcomes (already wired live on map tokens via `/api/effects`; needs sheet-side mirror).
+- Character-sheet PDF in overall campaign export bundle.
+- Artisan / Evereantha auto-NPC seeding across all 4 systems.
+- Public Canon Registry.
+
+
 ### Core (V1.0 → V4.6)
 - Auth · BESM 4E full reference data · Campaign Atelier (7-phase Sclanders Master Plot Genesis) · multi-system Character Forges · Live Sessions with WebRTC mesh AV · Knowledge Web with role-gated reveal · Atelier Session-0 + Arcs + continuity · Player Primer with allow/prohibit lists · Resend email · World Codex + Genesis seed → nodes · Session Recap (Claude) + auto-pin + finalize-into-chronicle · Battlemap V2 (LoS raycast + measure ruler + token effects) · Discord-style PBP Channels V2 (real-time WS + @mention autocomplete + image attachments) · System theming layer · Card Decks (Deck of Many Things, Cypher Draw, Genre Shift, Mood) · DriveThruRPG-ready PDF chronicles with system-specific style profiles · system-aware ingestion (Claude branch per system) · XP scorecard with GM approval queue · Customisable Attribute/Skill/Defect display names · System-aware Reference Editor (Atelier) · System-aware Character Sheets · D&D 5E + Cypher dedicated builders · Anime 5E hybrid (Tri-Stat point-buy + 5E class+slot) builder · HP/Pool status rings on Character Sheet · 404-fix on `/campaigns/:id/characters/new` for non-BESM systems
 
