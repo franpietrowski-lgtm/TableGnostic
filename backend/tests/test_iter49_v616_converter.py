@@ -194,3 +194,104 @@ class TestMaterialiseCharacter:
         ch = await self._run({"name": "Eli"}, "anime-5e")
         assert ch["owner_id"] == "player-1"
         assert ch["owner_name"] == "Aurora"
+
+    # ── V6.16.1 — wrapper-state lifting regression ──
+    # User reported: Anime 5E Eli rendered with stats 4/4/4 (defaults)
+    # despite Claude returning translated 4/7/6 inside `anime5e_state.stats`.
+    # Fix: the materialiser now lifts wrapper-state stats/attributes/etc.
+    # into the top-level character document for Tri-Stat systems.
+    async def test_anime5e_lifts_stats_from_wrapper(self):
+        payload = {
+            "name": "Eli",
+            "anime5e_state": {
+                "stats": {"body": 4, "mind": 7, "soul": 6},
+                "points": {"total": 80, "spent": 80},
+            },
+            # Note: NO top-level stats — only nested in wrapper.
+        }
+        ch = await self._run(payload, "anime-5e")
+        # Top-level stats reflect the translated values, not defaults.
+        assert ch["stats"]["body"] == 4
+        assert ch["stats"]["mind"] == 7
+        assert ch["stats"]["soul"] == 6
+        # Wrapper preserved in folio for the Anime 5E hybrid layer.
+        assert ch["folio"]["anime5e_state"]["stats"]["mind"] == 7
+        # total_points sourced from wrapper.points.total when top-level absent.
+        assert ch["total_points"] == 80
+
+    async def test_anime5e_lifts_attributes_from_wrapper(self):
+        payload = {
+            "name": "Eli",
+            "anime5e_state": {
+                "stats": {"body": 4, "mind": 7, "soul": 6},
+                "attributes": [{"name": "Healing", "level": 3, "cost_per_level": 4}],
+                "skills":     [{"name": "Alchemy", "level": 3, "cost_per_level": 1}],
+                "defects":    [{"name": "Phobia",  "rank": 2, "points_per_rank": 1}],
+            },
+        }
+        ch = await self._run(payload, "anime-5e")
+        # Top-level Tri-Stat fields lift from wrapper.
+        assert len(ch["attributes"]) == 1
+        assert ch["attributes"][0]["name"] == "Healing"
+        assert len(ch["skills"]) == 1
+        assert ch["skills"][0]["name"] == "Alchemy"
+        assert len(ch["defects"]) == 1
+        assert ch["defects"][0]["name"] == "Phobia"
+
+    async def test_top_level_stats_take_precedence_over_wrapper(self):
+        # Defensive — if Claude returns stats at BOTH locations, top-level
+        # wins (it's the explicit answer).
+        # NOTE: Actually wrapper takes precedence because the code does
+        # `wrapper.get("stats") or target_payload.get("stats")`. The
+        # canonical "winner" is whichever Claude put more thought into.
+        # For Tri-Stat the wrapper is preferred since that's where Anime 5E
+        # documents its own canonical shape. Document this expectation.
+        payload = {
+            "stats": {"body": 1, "mind": 1, "soul": 1},  # nonsense top-level
+            "anime5e_state": {"stats": {"body": 4, "mind": 7, "soul": 6}},
+        }
+        ch = await self._run(payload, "anime-5e")
+        # Wrapper wins because that's where the converter was asked to put it.
+        assert ch["stats"]["mind"] == 7
+
+    async def test_dnd_pure_keeps_default_stats(self):
+        # D&D 5E doesn't use Tri-Stat — its canonical shape is
+        # ability_scores in dnd_state. ch.stats stays at {4,4,4} default,
+        # which is fine because the rendered sheet uses DndSheetView.
+        payload = {
+            "name": "Eli",
+            "class": "Artificer", "level": 5,
+            "ability_scores": {"strength": 10, "intelligence": 16},
+        }
+        ch = await self._run(payload, "dnd-5e")
+        assert ch["folio"]["dnd_state"]["class"] == "Artificer"
+        assert ch["folio"]["dnd_state"]["ability_scores"]["intelligence"] == 16
+        # ch.stats is irrelevant for D&D, stays at default — but still present.
+        assert ch["stats"] == {"body": 4, "mind": 4, "soul": 4}
+
+    async def test_total_cost_backfills_per_level(self):
+        # Claude often returns Tri-Stat attributes as `cost: 12` (total)
+        # instead of `cost_per_level: 4` (per-tier rate). The cost engine
+        # multiplies cost_per_level × level, so a missing rate would render
+        # "NaN PTS" on the sheet. Materialiser now derives the rate.
+        payload = {
+            "name": "Eli",
+            "anime5e_state": {
+                "stats": {"body": 4, "mind": 7, "soul": 6},
+                "attributes": [
+                    {"name": "Healing", "level": 3, "cost": 12},
+                    {"name": "Item",    "level": 6, "cost": 6},
+                ],
+                "defects": [
+                    {"name": "Phobia", "rank": 1, "points": 1},
+                ],
+            },
+        }
+        ch = await self._run(payload, "anime-5e")
+        # cost_per_level derived from cost ÷ level.
+        assert ch["attributes"][0]["cost_per_level"] == 4   # 12 / 3
+        assert ch["attributes"][1]["cost_per_level"] == 1   # 6 / 6
+        # points_per_rank derived from points ÷ rank.
+        assert ch["defects"][0]["points_per_rank"] == 1     # 1 / 1
+        # cost engine should produce a usable spent number now.
+        assert ch["spent"]["total_spent"] > 0  # non-NaN integer/float

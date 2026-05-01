@@ -16,13 +16,33 @@ export function Stat({ label, v }) {
 }
 
 export function SimpleListCard({ title, items, testid }) {
+  // Tolerant of strings OR objects ({name, tier, cost, description}).
+  // Ability/cypher lists from cross-system conversions return rich
+  // dicts; legacy seeds + manual entry use plain strings.
+  const renderItem = (it, i) => {
+    if (it == null) return null;
+    if (typeof it === "string" || typeof it === "number") {
+      return <li key={i} className="text-sm text-parchment font-body">· {it}</li>;
+    }
+    // Object with name + optional tier/cost/description
+    const head = [it.name || it.title, it.tier ? `T${it.tier}` : null, it.level ? `L${it.level}` : null,
+                  it.cost ? `cost ${it.cost}` : null].filter(Boolean).join(" · ");
+    return (
+      <li key={i} className="text-sm text-parchment font-body">
+        <div>· <b>{head || "—"}</b></div>
+        {it.description && (
+          <div className="text-mist text-[12px] italic ml-3 mt-0.5 leading-snug">
+            {it.description}
+          </div>
+        )}
+      </li>
+    );
+  };
   return (
     <div className="card-mystic p-6 mt-4" data-testid={testid}>
       <div className="label-ref">{title}</div>
-      <ul className="mt-2 space-y-1">
-        {items.map((it, i) => (
-          <li key={i} className="text-sm text-parchment font-body">· {it}</li>
-        ))}
+      <ul className="mt-2 space-y-1.5">
+        {(items || []).map(renderItem)}
       </ul>
     </div>
   );

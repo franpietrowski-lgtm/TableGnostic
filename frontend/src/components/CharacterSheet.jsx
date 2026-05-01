@@ -242,8 +242,15 @@ export default function CharacterSheet() {
               // BESM-style point-buy layer.
               const sysId = campaign?.system_id;
               if (sysId === "anime-5e") {
+                // Anime 5E supports both Tri-Stat point-buy AND a 5E-style
+                // class+level chassis (hybrid). Show the relevant label
+                // based on which shape the character actually carries.
                 const d = dndState || {};
-                return `Anime 5E · ${d.class || "Class"} ${d.level || 1} · ${d.race || "Race"}`;
+                const hasD20 = d.class || d.level;
+                if (hasD20) {
+                  return `Anime 5E · ${d.class || "Class"} ${d.level || 1} · ${d.race || "Race"}`;
+                }
+                return `Anime 5E (Tri-Stat) · ${ch.power_level || "Adventurous"} · ${ch.total_points || 0} pts`;
               }
               if (sysId === "dnd-5e" || (!sysId && dndState && !ch.folio?.anime5e_state)) {
                 const d = dndState || {};

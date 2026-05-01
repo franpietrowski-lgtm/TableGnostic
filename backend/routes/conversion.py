@@ -258,6 +258,56 @@ def _coerce_to_dict_list(items, default_keys: Optional[Dict[str, Any]] = None):
     return out
 
 
+def _normalise_tristat_cost_fields(items, kind: str):
+    """Tri-Stat-specific post-processor.
+
+    Claude's response shape varies per call: an Attribute might come
+    back with `cost: 12` (TOTAL) instead of `cost_per_level: 4` (per-tier
+    rate, which the BESM cost engine multiplies by `level`). A Defect
+    might return `points: 1` instead of `points_per_rank: 1`. Without
+    correction the rendered "x3 = NaN PTS" tag appears on every entry.
+
+    `kind` ∈ {"attribute", "skill", "defect"}. Mutates entries in place.
+    """
+    for it in (items or []):
+        if not isinstance(it, dict):
+            continue
+        if kind in ("attribute", "skill"):
+            level = int(it.get("level") or 0) or 1
+            cpl = it.get("cost_per_level")
+            if cpl is None:
+                total = it.get("cost") or it.get("total_cost")
+                if total is not None and level > 0:
+                    try:
+                        it["cost_per_level"] = round(float(total) / level, 2)
+                    except (ValueError, TypeError):
+                        it["cost_per_level"] = 0
+            # Backfill `level` if Claude omitted it but gave a cost.
+            if it.get("level") is None and it.get("cost") is not None:
+                it["level"] = 1
+        elif kind == "defect":
+            rank = int(it.get("rank") or 0) or 1
+            ppr = it.get("points_per_rank")
+            if ppr is None:
+                total = it.get("points") or it.get("refund")
+                if total is not None and rank > 0:
+                    try:
+                        it["points_per_rank"] = round(float(total) / rank, 2)
+                    except (ValueError, TypeError):
+                        it["points_per_rank"] = 0
+                else:
+                    # Bare narrative defect — default to 1 pt/rank (BESM
+                    # "Lesser" baseline). The GM can reweight in the editor.
+                    it["points_per_rank"] = 1
+                    if "category" not in it:
+                        it["category"] = "Lesser"
+            if it.get("rank") is None and it.get("points") is not None:
+                it["rank"] = 1
+            elif it.get("rank") is None:
+                it["rank"] = 1
+    return items
+
+
 async def _materialise_character(target_payload: Dict[str, Any],
                                  target_system: str,
                                  target_camp: Dict[str, Any],
@@ -268,10 +318,80 @@ async def _materialise_character(target_payload: Dict[str, Any],
                                  name_override: Optional[str]) -> Dict[str, Any]:
     """Take Claude's target_payload and shape it into our `characters`
     document. The LLM produces a free-form blob; this function maps the
-    obvious bits (attributes/skills/defects for BESM, folio dictionaries
-    for Cypher/D&D state, etc.) into the existing schema."""
+    obvious bits into the existing schema.
+
+    V6.16.1 — when Claude nests canonical fields inside a per-system
+    wrapper (`anime5e_state.stats`, `cypher_state.pools`, `dnd_state.
+    ability_scores`), we extract them. The top-level character document
+    is the source of truth for the *active* system's render and
+    function-binding (cost engine, encounter math, XP), so its fields
+    must reflect the converted values, not the source-system defaults.
+    """
     name = name_override or target_payload.get("name") or source_ch.get("name", "Untitled")
     concept = target_payload.get("concept") or target_payload.get("summary") or source_ch.get("concept", "")
+
+    # ── Resolve canonical state wrapper for this target system ──
+    # Claude returns either a wrapper (`anime5e_state: {...}`) or inline
+    # fields at the top of target_payload. Build the wrapper first by
+    # merging both so downstream lifters see ONE coherent dict.
+    if target_system == "anime-5e":
+        wrapper_keys = ["points", "stats", "hp", "ep", "acp", "derived",
+                        "level", "ability_scores", "class", "attributes",
+                        "skills", "defects"]
+        wrapper = {**{k: target_payload[k] for k in wrapper_keys if k in target_payload},
+                   **(target_payload.get("anime5e_state") or {})}
+        per_system_key = "anime5e_state"
+    elif target_system == "cypher":
+        wrapper_keys = ["tier", "descriptor", "type", "focus", "pools",
+                        "edge", "effort", "abilities", "cyphers",
+                        "artifacts", "shins", "background_connection"]
+        wrapper = {**{k: target_payload[k] for k in wrapper_keys if k in target_payload},
+                   **(target_payload.get("cypher_state") or {})}
+        per_system_key = "cypher_state"
+    elif target_system == "dnd-5e":
+        wrapper_keys = ["class", "level", "race", "background",
+                        "ability_scores", "skills", "spells", "features",
+                        "equipment", "armor_class", "hit_points",
+                        "proficiency_bonus", "alignment",
+                        "saving_throws", "spell_slots"]
+        wrapper = {**{k: target_payload[k] for k in wrapper_keys if k in target_payload},
+                   **(target_payload.get("dnd_state") or {})}
+        per_system_key = "dnd_state"
+    else:
+        wrapper = {}
+        per_system_key = None
+
+    # ── Top-level fields ──
+    # For Tri-Stat systems (BESM / Anime 5E), the rendered sheet reads
+    # ch.stats / ch.attributes / ch.skills / ch.defects directly — the
+    # wrapper is the source of truth. For non-Tri-Stat systems the
+    # Tri-Stat fields are largely vestigial; we still populate them with
+    # reasonable defaults so the cost-engine/UI don't NPE.
+    tristat_stats = (wrapper.get("stats")
+                     or target_payload.get("stats")
+                     or {"body": 4, "mind": 4, "soul": 4})
+    tristat_attrs = (wrapper.get("attributes")
+                     if target_system in ("besm-4e", "anime-5e")
+                     else None)
+    tristat_attrs = tristat_attrs if tristat_attrs is not None else target_payload.get("attributes")
+    tristat_skills = (wrapper.get("skills")
+                      if target_system in ("besm-4e", "anime-5e")
+                      else None)
+    tristat_skills = tristat_skills if tristat_skills is not None else target_payload.get("skills")
+    tristat_defects = (wrapper.get("defects")
+                       if target_system in ("besm-4e", "anime-5e")
+                       else None)
+    tristat_defects = tristat_defects if tristat_defects is not None else target_payload.get("defects")
+
+    # total_points may be at top level OR nested under a "points" wrapper
+    # (anime5e_state.points.total, cypher's shins, etc.). Fallback to
+    # the source character's value, then a sensible default.
+    pts = target_payload.get("total_points")
+    if pts is None and isinstance(wrapper.get("points"), dict):
+        pts = wrapper["points"].get("total")
+    if pts is None:
+        pts = source_ch.get("total_points") or 100
+
     base = {
         "id": new_id(),
         "name": name,
@@ -281,50 +401,26 @@ async def _materialise_character(target_payload: Dict[str, Any],
         "created_at": now_iso(),
         "concept": concept,
         "system_id": target_system,
-        "total_points": int(target_payload.get("total_points")
-                            or source_ch.get("total_points") or 100),
-        "stats": target_payload.get("stats") or {"body": 4, "mind": 4, "soul": 4},
-        "attributes": _coerce_to_dict_list(target_payload.get("attributes")),
-        "skills": _coerce_to_dict_list(target_payload.get("skills"),
-                                       default_keys={"cost_per_level": 0, "level": 0}),
-        "defects": _coerce_to_dict_list(target_payload.get("defects"),
-                                        default_keys={"points_per_rank": 0, "rank": 0}),
-        "items": _coerce_to_dict_list(target_payload.get("items")),
+        "total_points": int(pts),
+        "stats": tristat_stats,
+        "attributes": _normalise_tristat_cost_fields(_coerce_to_dict_list(tristat_attrs), "attribute"),
+        "skills": _normalise_tristat_cost_fields(_coerce_to_dict_list(tristat_skills,
+                                       default_keys={"cost_per_level": 0, "level": 0}), "skill"),
+        "defects": _normalise_tristat_cost_fields(_coerce_to_dict_list(tristat_defects,
+                                        default_keys={"points_per_rank": 0, "rank": 0}), "defect"),
+        "items": _coerce_to_dict_list(target_payload.get("items")
+                                      or wrapper.get("equipment")),
         "weapons": _coerce_to_dict_list(target_payload.get("weapons")),
-        # Per-system state blocks (populated when Claude returns them).
         "folio": {},
     }
     # Carry the source folio (journal, bio, motivations) when keep_folio.
     if keep_folio and source_ch.get("folio"):
         base["folio"] = {**(source_ch.get("folio") or {})}
-    # Per-system state — Claude produces these as siblings in target_payload.
-    # Some prompts give us a wrapped sub-dict (`cypher_state: {...}`),
-    # others return the canonical fields directly at the top level.
-    # Tolerate both shapes by merging the wrapper (if any) with a plucked
-    # set of canonical fields.
-    def _extract(keys):
-        plucked = {k: target_payload[k] for k in keys if k in target_payload}
-        return plucked
-
-    if target_system == "dnd-5e":
-        wrapped = target_payload.get("dnd_state") or {}
-        plucked = _extract(["class", "level", "race", "background",
-                            "ability_scores", "skills", "spells",
-                            "features", "equipment", "armor_class",
-                            "hit_points", "proficiency_bonus", "alignment",
-                            "saving_throws", "spell_slots"])
-        base["folio"]["dnd_state"] = {**plucked, **wrapped}
-    elif target_system == "cypher":
-        wrapped = target_payload.get("cypher_state") or {}
-        plucked = _extract(["tier", "descriptor", "type", "focus", "pools",
-                            "edge", "effort", "abilities", "cyphers",
-                            "artifacts", "shins", "background_connection"])
-        base["folio"]["cypher_state"] = {**plucked, **wrapped}
-    elif target_system == "anime-5e":
-        wrapped = target_payload.get("anime5e_state") or {}
-        plucked = _extract(["points", "stats", "derived", "level",
-                            "ability_scores", "class"])
-        base["folio"]["anime5e_state"] = {**plucked, **wrapped}
+    # Per-system state — store the merged wrapper so the system-shaped
+    # views (DndSheetView / CypherSheetView / Anime 5E hybrid layer) can
+    # render directly from it.
+    if per_system_key:
+        base["folio"][per_system_key] = wrapper
     # Stamp a converted-from breadcrumb so cloners can audit.
     base["converted_from"] = {
         "source_character_id": source_ch.get("id"),

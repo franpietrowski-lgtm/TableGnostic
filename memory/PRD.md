@@ -14,6 +14,17 @@
 
 ## 2. Implemented (cumulative, condensed)
 
+### V6.16.1 — Converter materialiser hardening (2026-05-01, follow-up)
+
+User feedback after V6.16: ported Anime 5E Eli was rendering with BODY/MIND/SOUL = 4/4/4 (defaults) instead of the translated 4/7/6, attribute costs showed "NaN PTS", and Cypher abilities crashed the React tree with "Objects are not valid as a React child". Three concrete fixes:
+
+- **Wrapper-state lifting** — Claude commonly nests Tri-Stat fields inside `anime5e_state.stats / .attributes / .skills / .defects` rather than top-level. The materialiser now resolves a unified `wrapper` per target system (merging top-level inline fields with the wrapped sub-dict) and lifts the canonical fields into the top-level character document for Tri-Stat systems. Top-level `ch.stats` is now the source of truth for what the BESM/Anime 5E sheet renders.
+- **Cost-field normaliser** — `_normalise_tristat_cost_fields()` derives missing `cost_per_level` from Claude's frequent `cost: 12` (total) shape (12 / level 3 = 4 per level) and `points_per_rank` from `points: N`. Defects with no points value default to "Lesser" (1 pt/rank). Eliminates the "NaN PTS" tags on every converted attribute / defect.
+- **`SimpleListCard` accepts dicts** — Cypher abilities and cyphers come back from Claude as `{name, tier, cost, description}` objects. The shared list card now renders rich entries (head line + indented description) instead of crashing on object-as-child.
+
+**Verified live**: Aurora's 4 Eli sheets — Anime 5E (BODY 4 / MIND 7 / SOUL 6, 6 attrs with proper costs), Cypher (Intuitive Explorer who Works Miracles, Tier 2, full pools/edge/effort), D&D 5E (Artificer Lvl 3, AC 13, INT 16, full ability_scores). 21/21 converter tests pass; 43/43 cumulative.
+
+
 ### V6.16 — Cross-system Content Converter + Eli ports + Cut-1 polish (2026-05-01)
 
 **Cut 1 — UI/UX polish**
