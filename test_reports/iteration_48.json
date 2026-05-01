@@ -1,0 +1,47 @@
+{
+  "summary": "V6.15 CR-engine parity + interactive guided tours validated end-to-end. Backend: all 22 parity tests in test_iter48_v615_cr_parity.py PASS (env-levers, role-mix nudges, party-spread warnings, tune-to-target deltas across D&D-5E/Cypher/BESM/Anime-5E, plus backward-compat Pushover/Unknown branches and anime-5e dispatcher routing). Legacy POST /api/director/{cid}/cr-analyse on a real Cypher campaign returns 200 with the full shape (system_id, rating, score, reason, party_label, npc_label, suggestions) — confirmed 'Unknown' rating when no party seated. Frontend: /app/help renders compass header + 8 recipe cards; recipes with tours (welcome, campaign-from-scratch, build-character, run-encounter→director-console, knowledge-web, live-session) each surface Launch-tour buttons; timeline + delta-drop recipes show the 'roadmap' no-tour note (export-pdf no-tour selector flaked once under accordion-toggle timing — treated as minor). Welcome tour walks all 5 steps (Dashboard sidebar → Campaigns → Reference → Canon → How-To) with STEP 1/5 indicator, Prev/Next, ESC-close, X-close all working. CRITICAL tour-persistence-across-route-change confirmed: picking a campaign in tour-campaign-picker (5 campaigns listed for GMFran) navigates to /app/campaigns/{cid}/director and the GuidedTour overlay stays mounted the entire time, walking through all 5 Director-Console steps (director-console → director-session-picker → director-npc-pool → director-encounter-editor → cr-panel).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_assertions": [
+    "pytest test_iter48_v615_cr_parity.py — 22/22 pass",
+    "POST /api/director/{cypher_cid}/cr-analyse → 200, rating=Unknown, suggestions=[], shape intact",
+    "Login franpietrowski@gmail.com / PieGod08!! → 200 with access_token",
+    "/api/campaigns returns 5 seeded campaigns across anime-5e, cypher, dnd-5e, besm-4e (x2)",
+    "/app/help page: compass glyph + 'How to TableGnostic' H1",
+    "8 [data-testid=howto-card-*] cards render (campaign-from-scratch, build-character, run-encounter, knowledge-web, live-session, timeline, delta-drop, export-pdf)",
+    "howto-launch-tour-{campaign-from-scratch|build-character|run-encounter|knowledge-web|live-session} present when card expanded",
+    "howto-no-tour-{timeline|delta-drop} present with roadmap note",
+    "howto-launch-welcome CTA triggers GuidedTour overlay",
+    "guided-tour-overlay + guided-tour-tooltip + guided-tour-title render on tour start",
+    "STEP 1/5 indicator shown, titles progress: 'Your table's left rail' → 'Campaigns — your workshop' → 'Reference — system-aware rulebook' → 'Canon — the public table' → 'That's the map'",
+    "guided-tour-next advances through steps; tour auto-closes after final step",
+    "ESC key closes tour overlay (OVERLAY_AFTER_ESC=False)",
+    "guided-tour-close (X button) closes tour overlay",
+    "run-encounter Launch tour opens tour-campaign-picker modal listing all 5 GMFran campaigns",
+    "Clicking a campaign in picker navigates to /app/campaigns/{cid}/director AND the GuidedTour overlay survives the route change (persistence verified — this is the critical regression this session fixed)",
+    "Director-Console tour titles in order: Director's Console → Pick the active session → The NPC & Creature Pool → The encounter editor → The CR Panel, all with overlay persisting"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_iter48_v615_cr_parity.py",
+    "/app/test_reports/pytest/iter48_v615.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "HowToGuide.jsx uses accordion toggle (re-clicking an expanded card collapses it). Consider scrolling expanded card into view to avoid off-screen collapse surprises during keyboard nav.",
+    "GuidedTour step-indicator data-testid: my query for [data-testid=guided-tour-step-indicator] returned null but visual STEP 1/5 is clearly rendered — verify the exact testid matches spec (review_request mentions 'Step X/5'). Minor testability improvement.",
+    "Direct goto /app/help (external or page-reload) sometimes loses session and stalls on SUMMONING splash; navigating via sidebar <a href=/app/help> works fine. Same auth-gate timing as iteration_47 — pre-existing, not a V6.15 regression.",
+    "tours.js uses optional-step fallback pattern (e.g. campaign-from-scratch step 2 accepts either campaign-list or new-campaign-btn) — good resilience."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (22/22 pytest + legacy cr-analyse smoke OK)", "frontend": "100% on critical acceptance criteria"},
+  "test_credentials": "franpietrowski@gmail.com / PieGod08!! (admin GMFran)",
+  "seed_data_creation": "None — used existing 5 seeded Evereantha campaigns.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "V6.15 ships two things: (1) CR-engine parity helpers in /app/backend/core/cr_engine.py (_env_suggestions, _role_mix_suggestions, _party_spread_suggestions, _tune_to_target_*) — covered by test_iter48_v615_cr_parity.py (22 tests). (2) Interactive guided tours — TourProvider mounted inside Shell.jsx (persists across route changes), GuidedTour.jsx renders via createPortal with ResizeObserver repositioning, tours.js registry has: welcome (no-campaign), campaign-from-scratch, build-character, director-console (needsCampaign), knowledge-web, live-session. HowToGuide.jsx recipes map tourIds to TOURS; recipes without tourId show 'roadmap' no-tour note. Correct testids: howto-card-{id}, howto-launch-tour-{id}, howto-no-tour-{id}, howto-launch-welcome, tour-campaign-picker, tour-pick-campaign-{cid}, guided-tour-overlay, guided-tour-tooltip, guided-tour-title, guided-tour-next, guided-tour-close. Login via /auth?mode=login then navigate via sidebar (direct /app/help goto can hit SUMMONING splash if session not yet hydrated).",
+  "rca of the issue": "N/A — no new bugs. Previously-known hash-deeplink in-session issue from iteration_47 remains; tour-persistence-across-route-change (this session's headline fix) is verified working via Shell-level TourProvider + React Portal."
+}

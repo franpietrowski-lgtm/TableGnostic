@@ -3,6 +3,7 @@ import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../lib/api";
 import { Scroll, LayoutGrid, BookOpen, LogOut, UserCircle2, Compass, Menu, X, User, HelpCircle, Sparkles } from "lucide-react";
 import CmdKPalette from "./CmdKPalette";
+import { TourProvider } from "./TourProvider";
 
 const Sigil = ({ size = 32 }) => (
   <svg viewBox="0 0 120 120" style={{ width: size, height: size }}
@@ -43,6 +44,7 @@ export default function Shell() {
      ${isActive ? "text-gold-bright" : "text-mist/70 hover:text-parchment"}`;
 
   return (
+    <TourProvider>
     <div className="relative z-10 min-h-screen md:grid md:grid-cols-[240px_1fr]">
       {/* DESKTOP SIDEBAR */}
       <aside className="hidden md:flex border-r border-gold/10 bg-void/60 backdrop-blur-sm min-h-screen flex-col"
@@ -138,6 +140,7 @@ export default function Shell() {
         ))}
       </nav>
     </div>
+    </TourProvider>
   );
 }
 
