@@ -177,9 +177,46 @@ export default function CharacterSheet() {
 
   return (
     <div className="px-8 md:px-12 py-10 max-w-6xl">
-      <Link to={`/app/campaigns/${ch.campaign_id}`} className="text-xs font-ui uppercase tracking-widest text-gold/70">
-        ← Campaign
-      </Link>
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <Link to={`/app/campaigns/${ch.campaign_id}`} className="text-xs font-ui uppercase tracking-widest text-gold/70">
+          ← Campaign
+        </Link>
+        {/* V6.16 — sheet action toolbar lives above the tabs so it's
+            visible on Mechanics / Inventory / History as well as Identity. */}
+        <div className="flex gap-2 flex-wrap" data-testid="sheet-action-toolbar">
+          <button onClick={async () => {
+                    try {
+                      const token = localStorage.getItem("tg_token");
+                      const r = await fetch(
+                        `${process.env.REACT_APP_BACKEND_URL}/api/characters/${ch.id}/export.pdf?mode=mobile`,
+                        { headers: { Authorization: `Bearer ${token}` } });
+                      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+                      const blob = await r.blob();
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement("a");
+                      a.href = url;
+                      a.download = `${(ch.name || "character").replace(/\s+/g, "_")}-sheet.pdf`;
+                      document.body.appendChild(a); a.click(); a.remove();
+                      URL.revokeObjectURL(url);
+                    } catch (e) { window.alert("PDF download failed: " + e.message); }
+                  }}
+                  className="btn btn-ghost text-xs"
+                  data-testid="export-mobile-sheet-btn"
+                  title="Download a phone-portrait PDF character sheet (A6) — easy to hand to a player mid-session.">
+            <Printer className="w-4 h-4"/> Mobile PDF
+          </button>
+          <Link to={`/app/characters/${ch.id}/edit`} className="btn" data-testid="edit-character-btn">
+            <Edit3 className="w-4 h-4"/> Edit
+          </Link>
+          <ConvertCharacterButton
+            character={ch}
+            isGm={!!(campaign?.is_gm) || user?.role === "admin" || user?.role === "gm"}/>
+          <button onClick={delChar} className="btn btn-danger" data-testid="delete-character-btn"
+                  title="Forget this character (irreversible).">
+            <Trash2 className="w-4 h-4"/>
+          </button>
+        </div>
+      </div>
 
       {/* V6.14 — Character-sheet sub-tabs (DESIGN_AUDIT P1 #7).
           Identity stays visible at the top; Mechanics / Inventory / History
@@ -260,34 +297,6 @@ export default function CharacterSheet() {
               onChanged={load}/>
           )}
           </div>
-        </div>
-        <div className="flex gap-2">
-          <button onClick={async () => {
-                    try {
-                      const token = localStorage.getItem("tg_token");
-                      const r = await fetch(
-                        `${process.env.REACT_APP_BACKEND_URL}/api/characters/${ch.id}/export.pdf?mode=mobile`,
-                        { headers: { Authorization: `Bearer ${token}` } });
-                      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-                      const blob = await r.blob();
-                      const url = URL.createObjectURL(blob);
-                      const a = document.createElement("a");
-                      a.href = url;
-                      a.download = `${(ch.name || "character").replace(/\s+/g, "_")}-sheet.pdf`;
-                      document.body.appendChild(a); a.click(); a.remove();
-                      URL.revokeObjectURL(url);
-                    } catch (e) { window.alert("PDF download failed: " + e.message); }
-                  }}
-                  className="btn btn-ghost text-xs"
-                  data-testid="export-mobile-sheet-btn"
-                  title="Download a phone-portrait PDF character sheet (A6) — easy to hand to a player mid-session.">
-            <Printer className="w-4 h-4"/> Mobile PDF
-          </button>
-          <Link to={`/app/characters/${ch.id}/edit`} className="btn" data-testid="edit-character-btn">
-            <Edit3 className="w-4 h-4"/> Edit
-          </Link>
-          <ConvertCharacterButton character={ch} isGm={!!(campaign?.is_gm)}/>
-          <button onClick={delChar} className="btn btn-danger"><Trash2 className="w-4 h-4"/></button>
         </div>
       </div>
       )}

@@ -14,6 +14,37 @@
 
 ## 2. Implemented (cumulative, condensed)
 
+### V6.16 — Cross-system Content Converter + Eli ports + Cut-1 polish (2026-05-01)
+
+**Cut 1 — UI/UX polish**
+- **Anime 5E logo fix** — `besm_data.py` Anime 5E `logo_url` corrected to `/system-logos/anime5e-tristat-emporium.png` (was wrongly pointing at the BESM 4E asset). Now the `tri-stat-credit` footer shows the correct Anime 5E + Tri-Stat Emporium logo on Anime 5E campaigns.
+- **SystemBadge** — added a `compact` prop (small colored corner pill) and an explicit per-system logo path map. D&D 5E now falls back to a styled "DND" initials block (no SRD-safe logo bundled).
+- **Campaign card parity** — `Campaigns.jsx` and `Dashboard.jsx` campaign tiles now both render: (a) compact colored system pill in the upper-left corner (BESM purple, Anime 5E pink, D&D 5E maroon, Cypher navy), and (b) the full SystemBadge card with licence + notice text below the description. Closed the gap between Dashboard view and dedicated Campaigns page.
+- **Pin Confirm Panel** (`CodexChartView.jsx`) — clicking a codex node no longer silently commits a Timeline marker. A floating confirm modal opens with a visible mini-timeline strip — every session as a tappable pill, gold marker dot above the picked one, ◀ ▶ chevrons + ESC/Enter shortcuts. The session picker at the top is now relabelled "default session for new pins" since the confirm modal lets the GM retarget.
+- **Atelier Intake Template** — `/app/memory/INTAKE_TEMPLATE.md` ships a section-aware markdown spine (`## CHARACTERS`, `## LOCATIONS`, `## CREATURES`, `## TIMELINE`, etc.) so GMs can drop a 5 MB campaign-bible file and the ingestor parses each section as its own focused Claude call.
+- **Ingest size raise** — `routes/ingest.py` `MAX_BYTES` 24 MB → 64 MB; `_truncate_for_llm` cap 60k → 240k chars (≈ 80k tokens — fits 1.5×Evereantha+Artisan-Tale comfortably).
+
+**Cut 2 — Cross-system Content Converter (G) + Eli ports (F)**
+- **`routes/conversion.py`** (new, 380 lines) — Claude-assisted bidirectional converter:
+  - `POST /api/convert/content` — translate any single mechanic between any two of {besm-4e, anime-5e, dnd-5e, cypher}. Body: `{source_system, target_system, source_kind, payload, target_constraints?}`. GM/admin only.
+  - `POST /api/convert/character` — port a full character document into another campaign. Permission model: caller must be GM (or admin) of both source and target campaigns. Auto-adds the new owner to the target campaign's member list. Ships a `converted_from` breadcrumb on the target document.
+  - `_materialise_character` handles Claude's variable response shape — wrapped (`{cypher_state: {...}}`) AND inline (`{tier, descriptor, ...}`) — by extracting canonical per-system fields. `_coerce_to_dict_list` defends against string-shaped skill/defect entries that used to crash the BESM cost engine.
+  - Cost-engine math (`calc_derived` / `calc_spent_points`) only runs for Tri-Stat systems (BESM/Anime 5E); D&D/Cypher get a `spent.total_spent = 0` stub since their canonical math lives in `dnd_state` / `cypher_state`.
+  - System prompt commits to: no rulebook prose verbatim, no trademark-protected content, target-system canonical shape, preserve power level, document caveats explicitly.
+- **`scripts/port_eli_v616.py`** — one-shot seed that ports Eli (BESM Maiden Adventure, id `244db025...`) → Cypher / D&D 5E / Anime 5E and assigns Aurora (player) as owner. Took ~35-40s per port live with Claude. All 4 Eli sheets currently live:
+  - BESM (`244db025742b4bd9a9662f6240e40729`)
+  - Cypher Eli — Tier 2 Learned Explorer who Concocts Powerful Elixirs (`3c37c7ab36004eb3b902d22f4c4c186b`)
+  - D&D 5E Eli — Level 5 Artificer/Alchemist (`733ff0dc6bb64709b63fea31c16f2afc`)
+  - Anime 5E Eli — Tri-Stat 80 CP build (`7da6f4f5d17848ab871ac91b5f1cf0d4`)
+- **`ConvertCharacterButton.jsx`** (new) — header-toolbar action on every character sheet; lists GM-eligible target campaigns with colored system badges; fires `/api/convert/character`; surfaces caveats + "Open new sheet" CTA on success.
+- **CharacterSheet header refactor** — action toolbar (Mobile PDF · Edit · Convert · Trash) lifted from the Identity-only block to the page header so it persists across all 4 sub-tabs (Identity / Mechanics / Inventory / History). Convert visibility gate now widened to `campaign?.is_gm || user.role ∈ ('gm','admin')` to dodge the campaign-fetch race.
+- **Aurora player account** — password reset to `AuroraTest123!`; now owns Eli across all 4 systems for cross-account UX testing. Cross-account verified live: GMFran sees Convert button; Aurora (player) does NOT.
+
+**Testing — `/app/test_reports/iteration_49.json`**
+- Backend 50/50 pytest pass (16 converter unit tests in `test_iter49_v616_converter.py` + 22 CR-parity tests + 12 endpoint smoke tests).
+- Frontend 100% acceptance after the toolbar-lift fix (campaign cards parity, Anime 5E logo, Pin Confirm Panel with 8-session strip, cross-account Convert visibility).
+
+
 ### V6.15 — Multi-system CR-engine parity + Interactive How-To tours (2026-05-01)
 
 **P2 — D&D 5E / Cypher encounter-balancer parity with BESM/Anime 5E**
