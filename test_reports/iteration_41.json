@@ -1,0 +1,43 @@
+{
+  "summary": "V6.8 testing — Genesis/Epic Atelier split, Timeline panel, Codex chart view, Cypher fuzzy keywords, NPC sheet save-onto-node. ALL surfaces verified PASS. Backend: 8 new V6.8 tests (test_iter41_v68.py) + 11 V6.7 regression all pass; broader regression of iter34/35/37/38/39/40/41 = 80 passed / 1 skipped. Frontend: 24/24 assertions pass — all 5 atelier sub-tabs render their distinct panes (workshop default, genesis with deep-link button, epic mounts EpicCampaignPanel, timeline mounts TimelinePanel with system-themed gold lozenge for besm-4e, references mounts ReferenceEditor); Codex tab has all 3 view buttons; chart-view renders codex-chart-geo + codex-chart-pillars with all 5 pillars (population, geography, magic, technology, history). Cypher fuzzy: free_keywords echoed in response, matched_keywords annotation on every entry, +2 score boost when keyword in name/summary. NPC save: save=true persists stat_block + stat_block_threat_tier on node document (verified via GET nodes), default save=false returns saved:false and does not mutate, 403 for non-GM.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "critical_code_review_comments": [
+    "AtelierTab.jsx is 608 lines — over the 700-line guideline still acceptable but the 5 sub-pane render blocks (lines 173-205) would slot cleanly into a sub-component if it grows.",
+    "TimelinePanel.jsx line 55 filters encounters as `n.type === encounter|set-piece` but the rest of the codebase uses `n.kind` (see CodexChartView.jsx line 46 which uses `n.type` too — consistent here, but the V6.7 NPC sheet generator on line 156 of test_iter40 uses `n.kind`). Worth grep-confirming codex nodes carry both `type` and `kind` fields, otherwise some encounters may not cluster.",
+    "TimelinePanel.jsx min-width 600px on inner flex (line 99) means the timeline stays a horizontal scroll on mobile (390px) — acceptable for GM-tool surface but worth a responsive note.",
+    "CodexChartView.jsx geo bucketing (line 46) only inspects nodes whose `type` is one of [location, region, place, biome] — npc/faction/quest nodes with biome metadata are skipped from the geo flow. That matches the spec's intent (geography-only flow at top) but flag it for future expansion.",
+    "cypher_suggest_anime_cr.py:99-106 fuzzy match is case-insensitive substring against name+summary only; description-only entries (no summary) fall back via the OR on line 87. Verified working but consider also matching against `genres` array for richer hits.",
+    "cypher_suggest_anime_cr.py generate-sheet endpoint (line 412) — `save=true` writes `stat_block` and `stat_block_threat_tier` but does NOT update `node.updated_at`; downstream sort-by-updated may miss recent stat-block edits.",
+    "CarryForward from V6.7: CharacterSheet.jsx:534 still uses non-existent localStorage key `tg_user_id` for ownership gate (forge-power-bundles card never renders). Not in V6.8 scope but blocks Feature #6b. Recommend swap to useAuth() hook."
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_iter41_v68.py",
+    "/app/test_reports/pytest/iter41_v68.xml",
+    "/app/test_reports/pytest/iter41_combined.xml"
+  ],
+  "action_items": [
+    "[OPTIONAL] Update node.updated_at timestamp in generate-sheet save branch so stat-block edits surface in any updated_at-based sort.",
+    "[CARRY V6.7] Fix CharacterSheet.jsx:534 ownership gate — replace `localStorage.getItem('tg_user_id')` with useAuth() user.id (the forge-power-bundles card is dead code today)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter41_v68.py (NEW — 8 V6.8 tests, all passing)"
+  ],
+  "success_rate": {
+    "backend": "100% (19/19 V6.7+V6.8 pass; 80 pass + 1 skip across iter34/35/37/38/39/40/41 regression)",
+    "frontend": "100% (24/24 testid + behavioural assertions: 5 atelier sub-tabs, workshop default, genesis pane + open-genesis button, epic pane, timeline pane + panel + sessions, references pane, 3 codex view buttons, chart-view + geo + pillars + 5 individual pillar testids)"
+  },
+  "test_credentials": "franpietrowski@gmail.com / PieGod08!! (admin/GM) — verified working via REST login + UI sign-in",
+  "seed_data_creation": "1 throwaway player account (TEST_v68_save_*@example.com) for 403-gate test on save=true. No persistent data seeded. Note: test_save_true_persists_stat_block_on_node DOES write a stat_block onto the first BESM codex node — this is the V6.8 happy-path under test, intentional, GM-only operation.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Run: cd /app/backend && python -m pytest tests/test_iter41_v68.py tests/test_iter40_v67.py -v. The Atelier tab uses Radix Tabs — the *campaign* tab strip's testid is `[data-testid='tab-atelier']` (NOT `text=ATELIER` because the header `Atelier` button at top-right is a separate Link to /genesis page that shadows the click). After clicking tab-atelier, the AtelierTab component renders the V6.8 sub-tab strip with 5 buttons `atelier-subtab-{workshop|genesis|epic|timeline|references}`, default = workshop. BESM Evereantha campaign id used: 05b97c8b010d47e5882b9cf5177e62d7. Cypher Evereantha: cf802ead612c4deebca0eafc938e48a9. The timeline shows 1 session on the BESM campaign (gold lozenge ◆ glyph confirms system theming). Codex chart Geography section is populated (1 'Uncategorised' biome bucket with 11 locations). All 5 pillars render in the worldbuilding grid.",
+  "rca of the issue": "No issues found in V6.8 scope. Both backend behavioural changes (fuzzy + save=true) and all 5 frontend surfaces work end-to-end. Carry-forward CharacterSheet.jsx:534 bug from V6.7 still unresolved — not in V6.8 scope but tracked for main agent."
+}

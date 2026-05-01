@@ -4,6 +4,9 @@ import { api, formatApiErrorDetail } from "../lib/api";
 import { Plus, X, AlertTriangle, CheckCircle2, Save, Layers, ListTree, ScrollText, FileDown } from "lucide-react";
 import IngestPanel from "./IngestPanel";
 import XPApprovalQueue from "./XPApprovalQueue";
+import EpicCampaignPanel from "./EpicCampaignPanel";
+import ReferenceEditor from "./ReferenceEditor";
+import TimelinePanel from "./TimelinePanel";
 
 /**
  * AtelierTab — V4.4 dynamic-scaling tiers.
@@ -22,6 +25,15 @@ export default function AtelierTab({ campId, camp }) {
   const [findings, setFindings] = useState([]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
+  // V6.8 — sub-tab nav. Genesis | Epic | Timeline | References live as
+  // discrete sub-surfaces; Workshop is the original Session-0 / Arcs /
+  // continuity-check toolset.
+  const [subtab, setSubtab] = useState(() => {
+    try {
+      const u = new URL(window.location.href);
+      return u.searchParams.get("atelier") || "workshop";
+    } catch { return "workshop"; }
+  });
 
   useEffect(() => {
     (async () => {
@@ -139,19 +151,69 @@ export default function AtelierTab({ campId, camp }) {
         </div>
       </div>
 
+      {/* V6.8 — Sub-tab strip. Genesis / Epic / Timeline / References /
+          Workshop are now distinct authoring surfaces. */}
+      <div className="flex flex-wrap gap-1 border-b border-gold/15 pb-2"
+           data-testid="atelier-subtabs">
+        {[
+          ["workshop",   "Workshop"],
+          ["genesis",    "Genesis (7 Phases)"],
+          ["epic",       "Epic Campaign"],
+          ["timeline",   "Timeline"],
+          ["references", "References"],
+        ].map(([k, label]) => (
+          <button key={k} onClick={() => setSubtab(k)}
+                  className={`text-[11px] px-3 py-1.5 rounded-sm font-ui uppercase tracking-widest transition-colors ${subtab === k ? "bg-gold/15 text-gold-bright border border-gold/30" : "text-mist hover:bg-gold/5"}`}
+                  data-testid={`atelier-subtab-${k}`}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {subtab === "genesis" && (
+        <div data-testid="atelier-genesis-pane">
+          <div className="card-mystic p-5">
+            <div className="label-ref">7-Phase Master Plot · independently navigable</div>
+            <div className="text-[11px] text-mist italic mt-1 mb-3">
+              The full 7-phase plot designer lives on its own deep-link page so each phase has a stable URL. Open it in a new tab if you want to author plot beats while keeping this Atelier surface in view.
+            </div>
+            <Link to={`/app/campaigns/${campId}/genesis`} className="btn btn-primary text-xs"
+                  data-testid="atelier-open-genesis">
+              Open Genesis (7 phases) →
+            </Link>
+          </div>
+        </div>
+      )}
+
+      {subtab === "epic" && (
+        <div data-testid="atelier-epic-pane">
+          <EpicCampaignPanel campId={campId}/>
+        </div>
+      )}
+
+      {subtab === "timeline" && (
+        <div data-testid="atelier-timeline-pane">
+          <TimelinePanel campId={campId} systemId={camp?.system_id} isGm={camp?.is_gm}/>
+        </div>
+      )}
+
+      {subtab === "references" && (
+        <div data-testid="atelier-references-pane">
+          <ReferenceEditor campaignId={campId} systemId={camp?.system_id}
+                            isGm={camp?.is_gm}/>
+        </div>
+      )}
+
+      {subtab === "workshop" && (<>
       {/* ---------- Knowledge Web ingestion ---------- */}
       <IngestPanel campId={campId}/>
 
       {/* ---------- XP Approval Queue (GM-side) ---------- */}
       <XPApprovalQueue campaignId={campId} isGm/>
 
-      {/* Reference Editor + GM Instructions moved to the Genesis page in
-          V5.4 — they're authoring surfaces, not in-campaign tools. The
-          Atelier tab keeps the ingestion + XP queue + Session-0/Arcs /
-          continuity that you want at-the-table. */}
       <div className="text-[11px] text-mist/60 italic px-1" data-testid="atelier-ref-moved-note">
         Looking for the campaign Reference tables and the GM Quickstart instructions?
-        They moved to the <Link to={`/app/campaigns/${campId}/genesis`} className="text-gold-bright underline">Atelier Genesis page</Link> as a dedicated phase, alongside the 7-phase Master Plot and the Epic Campaign tab.
+        Switch to the <button onClick={() => setSubtab("references")} className="text-gold-bright underline">References</button> sub-tab above, or open <Link to={`/app/campaigns/${campId}/genesis`} className="text-gold-bright underline">Genesis</Link> for the full 7-phase plot designer.
       </div>
 
       {/* ---------- Session 0 ---------- */}
@@ -232,6 +294,7 @@ export default function AtelierTab({ campId, camp }) {
           <CheckCircle2 className="w-3 h-3 inline -mt-0.5"/> No continuity issues found.
         </div>
       )}
+      </>)}
     </div>
   );
 }

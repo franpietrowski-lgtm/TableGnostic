@@ -72,37 +72,64 @@ def _tone_hints(phase: str, motive_text: str) -> Dict[str, List[str]]:
     return keys
 
 
-def _score_entry(entry: Dict[str, Any], camp_genre: str, hints: List[str]) -> Dict[str, Any]:
+def _score_entry(entry: Dict[str, Any], camp_genre: str,
+                  hints: List[str], free_keywords: Optional[List[str]] = None) -> Dict[str, Any]:
+    """V6.8 — flexible matcher.
+
+    * `hints` are codex-derived exact-name candidates (legacy V6.6).
+    * `free_keywords` are user-typed loose keywords; we match them
+      case-insensitively against the entry's name + summary so a GM
+      can type "fire" or "swift" and bias the suggestion.
+    * Substring matching against entry name as a fallback for hints.
+    """
     score = _score_genre(entry.get("genres", []), camp_genre)
-    matched_hints = [h for h in hints if entry.get("name") == h]
-    score += len(matched_hints) * 3
+    name = (entry.get("name") or "").lower()
+    summary = (entry.get("summary") or entry.get("description") or "").lower()
+
+    matched_hints: List[str] = []
+    for h in hints:
+        hl = h.lower()
+        if entry.get("name") == h:
+            matched_hints.append(h)
+            score += 3  # exact-match heavy weight
+        elif hl in name or hl in summary:
+            matched_hints.append(h)
+            score += 2  # substring fallback
+
+    matched_keywords: List[str] = []
+    for kw in (free_keywords or []):
+        kwl = kw.strip().lower()
+        if not kwl:
+            continue
+        if kwl in name or kwl in summary:
+            matched_keywords.append(kw)
+            score += 2
+
+    why = (
+        "Strongly suggested by codex tone" if matched_hints else
+        f"Matches keyword: {', '.join(matched_keywords)}" if matched_keywords else
+        "Genre fit" if score >= 2 else
+        "Genre-neutral choice"
+    )
     return {
         "entry": entry,
         "score": score,
         "matched_hints": matched_hints,
-        "why": (
-            ("Strongly suggested by codex tone" if matched_hints else
-             "Genre fit" if score >= 2 else
-             "Genre-neutral choice")
-        ),
+        "matched_keywords": matched_keywords,
+        "why": why,
     }
 
 
 @router.get("/cypher/{campaign_id}/suggest")
 async def cypher_suggest(
     campaign_id: str,
-    kind: str = "all",  # "descriptors"|"foci"|"types"|"cyphers"|"artifacts"|"all"
+    kind: str = "all",
     limit: int = 6,
+    keywords: str = "",
     user: dict = Depends(get_current_user),
 ):
-    """Return codex-aware Cypher pick suggestions for the campaign.
-
-    Reads the campaign's `setting_genre`, `genre`, the first-plot-phase
-    motive cluster (top 5 motives by recency), and the session-level
-    `plot_phase` if any sessions exist. Feeds these into a scoring pass
-    over Descriptors / Foci / Types / Cyphers / Artifacts and returns
-    the top N per axis with a `why` line per row.
-    """
+    """Codex-aware Cypher pick suggestions. V6.8 adds substring/fuzzy
+    hint matching and a free-text `keywords` query for GM nudges."""
     camp = await db.campaigns.find_one({"id": campaign_id}, {"_id": 0})
     if not camp:
         raise HTTPException(404, "Campaign not found")
@@ -118,7 +145,6 @@ async def cypher_suggest(
 
     camp_genre = (camp.get("setting_genre") or camp.get("genre") or "any").lower()
 
-    # Pull the last 5 motives and the most recent session's plot_phase.
     motives_cursor = db.nodes.find(
         {"campaign_id": campaign_id, "motive": {"$exists": True, "$ne": ""}},
         {"_id": 0, "motive": 1, "plot_phase": 1},
@@ -133,10 +159,11 @@ async def cypher_suggest(
         phase_blob = sess["plot_phase"] + " " + phase_blob
 
     hints_map = _tone_hints(phase_blob, motive_blob)
+    free_kw = [k.strip() for k in keywords.split(",") if k.strip()] if keywords else []
 
     def top_n(pool: List[Dict[str, Any]], hint_list: List[str]) -> List[Dict[str, Any]]:
         scored = sorted(
-            [_score_entry(e, camp_genre, hint_list) for e in pool],
+            [_score_entry(e, camp_genre, hint_list, free_kw) for e in pool],
             key=lambda r: r["score"], reverse=True,
         )
         return scored[:limit]
@@ -156,6 +183,7 @@ async def cypher_suggest(
         "setting_genre": camp_genre,
         "plot_phase_seen": phase_blob or None,
         "motive_window": motive_blob or None,
+        "free_keywords": free_kw,
         "suggestions": axes,
     }
 
@@ -385,14 +413,13 @@ async def besm_encounter_budget(
 async def generate_npc_sheet(
     campaign_id: str, node_id: str,
     threat_tier: str = "equal",
+    save: bool = False,
     user: dict = Depends(get_current_user),
 ):
     """V6.7 — auto-generate a system-appropriate stat block for an NPC
-    codex node. Streamlines encounter prep — the GM points at a node
-    in the codex, picks a threat tier, and gets a ready-to-run block.
-
-    Returns a draft stat block that the GM can save onto the node's
-    `stat_block` field; we do NOT mutate the node automatically.
+    codex node. V6.8 — `save=true` persists the block to the node's
+    `stat_block` field so downstream tools (Encounter Designer) can
+    reference it by node ID.
     """
     camp = await db.campaigns.find_one({"id": campaign_id}, {"_id": 0})
     if not camp:
@@ -471,4 +498,11 @@ async def generate_npc_sheet(
     else:
         raise HTTPException(400, f"Unknown system_id: {sys_id}")
 
+    if save:
+        await db.nodes.update_one(
+            {"id": node_id, "campaign_id": campaign_id},
+            {"$set": {"stat_block": block,
+                       "stat_block_threat_tier": threat_tier}},
+        )
+        return {"node_id": node_id, "stat_block": block, "saved": True}
     return {"node_id": node_id, "stat_block": block, "saved": False}

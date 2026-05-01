@@ -4,6 +4,7 @@ import { api, formatApiErrorDetail } from "../lib/api";
 import * as Tabs from "@radix-ui/react-tabs";
 import { Users, Plus, UserPlus2, ArrowRight, Trash2, Sparkles, Eye, EyeOff, Link as LinkIcon, Wand2, Shield, Copy, RefreshCw, Check, Save, Network, ListTree, Lightbulb, X, BookOpen, ChevronDown, ChevronRight, ScrollText } from "lucide-react";
 import KnowledgeGraph from "./KnowledgeGraph";
+import CodexChartView from "./CodexChartView";
 import ChannelsPanel from "./ChannelsPanel";
 import AtelierTab from "./AtelierTab";
 import SystemBadge from "./SystemBadge";
@@ -448,7 +449,7 @@ function labelForSystemShort(sysId) {
 }
 
 function KnowledgeTab({ camp, nodes, edges, onRefresh }) {
-  const [view, setView] = useState("list"); // list | graph
+  const [view, setView] = useState("list"); // list | graph | chart
   const [showNew, setShowNew] = useState(false);
   const [filterType, setFilterType] = useState("all");
   const [selectedNode, setSelectedNode] = useState(null);
@@ -503,9 +504,21 @@ function KnowledgeTab({ camp, nodes, edges, onRefresh }) {
           </div>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <button onClick={() => setView(view === "list" ? "graph" : "list")}
-                  className="btn btn-ghost text-xs" data-testid="toggle-view-btn">
-            {view === "list" ? <><Network className="w-3 h-3"/> Graph view</> : <><ListTree className="w-3 h-3"/> List view</>}
+          <button onClick={() => setView("list")}
+                  className={`btn btn-ghost text-xs ${view === "list" ? "ring-1 ring-gold/40" : ""}`}
+                  data-testid="codex-view-list-btn">
+            <ListTree className="w-3 h-3"/> List
+          </button>
+          <button onClick={() => setView("graph")}
+                  className={`btn btn-ghost text-xs ${view === "graph" ? "ring-1 ring-gold/40" : ""}`}
+                  data-testid="codex-view-graph-btn">
+            <Network className="w-3 h-3"/> Graph
+          </button>
+          <button onClick={() => setView("chart")}
+                  className={`btn btn-ghost text-xs ${view === "chart" ? "ring-1 ring-gold/40" : ""}`}
+                  data-testid="codex-view-chart-btn"
+                  title="Worldbuilding chart — biomes flow chart + 5-pillar grid (population, geography, magic, technology, history).">
+            <Network className="w-3 h-3"/> Chart
           </button>
           {camp.is_gm && (
             <>
@@ -555,7 +568,9 @@ function KnowledgeTab({ camp, nodes, edges, onRefresh }) {
 
       {showNew && <NodeEditor camp={camp} onClose={() => setShowNew(false)} onSaved={() => { setShowNew(false); onRefresh(); }}/>}
 
-      {view === "graph" ? (
+      {view === "chart" ? (
+        <CodexChartView campId={camp.id}/>
+      ) : view === "graph" ? (
         <div>
           <KnowledgeGraph nodes={filtered} edges={edges}
                           selectedId={selectedNode?.id}
