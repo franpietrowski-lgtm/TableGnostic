@@ -26,6 +26,12 @@ export default function CharacterSheet() {
   const [selectedSession, setSelectedSession] = useState("");
   const [pbpChannelId, setPbpChannelId] = useState(null);
   const [campaign, setCampaign] = useState(null);
+  // V6.14 — active sub-tab. Valid: identity | mechanics | inventory | history.
+  const [sheetTab, setSheetTab] = useState(() => {
+    const h = ((typeof window !== "undefined" && window.location.hash) || "")
+      .replace("#", "");
+    return ["identity", "mechanics", "inventory", "history"].includes(h) ? h : "mechanics";
+  });
 
   const load = async () => {
     try {
@@ -161,7 +167,18 @@ export default function CharacterSheet() {
       <Link to={`/app/campaigns/${ch.campaign_id}`} className="text-xs font-ui uppercase tracking-widest text-gold/70">
         ← Campaign
       </Link>
-      <div className="mt-3 flex items-start justify-between flex-wrap gap-4">
+
+      {/* V6.14 — Character-sheet sub-tabs (DESIGN_AUDIT P1 #7).
+          Identity stays visible at the top; Mechanics / Inventory / History
+          switch out below. Default to Mechanics so the sheet still "opens"
+          on its dice surface. Honours URL hash (#inventory, #history) so
+          deep links work. */}
+      <SheetTabBar value={sheetTab} onChange={setSheetTab}/>
+
+      {/* ───────── Identity tab ───────── */}
+      {sheetTab === "identity" && (
+      <div className="mt-3 flex items-start justify-between flex-wrap gap-4"
+           data-testid="sheet-identity-pane">
         <div className="flex items-start gap-5 flex-1 min-w-0">
           <CharacterPortrait character={ch} canEdit={canEditMech} onUploaded={load}/>
           <div className="min-w-0 flex-1">
@@ -259,7 +276,10 @@ export default function CharacterSheet() {
           <button onClick={delChar} className="btn btn-danger"><Trash2 className="w-4 h-4"/></button>
         </div>
       </div>
+      )}
 
+      {/* ───────── Mechanics tab ───────── */}
+      {sheetTab === "mechanics" && (<>
       {/* System-shaped read view — D&D 5E / Cypher get their own block;
           BESM 4E (and Anime 5E by default) keep the original tri-stat layout. */}
       {dndState && <DndSheetView state={dndState} folio={ch.folio} roll={roll}/>}
@@ -664,14 +684,192 @@ export default function CharacterSheet() {
         </div>
       </div>
       )}
+      </>)}
 
-      {/* Journal — universal across all systems. Fed by /characters/{id}/journal,
-          which timestamps each entry and (optionally) auto-pins it to the
-          campaign's World Codex as a `player_journal` node. The textbox stays
-          editable inline; rendered entries are read-only with a delete affordance
-          handled by the GM/owner. */}
-      <CharacterJournal character={ch} onUpdated={load}/>
+      {/* Journal — History tab content (universal across systems). */}
+      {sheetTab === "history" && (
+        <>
+          <CharacterJournal character={ch} onUpdated={load}/>
+          <SheetHistoryPanel character={ch}/>
+        </>
+      )}
 
+      {/* Inventory tab content — lists items from every system's loadout
+          source (BESM power packs / D&D magic items / Cypher cyphers). */}
+      {sheetTab === "inventory" && (
+        <SheetInventoryPanel character={ch} canEditMech={canEditMech}/>
+      )}
+
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────
+// SheetTabBar — V6.14 sub-tab strip (Identity / Mechanics / Inventory / History)
+// ────────────────────────────────────────────────────────────────────
+function SheetTabBar({ value, onChange }) {
+  const tabs = [
+    { id: "identity",  label: "Identity",  hint: "Portrait, approvals, XP, companions" },
+    { id: "mechanics", label: "Mechanics", hint: "Stats, attributes, skills, dice" },
+    { id: "inventory", label: "Inventory", hint: "Gear, cyphers, power packs, magic items" },
+    { id: "history",   label: "History",   hint: "Journal, XP log, character audit" },
+  ];
+  return (
+    <div className="mt-4 flex gap-1 flex-wrap border-b border-gold/20 pb-1"
+         data-testid="sheet-tabs">
+      {tabs.map((t) => (
+        <button key={t.id} onClick={() => { onChange(t.id); try { window.location.hash = t.id; } catch (_) {} }}
+                className={`px-3 py-1.5 text-[11px] uppercase tracking-widest font-ui rounded-t-sm transition-colors ${value === t.id ? "bg-gold/15 text-gold-bright border-b-2 border-gold" : "text-mist hover:bg-gold/5"}`}
+                title={t.hint}
+                data-testid={`sheet-tab-${t.id}`}>
+          {t.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────
+// SheetInventoryPanel — gathers every inventory-adjacent bucket from the
+// character's folio into a single tidy page. Read-only for now; GMs
+// still edit via the builder. Designed to be tolerant of sparse data.
+// ────────────────────────────────────────────────────────────────────
+function SheetInventoryPanel({ character, canEditMech }) {
+  const folio = character.folio || {};
+  const dnd = folio.dnd_state || {};
+  const cypher = folio.cypher_state || {};
+  const magicItems = dnd.magic_items || [];
+  const cyphers = cypher.cyphers || [];
+  const dndInventory = dnd.inventory || [];
+  const powerPacks = character.power_packs || [];
+  const powerBundles = character.power_bundles || [];
+  const empty = magicItems.length === 0 && cyphers.length === 0
+    && dndInventory.length === 0 && powerPacks.length === 0 && powerBundles.length === 0;
+  if (empty) {
+    return (
+      <div className="card-mystic p-8 mt-4 text-center" data-testid="sheet-inventory-empty">
+        <div className="font-display text-lg text-parchment">The pack is empty.</div>
+        <div className="text-mist italic text-sm mt-2">
+          No magic items, cyphers, power packs, or loadout entries recorded yet.
+          {canEditMech && " Open Edit to populate your character's kit."}
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div className="space-y-4 mt-4" data-testid="sheet-inventory">
+      {magicItems.length > 0 && (
+        <div className="card-mystic p-5" data-testid="sheet-inventory-magic-items">
+          <div className="label-ref mb-2">Magic items &amp; boons</div>
+          <table className="w-full text-sm">
+            <thead className="text-[10px] font-ui uppercase tracking-widest text-gold/60">
+              <tr className="border-b border-gold/15">
+                <th className="text-left py-1.5">Item</th>
+                <th className="text-left py-1.5">Slot</th>
+                <th className="text-left py-1.5">Tag</th>
+                <th className="text-left py-1.5 pl-2">Notes</th>
+              </tr>
+            </thead>
+            <tbody>
+              {magicItems.map((it, i) => (
+                <tr key={i} className="border-b border-gold/5">
+                  <td className="py-1.5 text-parchment">{it.name}</td>
+                  <td className="py-1.5 text-mist text-xs font-ui uppercase tracking-widest">{it.slot || "—"}</td>
+                  <td className="py-1.5">
+                    {it.tag && <span className="tag border-gold/50 text-gold-bright text-[10px]">{it.tag}</span>}
+                  </td>
+                  <td className="py-1.5 pl-2 text-mist text-xs">{it.notes || ""}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {cyphers.length > 0 && (
+        <div className="card-mystic p-5" data-testid="sheet-inventory-cyphers">
+          <div className="label-ref mb-2">Cyphers carried</div>
+          <ul className="space-y-1">
+            {cyphers.map((c, i) => (
+              <li key={i} className="text-sm text-parchment font-body">· {typeof c === "string" ? c : c.name}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {dndInventory.length > 0 && (
+        <div className="card-mystic p-5" data-testid="sheet-inventory-dnd">
+          <div className="label-ref mb-2">Inventory</div>
+          <ul className="space-y-1">
+            {dndInventory.map((it, i) => (
+              <li key={i} className="text-sm text-parchment font-body">· {it}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {(powerPacks.length > 0 || powerBundles.length > 0) && (
+        <div className="card-mystic p-5" data-testid="sheet-inventory-packs">
+          <div className="label-ref mb-2">Power packs &amp; bundles</div>
+          <div className="grid sm:grid-cols-2 gap-2">
+            {powerPacks.map((p, i) => (
+              <div key={i} className="border border-gold/15 rounded-sm p-2">
+                <div className="text-sm text-gold-bright font-ui">{p.name}</div>
+                <div className="text-[10px] text-mist">Pack · {p.level ? `Lv ${p.level}` : "—"} · {p.cost_per_level ? `${p.cost_per_level} CP/lvl` : "—"}</div>
+                {p.blurb && <div className="text-[11px] text-mist italic mt-1">{p.blurb}</div>}
+              </div>
+            ))}
+            {powerBundles.map((b, i) => (
+              <div key={`b${i}`} className="border border-arcane/30 rounded-sm p-2">
+                <div className="text-sm text-arcane-light font-ui">{b.name}</div>
+                <div className="text-[10px] text-mist">Bundle · {b.total_cost != null ? `${b.total_cost} CP` : "—"}</div>
+                {b.blurb && <div className="text-[11px] text-mist italic mt-1">{b.blurb}</div>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────────────
+// SheetHistoryPanel — XP ledger from ch.xp_total / ch.xp_unspent +
+// folio.xp_log if present. Read-only summary with timestamps.
+// ────────────────────────────────────────────────────────────────────
+function SheetHistoryPanel({ character }) {
+  const folio = character.folio || {};
+  const xpLog = folio.xp_log || [];
+  return (
+    <div className="space-y-4 mt-4" data-testid="sheet-history">
+      <div className="card-mystic p-5 grid sm:grid-cols-3 gap-3" data-testid="sheet-history-xp">
+        <div className="border border-gold/15 rounded-sm py-3 px-2 text-center">
+          <div className="label-ref">XP earned</div>
+          <div className="font-display text-2xl text-gold">{Number(character.xp_total || 0).toFixed(2)}</div>
+        </div>
+        <div className="border border-gold/15 rounded-sm py-3 px-2 text-center">
+          <div className="label-ref">XP unspent</div>
+          <div className="font-display text-2xl text-gold-bright">{Number(character.xp_unspent || 0).toFixed(2)}</div>
+        </div>
+        <div className="border border-gold/15 rounded-sm py-3 px-2 text-center">
+          <div className="label-ref">Points spent</div>
+          <div className="font-display text-2xl text-parchment">{character.spent?.total_spent ?? 0}<span className="text-mist text-sm"> / {character.total_points}</span></div>
+        </div>
+      </div>
+      {xpLog.length > 0 && (
+        <div className="card-mystic p-5" data-testid="sheet-history-xp-log">
+          <div className="label-ref mb-2">XP log</div>
+          <ul className="space-y-2">
+            {[...xpLog].reverse().slice(0, 30).map((entry, i) => (
+              <li key={i} className="text-sm border-l-2 border-gold/20 pl-3">
+                <div className="text-[10px] text-mist uppercase tracking-widest">
+                  {entry.created_at ? new Date(entry.created_at).toLocaleString() : ""}
+                  {entry.amount != null && <span className="text-gold-bright ml-2">{entry.amount > 0 ? "+" : ""}{entry.amount} XP</span>}
+                </div>
+                <div className="text-parchment font-body">{entry.reason || entry.note || "(no reason given)"}</div>
+                {entry.approved_by && <div className="text-[10px] text-mist italic">Approved by {entry.approved_by}</div>}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }

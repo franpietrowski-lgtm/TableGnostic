@@ -24,6 +24,7 @@ import {
   Scroll, Plus, ArrowRight, Flame, PlayCircle, Users, Sparkles,
   BookOpen, Compass, Dices, BookMarked,
 } from "lucide-react";
+import PlayerHearth from "./PlayerHearth";
 
 const SYSTEM_TINT = {
   "besm-4e":  "#C8A34A",
@@ -81,6 +82,9 @@ export default function Dashboard() {
 
   return (
     <div className="px-5 md:px-12 py-8 md:py-10 max-w-6xl" data-testid="dashboard">
+      {/* ── Player Hearth widget strip (shows when user has ≥1 seated PC) ── */}
+      <PlayerHearth myChars={myChars}/>
+
       {/* ── Hero strip ── */}
       <div className="flex items-end justify-between flex-wrap gap-4 mb-2">
         <div>

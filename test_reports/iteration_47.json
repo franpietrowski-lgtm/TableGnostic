@@ -1,0 +1,56 @@
+{
+  "summary": "V6.14 frontend sprint validated. PlayerHearth strip renders all 3 cards on dashboard for admin GMFran (seated PCs). Navigation via hearth-your-sheet → /app/characters/{id} works. CharacterSheet 4 sub-tabs (identity/mechanics/inventory/history) all render with correct data-testids. Default tab = mechanics. Click-driven hash updates work (#identity / #inventory / #history). Tab-specific panes render correctly: identity-pane on Identity, sheet-inventory (with sheet-inventory-packs sub-panel for BESM Eli) on Inventory, character-journal + sheet-history + sheet-history-xp grid on History. 21 of 24 assertions PASSED.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "CharacterSheet", "issue": "sheetTab useState only reads window.location.hash on initial mount — no hashchange listener. In-session hash changes (page.goto same-path with new hash, browser back/forward, manual address-bar hash edit) do NOT re-sync the active tab. Spec line 'Deep-linked hash pre-selects the tab' works ONLY on FIRST fresh load. Subsequent hash variations within the same SPA session leave the tab stale.", "selector": "useState init at CharacterSheet.jsx:30-34 — needs companion useEffect listening to 'hashchange'", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_assertions": [
+    "login as franpietrowski@gmail.com / PieGod08!!",
+    "[data-testid=player-hearth] visible on /app dashboard",
+    "[data-testid=hearth-your-sheet] / hearth-next-session / hearth-your-codex 3 cards render",
+    "hearth-your-sheet href = /app/characters/244db025742b4bd9a9662f6240e40729 (Eli)",
+    "Empty 'No scheduled session' copy shown in next-session card (no upcoming sessions for primary char's campaign)",
+    "Empty 'No journal entries yet' copy shown in codex card",
+    "+3 other seats counter shows (Eli has 4 total seats across tables)",
+    "[data-testid=sheet-tabs] strip with 4 buttons (sheet-tab-identity/mechanics/inventory/history)",
+    "Default active tab = mechanics (gold-bright class)",
+    "Identity pane hidden by default; appears after sheet-tab-identity click",
+    "Click sheet-tab-identity → URL hash becomes #identity + sheet-identity-pane shown",
+    "Click sheet-tab-inventory → URL hash becomes #inventory + sheet-inventory shown (sheet-inventory-packs sub-panel populated for BESM character)",
+    "Click sheet-tab-history → URL hash becomes #history + character-journal + sheet-history + sheet-history-xp grid shown",
+    "deep-link #history (in-session hash goto) pre-selects history tab (passed because state was already history from prior click)"
+  ],
+  "failed_assertions": [
+    "deep-link #inventory in-session hash goto did NOT pre-select inventory tab",
+    "deep-link #identity in-session hash goto did NOT pre-select identity tab",
+    "deep-link #identity in-session hash goto did NOT show sheet-identity-pane"
+  ],
+  "additional_observations": [
+    "hearth-hp-bar is NOT shown for Eli — folio.dnd_state.hp_max and primary.health_max both 0 for BESM characters (component only renders bar when hpMax>0 — correct behavior).",
+    "hearth-session-live not shown — no in-progress session exists.",
+    "sheet-inventory-magic-items / cyphers / dnd sub-panels NOT shown for Eli (BESM char has no magic_items/cyphers/dnd_inventory) — correct behavior.",
+    "sheet-history-xp-log NOT shown — folio.xp_log is empty/missing for Eli — conditional rendering correct.",
+    "Auth: After login, auto-redirect lands on /app (not /app/dashboard); both render the Dashboard. Direct goto /app/dashboard from external context lost session and stuck on 'SUMMONING' splash — investigate auth gate timing."
+  ],
+  "test_report_links": [],
+  "action_items": [
+    "Add a useEffect in CharacterSheet listening to 'hashchange' to sync sheetTab when URL hash changes mid-session (improves shareable URLs / browser back-forward)."
+  ],
+  "critical_code_review_comments": [
+    "PlayerHearth.jsx clean; correct primary-char selection by updated_at, conditional HP rendering, graceful empty states.",
+    "CharacterSheet.jsx hash deep-link is one-shot (init-only). No hashchange subscriber.",
+    "CharacterSheet.jsx is 876 lines — over the 700-line guideline; consider splitting SheetTabBar / SheetInventoryPanel / SheetHistoryPanel into separate files (already noted by E1 as planned)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (frontend-only sprint)", "frontend": "87.5% (21/24)"},
+  "test_credentials": "franpietrowski@gmail.com / PieGod08!! (admin GMFran)",
+  "seed_data_creation": "None — used existing admin seated PCs (Eli @ char 244db025742b4bd9a9662f6240e40729 on BESM Evereantha 3f2ed01a034f4fdb8f5d686089f2e3a9).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All V6.14 testids verified (player-hearth, hearth-your-sheet, hearth-next-session, hearth-your-codex, hearth-hp-bar, hearth-session-live, sheet-tabs, sheet-tab-{identity|mechanics|inventory|history}, sheet-identity-pane, sheet-inventory, sheet-inventory-empty, sheet-inventory-{magic-items|cyphers|dnd|packs}, sheet-history, sheet-history-xp, sheet-history-xp-log). Login flow: visit /auth?mode=login then submit; redirects to /app. After login, navigate to dashboard from /app (NOT goto /app/dashboard — that loses session sometimes). Test viewport 1920x900.",
+  "rca of the issue": "Hash deep-link in-session failure RCA: CharacterSheet.jsx:30-34 uses `useState(() => readHash())` lazy-initializer which executes ONLY on component mount. React Router treats hash-only URL changes (e.g., /app/characters/X#a → /app/characters/X#b) as the same route and does NOT remount, so the initializer never re-runs. There is no `useEffect` subscribing to window 'hashchange'. Mitigation: add `useEffect(() => { const onHash = () => { const h = window.location.hash.replace('#',''); if (['identity','mechanics','inventory','history'].includes(h)) setSheetTab(h); }; window.addEventListener('hashchange', onHash); return () => window.removeEventListener('hashchange', onHash); }, []);`. Fresh-load deep-linking (user arrives at URL with hash) WAS confirmed working by E1's smoke test — only in-session hash-change is broken."
+}
