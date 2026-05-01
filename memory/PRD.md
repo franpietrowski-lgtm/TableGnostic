@@ -14,6 +14,48 @@
 
 ## 2. Implemented (cumulative, condensed)
 
+### V6.10 — Refactor Sprint + Auto-status rings + Expanded PDF export + Bulk NPC seed (2026-05-01)
+
+**P0 — Refactor sprint (file-size hygiene, zero behavioural change)**
+- `CharacterSheet.jsx` 1411 → **634 lines**. Extracted to:
+  - `sheets/sheetCommon.jsx` — Stat, SimpleListCard, DiceCard, CharacterJournal, Anime5eSupplementView.
+  - `sheets/DndSheetView.jsx` — D&D 5E + Anime 5E hybrid d20 view (chassis + spell slots + class features).
+  - `sheets/CypherSheetView.jsx` — Cypher pools, difficulty tracker, intrusion ledger, skill trains.
+- `CampaignDetail.jsx` 1670 → **804 lines**. Extracted to:
+  - `campaignDetail/KnowledgeTab.jsx` — list/graph/chart views + NodeCard/Detail/Editor.
+  - `campaignDetail/PrimerTab.jsx` — Primer + system-aware Forge Caps + House Rules + ListField.
+- `ReferenceEditor.jsx` 971 → **607 lines**. Extracted to:
+  - `referenceEditor/PowerBundleTemplatePicker.jsx` — D&D-mimic template grid.
+  - `referenceEditor/SpellConversionAtlas.jsx` — read-only conversion library modal.
+  - `referenceEditor/PowerBundleEditor.jsx` — bundle component composer with live CP estimator.
+- All `data-testid` attributes preserved verbatim. ESLint clean across all touched files.
+
+**P1 — Auto-status rings on character sheet**
+- New `GET /api/characters/{cid}/effects` — returns active effects targeting the character (member/owner/GM/admin only).
+- `CharacterStatusRings.jsx` mounted on the sheet under XP queue. Conditionally renders only when ≥1 effect active. 30s polling + manual refresh button. Mirrors the live battlemap status rings.
+
+**P1 — Campaign export bundle expansion**
+- Character appendices now render `folio.journal[]` entries inline (timestamp + author + text), per-PC.
+- New "Appendix · Campaign Timeline" — V6.9 timeline markers grouped by anchoring session.
+- New "Appendix · Chat Transcripts" — verbatim per-session chat logs (capped at 200 lines/session).
+- Hydrated via `db.timeline_markers` + `db.chat_logs` queries in the `/api/campaigns/{cid}/export.pdf` endpoint.
+
+**P1 — Artisan / Evereantha auto-NPC seeding**
+- New `POST /api/campaigns/{cid}/npcs/auto-generate-all?threat_tier=&overwrite=` — bulk-stamps system-appropriate stat_block on every NPC/creature codex node. Idempotent (skips populated nodes unless `overwrite=true`).
+- Shared `_build_stat_block()` helper extracted in `cypher_suggest_anime_cr.py` so the bulk and single-node generators stay in lockstep.
+- `POST /api/admin/seed-evereantha-suite` now AUTO-RUNS the bulk generator on each freshly-seeded campaign (skipped on `skipped_existing` clones). Returns new field: `auto_generated_npc_sheets: List[{campaign_id, system_id, auto_npc_sheets: int}]`.
+
+**Testing — `/app/test_reports/iteration_43.json`**
+- Backend: **6/6 V6.10 + 38/38 regression V6.6→V6.9** (single historical skip retained). New tests at `/app/backend/tests/test_iter43_v610.py`.
+- Frontend: 10/10 campaign tab-* testids driven live; 11/11 refactor-preserved sheet/reference testids verified in their new sub-module locations.
+- All previously-deferred refactor items now CLOSED. CARRY note about `tg_user_id` localStorage gate is a stale historical reference — `grep -r "tg_user_id" /app/frontend/src/` returns ZERO matches; V6.7 fix to `useAuth()` is confirmed in place.
+
+**Deferred to next sprint**
+- Public Canon Registry (landing page) — let GMs publish Delta Drops for discovery.
+- Cmd-K global search across campaigns / codex / characters.
+- Reference Editor visual grouping (5 categories per DESIGN_AUDIT).
+
+
 ### V6.9 — Timeline ↔ Codex bridge + Companion seats + Token size cycler (2026-05-01)
 
 **Timeline ↔ Codex Chart bridge (P0 #1)**
