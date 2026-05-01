@@ -23,6 +23,47 @@
 ### V5.1 — Atelier "Epic Campaign" 8th-phase tab (2026-04-27)
 **Trigger:** GMFran uploaded Guy Sclanders' follow-up book *Epic Campaigns: Digital Edition* (146 pp) and asked for a new tab inside the **"Forge the Master Plot"** Atelier page. The two planes (the existing 7-phase Genesis and the new Epic Campaign) are intentionally INDEPENDENT — usable in tandem, separately, or one-or-the-other; pure GM brainstorming kit. Implemented as `phase === 7` panel inside `CampaignGenesis.jsx`, alongside the existing seven phases. Backend: new `db.epic_campaigns` collection + `routes/epic_campaign.py` (GET/PUT/seed-codex). Frontend: new `EpicCampaignPanel.jsx` (11 sections — Plan/Constraints, Theme, Sentence, OGAS Nemesis, Villains, Expanding Goal, Milestones, Adventures, Seeds, Beginning, Climax — plus Tie-ins picker). The "Sync to Codex" action pushes the Nemesis + each Villain + each Seed into the World Codex as gm-only knowledge nodes; idempotent on re-run.
 
+### V6.7 — Soft party cap + BESM CR kit + NPC sheet generator + Power Bundle on sheet + Design Audit (2026-04-30)
+
+**Soft party cap of 6 (warn, allow)**
+- `/api/anime5e/encounter-budget` now returns `warnings: [...]` array; soft-cap message emits when `party_size > 6`. Existing math unchanged.
+- Frontend EncounterDesigner shows ⚠ on Party label and renders `encounter-designer-warnings` block.
+
+**BESM 4E CR / Encounter Threat-Tier kit**
+- Researched and implemented from BESM 4E p.119+: PowerLevel-CP-based threat tiers — Underling (0.5×PC-CP), Equal (1.0), Boss (1.5), Demigod (2.5).
+- `GET /api/besm/encounter-budget?campaign_id&party_size&difficulty` — returns `pc_cp`, `party_total_cp`, `encounter_budget`, `threat_slots[]` with `max_count` per tier, plus the same soft-cap warning behaviour. Difficulty multipliers: easy 0.7 / medium 0.85 / equal 1.0 / hard 1.25 / deadly 1.5.
+- EncounterDesigner BESM mode: hides level input, shows CP budget + per-tier threat-slot rows (`besm-threat-{tier}`), 'equal' difficulty option added.
+- Mounted on BESM-4E sessions in addition to Anime 5E / D&D 5E.
+
+**NPC / Creature character-sheet auto-generator**
+- `POST /api/campaigns/{cid}/npcs/{nid}/generate-sheet?threat_tier=…` — system-aware draft stat block:
+  - **BESM 4E**: stats (Body/Mind/Soul above baseline 4), 2 attribute starters (Combat Mastery + Tough), 1 skill starter, total CP = pc_cp × tier_ratio.
+  - **Anime 5E / D&D 5E**: AC, HP, six abilities, 2 actions; CR mapping {1/4, 2, 5, 12} for the four tiers.
+  - **Cypher**: level, target_number = 3×level, health, damage, armor (+1 at level≥4).
+- Returns `{node_id, stat_block, saved:false}` so the GM reviews before persisting; non-mutating.
+- GM-only (HTTP 403 for non-GM/non-admin).
+
+**Power Bundle visibility on BESM 4E + Anime 5E character sheet**
+- New `character-power-bundles` section renders activatable bundles with cost / invocation / charges / EP / cooldown / source-spell-mimic line.
+- New `character-forge-power-bundles` card (owner-only) with two link buttons: **+ Power Pack** and **+ Power Bundle**, deep-linked to the Atelier reference editor.
+- Bug fix from V6.7 testing-agent: ownership gate previously read non-existent `localStorage.getItem('tg_user_id')` — switched to `useAuth()` context (`user.id === ch.owner_id`). Forge buttons now actually render for the owner.
+
+**Design Audit document (`/app/memory/DESIGN_AUDIT.md`)**
+- 8-section read-only analysis: top-level "two modes" re-grouping (Atelier ↔ Table) + 15 ranked QoL suggestions + dedicated-page route table + UX paper-cuts + system-personality consistency + things to kill + things to never touch.
+- Highlights for executive review: Genesis ↔ Epic split, Encounter Lab as first-class Atelier section, NPC sheets auto-generation (now shipping in V6.7), per-role landing surfaces, Reference Editor visual grouping, Cmd-K global search.
+- No code changes; pick-and-execute in subsequent sessions.
+
+**Testing — `/app/test_reports/iteration_40.json`**
+- Backend: **72/73 pytest pass** (11 V6.7 new + 61 regression). Single skip is a benign no-D&D-campaign scenario. All 3 new endpoints ✓.
+- Frontend testing-agent caught the dead localStorage key bug — fixed in-place.
+- Minor design notes from agent: BESM demigod tier silently dropped at very small party sizes (n < 1 guard). Document-only; not regressing.
+
+**Deferred to next session (per user direction)**
+- Genesis ↔ Epic split into two Atelier tabs.
+- Timeline view (graphical encounter/session tracker, click-drag nodes, system-themed particles).
+- Cypher Suggest substring/fuzzy hint matching.
+
+
 ### V6.6 — Cypher codex-aware suggest + Anime 5E CR kit + Mobile character PDF + Spell→Bundle converter (2026-04-30)
 
 **Cypher codex-aware suggestions**

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
-import { api, formatApiErrorDetail } from "../lib/api";
+import { api, formatApiErrorDetail, useAuth } from "../lib/api";
 import { Dice6, Edit3, BookOpen, Trash2, Printer } from "lucide-react";
 import BesmTerm from "./ui/BesmTerm";
 import XPApprovalQueue, { XPSpendForm } from "./XPApprovalQueue";
@@ -9,6 +9,7 @@ import CharacterApprovalPanel from "./CharacterApprovalPanel";
 export default function CharacterSheet() {
   const { id } = useParams();
   const nav = useNavigate();
+  const { user } = useAuth();
   const [ch, setCh] = useState(null);
   const [sessions, setSessions] = useState([]);
   const [err, setErr] = useState("");
@@ -531,7 +532,7 @@ export default function CharacterSheet() {
           {/* V6.7 — Forge buttons for Power Pack / Bundle. Visible to
               the owner so they can author new ones via the Atelier. */}
           {(campaign?.system_id === "besm-4e" || campaign?.system_id === "anime-5e")
-            && ch.owner_id === window.localStorage?.getItem?.("tg_user_id") && (
+            && user?.id === ch.owner_id && (
             <div className="card-mystic p-4 mt-4 flex items-center justify-between flex-wrap gap-2"
                  data-testid="character-forge-power-bundles">
               <div>
