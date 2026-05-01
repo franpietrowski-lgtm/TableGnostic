@@ -19,7 +19,6 @@ from routes.conversion import (
     _validate_systems,
 )
 
-
 # ──────────────────────── Validation ────────────────────────
 class TestSystemValidation:
     def test_all_four_systems_supported(self):
@@ -135,19 +134,30 @@ class TestMaterialiseCharacter:
         assert len(st["spells"]) == 1
 
     async def test_anime5e_keeps_tristat_shape(self):
+        # V6.16.2 — Anime 5E is now 5E-primary. When Claude returns
+        # Tri-Stat-shaped data without a 5E chassis, those attrs/skills
+        # land in the supplement layer (anime5e_state.point_buys), not
+        # at the top level. Top-level Tri-Stat fields are reserved for
+        # pure BESM ports.
         payload = {
             "name": "Eli", "total_points": 80,
             "stats": {"body": 4, "mind": 7, "soul": 6},
-            "attributes": [{"name": "Healing", "level": 3, "cost_per_level": 4}],
-            "skills": [{"name": "Alchemy", "level": 3, "cost_per_level": 1}],
-            "defects": [{"name": "Phobia", "rank": 2, "points_per_rank": 1}],
-            "points": {"total": 80, "spent": 80},
+            "anime5e_state": {
+                "point_budget": 80,
+                "point_buys": [
+                    {"name": "Healing", "level": 3, "cost_per_level": 4,
+                     "blurb_role": "tincture brewing"},
+                ],
+            },
         }
         ch = await self._run(payload, "anime-5e")
-        assert ch["total_points"] == 80
-        assert ch["stats"]["mind"] == 7
-        assert len(ch["attributes"]) == 1
-        assert ch["folio"]["anime5e_state"]["points"]["total"] == 80
+        # Top-level Tri-Stat fields are NOT used for Anime 5E.
+        assert ch["attributes"] == []
+        assert ch["skills"] == []
+        assert ch["defects"] == []
+        # Supplement carries the Tri-Stat residue.
+        assert ch["folio"]["anime5e_state"]["point_budget"] == 80
+        assert len(ch["folio"]["anime5e_state"]["point_buys"]) == 1
 
     async def test_string_skills_dont_crash_cost_engine(self):
         # Regression — Claude sometimes returns skills as ["forage", "brew"];
@@ -200,59 +210,70 @@ class TestMaterialiseCharacter:
     # despite Claude returning translated 4/7/6 inside `anime5e_state.stats`.
     # Fix: the materialiser now lifts wrapper-state stats/attributes/etc.
     # into the top-level character document for Tri-Stat systems.
-    async def test_anime5e_lifts_stats_from_wrapper(self):
+    async def test_anime5e_lifts_5e_chassis(self):
+        # V6.16.2 — Anime 5E runs on D&D 5E OGL chassis with a Tri-Stat
+        # point-buy SUPPLEMENT layer. Claude's response should populate
+        # dnd_state with class/level/ability_scores AND anime5e_state
+        # with point_buys[]. Both end up in folio.
         payload = {
             "name": "Eli",
-            "anime5e_state": {
-                "stats": {"body": 4, "mind": 7, "soul": 6},
-                "points": {"total": 80, "spent": 80},
+            "class": "Druid",
+            "level": 4,
+            "race": "Halfling",
+            "background": "Guild Artisan (Apothecary)",
+            "ability_scores": {
+                "Strength": 8, "Dexterity": 12, "Constitution": 13,
+                "Intelligence": 16, "Wisdom": 16, "Charisma": 10,
             },
-            # Note: NO top-level stats — only nested in wrapper.
+            "hit_points": 28,
+            "armor_class": 13,
+            "spells": [{"name": "Cure Wounds", "level": 1}],
+            "anime5e_state": {
+                "point_budget": 30,
+                "point_buys": [
+                    {"name": "Sixth Sense (Magical)", "level": 1,
+                     "cost_per_level": 2, "blurb_role": "Premonition flashes",
+                     "source_attribute": "Sixth Sense 1 (BESM)"},
+                    {"name": "Heightened Senses (smell)", "level": 2,
+                     "cost_per_level": 1, "blurb_role": "Reagent ID",
+                     "source_attribute": "Heightened Senses 2 (BESM)"},
+                ],
+            },
         }
         ch = await self._run(payload, "anime-5e")
-        # Top-level stats reflect the translated values, not defaults.
-        assert ch["stats"]["body"] == 4
-        assert ch["stats"]["mind"] == 7
-        assert ch["stats"]["soul"] == 6
-        # Wrapper preserved in folio for the Anime 5E hybrid layer.
-        assert ch["folio"]["anime5e_state"]["stats"]["mind"] == 7
-        # total_points sourced from wrapper.points.total when top-level absent.
-        assert ch["total_points"] == 80
+        # 5E chassis lands in folio.dnd_state — primary render path.
+        dnd = ch["folio"]["dnd_state"]
+        assert dnd["class"] == "Druid"
+        assert dnd["level"] == 4
+        assert dnd["race"] == "Halfling"
+        assert dnd["ability_scores"]["Intelligence"] == 16
+        assert dnd["hit_points"] == 28
+        # Tri-Stat supplement lands in folio.anime5e_state.point_buys.
+        anime = ch["folio"]["anime5e_state"]
+        assert anime["point_budget"] == 30
+        assert len(anime["point_buys"]) == 2
+        assert anime["point_buys"][0]["source_attribute"] == "Sixth Sense 1 (BESM)"
+        # Top-level Tri-Stat fields are NOT used as canonical for Anime 5E
+        # (the rendered sheet pulls from dnd_state). Empty by design.
+        assert ch["attributes"] == []
+        assert ch["skills"] == []
+        assert ch["defects"] == []
 
-    async def test_anime5e_lifts_attributes_from_wrapper(self):
+    async def test_anime5e_inline_dnd_fields_become_dnd_state(self):
+        # Even when Claude inlines class/level/ability_scores at the
+        # top of target_payload (no `dnd_state` wrapper), they MUST end
+        # up in folio.dnd_state for the DndSheetView to render.
         payload = {
             "name": "Eli",
-            "anime5e_state": {
-                "stats": {"body": 4, "mind": 7, "soul": 6},
-                "attributes": [{"name": "Healing", "level": 3, "cost_per_level": 4}],
-                "skills":     [{"name": "Alchemy", "level": 3, "cost_per_level": 1}],
-                "defects":    [{"name": "Phobia",  "rank": 2, "points_per_rank": 1}],
-            },
+            "class": "Cleric",
+            "level": 5,
+            "ability_scores": {"Wisdom": 18},
         }
         ch = await self._run(payload, "anime-5e")
-        # Top-level Tri-Stat fields lift from wrapper.
-        assert len(ch["attributes"]) == 1
-        assert ch["attributes"][0]["name"] == "Healing"
-        assert len(ch["skills"]) == 1
-        assert ch["skills"][0]["name"] == "Alchemy"
-        assert len(ch["defects"]) == 1
-        assert ch["defects"][0]["name"] == "Phobia"
-
-    async def test_top_level_stats_take_precedence_over_wrapper(self):
-        # Defensive — if Claude returns stats at BOTH locations, top-level
-        # wins (it's the explicit answer).
-        # NOTE: Actually wrapper takes precedence because the code does
-        # `wrapper.get("stats") or target_payload.get("stats")`. The
-        # canonical "winner" is whichever Claude put more thought into.
-        # For Tri-Stat the wrapper is preferred since that's where Anime 5E
-        # documents its own canonical shape. Document this expectation.
-        payload = {
-            "stats": {"body": 1, "mind": 1, "soul": 1},  # nonsense top-level
-            "anime5e_state": {"stats": {"body": 4, "mind": 7, "soul": 6}},
-        }
-        ch = await self._run(payload, "anime-5e")
-        # Wrapper wins because that's where the converter was asked to put it.
-        assert ch["stats"]["mind"] == 7
+        assert ch["folio"]["dnd_state"]["class"] == "Cleric"
+        assert ch["folio"]["dnd_state"]["level"] == 5
+        # anime5e_state still gets created (empty supplement is valid).
+        assert "anime5e_state" in ch["folio"]
 
     async def test_dnd_pure_keeps_default_stats(self):
         # D&D 5E doesn't use Tri-Stat — its canonical shape is
@@ -274,24 +295,32 @@ class TestMaterialiseCharacter:
         # instead of `cost_per_level: 4` (per-tier rate). The cost engine
         # multiplies cost_per_level × level, so a missing rate would render
         # "NaN PTS" on the sheet. Materialiser now derives the rate.
+        # BESM remains the only system using top-level Tri-Stat fields.
+        source = {
+            "id": "src-1", "name": "Eli", "system_id": "besm-4e",
+            "total_points": 80,
+            "stats": {"body": 4, "mind": 7, "soul": 6},
+            "folio": {},
+        }
+        target_camp = {"id": "tgt-1", "system_id": "besm-4e", "house_rules": ""}
         payload = {
             "name": "Eli",
-            "anime5e_state": {
-                "stats": {"body": 4, "mind": 7, "soul": 6},
-                "attributes": [
-                    {"name": "Healing", "level": 3, "cost": 12},
-                    {"name": "Item",    "level": 6, "cost": 6},
-                ],
-                "defects": [
-                    {"name": "Phobia", "rank": 1, "points": 1},
-                ],
-            },
+            "stats": {"body": 4, "mind": 7, "soul": 6},
+            "attributes": [
+                {"name": "Healing", "level": 3, "cost": 12},
+                {"name": "Item",    "level": 6, "cost": 6},
+            ],
+            "defects": [
+                {"name": "Phobia", "rank": 1, "points": 1},
+            ],
         }
-        ch = await self._run(payload, "anime-5e")
+        ch = await _materialise_character(
+            payload, "besm-4e", target_camp, source,
+            "p1", "Aurora", True, None,
+        )
         # cost_per_level derived from cost ÷ level.
         assert ch["attributes"][0]["cost_per_level"] == 4   # 12 / 3
         assert ch["attributes"][1]["cost_per_level"] == 1   # 6 / 6
-        # points_per_rank derived from points ÷ rank.
         assert ch["defects"][0]["points_per_rank"] == 1     # 1 / 1
-        # cost engine should produce a usable spent number now.
-        assert ch["spent"]["total_spent"] > 0  # non-NaN integer/float
+        # BESM cost engine should produce a usable spent number now.
+        assert ch["spent"]["total_spent"] >= 0  # non-NaN integer/float

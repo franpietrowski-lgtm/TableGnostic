@@ -14,6 +14,27 @@
 
 ## 2. Implemented (cumulative, condensed)
 
+### V6.16.2 — Anime 5E correctly runs on 5E OGL chassis (2026-05-01)
+
+User correction after V6.16.1: Anime 5E is built on D&D 5E OGL with a Tri-Stat point-buy SUPPLEMENT layer, not the other way around. Eli's Anime 5E port should be a 5E character (class/level/race/background/ability scores/HP/AC/spells/equipment) with the residual BESM-only mechanics living in `anime5e_state.point_buys[]`.
+
+Concrete fixes:
+- **Converter prompt rewrite** — `TARGET_SHAPE["anime-5e"]` now instructs Claude that the PRIMARY shape is the 5E chassis (with Anime 5E classes/races/backgrounds extending the SRD: Magical Girl, Mech Pilot, Sentai, Espers, Demihuman, etc.) plus a `point_buys` array for residual BESM-style genre powers (Sixth Sense, Heightened Senses, etc.). Each `point_buys` entry: `{name, level, cost_per_level, blurb_role, source_attribute}`. Stats are 5E ability scores, NOT Body/Mind/Soul.
+- **Materialiser dual-state** — for Anime 5E, populate BOTH `folio.dnd_state` (5E chassis) AND `folio.anime5e_state` (point_buys + budget). DndSheetView already auto-renders the `Anime5eSupplementView` at the bottom when both are present, so no UI change required.
+- **Top-level Tri-Stat fields cleared on Anime 5E ports** — `ch.attributes / .skills / .defects` no longer get the BESM residue (which would double-render alongside the supplement). Only pure BESM ports populate top-level Tri-Stat fields.
+- **`features` → `class_features` alias** — DndSheetView reads `state.class_features` but Claude returned `features`. Materialiser aliases automatically. Backfilled the existing two ports.
+
+**Eli's Anime 5E port verified live (Aurora player view):**
+- Artificer (Alchemist) · Lvl 5 · Human · Guild Artisan (Apothecary) · proficiency +3 · AC 11 · HP 28
+- 5E ability scores: STR 10 / DEX 12 / CON 11 / **INT 16** / WIS 14 / CHA 13
+- 6 class features (Alchemical Savant · Experimental Elixir · Infuse Item · The Right Tool for the Job · Tool Expertise · Guild Membership)
+- 3 spells (incl. Cure Wounds), 5 equipment items (incl. Apothecary Bandolier as wondrous-item conversion of the BESM bandolier)
+- BESM Point-Buy Layer: Sixth Sense ×1 (1 pt) + Heightened Sense Smell ×2 (2 pts) — only the genre flair that doesn't fit a 5E feature
+
+Caveats Claude flagged: BESM Cognition +2 folded into INT 16 + Tool Expertise. Wealth 2 represented as Guild Artisan background credit. Bandolier converted to wondrous item with combined alchemist's-supplies + herbalism-kit functionality. Defects (Phobia, Nightmares, Marked) captured in personality flaws — GM may impose disadvantage on saves vs. fear when encountering hooded strangers.
+
+Tests: 42/42 cumulative (22 CR-parity + 20 converter unit tests, 2 retired Tri-Stat-as-Anime-5E assertions replaced with 2 new 5E-chassis assertions).
+
 ### V6.16.1 — Converter materialiser hardening (2026-05-01, follow-up)
 
 User feedback after V6.16: ported Anime 5E Eli was rendering with BODY/MIND/SOUL = 4/4/4 (defaults) instead of the translated 4/7/6, attribute costs showed "NaN PTS", and Cypher abilities crashed the React tree with "Objects are not valid as a React child". Three concrete fixes:

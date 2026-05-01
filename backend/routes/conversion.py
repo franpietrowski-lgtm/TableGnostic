@@ -66,11 +66,28 @@ TARGET_SHAPE = {
         "Body/Mind/Soul (1-12). Page hints from BESM 4E (1-320)."
     ),
     "anime-5e": (
-        "Anime 5E — hybrid 5E + Tri-Stat. Either express mechanics in "
-        "Tri-Stat shape (anime5e_state.points = CP budget like BESM) OR "
-        "in 5E shape (class, level, ability_scores, features). Pick the "
-        "shape that matches the source content's flavour. Stats are "
-        "Body/Mind/Soul, NOT 5E ability scores."
+        "Anime 5E — D&D 5E OGL chassis with a Tri-Stat point-buy "
+        "SUPPLEMENT layer. PRIMARY shape MUST be D&D 5E: class (str), "
+        "level (1-20), race (str), background (str), ability_scores "
+        "(Strength/Dexterity/Constitution/Intelligence/Wisdom/Charisma "
+        "8-20), hit_points, hit_dice (e.g. '5d8+10'), proficiency_bonus, "
+        "armor_class, saving_throws (list of ability names), skills "
+        "(list with proficient flag), features (per class/race/"
+        "background, level-gated), spells (if class casts), spell_slots, "
+        "equipment (with type & properties — including converted weapons), "
+        "alignment. Anime-5E classes/races/backgrounds extend the SRD "
+        "(Magical Girl, Mech Pilot, Sentai, Espers, Demihuman, Neko, "
+        "etc.) — favour those when the source flavour fits. "
+        "ADDITIONALLY, produce `point_buys` — a list of residual "
+        "BESM-style attributes/defects that DON'T cleanly map to a 5E "
+        "feature (e.g. Sixth Sense, Heightened Senses, Item-of-Power-"
+        "style genre powers). Each entry: {name, level, cost_per_level, "
+        "blurb_role, source_attribute}. These layer on top of the d20 "
+        "chassis to capture genre flair the SRD can't carry. Aim for "
+        "the bulk of source mechanics to land in the 5E chassis (class "
+        "features, spells, ability scores) and only the genre-specific "
+        "anime extras to land in `point_buys`. Stats are 5E ability "
+        "scores, NOT Body/Mind/Soul."
     ),
     "dnd-5e": (
         "D&D 5E — strict CC-BY SRD 5.1 only. Express mechanics as a 5E "
@@ -330,58 +347,92 @@ async def _materialise_character(target_payload: Dict[str, Any],
     name = name_override or target_payload.get("name") or source_ch.get("name", "Untitled")
     concept = target_payload.get("concept") or target_payload.get("summary") or source_ch.get("concept", "")
 
-    # ── Resolve canonical state wrapper for this target system ──
+    # ── Resolve canonical state wrapper(s) for this target system ──
     # Claude returns either a wrapper (`anime5e_state: {...}`) or inline
     # fields at the top of target_payload. Build the wrapper first by
     # merging both so downstream lifters see ONE coherent dict.
+    #
+    # Anime 5E is unique: it runs on the D&D 5E OGL chassis as the
+    # PRIMARY shape, with a Tri-Stat point-buy SUPPLEMENT layer for
+    # residual BESM-style genre powers. That means an Anime 5E port
+    # populates BOTH dnd_state (5E chassis) AND anime5e_state.point_buys
+    # (supplement). The DndSheetView already renders Anime5eSupplementView
+    # at the bottom when both are present.
     if target_system == "anime-5e":
-        wrapper_keys = ["points", "stats", "hp", "ep", "acp", "derived",
-                        "level", "ability_scores", "class", "attributes",
-                        "skills", "defects"]
-        wrapper = {**{k: target_payload[k] for k in wrapper_keys if k in target_payload},
-                   **(target_payload.get("anime5e_state") or {})}
-        per_system_key = "anime5e_state"
+        # 5E chassis lives in dnd_state-shaped fields.
+        dnd_keys = ["class", "level", "race", "background",
+                    "ability_scores", "skills", "spells", "features",
+                    "class_features", "equipment", "armor_class",
+                    "hit_points", "hit_dice", "proficiency_bonus",
+                    "alignment", "saving_throws", "spell_slots"]
+        dnd_wrapper = {**{k: target_payload[k] for k in dnd_keys if k in target_payload},
+                       **(target_payload.get("dnd_state") or {})}
+        # DndSheetView reads `class_features` — alias `features` if Claude
+        # used the shorter name and the canonical key isn't already set.
+        if "features" in dnd_wrapper and "class_features" not in dnd_wrapper:
+            dnd_wrapper["class_features"] = dnd_wrapper["features"]
+        # Supplement layer — point_buys + Tri-Stat residue.
+        supp_keys = ["point_buys", "point_budget", "stats", "derived",
+                     "hp", "ep", "acp"]
+        supp_wrapper = {**{k: target_payload[k] for k in supp_keys if k in target_payload},
+                        **(target_payload.get("anime5e_state") or {})}
+        wrapper = dnd_wrapper       # primary shape for top-level field resolution
+        per_system_state = {"dnd_state": dnd_wrapper, "anime5e_state": supp_wrapper}
     elif target_system == "cypher":
         wrapper_keys = ["tier", "descriptor", "type", "focus", "pools",
                         "edge", "effort", "abilities", "cyphers",
                         "artifacts", "shins", "background_connection"]
         wrapper = {**{k: target_payload[k] for k in wrapper_keys if k in target_payload},
                    **(target_payload.get("cypher_state") or {})}
-        per_system_key = "cypher_state"
+        per_system_state = {"cypher_state": wrapper}
     elif target_system == "dnd-5e":
         wrapper_keys = ["class", "level", "race", "background",
                         "ability_scores", "skills", "spells", "features",
-                        "equipment", "armor_class", "hit_points",
-                        "proficiency_bonus", "alignment",
-                        "saving_throws", "spell_slots"]
+                        "class_features", "equipment", "armor_class",
+                        "hit_points", "hit_dice", "proficiency_bonus",
+                        "alignment", "saving_throws", "spell_slots"]
         wrapper = {**{k: target_payload[k] for k in wrapper_keys if k in target_payload},
                    **(target_payload.get("dnd_state") or {})}
-        per_system_key = "dnd_state"
+        # DndSheetView reads `class_features` — alias `features` if Claude
+        # used the shorter name and the canonical key isn't already set.
+        if "features" in wrapper and "class_features" not in wrapper:
+            wrapper["class_features"] = wrapper["features"]
+        per_system_state = {"dnd_state": wrapper}
     else:
         wrapper = {}
-        per_system_key = None
+        per_system_state = {}
 
-    # ── Top-level fields ──
-    # For Tri-Stat systems (BESM / Anime 5E), the rendered sheet reads
-    # ch.stats / ch.attributes / ch.skills / ch.defects directly — the
-    # wrapper is the source of truth. For non-Tri-Stat systems the
-    # Tri-Stat fields are largely vestigial; we still populate them with
-    # reasonable defaults so the cost-engine/UI don't NPE.
-    tristat_stats = (wrapper.get("stats")
-                     or target_payload.get("stats")
-                     or {"body": 4, "mind": 4, "soul": 4})
-    tristat_attrs = (wrapper.get("attributes")
-                     if target_system in ("besm-4e", "anime-5e")
-                     else None)
-    tristat_attrs = tristat_attrs if tristat_attrs is not None else target_payload.get("attributes")
-    tristat_skills = (wrapper.get("skills")
-                      if target_system in ("besm-4e", "anime-5e")
-                      else None)
-    tristat_skills = tristat_skills if tristat_skills is not None else target_payload.get("skills")
-    tristat_defects = (wrapper.get("defects")
-                       if target_system in ("besm-4e", "anime-5e")
-                       else None)
-    tristat_defects = tristat_defects if tristat_defects is not None else target_payload.get("defects")
+    # Top-level Tri-Stat fields. Anime 5E now uses 5E ability scores via
+    # dnd_state — the top-level `stats` (Body/Mind/Soul) is vestigial for
+    # the rendered sheet, but kept populated so any legacy reader works.
+    # For pure BESM ports the top-level fields ARE the canonical surface.
+    if target_system == "anime-5e":
+        # 5E ability scores live in dnd_state.ability_scores. Top-level
+        # stats stay default — the rendered sheet uses DndSheetView.
+        tristat_stats = (target_payload.get("stats")
+                         or {"body": 4, "mind": 4, "soul": 4})
+        # Tri-Stat attributes/skills/defects on Anime 5E ports get
+        # absorbed into anime5e_state.point_buys and 5E features —
+        # don't double-render them at the top level.
+        tristat_attrs = []
+        tristat_skills = []
+        tristat_defects = []
+    else:
+        tristat_stats = (wrapper.get("stats")
+                         or target_payload.get("stats")
+                         or {"body": 4, "mind": 4, "soul": 4})
+        tristat_attrs = (wrapper.get("attributes")
+                         if target_system == "besm-4e"
+                         else None)
+        tristat_attrs = tristat_attrs if tristat_attrs is not None else target_payload.get("attributes")
+        tristat_skills = (wrapper.get("skills")
+                          if target_system == "besm-4e"
+                          else None)
+        tristat_skills = tristat_skills if tristat_skills is not None else target_payload.get("skills")
+        tristat_defects = (wrapper.get("defects")
+                           if target_system == "besm-4e"
+                           else None)
+        tristat_defects = tristat_defects if tristat_defects is not None else target_payload.get("defects")
 
     # total_points may be at top level OR nested under a "points" wrapper
     # (anime5e_state.points.total, cypher's shins, etc.). Fallback to
@@ -416,20 +467,24 @@ async def _materialise_character(target_payload: Dict[str, Any],
     # Carry the source folio (journal, bio, motivations) when keep_folio.
     if keep_folio and source_ch.get("folio"):
         base["folio"] = {**(source_ch.get("folio") or {})}
-    # Per-system state — store the merged wrapper so the system-shaped
+    # Per-system state — store the merged wrapper(s) so the system-shaped
     # views (DndSheetView / CypherSheetView / Anime 5E hybrid layer) can
-    # render directly from it.
-    if per_system_key:
-        base["folio"][per_system_key] = wrapper
+    # render directly from them. Anime 5E populates BOTH dnd_state (5E
+    # chassis) and anime5e_state (point_buys supplement).
+    for k, v in (per_system_state or {}).items():
+        base["folio"][k] = v
     # Stamp a converted-from breadcrumb so cloners can audit.
     base["converted_from"] = {
         "source_character_id": source_ch.get("id"),
         "source_system": source_ch.get("system_id") or "besm-4e",
         "converted_at": now_iso(),
     }
-    # Tri-Stat-shape cost engine only applies to BESM/Anime 5E. For D&D /
-    # Cypher we compute a simplified "spent" so the sheet header is happy.
-    if target_system in ("besm-4e", "anime-5e"):
+    # Tri-Stat-shape cost engine only applies to BESM. Anime 5E is now
+    # 5E-primary with a Tri-Stat point-buy SUPPLEMENT layer — its CP
+    # accounting is on `anime5e_state.point_buys` not on top-level fields.
+    # D&D / Cypher get a `spent.total_spent = 0` stub since their
+    # canonical math lives in dnd_state / cypher_state.
+    if target_system == "besm-4e":
         try:
             base["derived"] = calc_derived(base, target_camp)
             base["spent"] = calc_spent_points(base)
