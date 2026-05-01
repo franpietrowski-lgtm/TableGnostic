@@ -45,6 +45,7 @@ from routes import character_pdf as character_pdf_routes
 from routes import timeline_markers as timeline_markers_routes
 from routes import canon_registry as canon_registry_routes
 from routes import search as search_routes
+from routes import conversion as conversion_routes
 
 app = FastAPI(title="Table-Gnostic API")
 
@@ -108,6 +109,7 @@ app.include_router(character_pdf_routes.router)
 app.include_router(timeline_markers_routes.router)
 app.include_router(canon_registry_routes.router)
 app.include_router(search_routes.router)
+app.include_router(conversion_routes.router)
 
 # Static-file mount: serve uploaded battlemap images from disk so GMs can
 # drop in renders from Inkarnate / DungeonCraft / Talespire / RPGEngine

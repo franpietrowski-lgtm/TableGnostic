@@ -1,0 +1,46 @@
+{
+  "summary": "V6.16 (cross-system Content Converter + Eli multi-system ports + campaign-card parity + Anime-5E logo fix + Pin Confirm Panel + ingest 64MB cap) validated end-to-end. Backend: 50/50 pytest pass (16 converter unit tests + 22 CR-parity tests + 12 new API smoke tests for converter endpoints, Eli character shapes across Cypher/DnD/Anime-5E, Aurora cross-account access, and large-payload ingest). Frontend: Dashboard + /app/campaigns both render compact system pill (data-testid=system-badge-compact) in upper-left plus full SystemBadge below description with 4 distinct colors (ANIME 5E rgb(224,58,142) pink, CYPHER rgb(15,37,64) navy, D&D 5E rgb(122,31,46) maroon, BESM 4E rgb(59,30,99) purple). Anime-5E campaign footer tri-stat-credit img src confirmed as /system-logos/anime5e-tristat-emporium.png alt='Anime 5E logo' (not BESM). Pin Confirm Panel on BESM Maiden → Knowledge Web → Chart: clicking a codex-tree-node opens data-testid=pin-confirm-panel with data-testid=pin-confirm-strip (8 session pills), pin-confirm-cancel + pin-confirm-prev chevron controls present, ESC closes. One issue found: data-testid=convert-character-btn did not render on Eli's character sheet when navigated via Characters-tab link — see action_items.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "ConvertCharacterButton in CharacterSheet header", "issue": "data-testid=convert-character-btn not present in DOM on Eli BESM sheet (URL /app/characters/244db025742b4bd9a9662f6240e40729) for GMFran after 5s wait. CharacterSheet.jsx line 289 gates on `!!(campaign?.is_gm)` — if campaign fetch lags or returns is_gm=false, button hides. Dashboard/Campaigns actions (Director/Start session/XP Ledger) DO render for GMFran on the same campaign, so GM-detection works at the campaign page. Worth checking whether CharacterSheet's campaign fetch resolves is_gm correctly (race between ch fetch and campaign fetch?).", "selector": "[data-testid=convert-character-btn]", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_assertions": [
+    "pytest test_iter49_v616_converter.py — 16/16 pass (validation, coercion, materialise cypher_state/dnd_state/anime5e_state, string-skills regression, folio carryover, converted_from breadcrumb, owner passthrough)",
+    "pytest test_iter48_v615_cr_parity.py — 22/22 pass (regression clean after V6.16 changes)",
+    "pytest test_iter49_v616_api.py — 12/12 pass: Aurora player 403 on /api/convert/content + /api/convert/character; GM 400/422 on unknown target system + missing payload; GM 404/400 on unknown source character; GET /api/characters/{ELI_CYPHER} has folio.cypher_state with tier/descriptor/type/focus/pools; GET /api/characters/{ELI_DND} has folio.dnd_state with class/level/race/ability_scores/spells; GET /api/characters/{ELI_ANIME} has folio.anime5e_state + Tri-Stat stats; Aurora GET /api/characters on all 4 Eli IDs returns 200; Aurora GET /api/campaigns lists all 4 Evereantha campaigns; POST /api/campaigns/{cid}/ingest with >24MB markdown blob does NOT return 413 (cap raised to 64MB).",
+    "Login franpietrowski@gmail.com / PieGod08!! → 200",
+    "Login albanaszak@ymail.com / AuroraTest123! → 200 (player role)",
+    "/app/campaigns renders 5 campaign cards: 5 data-testid=system-badge-compact + 5 data-testid=system-badge, 4 distinct bg colors (anime pink / cypher navy / dnd maroon / besm purple)",
+    "Anime-5E campaign footer tri-stat-credit img src = /system-logos/anime5e-tristat-emporium.png (Anime 5E logo, NOT BESM) — V6.16 cut-1 fix confirmed",
+    "BESM Maiden Knowledge Web → Chart: codex-chart-view renders, 23 codex-tree-nodes + 11 biome-nodes. Click tree-node → pin-confirm-panel opens with pin-confirm-strip + 8 pin-confirm-strip-N pills + pin-confirm-cancel + pin-confirm-prev chevrons. ESC closes the panel (cleanly)."
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_iter49_v616_converter.py",
+    "/app/backend/tests/test_iter49_v616_api.py",
+    "/app/backend/tests/test_iter48_v615_cr_parity.py",
+    "/app/test_reports/pytest/iter49_v616_full.xml"
+  ],
+  "action_items": [
+    "VERIFY convert-character-btn on Eli sheet: either the button gate (campaign?.is_gm) is racing with the campaign fetch (ch loads before campaign, button renders with isGm=false), or the character-scoped campaign lookup used in CharacterSheet.jsx returns is_gm=false for admin GMFran. Suggest: add a loading guard so ConvertCharacterButton waits for `campaign` to be truthy before deciding visibility, OR compute isGm from user.role ∈ ('gm','admin') as a fallback. Main agent can self-test by logging in as GMFran, navigating to any Eli sheet, and confirming data-testid=convert-character-btn is in DOM."
+  ],
+  "critical_code_review_comments": [
+    "ConvertCharacterButton visibility rule (CharacterSheet.jsx:289) relies solely on `campaign?.is_gm`. Admins (role='admin') should also see the button even if the per-campaign is_gm flag isn't set — consider `isGm={!!(campaign?.is_gm) || user?.role === 'admin'}`.",
+    "routes/conversion.py /convert/content validates body before permission check (standard FastAPI behaviour) — that's fine, but it means even non-GM callers get 422 instead of 403 for malformed payloads. Not a bug; just a nuance when designing negative tests.",
+    "Direct-goto to /app/campaigns/{cid} still occasionally hits the SUMMONING splash (pre-existing from iteration_48). Sidebar navigation works reliably — consider persisting auth hydration in the route guard.",
+    "routes/ingest.py 64 MB cap verified live — no 413. LLM truncate cap at 240k chars is configured but was not exercised in this run (would need a real ingest pipeline call)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter49_v616_api.py (new — 12 API smoke tests)"
+  ],
+  "success_rate": {"backend": "100% (50/50 pytest)", "frontend": "~85% — 3 of 4 critical V6.16 UI features fully verified; Convert button visibility needs main-agent verification"},
+  "test_credentials": "franpietrowski@gmail.com / PieGod08!! (GMFran admin); albanaszak@ymail.com / AuroraTest123! (Aurora player)",
+  "seed_data_creation": "None — used existing Eli characters seeded by port_eli_v616.py (BESM 244db025..., Cypher 3c37c7ab..., DnD 733ff0dc..., Anime 7da6f4f5...) and 4 Evereantha campaigns.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "V6.16 backend is solid (50/50 pytest). Three frontend verdicts: (1) campaign-card parity confirmed on both Dashboard and /app/campaigns with 4 distinct system colors — compact pill upper-left + full SystemBadge below description. (2) Anime-5E footer logo is /system-logos/anime5e-tristat-emporium.png per tri-stat-credit img. (3) Pin-confirm-panel with mini-timeline strip + chevron nav works. Outstanding: convert-character-btn render depends on CharacterSheet.jsx passing isGm=true — my run got isGm=false for GMFran on Eli's BESM sheet. Recommend main agent tweak the gate to include admin role. Aurora cross-account flows are all green at the API layer; Aurora-side UI (DndSheetView / CypherSheetView / Tri-Stat Anime) was not separately drilled because main priority was the V6.16-cut features. See iteration_48.json for V6.15 context.",
+  "rca of the issue": "convert-character-btn missing — likely a prop-gate race: CharacterSheet loads `ch` (the character doc) and `campaign` in parallel; ConvertCharacterButton mounts with `isGm = !!(campaign?.is_gm)` and on first render campaign is null → isGm false → button returns null. Since the null branch short-circuits, the button never re-mounts cleanly when campaign arrives. Fix: (a) wrap the button in `{campaign && <ConvertCharacterButton …/>}`, or (b) pass `isGm = user?.role==='admin' || !!(campaign?.is_gm)` so admins always see it. Either one-liner clears the issue."
+}

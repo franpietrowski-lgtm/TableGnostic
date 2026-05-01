@@ -11,6 +11,7 @@ import CharacterPortrait from "./CharacterPortrait";
 import DndSheetView from "./sheets/DndSheetView";
 import CypherSheetView from "./sheets/CypherSheetView";
 import { CharacterJournal } from "./sheets/sheetCommon";
+import ConvertCharacterButton from "./ConvertCharacterButton";
 
 export default function CharacterSheet() {
   const { id } = useParams();
@@ -285,6 +286,7 @@ export default function CharacterSheet() {
           <Link to={`/app/characters/${ch.id}/edit`} className="btn" data-testid="edit-character-btn">
             <Edit3 className="w-4 h-4"/> Edit
           </Link>
+          <ConvertCharacterButton character={ch} isGm={!!(campaign?.is_gm)}/>
           <button onClick={delChar} className="btn btn-danger"><Trash2 className="w-4 h-4"/></button>
         </div>
       </div>

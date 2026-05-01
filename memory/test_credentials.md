@@ -40,9 +40,10 @@ Brute-force protection: 5 failed login attempts per (ip, email) = HTTP 423 lock 
 
 ## Demo accounts
 
-| Email                          | Password       | Role     | Notes                                    |
-|--------------------------------|----------------|----------|------------------------------------------|
-| **franpietrowski@gmail.com**   | **PieGod08!!** | admin    | **GMFran** — sole authoritative account  |
+| Email                          | Password           | Role     | Notes                                    |
+|--------------------------------|--------------------|----------|------------------------------------------|
+| **franpietrowski@gmail.com**   | **PieGod08!!**     | admin    | **GMFran** — sole authoritative account  |
+| **albanaszak@ymail.com**       | **AuroraTest123!** | player   | **Aurora** — owns Eli across all 4 systems for cross-account UX testing (V6.16) |
 
 The previous generic-demo accounts (admin@tablegnostic.com / gm@tablegnostic.com / player@tablegnostic.com) have been **retired in V4.3**. `core/startup.py` actively removes them from the DB on every backend boot.
 
