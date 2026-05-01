@@ -138,6 +138,52 @@ async def transfer_character(ch_id: str, new_owner_id: str,
     return _decorate(fresh)
 
 
+@router.post("/characters/{ch_id}/companions")
+async def assign_companion_owner(ch_id: str, player_id: str,
+                                 user: dict = Depends(get_current_user)):
+    """Add `player_id` to this character's `companion_owners` list. The
+    player gains move-token rights on the battlemap and read-only view of
+    the sheet, without losing any rights for the actual owner. GM/admin only.
+    """
+    ch = await db.characters.find_one({"id": ch_id}, {"_id": 0})
+    if not ch:
+        raise HTTPException(404, "Not found")
+    camp = await db.campaigns.find_one({"id": ch["campaign_id"]}, {"_id": 0})
+    if camp["gm_id"] != user["id"] and user.get("role") != "admin":
+        raise HTTPException(403, "Only the GM/admin may assign companion owners")
+    player = await db.users.find_one({"id": player_id}, {"_id": 0})
+    if not player:
+        raise HTTPException(404, "Player not found")
+    if player_id == ch.get("owner_id"):
+        raise HTTPException(400, "That player already owns this character")
+    await db.characters.update_one(
+        {"id": ch_id},
+        {"$addToSet": {"companion_owners": player_id},
+         "$set": {"updated_at": now_iso()}},
+    )
+    fresh = await db.characters.find_one({"id": ch_id}, {"_id": 0})
+    return _decorate(fresh)
+
+
+@router.delete("/characters/{ch_id}/companions/{player_id}")
+async def revoke_companion_owner(ch_id: str, player_id: str,
+                                 user: dict = Depends(get_current_user)):
+    """Remove `player_id` from this character's companion list. GM/admin only."""
+    ch = await db.characters.find_one({"id": ch_id}, {"_id": 0})
+    if not ch:
+        raise HTTPException(404, "Not found")
+    camp = await db.campaigns.find_one({"id": ch["campaign_id"]}, {"_id": 0})
+    if camp["gm_id"] != user["id"] and user.get("role") != "admin":
+        raise HTTPException(403, "Only the GM/admin may revoke companion owners")
+    await db.characters.update_one(
+        {"id": ch_id},
+        {"$pull": {"companion_owners": player_id},
+         "$set": {"updated_at": now_iso()}},
+    )
+    fresh = await db.characters.find_one({"id": ch_id}, {"_id": 0})
+    return _decorate(fresh)
+
+
 @router.post("/characters/{cid}/journal")
 async def add_journal_entry(cid: str, body: JournalEntryIn,
                             user: dict = Depends(get_current_user)):

@@ -1,0 +1,43 @@
+{
+  "summary": "V6.9 testing — Timeline↔Codex bridge + Companion seats + scale-aware tokens. Backend 100% (7/7 V6.9 incl. 2 new extended tests with real 2nd user; 31/31 regression V6.6/6.7/6.8 still green). Critical battlemap companion-can-move-token-after-assign-and-403-after-revoke flow VERIFIED end-to-end against live backend. Frontend: timeline-panel renders on Atelier→Timeline subtab; all data-testid + helper-text present in source per grep. Codex chart view interactive flow could not be auto-driven because the Codex tab is rendered inside KNOWLEDGE WEB tab strip with text-button selectors (no `tab-codex` testid). All other surfaces verified.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "critical_code_review_comments": [
+    "Campaign-detail tab strip exposes only text labels (CHARACTERS/CHANNELS/KNOWLEDGE WEB/SESSIONS/DECKS/PLAYER PRIMER/ATELIER/DELTA DROP/CUSTOM RULES/INVITE & SHARE). Only `tab-atelier` + `tab-characters` have data-testids. Add `tab-knowledge`, `tab-sessions`, `tab-channels`, `tab-codex`, `tab-decks`, `tab-primer`, `tab-delta`, `tab-rules`, `tab-invite` for testability. Without them the codex/chart drilldown can only be reached via text-content selectors which is brittle.",
+    "Character cards use testid `character-{id}` (not `character-card-{id}` as in some other surfaces). Inconsistent naming — would prefer the `*-card-` prefix seen elsewhere.",
+    "timeline_markers.py is well-bounded (~115 lines) — no concerns. Validation of `session_id` and `codex_node_id` belonging to the campaign is solid (returns 400 if mismatched).",
+    "characters.py companion endpoints use query-param `player_id` (consistent with /transfer). Note that revoke does NOT 404 if player_id was never a companion — DELETE is idempotent which is fine, but consider returning a 404/no-op flag if visibility into accidental no-ops is desired.",
+    "Battlemap upsert_token correctly added the `companion_owners` check (lines 180-188). The companion player is NOT auto-added as a member of the campaign — if GM assigns a companion to someone outside the table, that user still gets 403 from `_is_member` at line 165 before reaching the companion check. This is fine (defence-in-depth) but worth documenting: companions must already be seated.",
+    "Carry V6.7→V6.9: CharacterSheet.jsx ownership gate using non-existent localStorage key `tg_user_id` (forge-power-bundles) — still unresolved, not in V6.9 scope but tracked.",
+    "PRD-deferred refactor of CharacterSheet/CampaignDetail/ReferenceEditor (4052 lines across 3 files) acknowledged. Recommend prioritising next sprint."
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_iter42_v69.py",
+    "/app/backend/tests/test_iter42_v69_extra.py",
+    "/app/test_reports/pytest/iter42_v69.xml"
+  ],
+  "action_items": [
+    "[OPTIONAL] Add data-testid attributes to remaining campaign-detail tab buttons (tab-codex/tab-knowledge/tab-sessions/etc.) for stable Playwright drilldown into CodexChartView and other panes.",
+    "[CARRY] Fix CharacterSheet.jsx forge-power-bundles ownership gate (tg_user_id localStorage misnamed key)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter42_v69_extra.py (NEW — 2 extended tests with real 2nd registered player covering companion assign+revoke verified-via-GET, plus battlemap companion-can-move-token + 403-after-revoke)"
+  ],
+  "success_rate": {
+    "backend": "100% (7/7 V6.9 [4 prior + 2 new extended + 1 skip resolved] + 31/31 regression)",
+    "frontend": "Partial — timeline-panel verified rendered live; CodexChartView/CompanionAssignPanel data-testids verified in source via grep but not driven end-to-end due to missing `tab-codex` testid on campaign tab strip"
+  },
+  "test_credentials": "franpietrowski@gmail.com / PieGod08!! (admin/GM) verified working via REST + UI",
+  "seed_data_creation": "1 throwaway player account TEST_companion_*@example.com per test_iter42_v69_extra run. Player is auto-added to BESM Evereantha campaign via invite-accept. Cleanup: token added to battlemap is removed at end of test; companion assignment is revoked at end of test. No persistent corruption.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Run: cd /app/backend && python -m pytest tests/test_iter42_v69.py tests/test_iter42_v69_extra.py tests/test_iter41_v68.py tests/test_iter40_v67.py tests/test_iter39_v66.py -v. The new extended file proves: (a) companion assignment persists + revocation persists (verified via GET on character), (b) GM-created token bound to character → companion player POST /map/tokens succeeds with x/y change, (c) after revoke, same companion POST returns 403. BESM Evereantha campaign id: 05b97c8b010d47e5882b9cf5177e62d7. Login route: /auth?mode=login (input testids: auth-email-input, auth-password-input). Post-login lands at /app. Campaign deep link: /app/campaigns/{cid}. Atelier tab in campaign detail has testid `tab-atelier` and reveals `atelier-subtab-{workshop|genesis|epic|timeline|references}`. Other campaign tabs DO NOT have data-testid (text-button only) — recommend main agent add `tab-codex` etc. so future sprints can drive CodexChartView automatically. CodexChartView/TimelinePanel/CompanionAssignPanel data-testids all present per grep: codex-chart-view, codex-chart-pin-bar, codex-chart-active-session, codex-chart-pin-feedback, codex-chart-node-{nid}, codex-chart-pin-{nid}, timeline-panel, timeline-marker-{mid}, timeline-marker-remove-{mid}, companion-assign-panel, companion-list-empty, companion-list, companion-row-{pid}, companion-revoke-{pid}, companion-assign-{pid}. Battlemap helper text grep on line 782: 'shift+right-click to cycle size' — confirmed.",
+  "rca of the issue": "No defects in V6.9 scope. Frontend partial coverage is purely a test-driving gap (missing tab-codex testid), not a functional bug — CodexChartView itself is correctly wired with all expected data-testids and the live timeline-panel render confirms the parent campaign route works."
+}

@@ -414,6 +414,14 @@ export default function Battlemap({
     if (!window.confirm("Remove this token?")) return;
     await api.delete(`/sessions/${sessionId}/map/tokens/${id}`).catch(() => {});
   };
+  // V6.9 — cycle a token's grid-size (1 → 2 → 3 → 4 → 1). Shift+right-click
+  // on a token while in select mode. Token visuals are already cell-zoom
+  // aware (size is a multiplier of grid_size_px), so this is the single
+  // missing handle to grow/shrink a creature inline.
+  const cycleTokenSize = async (t) => {
+    const next = ((Math.round(t.size || 1) % 4) + 1);
+    await sendToken({ ...t, size: next });
+  };
   const removeWall = async (id) => {
     if (!isGm) return;
     await api.delete(`/sessions/${sessionId}/map/walls/${id}`).catch(() => {});
@@ -715,7 +723,14 @@ export default function Battlemap({
             <button
               key={t.id}
               type="button"
-              onContextMenu={isGm ? (e) => { e.preventDefault(); removeToken(t.id); } : undefined}
+              onContextMenu={isGm ? (e) => {
+                e.preventDefault();
+                if (e.shiftKey) {
+                  cycleTokenSize(t);
+                } else {
+                  removeToken(t.id);
+                }
+              } : undefined}
               className={`absolute rounded-full border-2 flex items-center justify-center font-display text-base shadow-[0_2px_8px_rgba(0,0,0,0.6)]
                 ${isActive ? "ring-2 ring-gold ring-offset-1 ring-offset-black animate-pulse" : ""}
                 ${tokenIsMine(t) ? "cursor-grab active:cursor-grabbing" : "cursor-not-allowed"}`}
@@ -764,7 +779,7 @@ export default function Battlemap({
         {isMobile
           ? `View-only on mobile. ${losEnabled ? "Walls block your line of sight." : ""}`
           : isGm
-            ? "GM · select to move tokens · fog: click hide / shift-click reveal · wall: click+drag · ruler: click+drag · right-click token to remove"
+            ? "GM · select to move tokens · fog: click hide / shift-click reveal · wall: click+drag · ruler: click+drag · right-click token to remove · shift+right-click to cycle size"
             : `Drag tokens you own. Gold ring = active turn. ${losEnabled ? "Walls block your line of sight." : "Line-of-sight off — seeing all."}`}
       </div>
     </div>

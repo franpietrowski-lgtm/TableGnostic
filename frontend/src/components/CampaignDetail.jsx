@@ -569,7 +569,7 @@ function KnowledgeTab({ camp, nodes, edges, onRefresh }) {
       {showNew && <NodeEditor camp={camp} onClose={() => setShowNew(false)} onSaved={() => { setShowNew(false); onRefresh(); }}/>}
 
       {view === "chart" ? (
-        <CodexChartView campId={camp.id}/>
+        <CodexChartView campId={camp.id} isGm={camp.is_gm}/>
       ) : view === "graph" ? (
         <div>
           <KnowledgeGraph nodes={filtered} edges={edges}

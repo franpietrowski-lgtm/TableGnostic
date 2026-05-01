@@ -172,13 +172,20 @@ async def upsert_token(sid: str, body: TokenIn,
     existing = next((t for t in state["tokens"] if t["id"] == incoming["id"]), None)
     is_gm = _is_gm(user, camp)
     if existing and not is_gm:
-        # Player moves: must own the linked character.
+        # Player moves: must own the linked character OR be an
+        # explicitly-assigned companion owner (V6.9 sidekick model).
         cid = existing.get("character_id")
         if not cid:
             raise HTTPException(403, "Only the GM may move unbound tokens")
-        ch = await db.characters.find_one({"id": cid}, {"_id": 0, "owner_id": 1})
-        if not ch or ch.get("owner_id") != user["id"]:
-            raise HTTPException(403, "You do not own that character")
+        ch = await db.characters.find_one(
+            {"id": cid}, {"_id": 0, "owner_id": 1, "companion_owners": 1},
+        )
+        if not ch:
+            raise HTTPException(403, "Linked character not found")
+        is_owner = ch.get("owner_id") == user["id"]
+        is_companion = user["id"] in (ch.get("companion_owners") or [])
+        if not (is_owner or is_companion):
+            raise HTTPException(403, "You do not own that character or its companion seat")
     if not existing and not is_gm:
         raise HTTPException(403, "Only the GM may add tokens")
 

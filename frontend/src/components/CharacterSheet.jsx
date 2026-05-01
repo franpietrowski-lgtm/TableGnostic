@@ -5,6 +5,7 @@ import { Dice6, Edit3, BookOpen, Trash2, Printer } from "lucide-react";
 import BesmTerm from "./ui/BesmTerm";
 import XPApprovalQueue, { XPSpendForm } from "./XPApprovalQueue";
 import CharacterApprovalPanel from "./CharacterApprovalPanel";
+import CompanionAssignPanel from "./CompanionAssignPanel";
 
 export default function CharacterSheet() {
   const { id } = useParams();
@@ -198,6 +199,14 @@ export default function CharacterSheet() {
             isGm={!!(campaign?.is_gm)}
             campaignHouseRules={campaign?.house_rules || ""}
             onChanged={load}/>
+          {campaign?.is_gm && (
+            <CompanionAssignPanel
+              characterId={ch.id}
+              campaignId={ch.campaign_id}
+              ownerId={ch.owner_id}
+              companions={ch.companion_owners || []}
+              onChanged={load}/>
+          )}
         </div>
         <div className="flex gap-2">
           <button onClick={async () => {

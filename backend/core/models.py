@@ -279,6 +279,11 @@ class CharacterIn(BaseModel):
     notes: str = ""
     published: bool = False
     folio: Dict[str, Any] = Field(default_factory=dict)
+    # V6.9 — Companion / sidekick assignment. Players whose user_id is in this
+    # list are allowed to MOVE this character's token on the battlemap and
+    # view its sheet read-only. The owner (`owner_id`) always retains full
+    # control regardless. GM-only field; players cannot self-assign.
+    companion_owners: List[str] = Field(default_factory=list)
 
 
 class JournalEntryIn(BaseModel):

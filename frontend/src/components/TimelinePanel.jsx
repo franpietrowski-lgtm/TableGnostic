@@ -1,19 +1,14 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useCallback } from "react";
 import { api, formatApiErrorDetail } from "../lib/api";
-import { Calendar, Swords, BookOpen, Star, RefreshCw } from "lucide-react";
+import { Calendar, Swords, Star, RefreshCw, Pin, X } from "lucide-react";
 
 /**
  * TimelinePanel — V6.8 graphical session/encounter tracker.
  *
- * The user explicitly clarified: encounters and sessions are PRODUCTS
- * of the plot phases, not anchored to one. So we track them on a
- * timeline indexed by the session's `scheduled_at` / `played_at`,
- * with intra-session encounters (codex `encounter` nodes linked to
- * that session) clustered around their parent session.
- *
- * GM-only authoring surface. Click + drag anywhere on the lane to
- * adjust order; release to persist via PATCH /sessions/{id} or
- * /nodes/{id} (rank field).
+ * Sessions form a horizontal spine. Encounters cluster above the parent
+ * session. Codex-driven Timeline markers (V6.9) hang BELOW the spine —
+ * GMs spawn them by clicking a node in `CodexChartView` while a session
+ * is selected as the "active" anchor.
  *
  * System-themed flourishes:
  *   * besm-4e   — gold lozenge nodes on a parchment rule
@@ -31,40 +26,62 @@ const SYSTEM_VIBES = {
 export default function TimelinePanel({ campId, systemId, isGm }) {
   const [sessions, setSessions] = useState([]);
   const [nodes, setNodes] = useState([]);
+  const [markers, setMarkers] = useState([]);
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(true);
   const [hovered, setHovered] = useState(null);
   const containerRef = useRef(null);
   const vibe = SYSTEM_VIBES[systemId] || SYSTEM_VIBES["besm-4e"];
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true); setErr("");
     try {
-      const [s, ns] = await Promise.all([
+      const [s, ns, m] = await Promise.all([
         api.get(`/campaigns/${campId}/sessions`).then((r) => r.data),
         api.get(`/campaigns/${campId}/nodes`).then((r) => r.data),
+        api.get(`/campaigns/${campId}/timeline-markers`).then((r) => r.data).catch(() => []),
       ]);
-      // Order sessions by scheduled_at ascending, fallback to created_at.
       const ordered = (s || []).slice().sort((a, b) => {
         const ta = new Date(a.scheduled_at || a.played_at || a.created_at || 0).getTime();
         const tb = new Date(b.scheduled_at || b.played_at || b.created_at || 0).getTime();
         return ta - tb;
       });
       setSessions(ordered);
-      // Encounters = nodes with type encounter / npc-encounter and a session_id link.
       setNodes((ns || []).filter((n) => ["encounter", "set-piece"].includes(n.type)));
+      setMarkers(m || []);
     } catch (e) {
       setErr(formatApiErrorDetail(e.response?.data?.detail) || e.message);
     } finally { setLoading(false); }
-  };
+  }, [campId]);
 
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [campId]);
+  useEffect(() => { load(); }, [load]);
+
+  // Listen for marker-added events from CodexChartView elsewhere on the page.
+  useEffect(() => {
+    const onAdded = (ev) => {
+      if (ev?.detail?.campId === campId) load();
+    };
+    window.addEventListener("tg:timeline-marker-added", onAdded);
+    return () => window.removeEventListener("tg:timeline-marker-added", onAdded);
+  }, [campId, load]);
+
+  const removeMarker = async (mid) => {
+    if (!isGm) return;
+    if (!window.confirm("Remove this timeline marker?")) return;
+    try {
+      await api.delete(`/campaigns/${campId}/timeline-markers/${mid}`);
+      setMarkers((prev) => prev.filter((x) => x.id !== mid));
+    } catch (e) {
+      alert(formatApiErrorDetail(e.response?.data?.detail) || "Delete failed.");
+    }
+  };
 
   if (loading) return <div className="text-mist text-xs italic">Drawing the timeline…</div>;
   if (err) return <div className="text-ember text-xs">{err}</div>;
 
   const totalCount = sessions.length;
   const encountersBySession = (sid) => nodes.filter((n) => (n.session_id || n.linked_session_id) === sid);
+  const markersBySession = (sid) => markers.filter((m) => m.session_id === sid);
 
   return (
     <div className="card-mystic p-5" data-testid="timeline-panel">
@@ -74,7 +91,7 @@ export default function TimelinePanel({ campId, systemId, isGm }) {
             <Calendar className="w-4 h-4"/> Campaign Timeline
           </div>
           <div className="text-[11px] text-mist italic">
-            Sessions on the spine; encounters cluster around their parent session. Hover any node to inspect.
+            Sessions on the spine; encounters cluster above, codex pins below. Hover any node to inspect.
           </div>
         </div>
         <button onClick={load} className="btn btn-ghost text-xs"
@@ -95,15 +112,16 @@ export default function TimelinePanel({ campId, systemId, isGm }) {
             <div className="absolute inset-0 rounded-full"
                  style={{ background: `linear-gradient(90deg, ${vibe.rule}00, ${vibe.rule}, ${vibe.rule}00)` }}/>
           </div>
-          {/* Session nodes laid out evenly */}
+          {/* Session columns */}
           <div className="relative flex items-start justify-between gap-2 mt-[-30px] min-w-[600px]">
             {sessions.map((s, idx) => {
               const enc = encountersBySession(s.id);
+              const mks = markersBySession(s.id);
               const isHovered = hovered === s.id;
               return (
                 <div key={s.id}
                      className="relative flex flex-col items-center"
-                     style={{ minWidth: 110 }}
+                     style={{ minWidth: 120 }}
                      data-testid={`timeline-session-${s.id}`}
                      onMouseEnter={() => setHovered(s.id)}
                      onMouseLeave={() => setHovered(null)}>
@@ -155,6 +173,34 @@ export default function TimelinePanel({ campId, systemId, isGm }) {
                       </span>
                     )}
                   </div>
+                  {/* Codex markers below the session */}
+                  {mks.length > 0 && (
+                    <div className="mt-2 flex flex-col items-center gap-1 max-w-[140px]"
+                         data-testid={`timeline-markers-${s.id}`}>
+                      {mks.map((m) => (
+                        <span key={m.id}
+                              className="tag text-[9px] inline-flex items-center gap-1
+                                         px-1.5 py-0.5 rounded-sm border group"
+                              style={{ borderColor: (m.color || "#C8A34A") + "66",
+                                       color: m.color || "#C8A34A",
+                                       background: (m.color || "#C8A34A") + "14" }}
+                              title={m.label}
+                              data-testid={`timeline-marker-${m.id}`}>
+                          <Pin className="w-2.5 h-2.5"/>
+                          <span className="truncate max-w-[80px]">{m.label}</span>
+                          {isGm && (
+                            <button
+                              onClick={() => removeMarker(m.id)}
+                              className="opacity-0 group-hover:opacity-100 ml-0.5 transition"
+                              title="Remove marker"
+                              data-testid={`timeline-marker-remove-${m.id}`}>
+                              <X className="w-2.5 h-2.5"/>
+                            </button>
+                          )}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -164,8 +210,7 @@ export default function TimelinePanel({ campId, systemId, isGm }) {
 
       <div className="mt-4 text-[11px] text-mist italic">
         <Star className="w-3 h-3 inline -mt-0.5 mr-1 text-gold-bright"/>
-        Sessions are the spine; encounters bloom from each. Drag-to-reorder coming next sprint.
-        {isGm && " GM tip: link an encounter node to its session (set the node's session_id) to see it cluster here."}
+        Sessions are the spine; encounters bloom from each. Click codex chart nodes (with a session selected) to drop pins below.
       </div>
     </div>
   );
