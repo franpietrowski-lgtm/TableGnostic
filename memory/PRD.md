@@ -14,6 +14,35 @@
 
 ## 2. Implemented (cumulative, condensed)
 
+### V6.11 — User-feedback batch: modal vignette + Director session picker + worldbuilding chart V2 + character portrait + how-to guide (2026-05-01)
+
+**Batch 1 — UX hygiene & architecture cleanup**
+- **Modal vignette/blur fix** — DeltaDropPanel, SpellConversionAtlas, PowerBundleTemplatePicker, ChannelsPanel thread-drawer all migrated from `bg-black/80` (no blur) → `bg-void/90 backdrop-blur-md` for proper page isolation. Fixes content bleed-through reported by user.
+- **Director's Console: phase → session picker** — Replaced "Live Atelier phase" hardcoded enum dropdown with `director-session-picker` listing sessions in their GM-defined timeline order. Added `Session.sequence_index` field + `PUT /api/campaigns/{cid}/sessions/reorder` to support backstory / prologue / time-shenanigans sessions whose timeline position diverges from play date.
+- **Atelier ↔ Genesis redundancy** — Removed top-bar "Atelier" button from CampaignDetail header (was duplicate of Atelier tab + Genesis sub-tab). Genesis flow truncated from 9 phases → 7 phases (Phase 8 Epic + Phase 9 Reference Library now live ONLY as their dedicated Atelier sub-tabs).
+- **Encounter Builder field labels** — every input in `NpcRow` now carries an explicit visible `label-ref` (NPC name · Role · State · Location in scene · Current intent · Count · Challenge Rating · Level (1-10) · Total CP).
+- **Creatures bucket** — `_gather_npc_pool` in `routes/director.py` now separates `type=creature` codex nodes into `source="creatures"`. NpcPool UI groups them under "Codex · Creatures & Beasts" alongside the existing People bucket.
+
+**Batch 2 — Content & feature work**
+- **BESM 4E in-sheet inline level editors** — Owners and GMs can edit attribute Level, skill Level, and defect Rank directly on the character sheet via tiny inline numeric inputs. Updates PUT to `/api/characters/{id}`. Cost auto-recomputes server-side. Testing-agent caught + auto-fixed a bug where the PUT body was missing required `campaign_id`/`name`; fix spreads full character body.
+- **Character portrait uploader** — New `CharacterPortrait.jsx` component on every sheet header. POST `/api/uploads/character-portrait/{cid}` (multipart, 4 MB cap, PNG/JPEG/WEBP). Persists `portrait_url` on the character document. Falls back to a stylised silhouette placeholder when no portrait set.
+- **Worldbuilding Chart V2** — `CodexChartView.jsx` rewritten:
+  - **World Creation Tree** — organisational chart rooted on "Creation · Beginning", branching into Population · Geography · History pillars, fanning out into declared sub-branches (`fields.pillar` + `fields.pillar_branch`). Auto-infers from node type when not explicitly set.
+  - **Biome Pyramid** — content-aware 4×3 grid (Hot/Warm/Cool/Cold × Wet/Balanced/Dry) reading `fields.temperature` & `fields.humidity` on location nodes. Auto-falls-back to 11 sample biomes when no GM data exists so the chart never feels empty.
+- **How-To interactive guide** — New `/app/help` route. 8 recipe cards (Author campaign · Build PC · Run encounter · Map world · Run live session · Build Timeline · Delta Drop · Export PDF), each expanding into numbered step-by-step. Sidebar nav-help link added.
+
+**Testing — `/app/test_reports/iteration_44.json`**
+- Backend: **6/6 V6.11 + 41/41 V6.6-V6.10 regression** (1 historical skip retained, 1 V6.11 skip when test character has no attributes — both seed-dependent).
+- Frontend: 9/9 critical surfaces live-verified post-Evereantha-reset. Testing agent caught + auto-fixed inline-edit 422 bug.
+- 1 false-negative finding (NPC field labels not detected) — labels render correctly inside `NpcRow`, but only once an NPC is added; agent scanned empty encounter.
+- Stale CARRY note re `tg_user_id` localStorage gate — `grep -r "tg_user_id" /app/frontend/src/` returns ZERO matches, V6.7 fix permanently in place. PRD-removed.
+
+**Deferred to future sprints**
+- Click-and-drag session reorder UI on the Timeline panel (backend `PUT .../sessions/reorder` endpoint exists; UI handle pending).
+- Character portrait in PDF export bundle (currently text-only sheet appendix).
+- Public Canon Registry, Cmd-K global search, Reference Editor visual grouping (P2).
+
+
 ### V6.10 — Refactor Sprint + Auto-status rings + Expanded PDF export + Bulk NPC seed (2026-05-01)
 
 **P0 — Refactor sprint (file-size hygiene, zero behavioural change)**
