@@ -1,0 +1,50 @@
+{
+  "summary": "V6.7 testing — all 3 new backend surfaces PASS (11/11 new tests in test_iter40_v67.py + 61 regression = 72 passed, 1 skipped). Backend: anime5e soft-cap warning fires at party_size=8 & is absent at 4; BESM encounter-budget returns pc_cp/party_total_cp/encounter_budget/threat_slots[underling,equal,boss,demigod] with proper shape + 400 on non-besm + 403 for non-member; NPC generate-sheet returns system-specific stat blocks (besm-4e: stats+attributes+skills; anime-5e/dnd-5e: ac+hp+abilities+actions; cypher: level+target_number+health+damage) + 403 for non-GM. Frontend: EncounterDesigner component has all required testids (encounter-designer, besm-threat-{tier}, encounter-designer-warnings, encounter-designer-level hidden on BESM, equal option in difficulty dropdown). FRONTEND BUG FOUND: CharacterSheet.jsx:534 ownership gate for forge-power-* buttons uses non-existent localStorage key 'tg_user_id' — auth system stores token in 'tg_token' and exposes user via useAuth() context. Result: character-forge-power-bundles card NEVER renders for any user.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "CharacterSheet.jsx:534",
+        "issue": "Owner check reads window.localStorage.getItem('tg_user_id') but no code path ever SETS 'tg_user_id' (auth stores token under 'tg_token' and user via useAuth() context). Consequence: the character-forge-power-bundles card with forge-power-pack-link and forge-power-bundle-link buttons NEVER renders, even for the character's owner. Review-spec feature (6b) is effectively dead code.",
+        "selector": "[data-testid='character-forge-power-bundles']",
+        "priority": "HIGH"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "critical_code_review_comments": [
+    "CharacterSheet.jsx:534 — dead ownership check. Fix: replace `ch.owner_id === window.localStorage?.getItem?.('tg_user_id')` with the useAuth() hook (`const { user } = useAuth(); … user?.id === ch.owner_id`). Same file already imports/uses context elsewhere.",
+    "CharacterSheet.jsx is now 1411 lines (up from 1348 in V6.6) — definitely past the 700-line guideline. Recommend splitting the power-packs / power-bundles / forge sections into a PowerBundlesSection.jsx sub-component.",
+    "EncounterDesigner.jsx systemId prop defaults to 'anime-5e' (line 15) and SessionView mounts it with systemId={campaign?.system_id} (line 539). Good. BESM/non-BESM conditional rendering on lines 66-74/88-105/143-176 is clean.",
+    "BESM encounter-budget endpoint uses integer floor for max_count (line 352). For a demigod-tier foe (ratio 2.5) on a party of 4 at 'equal' difficulty, `encounter_budget // (pc_cp*2.5)` often yields 0 — so the 'demigod' slot is silently omitted from the response (the `if n >= 1` guard on line 353). Not a bug per se, but review spec expected all 4 tiers. Verified: on the seeded BESM campaign at party_size=4 + hard, only underling/equal/boss show up. Consider returning slots with max_count=0 so the UI can render 'not affordable' rows.",
+    "generate-sheet endpoint does NOT validate threat_tier — any value falls through to the default 'equal' mapping silently. Consider explicit 400 on bad input.",
+    "generate-sheet for besm-4e hardcodes 2 attributes (Combat Mastery + Tough) and 1 skill regardless of codex node kind. A 'creature' vs 'npc' node should probably yield different attribute rosters — current behaviour is system-agnostic within BESM."
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_iter40_v67.py",
+    "/app/test_reports/pytest/iter40_v67.xml",
+    "/app/test_reports/pytest/iter40_combined.xml"
+  ],
+  "action_items": [
+    "[HIGH] Fix CharacterSheet.jsx:534 — replace localStorage.getItem('tg_user_id') with useAuth() user.id. Without this, Feature #6b (forge-power-pack-link / forge-power-bundle-link buttons) is invisible in production.",
+    "[MED] BESM generate-sheet demigod tier silently dropped at low party sizes when `n < 1`. Either include zero-count slots or document the omission.",
+    "[LOW] Split CharacterSheet.jsx (1411 lines) into sub-components — well past 700-line guideline."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter40_v67.py (NEW — 11 tests, all passing)"
+  ],
+  "success_rate": {
+    "backend": "100% (72/73 executed pass, 1 skipped; 0 failures across V6.7 new + V6.6/V6.5/V6.4/V6.2/V6.1 regression)",
+    "frontend": "83% — testids all present and EncounterDesigner conditional logic correct, but CharacterSheet forge-bundle ownership gate is broken (dead localStorage key)"
+  },
+  "test_credentials": "franpietrowski@gmail.com / PieGod08!! (admin/GM) — verified working via REST login, token returned in JSON",
+  "seed_data_creation": "Created 2 throwaway player accounts (TEST_v67_besmnm_*@example.com and TEST_v67_npcsh_*@example.com) for 403-gate tests. No other data seeded.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Run: cd /app/backend && python -m pytest tests/test_iter40_v67.py -v. Regression: run the combined set (iter34/35/37/38/39/40) — 72 pass, 1 skipped. Key finding for main agent: grep -rn 'tg_user_id' /app/frontend/src/ — only 1 occurrence in CharacterSheet.jsx:534, and it's referring to a key that never gets set. The rest of the app uses useAuth() context + tg_token for bearer. BESM campaign used: aecff59… (seeded). The demigod threat tier may be absent from BESM encounter-budget output when party_size × pc_cp × difficulty_mult < 2.5 × pc_cp (i.e. very small parties on easy diff) — design-expected per the `if n >= 1` guard but worth a product call.",
+  "rca of the issue": "CharacterSheet.jsx:534 bug — V6.7 added a new ownership-gated 'Power Forge' card. The author wrote `ch.owner_id === window.localStorage?.getItem?.('tg_user_id')` but `tg_user_id` is never set anywhere in the codebase (grep -rn 'tg_user_id' /app/frontend/src/ returns only line 534 itself). The rest of the app uses `useAuth()` from /app/frontend/src/lib/api.js which provides a `user` object via React context, and the auth token lives under localStorage key `tg_token`. Fix: `import { useAuth } from '../lib/api';` then `const { user } = useAuth();` and change the gate to `user?.id === ch.owner_id`. Alternatively, if the author wanted a pure-localStorage path, the auth flow would need to additionally `localStorage.setItem('tg_user_id', data.user.id)` in login/register handlers in lib/api.js. Backend endpoints for V6.7 all behave correctly — bug is strictly frontend."
+}

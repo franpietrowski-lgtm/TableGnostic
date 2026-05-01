@@ -529,10 +529,14 @@ export default function SessionView() {
             onPick={(notation, lbl) => { setRoll(notation); setLabel(lbl); }}
           />
         </div>
-        {/* V6.6 — Encounter Designer on Anime 5E / D&D 5E sessions only. */}
+        {/* V6.6/V6.7 — Encounter Designer (Anime 5E / D&D 5E XP-based, BESM 4E CP-based). */}
         {campaign?.is_gm
-          && (campaign?.system_id === "anime-5e" || campaign?.system_id === "dnd-5e") && (
-          <EncounterDesigner className="mt-3" partySize={(characters || []).length || 4}/>
+          && (campaign?.system_id === "anime-5e" || campaign?.system_id === "dnd-5e"
+              || campaign?.system_id === "besm-4e") && (
+          <EncounterDesigner className="mt-3"
+                              partySize={(characters || []).length || 4}
+                              campaignId={campaign?.id}
+                              systemId={campaign?.system_id}/>
         )}
         <div className="divider-sigil my-3"/>
         <div className="label-ref mb-2">Log</div>

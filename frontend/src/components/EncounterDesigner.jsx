@@ -11,23 +11,33 @@ import { Swords, Skull, RefreshCw } from "lucide-react";
  * Pure math read; no writes. GM uses this as a stat-block-picker nudge,
  * not a hard constraint.
  */
-export default function EncounterDesigner({ partySize = 4, className = "" }) {
+export default function EncounterDesigner({ partySize = 4, className = "",
+                                              campaignId, systemId = "anime-5e" }) {
   const [level, setLevel] = useState(1);
   const [size, setSize] = useState(partySize || 4);
-  const [difficulty, setDifficulty] = useState("medium");
+  const [difficulty, setDifficulty] = useState(systemId === "besm-4e" ? "equal" : "medium");
   const [result, setResult] = useState(null);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
+  const isBesm = systemId === "besm-4e";
 
   const run = async () => {
     setBusy(true); setErr("");
     try {
-      const qs = new URLSearchParams({
-        party_level: String(level),
-        party_size: String(size),
-        difficulty,
-      });
-      const { data } = await api.get(`/anime5e/encounter-budget?${qs.toString()}`);
+      let endpoint, qs;
+      if (isBesm) {
+        if (!campaignId) { setBusy(false); return; }
+        qs = new URLSearchParams({
+          campaign_id: campaignId, party_size: String(size), difficulty,
+        });
+        endpoint = `/besm/encounter-budget?${qs.toString()}`;
+      } else {
+        qs = new URLSearchParams({
+          party_level: String(level), party_size: String(size), difficulty,
+        });
+        endpoint = `/anime5e/encounter-budget?${qs.toString()}`;
+      }
+      const { data } = await api.get(endpoint);
       setResult(data);
     } catch (e) {
       setErr(formatApiErrorDetail(e.response?.data?.detail) || e.message);
@@ -53,18 +63,21 @@ export default function EncounterDesigner({ partySize = 4, className = "" }) {
         </button>
       </div>
       <div className="grid grid-cols-3 gap-2 mb-2">
+        {!isBesm && (
+          <label className="text-[10px]">
+            <span className="label-ref text-[9px] block">Level</span>
+            <input className="input input-sm text-xs w-full" type="number" min={1} max={20}
+                   value={level}
+                   onChange={(e) => setLevel(Math.max(1, Math.min(20, +e.target.value || 1)))}
+                   data-testid="encounter-designer-level"/>
+          </label>
+        )}
         <label className="text-[10px]">
-          <span className="label-ref text-[9px] block">Level</span>
-          <input className="input input-sm text-xs w-full" type="number" min={1} max={20}
-                 value={level}
-                 onChange={(e) => setLevel(Math.max(1, Math.min(20, +e.target.value || 1)))}
-                 data-testid="encounter-designer-level"/>
-        </label>
-        <label className="text-[10px]">
-          <span className="label-ref text-[9px] block">Party</span>
+          <span className="label-ref text-[9px] block">Party {size > 6 ? "⚠" : ""}</span>
           <input className="input input-sm text-xs w-full" type="number" min={1} max={12}
                  value={size}
                  onChange={(e) => setSize(Math.max(1, Math.min(12, +e.target.value || 1)))}
+                 title={size > 6 ? "Soft cap is 6 — larger parties are allowed but encounter math may need GM eyeballing." : ""}
                  data-testid="encounter-designer-size"/>
         </label>
         <label className="text-[10px]">
@@ -72,15 +85,27 @@ export default function EncounterDesigner({ partySize = 4, className = "" }) {
           <select className="select select-sm text-xs w-full" value={difficulty}
                   onChange={(e) => setDifficulty(e.target.value)}
                   data-testid="encounter-designer-difficulty">
-            <option value="easy">Easy</option>
-            <option value="medium">Medium</option>
-            <option value="hard">Hard</option>
-            <option value="deadly">Deadly</option>
+            {isBesm ? (
+              <>
+                <option value="easy">Easy</option>
+                <option value="medium">Medium</option>
+                <option value="equal">Equal</option>
+                <option value="hard">Hard</option>
+                <option value="deadly">Deadly</option>
+              </>
+            ) : (
+              <>
+                <option value="easy">Easy</option>
+                <option value="medium">Medium</option>
+                <option value="hard">Hard</option>
+                <option value="deadly">Deadly</option>
+              </>
+            )}
           </select>
         </label>
       </div>
       {err && <div className="text-ember text-[10px] mb-2">{err}</div>}
-      {result && (
+      {result && !isBesm && (
         <>
           <div className="flex items-baseline justify-between text-[11px] font-ui mb-2">
             <span className="text-mist">XP budget</span>
@@ -114,6 +139,46 @@ export default function EncounterDesigner({ partySize = 4, className = "" }) {
             <span className="text-ember font-ui">{result.environmental_hazard_budget} XP</span>
           </div>
         </>
+      )}
+      {result && isBesm && (
+        <>
+          <div className="flex items-baseline justify-between text-[11px] font-ui mb-2">
+            <span className="text-mist">CP budget</span>
+            <span className="text-gold-bright font-display text-lg"
+                  data-testid="encounter-designer-budget">
+              {result.encounter_budget} CP
+            </span>
+            <span className="text-[10px] text-mist">
+              ({result.pc_cp}/PC · {result.power_level})
+            </span>
+          </div>
+          <div className="border-t border-gold/15 pt-2">
+            <div className="label-ref text-[9px] mb-1">Threat-tier slots (BESM 4E p.119+)</div>
+            <div className="space-y-1">
+              {(result.threat_slots || []).map((s) => (
+                <div key={s.tier}
+                     className="text-[11px] border-l-2 border-gold/30 pl-2 py-0.5"
+                     data-testid={`besm-threat-${s.tier}`}>
+                  <div className="flex items-center justify-between">
+                    <span className="text-parchment font-ui capitalize">
+                      {s.max_count}× {s.tier}
+                    </span>
+                    <span className="text-[10px] text-mist">
+                      {s.foe_cp} CP/foe · {s.budget_fit_pct}% of budget
+                    </span>
+                  </div>
+                  <div className="text-[10px] text-mist italic">{s.note}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+      {result?.warnings?.length > 0 && (
+        <div className="text-[10px] text-ember mt-2 italic"
+             data-testid="encounter-designer-warnings">
+          {result.warnings.map((w, i) => <div key={i}>⚠ {w}</div>)}
+        </div>
       )}
     </div>
   );

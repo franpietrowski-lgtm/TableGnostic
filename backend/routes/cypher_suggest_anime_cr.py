@@ -227,17 +227,15 @@ async def anime5e_encounter_budget(
     """Compute an Anime 5E / D&D 5E-compatible encounter XP budget and
     return slot-by-CR suggestions.
 
-    * `party_level` 1-20; `party_size` ≥ 1.
+    * `party_level` 1-20; `party_size` ≥ 1; soft-cap at 6 (warn, not reject).
     * `difficulty` ∈ {easy, medium, hard, deadly}.
-
-    Returns:
-      {
-        party_level, party_size, difficulty,
-        xp_per_pc, total_xp_budget,
-        slot_suggestions: [{ n_monsters, cr, xp_per, effective_xp }],
-        environmental_hazard_budget: int,
-      }
     """
+    warnings: List[str] = []
+    if party_size > 6:
+        warnings.append(
+            f"Party size {party_size} exceeds the canonical cap of 6 — "
+            f"encounter math may favour the players. Convention-style game?"
+        )
     per_pc = _xp_budget(party_level, difficulty.lower())
     total = per_pc * max(1, party_size)
 
@@ -272,8 +270,205 @@ async def anime5e_encounter_budget(
         "total_xp_budget": total,
         "slot_suggestions": slots,
         "environmental_hazard_budget": hazard_medium // 2,
+        "warnings": warnings,
         "note": (
             f"Budget is {per_pc} XP per PC × {party_size} PCs. "
             f"Apply multiplier by monster count (1×, ×1.5 for pairs, ×2 for 3-6, …)."
         ),
     }
+
+
+# ─── BESM 4E — Threat-Tier Encounter Budget ─────────────────────────
+# BESM 4E doesn't use a CR table; it uses **Power Levels** (BESM 4E
+# p.18) and **Threat Tiers** (BESM 4E "Building Antagonists" guidance,
+# p.119+). The canonical heuristic:
+#
+#   * Underling tier   ≈ 0.5 × party-PC-CP    (mooks, ~2-4 per PC)
+#   * Equal tier       ≈ 1.0 × party-PC-CP    (peers, party of N vs N)
+#   * Boss tier        ≈ 1.5 × party-PC-CP    (named foe, 1 per 2 PCs)
+#   * Demigod tier     ≈ 2.5 × party-PC-CP    (campaign-defining, solo)
+#
+# We compute the budget per PC, then surface threat-slot suggestions
+# (how many of each tier the GM can afford to throw at the party).
+BESM_THREAT_TIERS = [
+    ("underling", 0.5,  "Mooks / minions; spend 1-2 actions before falling."),
+    ("equal",     1.0,  "PC-equivalent foe; even fight."),
+    ("boss",      1.5,  "Named adversary; harder fight, 1 per 2-3 PCs."),
+    ("demigod",   2.5,  "Campaign-defining. One per session, max."),
+]
+
+
+@router.get("/besm/encounter-budget")
+async def besm_encounter_budget(
+    campaign_id: str, party_size: int = 4,
+    difficulty: str = "equal",
+    user: dict = Depends(get_current_user),
+):
+    """BESM 4E threat-budget kit. Reads the campaign's `total_points`
+    (the Power Level CP cap) and computes how many foes of each
+    Threat Tier the party can absorb.
+
+    `difficulty` shifts the budget by a multiplier:
+       * easy   = ×0.7
+       * medium = ×0.85
+       * equal  = ×1.0  (default)
+       * hard   = ×1.25
+       * deadly = ×1.5
+    """
+    camp = await db.campaigns.find_one({"id": campaign_id}, {"_id": 0})
+    if not camp:
+        raise HTTPException(404, "Campaign not found")
+    if camp.get("system_id") != "besm-4e":
+        raise HTTPException(400, "BESM threat budget is for besm-4e campaigns.")
+    allowed = (
+        user["id"] == camp["gm_id"]
+        or user["id"] in (camp.get("member_ids") or [])
+        or user.get("role") == "admin"
+    )
+    if not allowed:
+        raise HTTPException(403, "Not a table member.")
+
+    pc_cp = int(camp.get("total_points") or 120)
+    diff_mult = {
+        "easy": 0.7, "medium": 0.85, "equal": 1.0,
+        "hard": 1.25, "deadly": 1.5,
+    }.get(difficulty.lower(), 1.0)
+
+    warnings: List[str] = []
+    if party_size > 6:
+        warnings.append(
+            f"Party size {party_size} exceeds the canonical cap of 6 "
+            f"(BESM 4E p.18). Threat math may need GM eyeballing."
+        )
+
+    party_total_cp = pc_cp * max(1, party_size)
+    encounter_budget = int(party_total_cp * diff_mult)
+
+    # Threat-slot suggestions — for each tier, how many foes of that tier
+    # fit in the budget?
+    slots = []
+    for name, ratio, note in BESM_THREAT_TIERS:
+        foe_cp = int(pc_cp * ratio)
+        n = encounter_budget // max(1, foe_cp)
+        if n >= 1:
+            slots.append({
+                "tier": name,
+                "foe_cp": foe_cp,
+                "ratio_to_pc": ratio,
+                "max_count": n,
+                "total_cp_used": int(n * foe_cp),
+                "budget_fit_pct": round(100 * n * foe_cp / encounter_budget),
+                "note": note,
+            })
+
+    return {
+        "campaign_id": campaign_id,
+        "system_id": "besm-4e",
+        "power_level": camp.get("power_level"),
+        "pc_cp": pc_cp,
+        "party_size": party_size,
+        "difficulty": difficulty,
+        "party_total_cp": party_total_cp,
+        "encounter_budget": encounter_budget,
+        "threat_slots": slots,
+        "warnings": warnings,
+        "note": (
+            "BESM 4E uses Power-Level CP totals as the budget unit (no CR table). "
+            "Threat-tiers per BESM 4E p.119+. Mix tiers as the narrative demands."
+        ),
+    }
+
+
+# ─── NPC / Creature auto-stat-block generator ───────────────────────
+
+@router.post("/campaigns/{campaign_id}/npcs/{node_id}/generate-sheet")
+async def generate_npc_sheet(
+    campaign_id: str, node_id: str,
+    threat_tier: str = "equal",
+    user: dict = Depends(get_current_user),
+):
+    """V6.7 — auto-generate a system-appropriate stat block for an NPC
+    codex node. Streamlines encounter prep — the GM points at a node
+    in the codex, picks a threat tier, and gets a ready-to-run block.
+
+    Returns a draft stat block that the GM can save onto the node's
+    `stat_block` field; we do NOT mutate the node automatically.
+    """
+    camp = await db.campaigns.find_one({"id": campaign_id}, {"_id": 0})
+    if not camp:
+        raise HTTPException(404, "Campaign not found")
+    if camp["gm_id"] != user["id"] and user.get("role") != "admin":
+        raise HTTPException(403, "GM/admin only.")
+    node = await db.nodes.find_one({"id": node_id, "campaign_id": campaign_id}, {"_id": 0})
+    if not node:
+        raise HTTPException(404, "Codex node not found")
+
+    sys_id = camp.get("system_id")
+    name = node.get("title") or "Unnamed"
+    pc_cp = int(camp.get("total_points") or 120)
+
+    if sys_id == "besm-4e":
+        ratio = {"underling": 0.5, "equal": 1.0, "boss": 1.5, "demigod": 2.5}.get(
+            threat_tier.lower(), 1.0)
+        cp = int(pc_cp * ratio)
+        # Distribute CP roughly: 30% stats, 50% attributes, 20% skills.
+        stat_pool = max(2, cp * 30 // 100 // 6)  # +pts above baseline 4
+        block = {
+            "system_id": "besm-4e",
+            "name": name,
+            "threat_tier": threat_tier,
+            "total_cp": cp,
+            "stats": {
+                "body": 4 + stat_pool, "mind": 4 + stat_pool // 2,
+                "soul": 4 + stat_pool // 2,
+            },
+            "attributes": [
+                {"name": "Combat Mastery", "level": max(1, cp // 30),
+                 "cost_per_level": 4, "enhancements": [], "limiters": []},
+                {"name": "Tough", "level": max(1, cp // 40),
+                 "cost_per_level": 2, "enhancements": [], "limiters": []},
+            ],
+            "skills": [
+                {"group": "Combat", "level": max(1, cp // 25),
+                 "cost_per_level": 2},
+            ],
+            "summary": f"{threat_tier.title()}-tier BESM 4E foe at {cp} CP.",
+        }
+    elif sys_id == "anime-5e" or sys_id == "dnd-5e":
+        # Map tier → CR (rough 5E SRD scaling).
+        cr_by_tier = {"underling": "1/4", "equal": "2", "boss": "5", "demigod": "12"}
+        cr = cr_by_tier.get(threat_tier.lower(), "2")
+        block = {
+            "system_id": sys_id,
+            "name": name,
+            "threat_tier": threat_tier,
+            "cr": cr,
+            "ac": 12 if cr in ("1/4", "1/2") else (14 if cr in ("1", "2", "3") else 17),
+            "hp": {"underling": 13, "equal": 45, "boss": 110, "demigod": 280}.get(
+                threat_tier.lower(), 45),
+            "abilities": {"STR": 12, "DEX": 14, "CON": 12, "INT": 10, "WIS": 12, "CHA": 10},
+            "actions": [
+                {"name": "Multiattack", "desc": "Foe makes 2 attacks." if cr not in ("1/4", "1/2") else "—"},
+                {"name": "Strike", "desc": "+5 to hit, 1d8+3 damage."},
+            ],
+            "summary": f"{threat_tier.title()}-tier {sys_id} foe at CR {cr}.",
+        }
+    elif sys_id == "cypher":
+        level = {"underling": 2, "equal": 4, "boss": 6, "demigod": 8}.get(
+            threat_tier.lower(), 4)
+        block = {
+            "system_id": "cypher",
+            "name": name,
+            "threat_tier": threat_tier,
+            "level": level,
+            "target_number": 3 * level,
+            "health": level * 4,
+            "damage": max(2, level - 1),
+            "armor": 0 if level < 4 else 1,
+            "modifications": [],
+            "summary": f"{threat_tier.title()}-tier Cypher creature at Level {level}.",
+        }
+    else:
+        raise HTTPException(400, f"Unknown system_id: {sys_id}")
+
+    return {"node_id": node_id, "stat_block": block, "saved": False}

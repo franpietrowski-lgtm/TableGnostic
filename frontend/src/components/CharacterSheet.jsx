@@ -493,6 +493,68 @@ export default function CharacterSheet() {
             </div>
           )}
 
+          {/* V6.7 — Power Bundles (activatable spell-like packets). Distinct
+              from Power Packs (always-on source-of-power). Only renders on
+              BESM 4E + Anime 5E hybrid sheets. */}
+          {(campaign?.system_id === "besm-4e" || campaign?.system_id === "anime-5e")
+            && Array.isArray(ch.power_bundles) && ch.power_bundles.length > 0 && (
+            <div className="card-mystic p-6 mt-4" data-testid="character-power-bundles">
+              <div className="h-arcane text-sm mb-3">Power Bundle · Activatable Effects</div>
+              <div className="space-y-3">
+                {ch.power_bundles.map((pb, i) => (
+                  <div key={i} className="border-l-2 border-arcane/40 pl-3 py-1">
+                    <div className="flex items-baseline justify-between flex-wrap gap-1">
+                      <span className="font-ui text-parchment">{pb.name}</span>
+                      <div className="flex items-center gap-1 text-[10px] font-ui">
+                        <span className="tag border-gold/40 text-gold-bright">{pb.cost} CP</span>
+                        <span className="tag border-arcane/30 text-arcane">{pb.invocation || "per-scene"}</span>
+                        {pb.charges_max > 0 && <span className="tag border-mist/40 text-mist">{pb.charges_current || 0}/{pb.charges_max}</span>}
+                        {pb.energy_cost > 0 && <span className="tag border-ember/30 text-ember">{pb.energy_cost} EP</span>}
+                      </div>
+                    </div>
+                    {pb.description && <div className="text-[11px] text-parchment/85 italic mt-1">{pb.description}</div>}
+                    {pb.cooldown && <div className="text-[10px] text-mist mt-1">Cooldown: {pb.cooldown}</div>}
+                    {pb.source_spell_name && (
+                      <div className="text-[10px] text-mist font-ui uppercase tracking-widest mt-1.5">
+                        ↪ Mimics D&D: {pb.source_spell_name} (L{pb.source_spell_level || 0})
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <div className="mt-3 text-[10px] text-mist italic flex items-center gap-1">
+                <BookOpen className="w-3 h-3"/> BESM Extras p.42 · Power Bundles
+              </div>
+            </div>
+          )}
+
+          {/* V6.7 — Forge buttons for Power Pack / Bundle. Visible to
+              the owner so they can author new ones via the Atelier. */}
+          {(campaign?.system_id === "besm-4e" || campaign?.system_id === "anime-5e")
+            && ch.owner_id === window.localStorage?.getItem?.("tg_user_id") && (
+            <div className="card-mystic p-4 mt-4 flex items-center justify-between flex-wrap gap-2"
+                 data-testid="character-forge-power-bundles">
+              <div>
+                <div className="label-ref">Power forge</div>
+                <div className="text-[11px] text-mist italic">
+                  Author new packs (always-on sources of power) or bundles (activatable effects) in the Atelier — they show up here once saved on the sheet.
+                </div>
+              </div>
+              <div className="flex items-center gap-1">
+                <Link to={`/app/campaigns/${ch.campaign_id}?tab=atelier&kind=power_pack`}
+                      className="btn btn-ghost text-xs"
+                      data-testid="forge-power-pack-link">
+                  + Power Pack
+                </Link>
+                <Link to={`/app/campaigns/${ch.campaign_id}?tab=atelier&kind=power_bundle`}
+                      className="btn btn-ghost text-xs"
+                      data-testid="forge-power-bundle-link">
+                  + Power Bundle
+                </Link>
+              </div>
+            </div>
+          )}
+
           <div className="card-mystic p-6">
             <div className="flex items-center justify-between">
               <div className="h-arcane text-sm">Dice</div>
