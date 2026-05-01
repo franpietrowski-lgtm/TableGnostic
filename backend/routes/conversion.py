@@ -1,119 +1,38 @@
-"""V6.16 — Cross-system Content Converter.
+"""V6.16 — Cross-system Content Converter API.
 
-A Claude-assisted bridge that takes a mechanic, ability, character, or any
-piece of structured content from ANY supported system and produces a
-target-system equivalent.
+Thin endpoint layer over `core.conversion_engine`. Three POST routes:
 
-Endpoints (all `/api`-prefixed):
+  POST /api/convert/content    — single mechanic translation
+  POST /api/convert/character  — full character port + DB write
+  POST /api/convert/creature   — full creature port + Codex node write
 
-  POST /api/convert/content
-       Body: {
-         source_system: "besm-4e" | "anime-5e" | "dnd-5e" | "cypher" | …,
-         target_system: "...",            # same set
-         source_kind: "attribute" | "spell" | "focus" | "feat" |
-                      "feature" | "skill" | "defect" | "item" |
-                      "monster" | "character" | …,
-         payload: { … arbitrary source-system shape … },
-         target_constraints?: { power_level: ..., level: ..., tier: ... },
-       }
-       → returns a structured target-system object with:
-         { name, kind, target_system, summary, target_payload, citations }
-
-  POST /api/convert/character
-       Body: {
-         source_character_id: "...",
-         target_campaign_id: "...",       # must already exist; system inferred
-         new_owner_id?: "...",            # GM may pre-assign
-         keep_folio?: true,               # journal + bio carries over
-       }
-       → creates the character in the target campaign and returns it.
-       Calls /api/convert/content under the hood for each mechanic block.
-
-The converter is bidirectional: any → any.
-
-Compliance: We never echo back rulebook prose verbatim. Claude is instructed
-to summarise mechanic-only and to produce the canonical numeric shape for
-the target system (CP cost for BESM, level + class for D&D, tier+sentence
-for Cypher, etc.).
+GM/admin-only on every route. The actual translation is Claude-assisted
+(Anthropic Sonnet 4.5 via the EMERGENT LLM key).
 """
 from __future__ import annotations
 
-import json
-import re
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
-from core.config import EMERGENT_LLM_KEY
-from core.cost_engine import calc_derived, calc_spent_points
-from core.db import db, new_id, now_iso, sanitize
+from core.conversion_engine import (
+    SUPPORTED_SYSTEMS,
+    TARGET_SHAPE,
+    build_content_prompt,
+    call_claude_convert,
+    materialise_character,
+    materialise_creature,
+    validate_systems,
+)
+from core.db import db, now_iso, sanitize
 from core.security import get_current_user
 
 router = APIRouter(prefix="/api", tags=["convert"])
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# System-target shape hints — what the LLM should produce for each ruleset.
-# Kept short; the LLM does the heavy lifting from training data.
-
-TARGET_SHAPE = {
-    "besm-4e": (
-        "BESM 4E — Tri-Stat point-buy. Express mechanics as Attributes "
-        "(name, level, cost_per_level, enhancements[], limiters[], note), "
-        "Defects (name, rank, points_per_rank, category, note), Skills "
-        "(name, group, level, cost_per_level, components[]). Stats are "
-        "Body/Mind/Soul (1-12). Page hints from BESM 4E (1-320)."
-    ),
-    "anime-5e": (
-        "Anime 5E — D&D 5E OGL chassis with a Tri-Stat point-buy "
-        "SUPPLEMENT layer. PRIMARY shape MUST be D&D 5E: class (str), "
-        "level (1-20), race (str), background (str), ability_scores "
-        "(Strength/Dexterity/Constitution/Intelligence/Wisdom/Charisma "
-        "8-20), hit_points, hit_dice (e.g. '5d8+10'), proficiency_bonus, "
-        "armor_class, saving_throws (list of ability names), skills "
-        "(list with proficient flag), features (per class/race/"
-        "background, level-gated), spells (if class casts), spell_slots, "
-        "equipment (with type & properties — including converted weapons), "
-        "alignment. Anime-5E classes/races/backgrounds extend the SRD "
-        "(Magical Girl, Mech Pilot, Sentai, Espers, Demihuman, Neko, "
-        "etc.) — favour those when the source flavour fits. "
-        "ADDITIONALLY, produce `point_buys` — a list of residual "
-        "BESM-style attributes/defects that DON'T cleanly map to a 5E "
-        "feature (e.g. Sixth Sense, Heightened Senses, Item-of-Power-"
-        "style genre powers). Each entry: {name, level, cost_per_level, "
-        "blurb_role, source_attribute}. These layer on top of the d20 "
-        "chassis to capture genre flair the SRD can't carry. Aim for "
-        "the bulk of source mechanics to land in the 5E chassis (class "
-        "features, spells, ability scores) and only the genre-specific "
-        "anime extras to land in `point_buys`. Stats are 5E ability "
-        "scores, NOT Body/Mind/Soul."
-    ),
-    "dnd-5e": (
-        "D&D 5E — strict CC-BY SRD 5.1 only. Express mechanics as a 5E "
-        "PC: class (str), level (1-20), race (str), background (str), "
-        "ability_scores (Strength/Dex/Con/Int/Wis/Cha 8-20), spells[] "
-        "(name, level, school), features[] (name, source, description), "
-        "equipment[] (name, type, properties[]). For non-PC content "
-        "(monsters, items), use stat-block shape. NEVER reference "
-        "Forgotten Realms, Mind Flayers, Beholders, or any "
-        "Wizards-trademarked content."
-    ),
-    "cypher": (
-        "Cypher System — Sentence: Descriptor + Type + Focus. Express "
-        "mechanics as cypher_state {tier (1-6), descriptor (str), type "
-        "(Warrior/Adept/Explorer/Speaker/...), focus (str), pools "
-        "{Might/Speed/Intellect}, edge {Might/Speed/Intellect}, abilities "
-        "[]}. For non-PC content: foci, cyphers (one-shot, level 1-10), "
-        "artifacts (level + depletion). TN = level × 3."
-    ),
-}
-
-SUPPORTED_SYSTEMS = list(TARGET_SHAPE.keys())
-
-
-# ──────────────────────────────────────────────────────────────────────────
-# Pydantic
+# Pydantic input schemas
 
 class ConvertContentIn(BaseModel):
     source_system: str
@@ -131,97 +50,14 @@ class ConvertCharacterIn(BaseModel):
     name_override: Optional[str] = None
 
 
-# ──────────────────────────────────────────────────────────────────────────
-# Claude prompt scaffolding
-
-SYSTEM_PROMPT_CONTENT = """You are TableGnostic's Cross-System Content Converter.
-
-Given a piece of mechanic content from ONE tabletop RPG system, produce a
-faithful equivalent in a DIFFERENT system. Preserve narrative intent and
-power level; translate the math into the target system's native shape.
-
-Hard rules:
-  1. Output MUST be valid JSON. No markdown fences. No commentary.
-  2. NEVER reproduce rulebook prose verbatim. Summarise mechanic-only.
-     This is a Tri-Stat Emporium / Cypher System Creator licence
-     requirement.
-  3. NEVER reference trademark-protected content (Forgotten Realms,
-     Mind Flayer, Beholder, Cthulhu, Vampire: the Masquerade clans, etc.).
-     If the source mentions any, replace with a generic descriptor.
-  4. The target_payload must follow the target system's CANONICAL shape —
-     no inventing fields. If a source feature has no clean target
-     equivalent, document it in `caveats` and approximate as best you can.
-  5. Preserve power level. If the source is "level 3 spell" the target
-     should be roughly equivalent in difficulty/cost.
-  6. Stats / pools / abilities use TARGET SYSTEM names always. e.g. when
-     converting to D&D 5E use Strength/Dexterity/etc, NOT Body/Mind/Soul.
-
-Top-level shape:
-{
-  "name": "Target-system display name",
-  "kind": "attribute|spell|focus|feat|character|item|...",
-  "target_system": "besm-4e|anime-5e|dnd-5e|cypher",
-  "summary": "≤ 200 chars mechanic-only flavour line.",
-  "target_payload": { /* canonical target-system shape */ },
-  "caveats": ["short bullet on lossy conversions, optional"],
-  "citations": [
-    { "source_ref": "BESM 4E p.96", "target_ref": "Cypher SRD - Healing focus" }
-  ]
-}
-"""
-
-
-async def _call_claude_convert(prompt: str, session_seed: str) -> Dict[str, Any]:
-    if not EMERGENT_LLM_KEY:
-        raise HTTPException(503, "LLM key not configured")
-    try:
-        from emergentintegrations.llm.chat import LlmChat, UserMessage
-        chat = LlmChat(
-            api_key=EMERGENT_LLM_KEY,
-            session_id=f"convert-{session_seed[:32]}",
-            system_message=SYSTEM_PROMPT_CONTENT,
-        ).with_model("anthropic", "claude-sonnet-4-5-20250929")
-        raw = await chat.send_message(UserMessage(text=prompt))
-    except Exception as e:
-        raise HTTPException(502, f"Claude call failed: {e}")
-    cleaned = raw.strip()
-    if cleaned.startswith("```"):
-        cleaned = re.sub(r"^```[a-zA-Z]*\n", "", cleaned).strip()
-        if cleaned.endswith("```"):
-            cleaned = cleaned[:-3].strip()
-    try:
-        return json.loads(cleaned)
-    except json.JSONDecodeError:
-        # Try to extract the first {...} block.
-        m = re.search(r"\{.*\}", cleaned, re.S)
-        if not m:
-            raise HTTPException(502, "Claude returned non-JSON output")
-        return json.loads(m.group(0))
-
-
-def _validate_systems(src: str, tgt: str):
-    if src not in SUPPORTED_SYSTEMS:
-        raise HTTPException(400, f"Unsupported source_system: {src}. Use one of {SUPPORTED_SYSTEMS}.")
-    if tgt not in SUPPORTED_SYSTEMS:
-        raise HTTPException(400, f"Unsupported target_system: {tgt}. Use one of {SUPPORTED_SYSTEMS}.")
-
-
-def _build_content_prompt(body: ConvertContentIn) -> str:
-    constraints = body.target_constraints or {}
-    return (
-        f"# Source system: {body.source_system}\n"
-        f"# Target system: {body.target_system}\n"
-        f"# Source kind: {body.source_kind}\n"
-        f"# Target shape hint:\n{TARGET_SHAPE[body.target_system]}\n\n"
-        f"# Source payload (JSON):\n{json.dumps(body.payload, indent=2)[:8000]}\n\n"
-        f"# Target constraints:\n{json.dumps(constraints, indent=2)[:1000]}\n\n"
-        f"Produce the canonical {body.target_system} equivalent now. "
-        f"Output JSON only — no markdown, no commentary."
-    )
+class ConvertCreatureIn(BaseModel):
+    source_node_id: str          # codex node where motive == "creature"
+    target_campaign_id: str
+    name_override: Optional[str] = None
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# Endpoint — single-content convert
+# Endpoint — single-mechanic translation
 
 @router.post("/convert/content")
 async def convert_content(body: ConvertContentIn,
@@ -229,14 +65,12 @@ async def convert_content(body: ConvertContentIn,
     """Translate one mechanic between any two supported systems.
 
     GM/admin only — players can read converted content via the
-    Reference page after a GM commits it. Stamping the writer guards
-    against abuse + budget tracking.
+    Reference page after a GM commits it.
     """
     if user.get("role") not in ("gm", "admin"):
         raise HTTPException(403, "GM/admin only — players cannot trigger conversions.")
-    _validate_systems(body.source_system, body.target_system)
+    validate_systems(body.source_system, body.target_system)
     if body.source_system == body.target_system:
-        # Same-system "convert" is a no-op — just echo the payload through.
         return {
             "name": body.payload.get("name") or body.payload.get("title") or "Untitled",
             "kind": body.source_kind,
@@ -246,9 +80,13 @@ async def convert_content(body: ConvertContentIn,
             "caveats": [],
             "citations": [],
         }
-    prompt = _build_content_prompt(body)
-    out = await _call_claude_convert(prompt, f"{body.source_system}-to-{body.target_system}-{body.source_kind}")
-    # Stamp + return.
+    prompt = build_content_prompt(
+        body.source_system, body.target_system, body.source_kind,
+        body.payload, body.target_constraints,
+    )
+    out = await call_claude_convert(
+        prompt, f"{body.source_system}-to-{body.target_system}-{body.source_kind}",
+    )
     out.setdefault("target_system", body.target_system)
     out.setdefault("kind", body.source_kind)
     out.setdefault("converted_by_user_id", user["id"])
@@ -257,245 +95,7 @@ async def convert_content(body: ConvertContentIn,
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# Endpoint — full-character convert
-
-def _coerce_to_dict_list(items, default_keys: Optional[Dict[str, Any]] = None):
-    """Defensive — Claude sometimes returns strings or non-dict entries
-    where we expect Tri-Stat objects. Wrap each into a dict so the cost
-    engine doesn't AttributeError. Non-Tri-Stat systems use this for
-    display-only purposes."""
-    out = []
-    base = default_keys or {}
-    for it in (items or []):
-        if isinstance(it, dict):
-            out.append(it)
-        elif isinstance(it, str):
-            out.append({**base, "name": it})
-        # Drop anything else (None, int, etc.) silently.
-    return out
-
-
-def _normalise_tristat_cost_fields(items, kind: str):
-    """Tri-Stat-specific post-processor.
-
-    Claude's response shape varies per call: an Attribute might come
-    back with `cost: 12` (TOTAL) instead of `cost_per_level: 4` (per-tier
-    rate, which the BESM cost engine multiplies by `level`). A Defect
-    might return `points: 1` instead of `points_per_rank: 1`. Without
-    correction the rendered "x3 = NaN PTS" tag appears on every entry.
-
-    `kind` ∈ {"attribute", "skill", "defect"}. Mutates entries in place.
-    """
-    for it in (items or []):
-        if not isinstance(it, dict):
-            continue
-        if kind in ("attribute", "skill"):
-            level = int(it.get("level") or 0) or 1
-            cpl = it.get("cost_per_level")
-            if cpl is None:
-                total = it.get("cost") or it.get("total_cost")
-                if total is not None and level > 0:
-                    try:
-                        it["cost_per_level"] = round(float(total) / level, 2)
-                    except (ValueError, TypeError):
-                        it["cost_per_level"] = 0
-            # Backfill `level` if Claude omitted it but gave a cost.
-            if it.get("level") is None and it.get("cost") is not None:
-                it["level"] = 1
-        elif kind == "defect":
-            rank = int(it.get("rank") or 0) or 1
-            ppr = it.get("points_per_rank")
-            if ppr is None:
-                total = it.get("points") or it.get("refund")
-                if total is not None and rank > 0:
-                    try:
-                        it["points_per_rank"] = round(float(total) / rank, 2)
-                    except (ValueError, TypeError):
-                        it["points_per_rank"] = 0
-                else:
-                    # Bare narrative defect — default to 1 pt/rank (BESM
-                    # "Lesser" baseline). The GM can reweight in the editor.
-                    it["points_per_rank"] = 1
-                    if "category" not in it:
-                        it["category"] = "Lesser"
-            if it.get("rank") is None and it.get("points") is not None:
-                it["rank"] = 1
-            elif it.get("rank") is None:
-                it["rank"] = 1
-    return items
-
-
-async def _materialise_character(target_payload: Dict[str, Any],
-                                 target_system: str,
-                                 target_camp: Dict[str, Any],
-                                 source_ch: Dict[str, Any],
-                                 owner_id: str,
-                                 owner_name: str,
-                                 keep_folio: bool,
-                                 name_override: Optional[str]) -> Dict[str, Any]:
-    """Take Claude's target_payload and shape it into our `characters`
-    document. The LLM produces a free-form blob; this function maps the
-    obvious bits into the existing schema.
-
-    V6.16.1 — when Claude nests canonical fields inside a per-system
-    wrapper (`anime5e_state.stats`, `cypher_state.pools`, `dnd_state.
-    ability_scores`), we extract them. The top-level character document
-    is the source of truth for the *active* system's render and
-    function-binding (cost engine, encounter math, XP), so its fields
-    must reflect the converted values, not the source-system defaults.
-    """
-    name = name_override or target_payload.get("name") or source_ch.get("name", "Untitled")
-    concept = target_payload.get("concept") or target_payload.get("summary") or source_ch.get("concept", "")
-
-    # ── Resolve canonical state wrapper(s) for this target system ──
-    # Claude returns either a wrapper (`anime5e_state: {...}`) or inline
-    # fields at the top of target_payload. Build the wrapper first by
-    # merging both so downstream lifters see ONE coherent dict.
-    #
-    # Anime 5E is unique: it runs on the D&D 5E OGL chassis as the
-    # PRIMARY shape, with a Tri-Stat point-buy SUPPLEMENT layer for
-    # residual BESM-style genre powers. That means an Anime 5E port
-    # populates BOTH dnd_state (5E chassis) AND anime5e_state.point_buys
-    # (supplement). The DndSheetView already renders Anime5eSupplementView
-    # at the bottom when both are present.
-    if target_system == "anime-5e":
-        # 5E chassis lives in dnd_state-shaped fields.
-        dnd_keys = ["class", "level", "race", "background",
-                    "ability_scores", "skills", "spells", "features",
-                    "class_features", "equipment", "armor_class",
-                    "hit_points", "hit_dice", "proficiency_bonus",
-                    "alignment", "saving_throws", "spell_slots"]
-        dnd_wrapper = {**{k: target_payload[k] for k in dnd_keys if k in target_payload},
-                       **(target_payload.get("dnd_state") or {})}
-        # DndSheetView reads `class_features` — alias `features` if Claude
-        # used the shorter name and the canonical key isn't already set.
-        if "features" in dnd_wrapper and "class_features" not in dnd_wrapper:
-            dnd_wrapper["class_features"] = dnd_wrapper["features"]
-        # Supplement layer — point_buys + Tri-Stat residue.
-        supp_keys = ["point_buys", "point_budget", "stats", "derived",
-                     "hp", "ep", "acp"]
-        supp_wrapper = {**{k: target_payload[k] for k in supp_keys if k in target_payload},
-                        **(target_payload.get("anime5e_state") or {})}
-        wrapper = dnd_wrapper       # primary shape for top-level field resolution
-        per_system_state = {"dnd_state": dnd_wrapper, "anime5e_state": supp_wrapper}
-    elif target_system == "cypher":
-        wrapper_keys = ["tier", "descriptor", "type", "focus", "pools",
-                        "edge", "effort", "abilities", "cyphers",
-                        "artifacts", "shins", "background_connection"]
-        wrapper = {**{k: target_payload[k] for k in wrapper_keys if k in target_payload},
-                   **(target_payload.get("cypher_state") or {})}
-        per_system_state = {"cypher_state": wrapper}
-    elif target_system == "dnd-5e":
-        wrapper_keys = ["class", "level", "race", "background",
-                        "ability_scores", "skills", "spells", "features",
-                        "class_features", "equipment", "armor_class",
-                        "hit_points", "hit_dice", "proficiency_bonus",
-                        "alignment", "saving_throws", "spell_slots"]
-        wrapper = {**{k: target_payload[k] for k in wrapper_keys if k in target_payload},
-                   **(target_payload.get("dnd_state") or {})}
-        # DndSheetView reads `class_features` — alias `features` if Claude
-        # used the shorter name and the canonical key isn't already set.
-        if "features" in wrapper and "class_features" not in wrapper:
-            wrapper["class_features"] = wrapper["features"]
-        per_system_state = {"dnd_state": wrapper}
-    else:
-        wrapper = {}
-        per_system_state = {}
-
-    # Top-level Tri-Stat fields. Anime 5E now uses 5E ability scores via
-    # dnd_state — the top-level `stats` (Body/Mind/Soul) is vestigial for
-    # the rendered sheet, but kept populated so any legacy reader works.
-    # For pure BESM ports the top-level fields ARE the canonical surface.
-    if target_system == "anime-5e":
-        # 5E ability scores live in dnd_state.ability_scores. Top-level
-        # stats stay default — the rendered sheet uses DndSheetView.
-        tristat_stats = (target_payload.get("stats")
-                         or {"body": 4, "mind": 4, "soul": 4})
-        # Tri-Stat attributes/skills/defects on Anime 5E ports get
-        # absorbed into anime5e_state.point_buys and 5E features —
-        # don't double-render them at the top level.
-        tristat_attrs = []
-        tristat_skills = []
-        tristat_defects = []
-    else:
-        tristat_stats = (wrapper.get("stats")
-                         or target_payload.get("stats")
-                         or {"body": 4, "mind": 4, "soul": 4})
-        tristat_attrs = (wrapper.get("attributes")
-                         if target_system == "besm-4e"
-                         else None)
-        tristat_attrs = tristat_attrs if tristat_attrs is not None else target_payload.get("attributes")
-        tristat_skills = (wrapper.get("skills")
-                          if target_system == "besm-4e"
-                          else None)
-        tristat_skills = tristat_skills if tristat_skills is not None else target_payload.get("skills")
-        tristat_defects = (wrapper.get("defects")
-                           if target_system == "besm-4e"
-                           else None)
-        tristat_defects = tristat_defects if tristat_defects is not None else target_payload.get("defects")
-
-    # total_points may be at top level OR nested under a "points" wrapper
-    # (anime5e_state.points.total, cypher's shins, etc.). Fallback to
-    # the source character's value, then a sensible default.
-    pts = target_payload.get("total_points")
-    if pts is None and isinstance(wrapper.get("points"), dict):
-        pts = wrapper["points"].get("total")
-    if pts is None:
-        pts = source_ch.get("total_points") or 100
-
-    base = {
-        "id": new_id(),
-        "name": name,
-        "campaign_id": target_camp["id"],
-        "owner_id": owner_id,
-        "owner_name": owner_name,
-        "created_at": now_iso(),
-        "concept": concept,
-        "system_id": target_system,
-        "total_points": int(pts),
-        "stats": tristat_stats,
-        "attributes": _normalise_tristat_cost_fields(_coerce_to_dict_list(tristat_attrs), "attribute"),
-        "skills": _normalise_tristat_cost_fields(_coerce_to_dict_list(tristat_skills,
-                                       default_keys={"cost_per_level": 0, "level": 0}), "skill"),
-        "defects": _normalise_tristat_cost_fields(_coerce_to_dict_list(tristat_defects,
-                                        default_keys={"points_per_rank": 0, "rank": 0}), "defect"),
-        "items": _coerce_to_dict_list(target_payload.get("items")
-                                      or wrapper.get("equipment")),
-        "weapons": _coerce_to_dict_list(target_payload.get("weapons")),
-        "folio": {},
-    }
-    # Carry the source folio (journal, bio, motivations) when keep_folio.
-    if keep_folio and source_ch.get("folio"):
-        base["folio"] = {**(source_ch.get("folio") or {})}
-    # Per-system state — store the merged wrapper(s) so the system-shaped
-    # views (DndSheetView / CypherSheetView / Anime 5E hybrid layer) can
-    # render directly from them. Anime 5E populates BOTH dnd_state (5E
-    # chassis) and anime5e_state (point_buys supplement).
-    for k, v in (per_system_state or {}).items():
-        base["folio"][k] = v
-    # Stamp a converted-from breadcrumb so cloners can audit.
-    base["converted_from"] = {
-        "source_character_id": source_ch.get("id"),
-        "source_system": source_ch.get("system_id") or "besm-4e",
-        "converted_at": now_iso(),
-    }
-    # Tri-Stat-shape cost engine only applies to BESM. Anime 5E is now
-    # 5E-primary with a Tri-Stat point-buy SUPPLEMENT layer — its CP
-    # accounting is on `anime5e_state.point_buys` not on top-level fields.
-    # D&D / Cypher get a `spent.total_spent = 0` stub since their
-    # canonical math lives in dnd_state / cypher_state.
-    if target_system == "besm-4e":
-        try:
-            base["derived"] = calc_derived(base, target_camp)
-            base["spent"] = calc_spent_points(base)
-        except Exception:
-            base["derived"] = {}
-            base["spent"] = {"total_spent": 0}
-    else:
-        base["derived"] = {}
-        base["spent"] = {"total_spent": 0}
-    return base
-
+# Endpoint — full-character port
 
 @router.post("/convert/character")
 async def convert_character(body: ConvertCharacterIn,
@@ -503,9 +103,9 @@ async def convert_character(body: ConvertCharacterIn,
     """Take an existing character and produce a working sheet in the
     target campaign's system. The new character is saved + returned.
 
-    Permission model: caller must be the source campaign's GM (or admin),
-    AND the target campaign's GM (or admin). This prevents content
-    laundering — a GM can't fork another GM's character.
+    Permission model: caller must be GM (or admin) of both source and
+    target campaigns. This prevents content laundering — a GM can't
+    fork another GM's character.
     """
     src_ch = await db.characters.find_one({"id": body.source_character_id}, {"_id": 0})
     if not src_ch:
@@ -522,12 +122,8 @@ async def convert_character(body: ConvertCharacterIn,
             raise HTTPException(403, "Only the target campaign's GM (or admin) may receive a converted character.")
     src_system = src_ch.get("system_id") or src_camp.get("system_id") or "besm-4e"
     tgt_system = tgt_camp.get("system_id") or "besm-4e"
-    _validate_systems(src_system, tgt_system)
+    validate_systems(src_system, tgt_system)
 
-    # Build a compact payload for Claude. We ship attributes, skills,
-    # defects, total_points + stats — the things that meaningfully change
-    # between systems. Folio (bio/journal) is left out of the LLM call;
-    # we carry it verbatim instead.
     payload = {
         "name": src_ch.get("name"),
         "concept": src_ch.get("concept"),
@@ -550,29 +146,20 @@ async def convert_character(body: ConvertCharacterIn,
         "target_anime5e_xp_formula": tgt_camp.get("anime5e_xp_formula"),
         "target_house_rules": tgt_camp.get("house_rules"),
     }
-    in_body = ConvertContentIn(
-        source_system=src_system,
-        target_system=tgt_system,
-        source_kind="character",
-        payload=payload,
-        target_constraints=constraints,
-    )
-    out = await _call_claude_convert(_build_content_prompt(in_body),
-                                     f"char-{src_ch['id']}-to-{tgt_system}")
-    target_payload = out.get("target_payload") or out  # tolerate either shape
-    # Decide owner.
+    prompt = build_content_prompt(src_system, tgt_system, "character", payload, constraints)
+    out = await call_claude_convert(prompt, f"char-{src_ch['id']}-to-{tgt_system}")
+    target_payload = out.get("target_payload") or out
     owner_id = body.new_owner_id or src_ch.get("owner_id") or user["id"]
     owner_name = user["name"]
     if body.new_owner_id:
         u = await db.users.find_one({"id": body.new_owner_id}, {"_id": 0, "name": 1, "email": 1})
         if u:
             owner_name = u.get("name") or u.get("email") or "?"
-            # Auto-add the new owner as a campaign member (mirror /transfer logic).
             if (body.new_owner_id != tgt_camp["gm_id"]
                     and body.new_owner_id not in tgt_camp.get("member_ids", [])):
                 await db.campaigns.update_one({"id": tgt_camp["id"]},
                                               {"$addToSet": {"member_ids": body.new_owner_id}})
-    new_ch = await _materialise_character(
+    new_ch = await materialise_character(
         target_payload, tgt_system, tgt_camp, src_ch,
         owner_id, owner_name, body.keep_folio, body.name_override,
     )
@@ -582,3 +169,109 @@ async def convert_character(body: ConvertCharacterIn,
         "caveats": out.get("caveats") or [],
         "citations": out.get("citations") or [],
     }
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Endpoint — V6.16.3 NEW — creature stat-block port
+
+@router.post("/convert/creature")
+async def convert_creature(body: ConvertCreatureIn,
+                           user: dict = Depends(get_current_user)):
+    """Take an existing creature codex node and produce a target-system
+    stat block. Saved as a NEW node in the target campaign's Knowledge
+    Web (motive: "creature") so it appears in the Director's Console
+    NPC pool ready to drop into encounters.
+
+    Permission model: GM (or admin) of both source and target campaigns.
+    """
+    src_node = await db.nodes.find_one({"id": body.source_node_id}, {"_id": 0})
+    if not src_node:
+        raise HTTPException(404, "Source codex node not found.")
+    if (src_node.get("motive") != "creature"
+            and src_node.get("type") != "creature"
+            and src_node.get("kind") != "creature"
+            and (src_node.get("fields") or {}).get("kind") != "creature"):
+        raise HTTPException(400, "Source node is not a creature — pick a node tagged as creature/monster.")
+    src_camp = await db.campaigns.find_one({"id": src_node["campaign_id"]}, {"_id": 0})
+    tgt_camp = await db.campaigns.find_one({"id": body.target_campaign_id}, {"_id": 0})
+    if not tgt_camp:
+        raise HTTPException(404, "Target campaign not found.")
+    is_admin = user.get("role") == "admin"
+    if not is_admin:
+        if src_camp and src_camp.get("gm_id") != user["id"]:
+            raise HTTPException(403, "Only the source campaign's GM (or admin) may convert.")
+        if tgt_camp.get("gm_id") != user["id"]:
+            raise HTTPException(403, "Only the target campaign's GM (or admin) may receive a converted creature.")
+    src_system = (src_node.get("fields") or {}).get("system_id") or src_camp.get("system_id") or "besm-4e"
+    tgt_system = tgt_camp.get("system_id") or "besm-4e"
+    validate_systems(src_system, tgt_system)
+
+    fields = src_node.get("fields") or {}
+    payload = {
+        "name": src_node.get("title"),
+        "summary": src_node.get("summary") or fields.get("summary"),
+        "description": fields.get("description"),
+        # Carry whichever per-system stat block is on the node already.
+        "stats": fields.get("stats"),
+        "attributes": fields.get("attributes"),
+        "defects": fields.get("defects"),
+        "total_points": fields.get("total_points"),
+        "cr": fields.get("cr"),
+        "hp": fields.get("hp"),
+        "ac": fields.get("ac"),
+        "level": fields.get("level"),
+        "health": fields.get("health"),
+        "dnd_state": fields.get("dnd_state"),
+        "cypher_state": fields.get("cypher_state"),
+        "anime5e_state": fields.get("anime5e_state"),
+        "tags": src_node.get("tags") or [],
+    }
+    constraints = {
+        "target_power_level": tgt_camp.get("power_level"),
+        "target_house_rules": tgt_camp.get("house_rules"),
+    }
+    prompt = build_content_prompt(src_system, tgt_system, "creature", payload, constraints)
+    out = await call_claude_convert(prompt, f"creature-{src_node['id']}-to-{tgt_system}")
+    target_payload = out.get("target_payload") or out
+
+    new_node = await materialise_creature(
+        target_payload, tgt_system, tgt_camp, src_node, body.name_override,
+    )
+    await db.nodes.insert_one(new_node)
+    return {
+        "node": sanitize(new_node),
+        "caveats": out.get("caveats") or [],
+        "citations": out.get("citations") or [],
+    }
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Backward-compat re-exports for existing tests + callers.
+# Pre-V6.16.3 the module owned all the engine logic; consumers imported
+# `_materialise_character`, `_validate_systems`, etc. from `routes.conversion`.
+# Keep the public-private aliases so test files + future imports don't break.
+
+from core.conversion_engine import (  # noqa: E402,F401  (re-exports for backwards compat)
+    coerce_to_dict_list as _coerce_to_dict_list,
+    materialise_character as _materialise_character,
+    materialise_creature as _materialise_creature,
+    normalise_tristat_cost_fields as _normalise_tristat_cost_fields,
+    validate_systems as _validate_systems,
+    SYSTEM_PROMPT_CONTENT,
+)
+
+__all__ = [
+    "router",
+    "ConvertContentIn",
+    "ConvertCharacterIn",
+    "ConvertCreatureIn",
+    "SUPPORTED_SYSTEMS",
+    "TARGET_SHAPE",
+    "SYSTEM_PROMPT_CONTENT",
+    # Backward-compat aliases.
+    "_coerce_to_dict_list",
+    "_materialise_character",
+    "_materialise_creature",
+    "_normalise_tristat_cost_fields",
+    "_validate_systems",
+]

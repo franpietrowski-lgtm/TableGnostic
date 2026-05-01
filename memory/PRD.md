@@ -14,6 +14,31 @@
 
 ## 2. Implemented (cumulative, condensed)
 
+### V6.16.3 — Conversion engine refactor + creature port endpoint (2026-05-01)
+
+**Refactor — split the converter module**
+- New `core/conversion_engine.py` (~440 lines) hosts all pure logic: `TARGET_SHAPE` registry, `SYSTEM_PROMPT_CONTENT`, `validate_systems`, `build_content_prompt`, `call_claude_convert`, `coerce_to_dict_list`, `normalise_tristat_cost_fields`, `_resolve_wrapper`, `_resolve_tristat_top_level`, `materialise_character`, `materialise_creature`. Zero FastAPI dependency.
+- `routes/conversion.py` slimmed to ~250 lines — endpoints only. Re-exports the underscore-prefixed engine symbols (`_materialise_character`, `_validate_systems`, etc.) so the existing test imports keep working with no changes.
+- Wrapper key lists in `_resolve_wrapper` now cover BOTH character-shape (class/level/ability_scores) AND creature-shape keys (challenge_rating, hit_points, actions, legendary_actions, target_difficulty, special_abilities, anime_traits) — the same materialiser handles both via the same dispatch.
+
+**Improvement — POST `/api/convert/creature`**
+- New endpoint takes a codex creature node + a target campaign and produces a target-system stat block as a fresh codex node (motive: "creature") in the target campaign. Director's Console + Codex Chart auto-pick it up.
+- `materialise_creature` writes per-system stat blocks into `node.fields`:
+  - **D&D 5E / Anime 5E:** full 5E monster stat block in `fields.dnd_state` + convenience fields `fields.cr / .hp / .ac` for fast Director's Console lookup. Anime 5E additionally carries `fields.anime_traits[]` for genre flair.
+  - **Cypher:** antagonist block in `fields.cypher_state` + convenience `fields.level / .target_difficulty / .health` (target_difficulty defaults to level × 3, health to level × 3 when not provided).
+  - **BESM:** `fields.stats / .total_points / .attributes / .defects` populated with normalised Tri-Stat shape.
+- Permission model identical to character port — caller must be GM (or admin) of both source and target campaigns.
+
+**Live verification — Lancing Andrewsarchus port to D&D 5E:**
+- Result: CR 4, HP 85, AC 14, full SRD-canonical stat block (Large beast, charge-based tusk attack with knockdown, 60ft speed, magical-resistance bias for cold). Three Claude caveats documented interpretive choices verbatim.
+- Created as new node in D&D campaign — auto-visible in Director's Console + Codex.
+
+**Tests — `tests/test_iter50_v616_3_creature.py` (9 new tests)**
+- D&D / Anime 5E / Cypher / BESM creature stat-block materialiser coverage
+- CR / health fallback defaults
+- Endpoint pydantic schema (ConvertCreatureIn)
+- Cumulative: 51/51 backend tests pass.
+
 ### V6.16.2 — Anime 5E correctly runs on 5E OGL chassis (2026-05-01)
 
 User correction after V6.16.1: Anime 5E is built on D&D 5E OGL with a Tri-Stat point-buy SUPPLEMENT layer, not the other way around. Eli's Anime 5E port should be a 5E character (class/level/race/background/ability scores/HP/AC/spells/equipment) with the residual BESM-only mechanics living in `anime5e_state.point_buys[]`.
