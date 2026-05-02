@@ -8,6 +8,7 @@ import Battlemap from "./Battlemap";
 import XPAwardPanel from "./XPAwardPanel";
 import MacroBar from "./MacroBar";
 import EncounterDesigner from "./EncounterDesigner";
+import QuickCastDock from "./QuickCastDock";
 
 export default function SessionView() {
   const { id } = useParams();
@@ -589,6 +590,11 @@ export default function SessionView() {
           onClose={() => setXpOpen(false)}
           onCommitted={() => loadAll()}
         />
+      )}
+
+      {/* V6.17 — Floating Quick-Cast dock for the active player. */}
+      {campaign && session && (
+        <QuickCastDock sessionId={id} campaignId={campaign.id || campaign._id || session.campaign_id}/>
       )}
     </div>
   );

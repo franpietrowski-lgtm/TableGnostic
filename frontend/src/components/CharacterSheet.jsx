@@ -12,6 +12,9 @@ import DndSheetView from "./sheets/DndSheetView";
 import CypherSheetView from "./sheets/CypherSheetView";
 import { CharacterJournal } from "./sheets/sheetCommon";
 import ConvertCharacterButton from "./ConvertCharacterButton";
+import { AdvancementBadge } from "./AdvancementWizard";
+import AdvancementWizard from "./AdvancementWizard";
+import SpellTracker from "./SpellTracker";
 
 export default function CharacterSheet() {
   const { id } = useParams();
@@ -27,6 +30,7 @@ export default function CharacterSheet() {
   const [selectedSession, setSelectedSession] = useState("");
   const [pbpChannelId, setPbpChannelId] = useState(null);
   const [campaign, setCampaign] = useState(null);
+  const [showAdvWizard, setShowAdvWizard] = useState(false);
   // V6.14 — active sub-tab. Valid: identity | mechanics | inventory | history.
   const [sheetTab, setSheetTab] = useState(() => {
     const h = ((typeof window !== "undefined" && window.location.hash) || "")
@@ -183,7 +187,10 @@ export default function CharacterSheet() {
         </Link>
         {/* V6.16 — sheet action toolbar lives above the tabs so it's
             visible on Mechanics / Inventory / History as well as Identity. */}
-        <div className="flex gap-2 flex-wrap" data-testid="sheet-action-toolbar">
+        <div className="flex gap-2 flex-wrap items-center" data-testid="sheet-action-toolbar">
+          <AdvancementBadge characterId={ch.id}
+                            isOwnerOrGm={canEditMech}
+                            onClick={() => setShowAdvWizard(true)}/>
           <button onClick={async () => {
                     try {
                       const token = localStorage.getItem("tg_token");
@@ -310,6 +317,8 @@ export default function CharacterSheet() {
 
       {/* ───────── Mechanics tab ───────── */}
       {sheetTab === "mechanics" && (<>
+      {/* V6.17 — Spell + Cooldown tracker (renders only when sheet has slots/bundles/EP). */}
+      <SpellTracker characterId={ch.id} isOwnerOrGm={canEditMech}/>
       {/* System-shaped read view — D&D 5E / Cypher get their own block;
           BESM 4E (and Anime 5E by default) keep the original tri-stat layout. */}
       {dndState && <DndSheetView state={dndState} folio={ch.folio} roll={roll}/>}
@@ -728,6 +737,13 @@ export default function CharacterSheet() {
           source (BESM power packs / D&D magic items / Cypher cyphers). */}
       {sheetTab === "inventory" && (
         <SheetInventoryPanel character={ch} canEditMech={canEditMech}/>
+      )}
+
+      {showAdvWizard && (
+        <AdvancementWizard characterId={ch.id}
+                            isOwnerOrGm={canEditMech}
+                            onClose={() => setShowAdvWizard(false)}
+                            onApplied={load}/>
       )}
 
     </div>

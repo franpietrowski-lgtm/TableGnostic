@@ -1,0 +1,46 @@
+{
+  "summary": "V6.17 (Advancement Checker + Spell Tracker + 68-entry SRD-safe Anime 5E reference seed) validated. Backend: 11/11 unit tests + 15/15 new live-API smoke tests = 26/26 pytest pass. GET /api/characters/{cid}/advancement works on Eli across Anime/D&D/Cypher; POST apply rejects unknown ids with 400 and non-owner with 403/404. Spell Tracker GET/cast/restore validated on D&D and Anime Eli. Anime5E seed is IDEMPOTENT (1st call inserts, 2nd call skips 50+ entries, non-GM Aurora gets 403, unknown campaign → 404). anime5e-recompute-budget honors campaign formula and returns new_point_budget + formula; 400 on non-anime campaigns. Frontend: logged in as GMFran, navigated to Eli (Anime 5E, lvl 5 Artificer Alchemist) — data-testid=advancement-badge-pending renders with '2 PENDING CHOICES' (subclass-3 + asi-4). Clicking the badge opened AdvancementWizard modal (screenshot confirms 'ADVANCEMENT · STEP 1 OF 2 · Artificer (Alchemist) Subclass' title, free-text-choice input, optional note, Prev/Next, 'Apply & record' button). SpellTracker and QuickCastDock are wired in CharacterSheet.jsx:321 and SessionView.jsx:597 respectively (grep-verified imports + JSX mounts).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_assertions": [
+    "pytest tests/test_iter52_v617_advancement_tracker.py — 11/11 pass (seed schema, page/kind normalizer, DnD ASI-4 detect, Cypher tier owed math, Anime 5E underspend, no-ASI-before-4 negative, Wizard-5 full caster slot table [4/3/2], Warlock short-rest flag, slot_usage subtraction, bundle inclusion + filter)",
+    "pytest tests/test_iter52_v617_api.py — 15/15 pass: Advancement GET on Eli Anime/DnD/Cypher all 200 with pending list; apply unknown id → 400; Aurora 403/404 on foreign char apply & cast; Spell Tracker GET returns spell_slots + power_bundles; cast missing slot_level → 400; restore long rest 200; seed-anime5e-reference idempotent (2nd call inserted=0, skipped>=50); seed unknown campaign → 404; Aurora (player) → 403; anime5e-recompute-budget returns ok=true + new_point_budget + formula; non-anime campaign → 400",
+    "GMFran login (franpietrowski@gmail.com / PieGod08!!) → 200 and /app landing",
+    "Navigate to /app/characters/29aaf1ce3b3c4261812a8749802e7fea → advancement-badge-pending rendered with visible '2 PENDING CHOICES' pill",
+    "Click AdvancementBadge → AdvancementWizard modal opens with 'Artificer (Alchemist) Subclass · STEP 1 OF 2', free-text-choice input, optional note textarea, Prev/Next pager, 'Apply & record' CTA — all visible in screenshot v617_anime_sheet.png",
+    "CharacterSheet.jsx imports AdvancementBadge (L15) + SpellTracker (L17); mounts AdvancementBadge at L191, SpellTracker at L321 gated on canEditMech",
+    "SessionView.jsx imports QuickCastDock (L11) and mounts at L597 with sessionId + campaignId props"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_iter52_v617_advancement_tracker.py",
+    "/app/backend/tests/test_iter52_v617_api.py",
+    "/app/test_reports/pytest/iter52_v617_unit.xml",
+    "/app/test_reports/pytest/iter52_v617_api.xml"
+  ],
+  "action_items": [
+    "VERIFY during a live session: SpellTracker visibility on character sheet requires canEditMech=true — make sure owner/GM check resolves promptly on slow networks (same race-risk pattern as iter_49 Convert button).",
+    "VERIFY SessionView route: direct navigation to /app/campaigns/{cid}/session redirects to landing. If that's an intentional gate (no active session), consider a friendlier '/no active session' state rather than a silent redirect to / which can look like a logout.",
+    "Review request listed outdated character IDs for D&D Eli (733ff0dc…) and Cypher Eli (3c37c7ab…); the live DB has 2c68ff49f249418b8ff2effef20ef1fc (D&D) and 48e2358e167e4261a59130d4c759ccf9 (Cypher). Update /app/memory or seed scripts so next iteration gets correct IDs."
+  ],
+  "critical_code_review_comments": [
+    "routes/advancement.py is 684 lines — still under 700, but close. Splitting into advancement_detect.py + spell_tracker.py + seed_admin.py would improve maintainability.",
+    "_build_spell_tracker_state and _detect_advancement are pure helpers — good test surface (11 unit tests cover them). Keep as pure functions.",
+    "AdvancementApplyIn.advancement_id uses string prefix matching (asi-/subclass-/cypher-tier-) — works but brittle. Consider an enum kind + lvl fields in the payload for forward-compat with new systems.",
+    "seed-anime5e-reference uses system_id check 'anime-5e' only — if other systems ever want seed templates, generalise to accept a seed registry key.",
+    "Frontend AdvancementWizard modal's data-testid can be overridden via `testid` prop; my test query '[data-testid=advancement-modal]' didn't match — consistent fallback naming or export a constant would help."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter52_v617_api.py (new — 15 live API smoke tests)"
+  ],
+  "success_rate": {"backend": "100% (26/26 pytest: 11 unit + 15 API)", "frontend": "~90% — AdvancementBadge + AdvancementWizard visually verified; SpellTracker/QuickCastDock source-mounts confirmed but direct live verification blocked by session route redirect"},
+  "test_credentials": "franpietrowski@gmail.com / PieGod08!! (GMFran admin); albanaszak@ymail.com / AuroraTest123! (Aurora player)",
+  "seed_data_creation": "None created. Re-ran POST /api/admin/seed-anime5e-reference on Anime Evereantha (f68e1b23…) — idempotent, 68 entries already present.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "V6.17 backend is green (26/26 pytest). Advancement Checker detects DnD ASI, subclass, Cypher tier owed, Anime 5E underspend; apply endpoint persists ASI deltas into ability_scores + advancement_log, subclass/fighting-style sets flat fields, cypher-tier appends to tier_benefits_log. Spell Tracker returns slots + bundles + EP from pure helper, cast/restore mutates folio.dnd_state.slot_usage & power_bundles.charges_current. Anime 5E seed idempotent via (campaign_id, kind, name) match. Eli IDs in live DB: Anime=29aaf1ce3b3c4261812a8749802e7fea, Cypher=48e2358e167e4261a59130d4c759ccf9, DnD=2c68ff49f249418b8ff2effef20ef1fc, BESM=244db025742b4bd9a9662f6240e40729 (review request had outdated DnD/Cypher IDs). Anime campaign=f68e1b235fbe4f1bab702a05aa7b4467. Frontend: AdvancementBadge+Wizard visually confirmed; SessionView route /app/campaigns/{cid}/session redirects to landing (likely requires active session_id, not campaign_id) — needs a live session for QuickCastDock UI verification.",
+  "rca of the issue": "No blocking issues found. Minor: /app/campaigns/{cid}/session route silently redirects to / when no active session — cosmetic, not a V6.17 regression."
+}
