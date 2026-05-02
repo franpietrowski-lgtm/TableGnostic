@@ -14,6 +14,45 @@
 
 ## 2. Implemented (cumulative, condensed)
 
+### V6.17 — Per-system Advancement Checker + Spell/Cooldown Tracker + Anime 5E SRD-safe seed (2026-05-02)
+
+**Per-system Advancement Checker (`routes/advancement.py`)**
+- `GET /api/characters/{cid}/advancement` detects pending choices per system:
+  - **D&D 5E / Anime 5E**: ASI windows at 4/8/12/16/19 (+ Fighter 6/14, Rogue 10), Fighting Style (Fighter/Paladin/Ranger), Subclass (level 1 for Cleric/Sorcerer/Warlock, level 3 otherwise).
+  - **Cypher**: 4 owed benefit picks per tier-up — surfaces tier-by-tier checklist (stat / edge / effort / skill / ability / cypher-cap).
+  - **Anime 5E**: BESM-style point-buy underspend advisory (≥2 unspent pts).
+  - **BESM 4E**: unspent XP advisory (≥5 XP).
+- `POST /api/characters/{cid}/advancement/apply` persists the chosen branch (asi-{lvl}, fighting-style, subclass-{lvl}, cypher-tier-{t}). ASI deltas write directly into `folio.dnd_state.ability_scores`; cypher benefits append to `folio.cypher_state.tier_benefits_log[tier]`.
+
+**Frontend — `AdvancementBadge` + `AdvancementWizard`**
+- `AdvancementBadge` pill (testid `advancement-badge-pending` / `advancement-badge-clean`) lives on the sheet action toolbar. Pulses gold + `N pending choices` copy when work is owed; muted "Up to date" when clean. Auto-refreshes on `tg:advancement-applied` event.
+- `AdvancementWizard` modal (`advancement-wizard`) — guided picker per kind: ASI/feat radio + ability dropdowns; fighting-style 6-option list; cypher tier-benefit checklist; advisory panels for point-buy underspend and unspent BESM XP. Step n/N indicator + Prev/Next/Apply, optional GM-visible note. ESC + click-outside close.
+
+**Spell / Cooldown Tracker (`routes/advancement.py` shared)**
+- `GET /api/characters/{cid}/spell-tracker` — assembles spell slots (full / half / warlock pact via SRD class table), Power Bundle charges, Anime 5E EP pool. Reads `folio.dnd_state.slot_usage` for live remainders.
+- `POST /api/characters/{cid}/spell-tracker/cast` — body `{kind: "slot"|"bundle"|"ep", slot_level?|bundle_name?|amount?}` consumes a slot/charge/EP.
+- `POST /api/characters/{cid}/spell-tracker/restore` — `rest_type: "long"|"short"`. Long resets all slots, all bundle charges, EP. Short resets Warlock pact slots + per-scene bundles only.
+
+**Frontend — `SpellTracker` + `QuickCastDock`**
+- `SpellTracker.jsx` (testid `spell-tracker`) — inline character-sheet widget under the Mechanics tab. Renders spell slots, power bundles, EP. Owner/GM gets per-slot **Cast** and per-bundle **Invoke** buttons + Long/Short rest controls. Pulses gold on the just-spent slot for descriptive feedback.
+- `QuickCastDock.jsx` (testid `quick-cast-dock`) — collapsible bottom-right floating dock on `SessionView`. Auto-resolves the active player's PC (first owned in campaign), surfaces compact slot chips, bundle invoke buttons, EP spend (−1/−2), Short/Long rest controls, and an "Open full sheet" link. Listens for `tg:spell-tracker-changed` events so the inline tracker and dock stay in lockstep.
+
+**SRD-safe Anime 5E reference seed (`system_data/anime5e_reference_seed.py`)**
+- 68 in-house authored entries spanning class features (5), race traits (8), backgrounds (8), feats (10), spells (8), weapons (8), armor (4), items (10), power packs (3), power bundles (4). All descriptive prose is original; each entry cites only the Anime 5E SRD page-equivalent for orientation.
+- `POST /api/admin/seed-anime5e-reference?campaign_id=...&overwrite=false` — GM/admin only. Idempotent: skips entries with a (kind, name) match unless `overwrite=true`. Returns `{inserted, skipped_existing, overwritten, total_in_seed}`.
+- Live verified on Anime 5E Evereantha (`f68e1b23…`): 68 inserted on first run, 0 inserted + 68 skipped on the idempotent re-run.
+
+**Anime 5E XP→CP formula honoring**
+- `POST /api/characters/{cid}/anime5e-recompute-budget` — recomputes and persists `folio.anime5e_state.point_budget` using the campaign's `anime5e_xp_formula` (flat / curve, V6.4) and the chassis level. Returns `{previous_point_budget, new_point_budget, level, formula}`. Owner/GM/admin only; 400 on non-Anime campaigns.
+
+**Testing — `tests/test_iter52_v617_advancement_tracker.py` + `test_iter52_v617_api.py`**
+- 11 unit tests (seed shape + size, page-int extraction, plural-kind coercion, advancement detection per system, spell tracker math) + 15 live-API smoke tests = 26/26 pytest pass. Cumulative: 84/84.
+- Frontend testing-agent (iter52): AdvancementBadge + AdvancementWizard visually verified live on Eli (Anime 5E lvl 5 Artificer Alchemist) — 2 pending choices ("subclass-3" + "asi-4"), modal opened with step 1/2 title + Prev/Next/Apply controls. SpellTracker + QuickCastDock source-mounts grep-verified (CharacterSheet.jsx:321 + SessionView.jsx:597). Idempotent Anime 5E seed verified twice. Apply ASI +2 INT verified to clear pending and update `ability_scores`.
+
+**Notes for next iteration**
+- Live DB IDs at this iteration: D&D Eli `2c68ff49f249418b8ff2effef20ef1fc`, Cypher Eli `48e2358e167e4261a59130d4c759ccf9`, Anime Eli `29aaf1ce3b3c4261812a8749802e7fea`, BESM Eli `244db025742b4bd9a9662f6240e40729`. Older recorded IDs in earlier PRD entries are stale.
+- Cosmetic: `/app/campaigns/{cid}/session` silently redirects to `/` when no active session is running. Consider a friendlier "no-active-session" landing.
+
 ### V6.16.4 — Entities unification + Section-aware ingest + Convert buttons for nodes and references (2026-05-01)
 
 **Entities unification (Director's Console + Encounter Builder)**
