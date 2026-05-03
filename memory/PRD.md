@@ -14,6 +14,47 @@
 
 ## 2. Implemented (cumulative, condensed)
 
+### V6.22 — World-tree codex-awareness + ReferencePicker z-index + Cut A2 class library expansion (2026-05-03)
+
+User-reported bug list addressed:
+
+**🔴 P0.1 — ReferencePicker dropdown rendering behind other cards** (`/app/frontend/src/components/builders/ReferencePicker.jsx`)
+- Bug: The autocomplete dropdown's `z-30` was being shadowed by the BESM Point-Buy Layer card's stacking context, and `bg-void/95 backdrop-blur-md` let downstream content bleed through.
+- Fix: Bumped dropdown to `z-[100]`, lifted the parent picker card to `relative z-50` + `isolation: isolate` while open, and replaced the translucent backdrop with a **fully opaque** inline background (`rgb(8, 6, 14)` + a subtle gold-to-black gradient).
+- Verified visually with the screenshot tool: "Longsword / Longbow" suggestions now render with solid contrast above downstream cards.
+
+**🔴 P0.2 — World Tree empty / not codex-aware** (`/app/backend/routes/world_creation.py`, `/app/frontend/src/components/WorldCreationTree.jsx`, `WorldTreeGraph.jsx`)
+- Root cause: `routes/world_creation.py` queried `db.codex_nodes` but ALL existing codex content lives in `db.nodes` (the same collection used by `/api/campaigns/{cid}/nodes`). Evereantha had 43 nodes that the World Tree never saw.
+- Fix:
+  - Replace-all `db.codex_nodes` → `db.nodes` (7 references).
+  - **`get_creation_tree()` auto-classifies** every codex node by its `type` field into a `Pillar.Branch` section (npc/faction → Population.Factions, location → Geography.Locations, lore/event/quest → History.Of the People, etc.). The existing `creation_tree.section` tag still wins when present.
+  - Returns new `unplaced[]` field for nodes whose type the classifier couldn't map.
+  - Each entry carries `auto_placed: bool` so the front-end can show a subtle "*auto*" badge.
+  - Display name falls back: `title` → `name` → "(unnamed)" so both legacy codex-editor rows and world-tree-sown rows render.
+- Frontend: WorldCreationTree's `BranchRow` now shows clickable codex chips with the "*auto*" classifier badge; clicking fires `tg:open-codex-node` event. Pillars/Graph view both populate from the unified codex pool. Live result on Evereantha: **28 Factions / 12 Locations / 4 Of-the-People** entries auto-classified into the correct pillars.
+
+**🔴 P0.3 — CodexLinkWidget source/target dropdowns empty** (`/app/backend/routes/world_creation.py` + `/app/frontend/src/components/WorldCreationTree.jsx`)
+- Root cause: `GET /api/campaigns/{cid}/codex-nodes` didn't exist (404) and `POST /codex-nodes` was missing for the world tree's `sow()` flow.
+- Fix: Added 3 new endpoints:
+  - `GET /api/campaigns/{cid}/codex-nodes` — returns every codex node with both `name` + `title` populated.
+  - `POST /api/campaigns/{cid}/codex-nodes` — creates a creation-tree-tagged node.
+  - `PATCH /api/campaigns/{cid}/codex-nodes/{nid}/place` — explicitly dock an untagged node into a pillar.
+- Frontend CodexLinkWidget now displays `name || title || "(unnamed)"` so legacy nodes (which use `title`) appear in the source/target selectors.
+- **44 nodes** (43 codex + 1 anchor) verified rendering in the World Tree Graph view.
+
+**🟧 P1 — Cut A2 class library expansion** (`/app/backend/system_data/class_progression.py`)
+- 7 → **22 classes** (additive; existing 7 untouched):
+  - PHB 5E (11 added): Barbarian, Bard, Cleric, Druid, Monk, Paladin, Ranger, Rogue, Sorcerer, Warlock + (Champion archetype available within Fighter L3 subclass — not duplicated as a standalone).
+  - Anime 5E specialty (5 added): **Magical Girl** (Charisma full caster + Henshin/Sparkling Finisher), **Mech Pilot** (mecha frame + hardpoint retrofit + Bailout), **Sentai** (team morph + Megazord at L7), **Esper** (psionic full caster + Mind's Shield), **Demihuman** (heritage-as-class chassis with kitsune/oni/nekomata/tengu/naga/centaur subpaths).
+- Each class records `hit_die`, `save_profs`, armor/weapon/tool profs, skill choices, spell progression, and a 10-level granular feature timeline.
+- All values authored in-house — no rulebook prose verbatim.
+- Tests: `test_v622_world_creation.py` (10/10 pass) verifies `Bard L5`, `Magical Girl L3`, `Sentai L10` cumulative_features all return populated timelines.
+
+**Testing**
+- 10/10 new V6.22 backend tests pass.
+- 74/74 prior pytest still pass.
+- Frontend: visual verification via screenshot tool — dropdown opacity ✅, World Tree codex-aware ✅ (28+12+4 entries), Graph view ✅ (44 nodes), DnD inventory picker ✅ ("Longsword/Longbow" suggestions on `long`).
+
 ### V6.21 — Anime 5E DP RAW math + ReferencePicker dropdowns + WorldTreeGraph + Reference auto-link + GM/Player consent flow (2026-05-03)
 
 **🔴 P0 — Anime 5E DP math RAW-correction (finished from V6.20 mid-flight rewrite)**

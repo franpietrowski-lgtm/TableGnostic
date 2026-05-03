@@ -41,13 +41,21 @@ const PILLAR_ANCHORS = {
 };
 
 function inferPillar(node) {
+  // V6.22 — prefer pre-classified pillar from the backend (set via
+  // auto-type-to-section map or explicit creation_tree.section).
   const p = node.fields?.pillar;
   if (p && PILLAR_COLORS[p]) return p;
-  // Fall back on node kind:
-  const k = (node.kind || "").toLowerCase();
-  if (["person", "npc", "faction", "creature", "character"].includes(k)) return "Population";
-  if (["location", "place", "biome", "region"].includes(k)) return "Geography";
-  if (["lore", "event", "chronicle", "quest"].includes(k)) return "History";
+  // Derive from pillar_branch key if present (e.g., "Population.Factions").
+  const branch = node.fields?.pillar_branch || "";
+  const head = branch.split(".")[0];
+  if (head && PILLAR_COLORS[head]) return head;
+  // Fall back on node kind / type.
+  const k = (node.kind || node.node_kind || node.type || "").toLowerCase();
+  if (["person", "npc", "faction", "creature", "character", "pc", "nation",
+        "religion", "language", "law", "technology"].includes(k)) return "Population";
+  if (["location", "place", "biome", "region", "country", "continent",
+        "landmark", "god", "dimension"].includes(k)) return "Geography";
+  if (["lore", "event", "chronicle", "quest", "era", "treaty", "myth"].includes(k)) return "History";
   return "Unclassified";
 }
 

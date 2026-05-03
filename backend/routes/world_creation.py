@@ -109,7 +109,14 @@ async def get_creation_tree(cid: str,
                               user: dict = Depends(get_current_user)):
     """Return the canonical Creation Tree schema PLUS the campaign's
     populated codex nodes grouped by tree section. Front-end uses this
-    to render the tree UI with prompt fields per branch."""
+    to render the tree UI with prompt fields per branch.
+
+    V6.22 — codex-aware merge: ALL codex nodes (not just those already
+    tagged with `creation_tree.section`) are returned, with untagged
+    entries auto-classified into a pillar by their `type` field so the
+    World Tree reflects the campaign's real codex instead of appearing
+    empty on campaigns that predate the Creation Tree feature.
+    """
     camp = await db.campaigns.find_one({"id": cid}, {"_id": 0})
     if not camp:
         raise HTTPException(404, "Campaign not found")
@@ -117,27 +124,83 @@ async def get_creation_tree(cid: str,
         and user["id"] not in (camp.get("member_ids") or [])
         and user.get("role") != "admin"):
         raise HTTPException(403, "Not a table member.")
-    # Pull codex nodes tagged with creation_tree.section
-    rows = await db.codex_nodes.find(
-        {"campaign_id": cid, "creation_tree": {"$exists": True}},
-        {"_id": 0},
+    # ALL codex nodes for this campaign (not just creation_tree-tagged).
+    rows = await db.nodes.find(
+        {"campaign_id": cid}, {"_id": 0},
     ).to_list(length=2000)
+
+    # V6.22 — fall-through classifier: map node `type` → pillar.branch
+    # section (matches the frontend PillarPanel's `${pillar}.${branch}`
+    # key format). This keeps legacy codex nodes from vanishing when
+    # the Creation Tree view is opened.
+    TYPE_TO_SECTION = {
+        # Population
+        "npc": "Population.Factions",
+        "person": "Population.Prominent People",
+        "character": "Population.Prominent People",
+        "faction": "Population.Factions",
+        "creature": "Population.Races",
+        "pc": "Population.Prominent People",
+        "nation": "Population.Nations",
+        "religion": "Population.Religions",
+        "language": "Population.Languages",
+        "law": "Population.Laws",
+        "technology": "Population.Technology",
+        # Geography
+        "location": "Geography.Locations",
+        "place": "Geography.Locations",
+        "region": "Geography.Continents",
+        "biome": "Geography.Biomes",
+        "landmark": "Geography.Locations",
+        "country": "Geography.Countries",
+        "continent": "Geography.Continents",
+        "god": "Geography.Gods",
+        "dimension": "Geography.Dimensions",
+        # History
+        "lore": "History.Of the People",
+        "event": "History.Of the People",
+        "chronicle": "History.Written",
+        "quest": "History.Of the People",
+        "era": "History.Natural History",
+        "treaty": "History.Written",
+        "myth": "History.Oral",
+    }
+
     grouped: Dict[str, List[Dict[str, Any]]] = {}
+    unplaced: List[Dict[str, Any]] = []
+
     for r in rows:
-        sec = (r.get("creation_tree") or {}).get("section")
+        ct = r.get("creation_tree") or {}
+        sec = ct.get("section")
         if not sec:
-            continue
-        grouped.setdefault(sec, []).append({
-            "id": r.get("id"), "name": r.get("name"),
-            "node_kind": r.get("node_kind"),
-            "color": (r.get("creation_tree") or {}).get("color"),
-            "weight": (r.get("creation_tree") or {}).get("weight"),
-            "summary": r.get("summary") or "",
-        })
+            # Auto-classify by node type.
+            node_type = (r.get("type") or r.get("node_kind") or "").lower()
+            sec = TYPE_TO_SECTION.get(node_type)
+        # Legacy rows may store the display text under `title` (codex
+        # editor) or `name` (world-tree seeder). Prefer `title` and
+        # fall back to `name` so both paths render.
+        display_name = r.get("title") or r.get("name") or "(unnamed)"
+        entry = {
+            "id": r.get("id"),
+            "name": display_name,
+            "title": display_name,
+            "node_kind": r.get("node_kind") or r.get("type"),
+            "type": r.get("type"),
+            "color": ct.get("color"),
+            "weight": ct.get("weight"),
+            "auto_placed": not bool((r.get("creation_tree") or {}).get("section")),
+            "summary": (r.get("summary") or r.get("content") or "")[:400],
+        }
+        if sec:
+            grouped.setdefault(sec, []).append(entry)
+        else:
+            unplaced.append(entry)
+
     return {
         "campaign_id": cid,
         "schema": CREATION_TREE_SCHEMA,
         "populated": grouped,
+        "unplaced": unplaced,
         "node_count": len(rows),
     }
 
@@ -196,7 +259,7 @@ async def create_creation_myth(
     doc.pop("_id", None)
     # Auto-link the myth back to its parent node by stamping the node.
     if body.parent_node_id:
-        await db.codex_nodes.update_one(
+        await db.nodes.update_one(
             {"id": body.parent_node_id, "campaign_id": cid},
             {"$set": {"has_creation_myth": True,
                        "creation_myth_id": doc["id"],
@@ -245,12 +308,133 @@ async def delete_creation_myth(
         raise HTTPException(403, "GM/admin only.")
     myth = await db.creation_myths.find_one({"id": mid, "campaign_id": cid})
     if myth and myth.get("parent_node_id"):
-        await db.codex_nodes.update_one(
+        await db.nodes.update_one(
             {"id": myth["parent_node_id"], "campaign_id": cid},
             {"$set": {"has_creation_myth": False, "creation_myth_id": None}},
         )
     res = await db.creation_myths.delete_one({"id": mid, "campaign_id": cid})
     return {"ok": True, "deleted": res.deleted_count}
+
+
+# ─── Codex nodes helper endpoints (V6.22) ──────────────────────────────
+#
+# The WorldCreationTree UI sow() flow POSTs to `/codex-nodes` with a
+# `creation_tree.section` tag; the CodexLinkWidget GETs `/codex-nodes`
+# to populate source/target dropdowns. Both were missing pre-V6.22, so
+# the world tree was never codex-aware and link widgets had empty
+# selectors. These endpoints close the gap by re-using `db.nodes`
+# (same collection as /nodes) with creation-tree-specific shape.
+
+
+class CreationTreeSow(BaseModel):
+    name: str = Field(min_length=1, max_length=200)
+    node_kind: str = Field(default="concept", max_length=40)
+    summary: str = ""
+    creation_tree: Dict[str, Any] = Field(default_factory=dict)
+
+
+@router.get("/campaigns/{cid}/codex-nodes")
+async def list_codex_nodes(cid: str,
+                            user: dict = Depends(get_current_user)):
+    """List every codex node for the campaign. Returns `title`, `name`,
+    `id`, `type`, `node_kind` on every row so the link-widget dropdowns
+    work whether the node was created via the world tree sow() (uses
+    `name`) or the legacy codex editor (uses `title`)."""
+    camp = await db.campaigns.find_one({"id": cid}, {"_id": 0})
+    if not camp:
+        raise HTTPException(404, "Campaign not found")
+    if (user["id"] != camp["gm_id"]
+        and user["id"] not in (camp.get("member_ids") or [])
+        and user.get("role") != "admin"):
+        raise HTTPException(403, "Not a table member.")
+    rows = await db.nodes.find(
+        {"campaign_id": cid},
+        {"_id": 0, "id": 1, "name": 1, "title": 1, "node_kind": 1,
+         "type": 1, "summary": 1, "content": 1, "creation_tree": 1},
+    ).to_list(length=5000)
+    out = []
+    for r in rows:
+        display = r.get("title") or r.get("name") or "(unnamed)"
+        out.append({
+            "id": r.get("id"),
+            "name": display,
+            "title": display,
+            "node_kind": r.get("node_kind") or r.get("type") or "concept",
+            "type": r.get("type"),
+            "summary": (r.get("summary") or r.get("content") or "")[:300],
+            "creation_tree": r.get("creation_tree") or {},
+        })
+    out.sort(key=lambda x: x["name"].lower())
+    return out
+
+
+@router.post("/campaigns/{cid}/codex-nodes")
+async def sow_codex_node(
+    cid: str, body: CreationTreeSow,
+    user: dict = Depends(get_current_user),
+):
+    """Create a creation-tree-tagged codex node. Used by the world
+    tree's sow() flow to seed new entries directly into a pillar."""
+    camp = await db.campaigns.find_one({"id": cid}, {"_id": 0})
+    if not camp:
+        raise HTTPException(404, "Campaign not found")
+    if camp["gm_id"] != user["id"] and user.get("role") != "admin":
+        raise HTTPException(403, "GM/admin only.")
+    doc = {
+        "id": new_id(),
+        "campaign_id": cid,
+        "name": body.name.strip(),
+        "title": body.name.strip(),
+        "node_kind": body.node_kind,
+        "type": body.node_kind,
+        "summary": body.summary.strip(),
+        "content": body.summary.strip(),
+        "creation_tree": dict(body.creation_tree or {}),
+        "tags": [],
+        "fields": {},
+        "visibility": "gm",
+        "revealed_to": [],
+        "author_id": user["id"],
+        "author_name": user.get("name"),
+        "created_at": now_iso(),
+        "updated_at": now_iso(),
+    }
+    await db.nodes.insert_one(dict(doc))
+    return {"ok": True, "node": doc}
+
+
+class CodexNodePlacement(BaseModel):
+    section: str = Field(min_length=1, max_length=80)
+    color: Optional[str] = None
+    weight: Optional[int] = Field(default=None, ge=1, le=10)
+
+
+@router.patch("/campaigns/{cid}/codex-nodes/{nid}/place")
+async def place_codex_node(
+    cid: str, nid: str, body: CodexNodePlacement,
+    user: dict = Depends(get_current_user),
+):
+    """V6.22 — explicitly dock an untagged codex node into a specific
+    pillar.branch section on the World Tree. Used by the 'pin to
+    pillar' control on the Graph view's unplaced tray."""
+    camp = await db.campaigns.find_one({"id": cid}, {"_id": 0})
+    if not camp:
+        raise HTTPException(404, "Campaign not found")
+    if camp["gm_id"] != user["id"] and user.get("role") != "admin":
+        raise HTTPException(403, "GM/admin only.")
+    upd = {
+        "creation_tree.section": body.section,
+        "updated_at": now_iso(),
+    }
+    if body.color is not None:
+        upd["creation_tree.color"] = body.color
+    if body.weight is not None:
+        upd["creation_tree.weight"] = body.weight
+    res = await db.nodes.update_one(
+        {"id": nid, "campaign_id": cid}, {"$set": upd})
+    if res.matched_count == 0:
+        raise HTTPException(404, "Node not found")
+    return {"ok": True}
 
 
 # ─── Codex Link Widget — extended edge schema ───────────────────────────

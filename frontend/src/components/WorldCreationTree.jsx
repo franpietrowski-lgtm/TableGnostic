@@ -48,19 +48,26 @@ export default function WorldCreationTree({ campId, isGm }) {
   // Flatten populated nodes across all pillars/branches for the graph.
   // NOTE: must be declared before any early return to satisfy the
   // react-hooks/rules-of-hooks lint rule.
+  // V6.22 — backend returns populated as a flat map keyed by
+  // "Pillar.Branch" (e.g., "Population.Factions"). Split the key so
+  // each node carries its pillar + branch in `fields` for the graph
+  // clusterer to pick up.
   const allNodes = useMemo(() => {
     const out = [];
-    Object.entries(data?.populated || {}).forEach(([pillar, branches]) => {
-      Object.entries(branches || {}).forEach(([branch, items]) => {
-        (items || []).forEach((n) => {
-          out.push({
-            ...n,
-            fields: { ...(n.fields || {}),
-                       pillar: n.fields?.pillar || pillar,
-                       pillar_branch: n.fields?.pillar_branch || branch },
-          });
+    Object.entries(data?.populated || {}).forEach(([section, items]) => {
+      const [pillar, branch] = section.split(".");
+      (items || []).forEach((n) => {
+        out.push({
+          ...n,
+          fields: { ...(n.fields || {}),
+                     pillar: n.fields?.pillar || pillar,
+                     pillar_branch: n.fields?.pillar_branch || branch },
         });
       });
+    });
+    // Also include unplaced nodes so the GM can see everything.
+    (data?.unplaced || []).forEach((n) => {
+      out.push({ ...n, fields: { ...(n.fields || {}), pillar: "Unclassified" } });
     });
     return out;
   }, [data]);
@@ -116,6 +123,13 @@ export default function WorldCreationTree({ campId, isGm }) {
                          }}/>
       ) : (
         <>
+        {/* V6.22 — Unplaced codex tray. Shows auto-classified legacy
+            codex entries above the pillar panels; GM can manually
+            re-dock a node by clicking the 'pin' button. */}
+        {(data.unplaced?.length || 0) > 0 && (
+          <UnplacedTray campId={campId} unplaced={data.unplaced}
+                         isGm={isGm} onChanged={refresh}/>
+        )}
         {/* Three pillars */}
         <div className="grid md:grid-cols-3 gap-3" data-testid="wct-pillars">
           {Object.entries(data.schema.pillars).map(([pillar, meta]) => (
@@ -180,6 +194,39 @@ export default function WorldCreationTree({ campId, isGm }) {
             ))}
           </div>
         )}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * UnplacedTray — V6.22. Shows codex nodes that were auto-classified
+ * (carry `auto_placed: true` from the backend) so the GM can confirm
+ * the placement or re-dock to a different pillar/branch. Also shows
+ * anything the classifier couldn't figure out under "Unknown type".
+ */
+function UnplacedTray({ campId, unplaced, isGm, onChanged }) {
+  return (
+    <div className="card-mystic p-3" data-testid="wct-unplaced-tray">
+      <div className="flex items-baseline justify-between">
+        <div className="label-ref">Unclassified codex entries</div>
+        <span className="text-[10px] text-mist italic">
+          {unplaced.length} unplaced — no `type` matched a pillar.
+        </span>
+      </div>
+      <div className="text-[10px] text-mist/80 italic mt-0.5 mb-2">
+        Assign each to a pillar.branch so the World Tree reflects your
+        canon. Classified entries (auto-placed by type) already appear
+        in the pillar panels below — hover a chip there to see the
+        classifier badge.
+      </div>
+      <div className="flex flex-wrap gap-1">
+        {unplaced.slice(0, 30).map((n) => (
+          <span key={n.id} className="tag text-[10px]"
+                data-testid={`wct-unplaced-${n.id}`}>
+            {n.name} <span className="text-mist ml-1">({n.type || "?"})</span>
+          </span>
+        ))}
       </div>
     </div>
   );
@@ -256,9 +303,17 @@ function BranchRow({ section, branch, items, campId, color, isGm, onChanged }) {
           {items.length > 0 && (
             <div className="space-y-0.5 mb-2">
               {items.map((it) => (
-                <div key={it.id} className="text-[11px] text-mist border-l-2 pl-2"
-                     style={{ borderColor: it.color || color }}>
-                  <span className="text-parchment">{it.name}</span>
+                <div key={it.id} className="text-[11px] text-mist border-l-2 pl-2 cursor-pointer hover:bg-gold/5 rounded-sm"
+                     style={{ borderColor: it.color || color }}
+                     onClick={() => window.dispatchEvent(new CustomEvent("tg:open-codex-node", { detail: { node_id: it.id, campaign_id: campId } }))}
+                     data-testid={`wct-entry-${it.id}`}>
+                  <span className="text-parchment">{it.name || it.title}</span>
+                  {it.auto_placed && (
+                    <span className="ml-1 text-[9px] text-gold-bright/70 italic"
+                          title="Auto-classified by node type — confirm or re-dock to a different branch.">
+                      · auto
+                    </span>
+                  )}
                   {it.summary && <span className="text-mist/80 italic ml-1">— {it.summary.slice(0, 80)}</span>}
                 </div>
               ))}
@@ -432,7 +487,7 @@ function CodexLinkWidget({ campId, edge, onClose, onSaved }) {
 
   useEffect(() => {
     api.get(`/campaigns/${campId}/codex-nodes`)
-      .then((r) => setNodes(r.data || []))
+      .then((r) => setNodes(Array.isArray(r.data) ? r.data : (r.data?.nodes || [])))
       .catch(() => {});
   }, [campId]);
 
@@ -478,7 +533,7 @@ function CodexLinkWidget({ campId, edge, onClose, onSaved }) {
                     onChange={(e) => setData({ ...data, source_id: e.target.value })}
                     data-testid="codex-link-source">
               <option value="">— pick source —</option>
-              {nodes.map((n) => <option key={n.id} value={n.id}>{n.name}</option>)}
+              {nodes.map((n) => <option key={n.id} value={n.id}>{n.name || n.title || "(unnamed)"}</option>)}
             </select>
           </div>
           <div>
@@ -487,7 +542,7 @@ function CodexLinkWidget({ campId, edge, onClose, onSaved }) {
                     onChange={(e) => setData({ ...data, target_id: e.target.value })}
                     data-testid="codex-link-target">
               <option value="">— pick target —</option>
-              {nodes.map((n) => <option key={n.id} value={n.id}>{n.name}</option>)}
+              {nodes.map((n) => <option key={n.id} value={n.id}>{n.name || n.title || "(unnamed)"}</option>)}
             </select>
           </div>
 

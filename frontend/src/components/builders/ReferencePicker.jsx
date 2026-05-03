@@ -158,7 +158,9 @@ export default function ReferencePicker({
   };
 
   return (
-    <div className="card-mystic p-4 mt-4" data-testid={`${testidPrefix}-picker`}>
+    <div className={`card-mystic p-4 mt-4 ${open ? "relative z-50" : ""}`}
+         data-testid={`${testidPrefix}-picker`}
+         style={open ? { isolation: "isolate" } : undefined}>
       <div className="flex items-baseline justify-between mb-2">
         <h3 className="h-arcane text-sm">{title}</h3>
         <span className="text-[10px] text-mist italic">
@@ -220,9 +222,16 @@ export default function ReferencePicker({
         </div>
 
         {open && suggestions.length > 0 && (
-          <div className="absolute z-30 left-0 right-12 mt-1 max-h-72 overflow-y-auto
-                          border border-gold/30 bg-void/95 backdrop-blur-md rounded-sm
-                          shadow-lg"
+          <div className="absolute z-[100] left-0 right-12 mt-1 max-h-72 overflow-y-auto
+                          border border-gold/40 rounded-sm shadow-2xl"
+               style={{
+                 // Solid (fully opaque) obsidian background — earlier
+                 // `bg-void/95 backdrop-blur-md` let downstream cards
+                 // bleed through when a stacking context wrapped the
+                 // parent. Inline styles ensure consistent contrast.
+                 backgroundColor: "rgb(8, 6, 14)",
+                 backgroundImage: "linear-gradient(180deg, rgba(60,45,20,0.12), rgba(0,0,0,0.9))",
+               }}
                data-testid={`${testidPrefix}-dropdown`}>
             {suggestions.map((e, i) => (
               <button key={`${e.name}-${i}`}
