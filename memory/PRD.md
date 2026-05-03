@@ -14,6 +14,70 @@
 
 ## 2. Implemented (cumulative, condensed)
 
+### V6.21 — Anime 5E DP RAW math + ReferencePicker dropdowns + WorldTreeGraph + Reference auto-link + GM/Player consent flow (2026-05-03)
+
+**🔴 P0 — Anime 5E DP math RAW-correction (finished from V6.20 mid-flight rewrite)**
+
+User dumped the explicit Anime 5E core p.20 rules text mid-session. The math was wrong; the previous agent had started rewriting `anime5e_race_costs.py` but never completed the chain. V6.21 closes the loop:
+
+- **`anime5e_xp_to_cp()`** now returns RAW budget `80 + (level − 1)` as default (`"raw"` formula). GM house-rule overrides in the Primer:
+  - `"raw"` — 80 + (L−1). Anime 5E core p.20.
+  - `"flat"` — flat 80 DP at every level.
+  - `"curve"` — heroic 80 + 2(L−1).
+  - `"tier"` — legacy V6.19 bracket table (10/20/40/60/80). Preserved for back-compat.
+- **`/api/anime5e/races` endpoint** — tuple unpacking fixed (old code read `t[2]`/`t[3]` after ANIME5E_TIER_TABLE tuple shape changed from `(max_lvl, name, dp, blurb)` → `(max_lvl, name, caps_dict)`). Now returns 29 races (14 native + 14 PHB crossovers + Raceless) + tier_table with name/caps/blurb + `rules_note` citing "80 + (level − 1)".
+- **`/api/characters/{cid}/anime5e/budget-breakdown`** — NEW fields: `ability_score_breakdown` (6-key dict), `ability_score_cost` (sum of STR+DEX+CON+INT+WIS+CHA values — RAW p.24 costs DP = score value), `total_spent` (race + abilities + point-buys), `canonical_raw_dp` (= 80 + L−1), `formula_note`. Live verified on Anime Eli (lvl 5): 84 DP canonical vs stored 20, race Human 7, abilities 62 → total 69 spent (net -49 with stored 20, cleared after recompute to 84).
+- **Primer UI** — 4-radio formula selector (raw / flat / curve / tier) with RAW as default. Campaign model `anime5e_xp_formula: Literal["raw", "flat", "curve", "tier"] = "raw"`.
+- **Anime5eBudgetAudit component rebuilt** — 8-stat card (Tier / RAW budget / Stored budget / Total spent / Ability scores / Race cost / Attributes-point-buy / Net unspent) + collapsible "Show detail" panel that breaks down the per-ability DP cost + per-point-buy entries.
+- **Compliance check** (`_validate_ticket_compliance`) now sums abilities + race + point-buys + ticket cost before flagging overbudget on approval.
+- **Stale tests updated** — `test_iter37_v64_rules.py`, `test_iter53_v619_atelier_audit.py`, `test_iter54_v619_race_class_audit.py` all rewritten to assert RAW math. 107/107 pytest pass (18 new V6.21 + 89 prior). 
+
+**🟧 P1 — ReferencePicker dropdown selectors** (replaces free-text inventory / spell entry)
+
+- **`builders/ReferencePicker.jsx`** (new, ~230 lines) — search-as-you-type dropdown backed by the SRD catalog (`/api/systems/{sid}/reference`) + campaign-scoped custom references. Features: debounced search; ↑↓ arrow navigation; rich chip display showing damage / AC / spell level / school / cost; Enter on unknown name adds as free-text homebrew (back-compat); click chip icon → fires `tg:open-reference` event → opens the auto-link modal.
+- **Dnd5e builder** — `FreeList` calls replaced with `ReferencePicker`. Inventory pulls weapons + armor + items; Spells filter by max slot level the class can cast at that level.
+- **`sheets/sheetCommon.jsx` `SimpleListCard`** — items are now clickable when systemId is passed; fires the `tg:open-reference` event. Extended header rendering to include damage / ac / school / category fields.
+- **`DndSheetView`** — now passes `systemId` + `autoLinkKind` to both inventory + spell SimpleListCards.
+
+**🟧 P2 — ReferenceAutoLink modal** (click-to-open reference)
+
+- **`ReferenceAutoLink.jsx`** (new, ~135 lines) — app-wide modal mounted in `Shell.jsx`. Listens for `tg:open-reference` CustomEvent. On fire, fetches `/systems/{sid}/reference` + campaign custom references in parallel, finds the match (case-insensitive substring), renders the full mechanic block with a key/value grid + homebrew badge.
+
+**🟧 P1 — Cut D V2 — World Tree Graph View**
+
+- **`WorldTreeGraph.jsx`** (new, ~240 lines) — SVG force-directed graph. Physics: spring-anchors per pillar (Population / Geography / History), node-node repulsion, codex-link spring-pull with weight-driven strength (weight 8-10 pulls linked nodes tight; 1-3 sits loose on perimeter). Stroke width scales with link weight (1-10). Hover highlights neighbours + edge label. Click dispatches `tg:open-codex-node` event.
+- **`WorldCreationTree.jsx`** — new Pillars/Graph view-mode toggle. `wct-view-graph` button swaps to the SVG layout; `wct-view-pillars` back to the 3-panel pillars view.
+- **Codex links** fetched from `GET /api/campaigns/{cid}/codex-links` on tree load so the graph has real relationship data without extra plumbing.
+
+**🟧 P2 — GM/Player Consent Flow**
+
+- **`routes/consent_flow.py`** (new, ~270 lines) — full REST CRUD:
+  - `GET/POST/DELETE /api/campaigns/{cid}/consent` — player consent record (upsert per user + campaign).
+  - `GET /api/campaigns/{cid}/consent-roll` — GM summary of every member's consent status (current primer hash comparison).
+  - `GET/POST /api/campaigns/{cid}/seat-applications` — player applies with character pitch + familiarity + note; GM lists pending + resolved.
+  - `POST /api/campaigns/{cid}/seat-applications/{aid}/{approve|reject}` — GM decision with optional gm_note.
+  - `POST /api/campaigns/{cid}/leave` — player leaves seat (GM cannot leave own campaign).
+  - Primer snapshot hash (`_primer_snapshot_hash`) covers primer + house_rules + setting_name — any edit invalidates active consents.
+- **`Campaign.consent_required: bool`** — new model field. When true, the sheet shows the `ConsentCheckbox` panel requiring acknowledgement before edits.
+- **`ConsentPanel.jsx`** (new, ~370 lines) exports 4 components:
+  - `<ConsentCheckbox/>` — player-facing; 3 checkboxes (primer / house rules / safety tags) + note textarea + Withdraw + Leave seat buttons. Mounted on CharacterSheet identity tab.
+  - `<SeatApplicationsPanel/>` — GM-facing queue with approve/reject + gm_note + 5-history details section.
+  - `<ConsentRollPanel/>` — GM-facing summary table (member / status / date).
+  - `<SeatApplicationForm/>` — player-facing apply form (pitch + familiarity dropdown + note + submit).
+- **Campaign InviteTab** — surfaces `ConsentRequiredToggle`, `SeatApplicationsPanel`, `ConsentRollPanel` below CanonPublishCard.
+
+**Testing — iter55/iter56/iter57**
+- Backend: 18/18 new V6.21 tests + 89 prior = 107/107 pytest pass.
+- Frontend: consent panels verified on InviteTab, Anime5eBudgetAudit verified on Eli Mechanics tab, ReferencePicker dropdown→chip flow verified on DnD builder, WorldTreeGraph toggle verified at Atelier ▸ World Tree subtab.
+- One LOW-priority known limitation: CampaignDetail doesn't parse `?tab=X` query-param on initial mount (manual tab click works fine). Deferred to a future polish sprint.
+
+**Deferred to next session**
+- Cut A2 polish — expand class_progression.py from 7 classes → 18+ (add Barbarian / Bard / Cleric / Druid / Monk / Paladin / Ranger / Rogue / Sorcerer / Warlock / Champion + Anime 5E Magical Girl / Mech Pilot / Sentai / Esper / Demihuman).
+- Cut B — XP-CP marketplace + chat hot-keys `/cast`, `/use bundle`, `/spend xp`.
+- Cut A3 — per-system seed packs for Surprise Bag / Scene-Break (Anime 5E / D&D / Cypher / BESM defaults).
+- P2 — Mobile responsiveness sweep for player-facing pages.
+- P3 — Audio capture / push-to-talk system for isolating player voice in session recaps.
+
 ### V6.20 — Critical sheet bug fixes + Cut D (World Creation Tree + Codex Link Widget) + Surprise Bag PBP auto-post + DndDerivedAndEquipment (2026-05-03)
 
 User-flagged production-breaking bugs (all 3 fixed and back-filled in DB):
