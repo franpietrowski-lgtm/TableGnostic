@@ -14,6 +14,49 @@
 
 ## 2. Implemented (cumulative, condensed)
 
+### V6.24 — Sheet correctness pack (equip + spell-prep + infusions + Idol armor) (2026-05-03)
+
+User punch-list of four sheet-correctness bugs + one missing UX surface, all fixed:
+
+**🔴 P0.1 — `Idol Stage Garb` AC referenced `SOL mod` but Anime 5E uses D&D's six abilities** (`/app/backend/system_data/anime5e_data.py`)
+- Bug: armor seed listed `"AC": "11 + SOL mod"` — there's no Soul ability score in the active rule set.
+- Fix: changed to `"11 + CHA mod"` (Idol class is Charisma-based per Anime 5E core).
+- Test: `test_anime5e_idol_armor_uses_cha_not_sol` asserts the live `/api/systems/anime-5e/reference` armor entry has `CHA` and not `SOL`.
+
+**🔴 P0.2 — Spell-prep checkbox reverted on click** (`/app/frontend/src/components/sheets/DndDerivedAndEquipment.jsx`, `/app/backend/routes/characters.py`)
+- Root cause: `togglePrep` issued `PUT /characters/{id}` with only `{folio: ...}`. The full `CharacterIn` model requires `campaign_id` + `name`; pydantic rejected the partial body silently and the frontend reverted.
+- Fix: new server endpoint `PATCH /characters/{cid}/folio` accepts `{bucket, patch}` and merges the patch onto the named folio bucket (`dnd_state` / `anime5e_state` / `cypher_state`). Owner / GM / companion-owner authorized. Frontend `togglePrep` now uses it.
+- Test: `test_patch_folio_persists_spell_prep` round-trips spells_prepared via PATCH + GET.
+
+**🔴 P0.3 — No way to equip an inventory item to a slot** (`DndDerivedAndEquipment.jsx`)
+- Built a new `EquippableInventory` panel below the slot cards. Each rich picker entry (`{name, kind, damage, props, __kind, ...}`) renders with auto-detected slot buttons:
+  - `weapons` / items with `damage` → "Equip → Main"; if has `light` prop also → "Equip → Off-hand".
+  - `armor` (light/medium/heavy) → "Equip → Armor".
+  - Names containing "shield" / category "Shield" → "Equip → Off-hand".
+  - Items with no detectable slot show a passive "no slot detected" label.
+- Each slot card (Weapon Main / Off-hand / Armor) gets an `Unequip` button.
+- Click → PATCH `/folio` to persist; the sheet listens for `tg:character-folio-changed` events and re-loads to show the slot card update.
+- Test: `test_patch_folio_equip_weapon` + `test_patch_folio_unequip` verify the round-trip.
+
+**🟧 P1 — Class feature picker missing for subclass + infusion choices** (`/app/backend/routes/advancement.py`, `/app/frontend/src/components/AdvancementWizard.jsx`)
+- Subclass picker existed but only revealed blurbs after click. Now shows every option's blurb up-front so players can compare archetypes BEFORE picking.
+- New `artificer_infusions` advancement step added at level 2+. Backend `_pending_choices` surfaces it with full blurb list (18 SRD-correct infusions: Enhanced Weapon, Enhanced Defense, Replicate Magic Item, Bag of Holding, Goggles of Night, etc.). Each option has a one-line in-house blurb explaining the mechanical effect.
+- `_artificer_infusion_slots(level)` returns RAW (known, active) per level — 4/2 at L2, 6/3 at L6, scaling to 12/6 at L18.
+- New `ArtificerInfusionsPanel` on the character sheet shows all known infusions as toggleable checkboxes. Active count clamped to slot cap; over-cap rows go ember + disable further toggles.
+- Frontend `AdvancementWizard.jsx` re-uses `OptionListPicker` for the new step kind.
+- Tests: `test_artificer_infusions_surface_in_pending_advancements` + `test_artificer_infusion_pick_via_apply`.
+
+**🟧 P1.5 — Sheet-side mutators normalized**
+- `DndDerivedAndEquipment.jsx` slot cards now render every weapon/armor field through a `typeof === "string"` / `Array.isArray()` guard so a malformed picker entry can't crash the sheet (companion fix to V6.23.1).
+- Slot cards expose Unequip buttons.
+
+**Testing**
+- 7/7 new V6.24 pytest pass.
+- 77/77 pytest pass with no regressions.
+
+**Deferred (per user "hold on cypher for now"):**
+- Cypher reference dropdown for Type/Focus Abilities — paused until Anime 5E + D&D 5E sheets are 100%.
+
 ### V6.23.1 — CharacterSheet inventory render crash hotfix (2026-05-03)
 
 User reported: after picking a weapon/spell via ReferencePicker on the edit screen, navigating to the Inventory tab threw  

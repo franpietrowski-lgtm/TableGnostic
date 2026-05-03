@@ -163,7 +163,8 @@ export default function AdvancementWizard({ characterId, isOwnerOrGm, onClose, o
       {(step.kind === "asi_or_feat") && (
         <AsiOrFeatPicker pick={pick} setPick={setPick}/>
       )}
-      {(step.kind === "fighting_style" || step.kind === "subclass") && (
+      {(step.kind === "fighting_style" || step.kind === "subclass"
+         || step.kind === "artificer_infusions") && (
         <OptionListPicker step={step} pick={pick} setPick={setPick}/>
       )}
       {(step.kind === "cypher_tier_benefits") && (
@@ -332,11 +333,11 @@ function OptionListPicker({ step, pick, setPick }) {
                 </span>
               )}
             </div>
-            {/* V6.18 — toggle-picker reveals the option's blurb only when
-                selected, keeping the list tight while exposing detail
-                on demand. */}
-            {selected && o.blurb && (
-              <div className="mt-1.5 ml-6 text-[11px] text-mist italic"
+            {/* V6.24 — show every option's blurb up-front so players
+                can compare archetypes BEFORE picking, not after. The
+                option still highlights gold when selected. */}
+            {o.blurb && (
+              <div className={`mt-1.5 ml-6 text-[11px] italic ${selected ? "text-parchment" : "text-mist"}`}
                    data-testid={`option-blurb-${o.key}`}>
                 {o.blurb}
               </div>

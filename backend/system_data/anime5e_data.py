@@ -211,7 +211,7 @@ WEAPONS = [
 # Armour
 ARMOR = [
     {"name": "School Uniform (reinforced)", "category": "Light",  "ac": "11 + DEX (cap 4)", "stealth": "ok"},
-    {"name": "Idol Stage Garb",             "category": "Light",  "ac": "11 + SOL mod",     "stealth": "ok"},
+    {"name": "Idol Stage Garb",             "category": "Light",  "ac": "11 + CHA mod",     "stealth": "ok"},
     {"name": "Pilot Suit",                  "category": "Medium", "ac": "13 + DEX (max 2)", "stealth": "ok"},
     {"name": "Cyber Mail",                  "category": "Medium", "ac": "14 + DEX (max 2)", "stealth": "ok"},
     {"name": "Spirit Plate",                "category": "Heavy",  "ac": "17",               "stealth": "ok"},

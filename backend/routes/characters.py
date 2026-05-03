@@ -4,6 +4,8 @@ The character sheet is the single artefact that survives between sessions —
 its `folio.journal` array is the player-facing diary that feeds the recap LLM.
 """
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
+from typing import Dict, Any
 
 from core.bus import broadcast
 from routes.ecosystem import _pulse_tick
@@ -150,6 +152,48 @@ async def delete_character(ch_id: str, user: dict = Depends(get_current_user)):
         raise HTTPException(403, "Not permitted")
     await db.characters.delete_one({"id": ch_id})
     return {"ok": True}
+
+
+# ─── V6.24 — light folio mutators for sheet-side actions ──────────────
+# These avoid sending the full CharacterIn payload (which triggers
+# pydantic validation + DP-gate enforcement) for tiny tweaks like
+# "I prepared this spell" or "I equipped this weapon".
+
+class FolioStatePatch(BaseModel):
+    # Generic folio mutator. Pass the system bucket key (e.g.
+    # "dnd_state" / "anime5e_state" / "cypher_state") and a partial
+    # dict — the server merges keys onto whatever's already stored.
+    bucket: str = Field(min_length=1, max_length=40)
+    patch: Dict[str, Any] = Field(default_factory=dict)
+
+
+@router.patch("/characters/{ch_id}/folio")
+async def patch_folio_state(ch_id: str, body: FolioStatePatch,
+                              user: dict = Depends(get_current_user)):
+    """Partial-update one folio bucket on a character. Used by:
+      - Spell-prep checkbox (sets `dnd_state.spells_prepared`).
+      - Equip controls on the sheet (sets `dnd_state.weapon_equipped`,
+        `armor_equipped`, `offhand_equipped`).
+      - Cypher recovery toggles, anime trick uses, etc.
+    Owner / companion-owner / GM may patch."""
+    ch = await db.characters.find_one({"id": ch_id}, {"_id": 0})
+    if not ch:
+        raise HTTPException(404, "Not found")
+    camp = await db.campaigns.find_one({"id": ch["campaign_id"]}, {"_id": 0})
+    is_owner = user["id"] == ch["owner_id"]
+    is_gm = user["id"] == camp["gm_id"] or user.get("role") == "admin"
+    is_companion = user["id"] in (ch.get("companion_owners") or [])
+    if not (is_owner or is_gm or is_companion):
+        raise HTTPException(403, "Not permitted")
+    folio = dict(ch.get("folio") or {})
+    bucket = folio.get(body.bucket) or {}
+    bucket.update(body.patch)
+    folio[body.bucket] = bucket
+    await db.characters.update_one(
+        {"id": ch_id},
+        {"$set": {"folio": folio, "updated_at": now_iso()}},
+    )
+    return {"ok": True, "bucket": body.bucket, "value": bucket}
 
 
 @router.post("/characters/{ch_id}/transfer")

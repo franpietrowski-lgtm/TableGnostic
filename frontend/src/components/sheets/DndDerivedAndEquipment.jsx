@@ -86,16 +86,71 @@ export default function DndDerivedAndEquipment({
     setLocalPrep(next);
     setBusy(true);
     try {
-      // Persist via PATCH on character; back-end already accepts arbitrary
-      // folio.dnd_state field updates.
-      await api.put(`/characters/${characterId}`, {
-        folio: { ...folio, dnd_state: { ...state, spells_prepared: next } },
+      // V6.24 — use the new PATCH /characters/{id}/folio endpoint so we
+      // skip CharacterIn validation (which previously rejected the
+      // partial body and silently reverted the toggle).
+      await api.patch(`/characters/${characterId}/folio`, {
+        bucket: "dnd_state",
+        patch: { spells_prepared: next },
       });
     } catch (e) {
       // revert on failure
       setLocalPrep(localPrep);
     } finally { setBusy(false); }
-  }, [characterId, folio, state, localPrep, isOwnerOrGm]);
+  }, [characterId, localPrep, isOwnerOrGm]);
+
+  // V6.24 — Equip controls. Tap an inventory item to set / clear the
+  // appropriate slot (weapon_equipped / offhand_equipped / armor_equipped).
+  // Maps the picker entry's __kind / category to the right slot.
+  const equipItem = useCallback(async (item, slot) => {
+    if (!isOwnerOrGm) return;
+    const isObj = typeof item === "object" && item !== null;
+    if (!isObj) return;  // legacy free-text strings can't auto-equip
+    setBusy(true);
+    try {
+      const slotKey = slot === "weapon" ? "weapon_equipped"
+                     : slot === "offhand" ? "offhand_equipped"
+                     : "armor_equipped";
+      // Normalize the entry to the slot's expected shape so the slot
+      // card renders correctly. Defensive coercion: damage / props
+      // must be string / array of strings.
+      const norm = {
+        name: typeof item.name === "string" ? item.name : "Item",
+        damage: typeof item.damage === "string" ? item.damage : undefined,
+        damage_type: undefined,  // SRD damage already includes the type token
+        props: Array.isArray(item.props)
+          ? item.props.filter((p) => typeof p === "string") : [],
+        category: typeof item.category === "string" ? item.category : undefined,
+        base_ac: +item.base_ac || (item.ac && parseInt(item.ac)) || undefined,
+        dex_cap: typeof item.dex_cap === "number" ? item.dex_cap : undefined,
+        bonus: +item.bonus || 0,
+        bonus_ac: +item.bonus_ac || 0,
+      };
+      await api.patch(`/characters/${characterId}/folio`, {
+        bucket: "dnd_state",
+        patch: { [slotKey]: norm },
+      });
+      // Trigger a refresh so the slot card picks up the new value.
+      window.dispatchEvent(new CustomEvent("tg:character-folio-changed",
+                                             { detail: { characterId } }));
+    } catch (_) { /* swallow */ } finally { setBusy(false); }
+  }, [characterId, isOwnerOrGm]);
+
+  const unequipSlot = useCallback(async (slot) => {
+    if (!isOwnerOrGm) return;
+    setBusy(true);
+    try {
+      const slotKey = slot === "weapon" ? "weapon_equipped"
+                     : slot === "offhand" ? "offhand_equipped"
+                     : "armor_equipped";
+      await api.patch(`/characters/${characterId}/folio`, {
+        bucket: "dnd_state",
+        patch: { [slotKey]: null },
+      });
+      window.dispatchEvent(new CustomEvent("tg:character-folio-changed",
+                                             { detail: { characterId } }));
+    } catch (_) { /* swallow */ } finally { setBusy(false); }
+  }, [characterId, isOwnerOrGm]);
 
   return (
     <>
@@ -138,6 +193,13 @@ export default function DndDerivedAndEquipment({
                 Atk: +{profBonus + Math.max(mod("Strength"), mod("Dexterity"))}
                 {" "}· Dmg: {typeof equippedWeapon.damage === "string" ? equippedWeapon.damage : "—"}{Math.max(mod("Strength"), mod("Dexterity")) >= 0 ? `+${Math.max(mod("Strength"), mod("Dexterity"))}` : Math.max(mod("Strength"), mod("Dexterity"))}
               </div>
+              {isOwnerOrGm && (
+                <button onClick={() => unequipSlot("weapon")} disabled={busy}
+                        className="btn btn-ghost text-[9px] mt-1"
+                        data-testid="unequip-weapon">
+                  Unequip
+                </button>
+              )}
             </div>
           ) : (
             <EmptySlotHint testid="empty-weapon-main"/>
@@ -149,11 +211,18 @@ export default function DndDerivedAndEquipment({
                    testid="slot-offhand">
           {equippedOffhand ? (
             <div className="text-sm text-parchment">
-              <div className="font-ui">{equippedOffhand.name}</div>
+              <div className="font-ui">{typeof equippedOffhand.name === "string" ? equippedOffhand.name : "—"}</div>
               <div className="text-[10px] text-mist mt-0.5">
                 {equippedOffhand.bonus_ac ? `+${equippedOffhand.bonus_ac} AC` : ""}
-                {equippedOffhand.damage ? ` · ${equippedOffhand.damage}` : ""}
+                {typeof equippedOffhand.damage === "string" ? ` · ${equippedOffhand.damage}` : ""}
               </div>
+              {isOwnerOrGm && (
+                <button onClick={() => unequipSlot("offhand")} disabled={busy}
+                        className="btn btn-ghost text-[9px] mt-1"
+                        data-testid="unequip-offhand">
+                  Unequip
+                </button>
+              )}
             </div>
           ) : (
             <EmptySlotHint testid="empty-offhand"/>
@@ -165,14 +234,19 @@ export default function DndDerivedAndEquipment({
                    testid="slot-armor">
           {equippedArmor ? (
             <div className="text-sm text-parchment">
-              <div className="font-ui">{equippedArmor.name}</div>
+              <div className="font-ui">{typeof equippedArmor.name === "string" ? equippedArmor.name : "—"}</div>
               <div className="text-[10px] text-mist mt-0.5">
-                {equippedArmor.category} · base AC {equippedArmor.base_ac}
+                {typeof equippedArmor.category === "string" ? equippedArmor.category : ""}
+                {equippedArmor.base_ac ? ` · base AC ${equippedArmor.base_ac}` : ""}
                 {equippedArmor.dex_cap != null ? ` (dex cap ${equippedArmor.dex_cap})` : ""}
               </div>
-              <div className="text-[10px] text-gold-bright mt-1">
-                Don / doff via the Inventory tab — currently equipped.
-              </div>
+              {isOwnerOrGm && (
+                <button onClick={() => unequipSlot("armor")} disabled={busy}
+                        className="btn btn-ghost text-[9px] mt-1"
+                        data-testid="unequip-armor">
+                  Unequip
+                </button>
+              )}
             </div>
           ) : (
             <EmptySlotHint testid="empty-armor" extra="Unarmored: AC = 10 + DEX mod"/>
@@ -227,6 +301,19 @@ export default function DndDerivedAndEquipment({
           </div>
         </div>
       )}
+
+      {/* ── V6.24 — Equippable inventory tray ────────────────────── */}
+      <EquippableInventory inventory={state.inventory || []}
+                            equipItem={equipItem}
+                            isOwnerOrGm={isOwnerOrGm}
+                            busy={busy}/>
+
+      {/* ── V6.24 — Artificer Infusions panel ────────────────────── */}
+      <ArtificerInfusionsPanel infusionsKnown={state.infusions_known || []}
+                                 infusionsActive={state.infusions_active || []}
+                                 characterId={characterId}
+                                 classLevels={state.class_levels || {}}
+                                 isOwnerOrGm={isOwnerOrGm}/>
 
       {/* ── Spell preparation (if class casts spells) ── */}
       {spellsKnown.length > 0 && (
@@ -303,3 +390,208 @@ function EmptySlotHint({ testid, extra }) {
     </div>
   );
 }
+
+
+/**
+ * EquippableInventory — V6.24
+ *
+ * Lists every rich inventory entry (added via ReferencePicker) and
+ * presents per-item Equip buttons routed to the right slot based on
+ * the entry's `__kind` (or its category / props for legacy data).
+ *
+ * Legacy plain-string entries are not equippable here — they show as
+ * a passive tally so the player still has visibility.
+ */
+function EquippableInventory({ inventory, equipItem, isOwnerOrGm, busy }) {
+  if (!inventory || inventory.length === 0) return null;
+  const richEntries = inventory.filter((it) => typeof it === "object" && it !== null);
+  const stringEntries = inventory.filter((it) => typeof it === "string");
+  if (richEntries.length === 0 && stringEntries.length === 0) return null;
+
+  const slotsFor = (it) => {
+    const k = (it.__kind || it.kind || "").toLowerCase();
+    const cat = (it.category || "").toLowerCase();
+    const out = [];
+    // Weapon: __kind 'weapons', or kind contains 'melee' / 'ranged'
+    if (k === "weapons" || k.includes("melee") || k.includes("ranged") || it.damage) {
+      out.push("weapon");
+      // Add off-hand if it has the light or thrown property.
+      const props = Array.isArray(it.props)
+        ? it.props.filter((p) => typeof p === "string").map((p) => p.toLowerCase())
+        : [];
+      if (props.some((p) => p.includes("light")) || k === "armor" /* shield-as-armor edge */) {
+        out.push("offhand");
+      }
+    }
+    if (k === "armor" || cat === "shield" || cat === "light" || cat === "medium" || cat === "heavy") {
+      // shield → offhand, else regular armor slot.
+      if (cat === "shield" || (it.name || "").toLowerCase().includes("shield")) {
+        out.push("offhand");
+      } else {
+        out.push("armor");
+      }
+    }
+    return [...new Set(out)];
+  };
+
+  return (
+    <div className="card-mystic p-5 mt-4" data-testid="equippable-inventory">
+      <div className="label-ref mb-2">Inventory · equip slots</div>
+      <div className="text-[10px] text-mist/70 italic mb-2">
+        Pick a slot to equip from your current inventory. Items added
+        via the SRD picker (weapons / armor / shields) auto-detect
+        eligible slots; legacy free-text items can't auto-equip.
+      </div>
+      {richEntries.length > 0 && (
+        <div className="space-y-1.5">
+          {richEntries.map((it, i) => {
+            const slots = slotsFor(it);
+            const name = typeof it.name === "string" ? it.name : "Item";
+            const hint = [it.kind, it.damage, it.ac, it.category]
+              .filter(Boolean).join(" · ");
+            return (
+              <div key={i}
+                   className="flex items-center justify-between flex-wrap gap-2 border-l-2 border-gold/20 pl-2"
+                   data-testid={`inv-equip-row-${i}`}>
+                <div className="min-w-0 flex-1">
+                  <div className="text-sm text-parchment truncate">{name}</div>
+                  {hint && <div className="text-[10px] text-mist truncate">{hint}</div>}
+                </div>
+                {isOwnerOrGm && (
+                  <div className="flex flex-wrap gap-1">
+                    {slots.length === 0 ? (
+                      <span className="text-[10px] text-mist italic">no slot detected</span>
+                    ) : (
+                      slots.map((s) => (
+                        <button key={s} onClick={() => equipItem(it, s)}
+                                disabled={busy}
+                                className="btn btn-ghost text-[10px]"
+                                data-testid={`equip-${s}-${i}`}>
+                          Equip → {s === "weapon" ? "Main" : s === "offhand" ? "Off-hand" : "Armor"}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {stringEntries.length > 0 && (
+        <div className="mt-3 text-[10px] text-mist italic">
+          {stringEntries.length} legacy free-text {stringEntries.length === 1 ? "item" : "items"}{" "}
+          (not auto-equippable): {stringEntries.slice(0, 5).join(", ")}
+          {stringEntries.length > 5 && "…"}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * ArtificerInfusionsPanel — V6.24
+ *
+ * Surfaces the character's known + active Artificer infusions on the
+ * sheet. Active infusions are toggleable (via PATCH /folio); known
+ * count is sourced from the level-up wizard (advancement tickets).
+ *
+ * Hidden for non-Artificers. The level → known/active table mirrors
+ * the backend's `_artificer_infusion_slots()`.
+ */
+function ArtificerInfusionsPanel({ infusionsKnown, infusionsActive,
+                                     characterId, classLevels, isOwnerOrGm }) {
+  const [busy, setBusy] = useState(false);
+  const artificerLevel = +(classLevels?.Artificer || 0);
+  if (artificerLevel < 2) return null;
+
+  // Mirror backend slot table.
+  const SLOTS = {
+    2: [4, 2], 3: [4, 2], 4: [4, 2], 5: [4, 2],
+    6: [6, 3], 7: [6, 3], 8: [6, 3], 9: [6, 3],
+    10: [8, 4], 11: [8, 4], 12: [8, 4], 13: [8, 4],
+    14: [10, 5], 15: [10, 5], 16: [10, 5], 17: [10, 5],
+    18: [12, 6], 19: [12, 6], 20: [12, 6],
+  };
+  const [knownCap, activeCap] = SLOTS[artificerLevel] || [4, 2];
+  const owedKnown = Math.max(0, knownCap - infusionsKnown.length);
+  const activeOver = infusionsActive.length > activeCap;
+
+  const toggleActive = async (name) => {
+    if (!isOwnerOrGm) return;
+    const next = infusionsActive.includes(name)
+      ? infusionsActive.filter((x) => x !== name)
+      : [...infusionsActive, name];
+    setBusy(true);
+    try {
+      await api.patch(`/characters/${characterId}/folio`, {
+        bucket: "dnd_state",
+        patch: { infusions_active: next },
+      });
+      window.dispatchEvent(new CustomEvent("tg:character-folio-changed",
+                                             { detail: { characterId } }));
+    } catch (_) { /* swallow */ } finally { setBusy(false); }
+  };
+
+  return (
+    <div className="card-mystic p-4 mt-4" data-testid="artificer-infusions-panel">
+      <div className="flex items-baseline justify-between flex-wrap gap-1">
+        <div>
+          <div className="label-ref">Artificer · Infuse Item</div>
+          <div className="text-[10px] text-mist italic">
+            Lv. {artificerLevel} — {knownCap} known · {activeCap} active simultaneously.
+            Long rest replaces active picks; ticking a box flips it on.
+          </div>
+        </div>
+        <div className="text-[11px]">
+          <span className="text-mist">Known </span>
+          <span className={infusionsKnown.length > knownCap ? "text-ember" : "text-gold-bright"}>
+            {infusionsKnown.length}/{knownCap}
+          </span>
+          <span className="text-mist"> · Active </span>
+          <span className={activeOver ? "text-ember" : "text-gold-bright"}>
+            {infusionsActive.length}/{activeCap}
+          </span>
+        </div>
+      </div>
+      {owedKnown > 0 && (
+        <div className="mt-2 text-[11px] text-ember"
+             data-testid="infusions-owed">
+          {owedKnown} infusion{owedKnown === 1 ? "" : "s"} unspent. File a
+          level-up ticket from the Pending Approval panel above to pick.
+        </div>
+      )}
+      {infusionsKnown.length === 0 ? (
+        <div className="text-[11px] text-mist italic mt-2">
+          No infusions yet — file a level-up ticket to learn your first.
+        </div>
+      ) : (
+        <div className="mt-2 grid sm:grid-cols-2 gap-1.5">
+          {infusionsKnown.map((name, i) => {
+            const active = infusionsActive.includes(name);
+            const wouldOverflow = !active && infusionsActive.length >= activeCap;
+            return (
+              <label key={i}
+                     className={`flex items-center gap-2 cursor-pointer text-xs border rounded-sm px-2 py-1.5
+                                  ${active ? "border-gold/50 bg-gold/5" : "border-gold/15"}
+                                  ${wouldOverflow ? "opacity-60" : ""}`}
+                     data-testid={`infusion-row-${i}`}>
+                <input type="checkbox" checked={active}
+                       disabled={busy || !isOwnerOrGm || wouldOverflow}
+                       onChange={() => toggleActive(name)}
+                       data-testid={`infusion-toggle-${i}`}/>
+                <span className="text-parchment">{name}</span>
+                {active && (
+                  <span className="ml-auto text-[9px] text-gold-bright">
+                    ACTIVE
+                  </span>
+                )}
+              </label>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+

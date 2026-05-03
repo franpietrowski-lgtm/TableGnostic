@@ -71,6 +71,17 @@ export default function CharacterSheet() {
   };
   useEffect(() => { load(); }, [id]);
 
+  // V6.24 — listen for folio mutations (equip / unequip / spell prep)
+  // and refresh the sheet so slot cards / spell-prep checkboxes show
+  // the persisted state.
+  useEffect(() => {
+    const h = (e) => {
+      if (e.detail?.characterId === id) load();
+    };
+    window.addEventListener("tg:character-folio-changed", h);
+    return () => window.removeEventListener("tg:character-folio-changed", h);
+  }, [id]);
+
   if (err) return <div className="p-10 text-ember">{err}</div>;
   if (!ch) return <div className="p-10 text-mist">Summoning…</div>;
 

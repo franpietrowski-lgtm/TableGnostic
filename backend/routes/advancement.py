@@ -261,6 +261,84 @@ CYPHER_TIER_BENEFITS = [
 # ─── Subclass option library ────────────────────────────────────────────
 # Per-class subclass lists. SRD 5.1 / Anime 5E SRD-safe — names + short
 # in-house blurbs only. Used by the Advancement Wizard's toggle picker.
+
+# ─── Artificer Infusions (SRD 5.1) ─────────────────────────────────────
+# In-house blurbs only — names match the SRD 5.1 list. Used by the
+# Advancement Wizard at level 2+ to let players pick their known
+# infusions before activating up to N at any time.
+ARTIFICER_INFUSIONS = [
+    {"key": "Enhanced Defense",
+     "label": "Enhanced Defense",
+     "blurb": "Touch armor / shield gains +1 AC (+2 at L10, +3 at L18)."},
+    {"key": "Enhanced Weapon",
+     "label": "Enhanced Weapon",
+     "blurb": "Touch weapon gains +1 to attack & damage rolls (+2 at L10, +3 at L18)."},
+    {"key": "Enhanced Focus",
+     "label": "Enhanced Focus",
+     "blurb": "Spellcasting focus gains +1 to spell attacks; lvl-1 slots add +1 dmg (scales with level)."},
+    {"key": "Replicate Magic Item",
+     "label": "Replicate Magic Item",
+     "blurb": "Pick from the Replicable list (bag of holding, sending stones, alchemy jug, etc.) — counts as one infusion."},
+    {"key": "Repeating Shot",
+     "label": "Repeating Shot",
+     "blurb": "Ranged weapon ignores loading; produces magical ammunition each shot."},
+    {"key": "Returning Weapon",
+     "label": "Returning Weapon",
+     "blurb": "Thrown weapon flies back to your hand after each throw; +1 attack & damage."},
+    {"key": "Boots of the Winding Path",
+     "label": "Boots of the Winding Path",
+     "blurb": "Bonus action — return to a square you occupied in the last minute (≤15 ft)."},
+    {"key": "Goggles of Night",
+     "label": "Goggles of Night",
+     "blurb": "Wearer gains 60-ft darkvision."},
+    {"key": "Mind Sharpener",
+     "label": "Mind Sharpener",
+     "blurb": "Once / long rest, succeed on a failed concentration save when wearing armor / robes."},
+    {"key": "Radiant Weapon",
+     "label": "Radiant Weapon",
+     "blurb": "+1 weapon. Bonus action — bright light 30 ft. Reaction — blind attacker until next turn (4 charges)."},
+    {"key": "Resistant Armor",
+     "label": "Resistant Armor",
+     "blurb": "Touch armor — wearer gains resistance to one chosen damage type while worn."},
+    {"key": "Spell-Storing Item",
+     "label": "Spell-Storing Item",
+     "blurb": "Store a 1st/2nd-lvl Artificer spell in an item; user can cast it INT-mod times before recharge."},
+    {"key": "Bag of Holding (Replicate)",
+     "label": "Bag of Holding (Replicate)",
+     "blurb": "Replicates a Bag of Holding — common-tier replicable at L2."},
+    {"key": "Cap of Water Breathing (Replicate)",
+     "label": "Cap of Water Breathing (Replicate)",
+     "blurb": "Wearer can breathe water — common-tier replicable at L2."},
+    {"key": "Sending Stones (Replicate)",
+     "label": "Sending Stones (Replicate)",
+     "blurb": "Pair of stones — Sending spell at-will between holders. Common-tier replicable at L2."},
+    {"key": "Cloak of the Manta Ray (Replicate)",
+     "label": "Cloak of the Manta Ray (Replicate)",
+     "blurb": "Wearer breathes water + swim 60 ft — uncommon-tier replicable at L6."},
+    {"key": "Pipes of Haunting (Replicate)",
+     "label": "Pipes of Haunting (Replicate)",
+     "blurb": "DC 15 frighten check on listeners — uncommon-tier replicable at L6."},
+    {"key": "Ring of Water Walking (Replicate)",
+     "label": "Ring of Water Walking (Replicate)",
+     "blurb": "Wearer can walk on liquid surfaces — uncommon-tier replicable at L6."},
+]
+
+
+def _artificer_infusion_slots(level: int) -> tuple[int, int]:
+    """SRD 5.1 — return (infusions_known, active_simultaneously) for an
+    Artificer of the given class level. Used by the pending-choice
+    surface to know how many picks the player owes."""
+    table = {
+        # level: (known, active)
+        2: (4, 2),  3: (4, 2),  4: (4, 2),  5: (4, 2),
+        6: (6, 3),  7: (6, 3),  8: (6, 3),  9: (6, 3),
+        10: (8, 4), 11: (8, 4), 12: (8, 4), 13: (8, 4),
+        14: (10, 5), 15: (10, 5), 16: (10, 5), 17: (10, 5),
+        18: (12, 6), 19: (12, 6), 20: (12, 6),
+    }
+    return table.get(int(level), (4, 2))
+
+
 SUBCLASS_OPTIONS = {
     # D&D 5E SRD subclasses
     "Barbarian": [
@@ -468,6 +546,34 @@ def _detect_advancement(ch: Dict[str, Any], camp: Dict[str, Any]) -> Dict[str, A
                 ],
             })
 
+        # V6.24 — Artificer Infusion picker. Active at L2+; the
+        # number of infusions known/active scales with class level.
+        # SRD 5.1 Artificer infusions; in-house blurbs only.
+        if cls == "Artificer" and lvl >= 2:
+            known_count, active_count = _artificer_infusion_slots(lvl)
+            chosen = list(dnd_state.get("infusions_known") or [])
+            if len(chosen) < known_count:
+                pending.append({
+                    "id": f"infusions-{known_count}",
+                    "kind": "artificer_infusions",
+                    "system_id": sys_id,
+                    "level": 2,
+                    "title": f"Infuse Item — {known_count} known / "
+                              f"{active_count} active",
+                    "blurb": (
+                        f"Artificers learn {known_count} infusions and may "
+                        f"have {active_count} active at any time. Pick "
+                        f"{known_count - len(chosen)} more from the list "
+                        f"below; each option shows its mechanical effect "
+                        f"so you can plan your build."
+                    ),
+                    "options": ARTIFICER_INFUSIONS,
+                    "extra": {"known_count": known_count,
+                               "active_count": active_count,
+                               "currently_known": chosen,
+                               "owed": known_count - len(chosen)},
+                })
+
     # ── Anime 5E specific: BESM-style point-buy underspend ──
     if sys_id == "anime-5e" and anime_state:
         budget = int(anime_state.get("point_budget") or 0)
@@ -610,6 +716,15 @@ def _commit_advancement(folio: Dict[str, Any], aid: str,
         log[str(t)] = chosen
         cy["tier_benefits_log"] = log
         folio["cypher_state"] = cy
+    elif aid.startswith("infusions-"):
+        # V6.24 — Artificer infusion pick. Append to infusions_known so
+        # the wizard's "owed" math drops by one each pick.
+        dnd = dict(folio.get("dnd_state") or {})
+        known = list(dnd.get("infusions_known") or [])
+        if choice_key and choice_key not in known:
+            known.append(choice_key)
+        dnd["infusions_known"] = known
+        folio["dnd_state"] = dnd
     return folio
 
 
