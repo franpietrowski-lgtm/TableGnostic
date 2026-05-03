@@ -1,0 +1,52 @@
+{
+  "summary": "V6.21 frontend RETEST — InviteTab consent panels NOW RENDER correctly (previous iteration_55 stale-bundle regression resolved by frontend restart). Anime5eBudgetAudit 8-stat card on Eli's Mechanics tab also verified. Two items remain unverified — DnD5e ReferencePicker testids and WorldCreationTree wct-view-graph not located at any tried routes; both need main-agent guidance on correct mount points.",
+  "verified_passes": {
+    "invite_tab_consent_panels": {
+      "consent-required-toggle": "RENDERS (count=1)",
+      "consent-required-checkbox": "RENDERS (count=1, toggleable)",
+      "seat-applications-panel": "RENDERS (count=1)",
+      "consent-roll-panel": "RENDERS (count=1)",
+      "Require player consent text": "VISIBLE",
+      "Seat applications text": "VISIBLE",
+      "Consent roll text": "VISIBLE",
+      "PUT /api/campaigns/{cid} on toggle": "Status 200; system_id preserved as 'anime-5e' on both ON->OFF and OFF->ON; consent_required field updated correctly. Implementation merges full {...camp, consent_required: next} so the iter55 backend full-replace concern is handled client-side.",
+      "campaign_id_used": "2d31c25354e4415f84a31704fe78a795 (Anime 5E, GMFran-owned)"
+    },
+    "anime5e_budget_audit": {
+      "screen": "/app/characters/{eli_id} -> Mechanics tab",
+      "8_stats_visible": "Tier (Seasoned), RAW budget (84), Stored budget (20), Total spent (62), Ability scores (62 DP), Race cost (0/None), Attributes/point-buy (0 DP), Net unspent (-42)",
+      "show_detail_button": "PRESENT",
+      "recompute_button": "PRESENT",
+      "character_id_used": "3ca31d4b9a8945d69bbf3b4cfde57f90 (TEST_V619_AnimeEli, L5 Artificer)"
+    }
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Dnd5e builder", "issue": "data-testid prefixes 'dnd-inv-picker' and 'dnd-spell-picker' NOT present on /app/campaigns/{dnd_cid}/characters/new. Page enumerated all data-testid attributes matching /inv|spell|dnd|picker/i and got an empty array. The builder may render those pickers behind a wizard step that wasn't auto-advanced, OR the testids in src/components/builders/Dnd5e.jsx (lines 272-290 per review) didn't make it into the bundled output. No 'Inventory' or 'Spells' step labels were clickable on the initial render.", "selector": "[data-testid^=\"dnd-inv-picker\"]", "priority": "MEDIUM"},
+      {"component": "WorldCreationTree", "issue": "data-testid 'wct-view-graph' not found at any of /app/world, /app/world-tree, /app/codex, /app/canon, /app/genesis, /app/atelier, /app/forge, nor inside campaign Atelier/Knowledge tabs. WorldTreeGraph SVG is not surfaced in any reachable route during this test. Main agent: please provide the exact route or sub-tab where WorldCreationTree mounts so retest can verify the wct-view-graph -> world-tree-graph toggle.", "selector": "[data-testid=\"wct-view-graph\"]", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "backend_issues": {"critical": [], "minor": []},
+  "test_report_links": [],
+  "action_items": [
+    "INFO ONLY: InviteTab consent panels now render correctly — iter55 'missing panels' bug is resolved; no fix required.",
+    "VERIFY: Confirm Dnd5e.jsx ReferencePicker mount path. The testids 'dnd-inv-picker*' and 'dnd-spell-picker*' did not appear on /app/campaigns/{cid}/characters/new. Either testids never made it into the bundle (rebuild) or they live behind a wizard step we didn't reach.",
+    "PROVIDE ROUTE: WorldCreationTree's wct-view-graph toggle was not findable. Main agent: send the exact route/component-mount-path so we can validate the SVG world-tree-graph rendering.",
+    "OPTIONAL backend hardening (carry-over from iter55): PUT /api/campaigns/{cid} still acts as full-replace; UI handles via merge but server-side PATCH semantics would be safer."
+  ],
+  "critical_code_review_comments": [
+    "CampaignDetail.jsx lines 802-807 are correct — ConsentRequiredToggle, SeatApplicationsPanel, ConsentRollPanel are mounted inside the GM-only InviteTab branch. iter55 was a stale-bundle artefact, not a code defect.",
+    "Toggle save() at L815-822 correctly spreads full camp object into the PUT body, preserving system_id even though backend is full-replace. Confirmed by network capture.",
+    "If Dnd5e.jsx really has the picker testids at lines 272-290, suggest adding a build smoke test that greps the JS bundle for 'dnd-inv-picker' to catch missing-export regressions early."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (frontend-only test)", "frontend": "5/7 critical paths verified (InviteTab panels x4 + budget audit x1). Dnd5e ReferencePicker and WorldCreationTree graph toggle could not be located on the running app."},
+  "test_credentials": "GMFran franpietrowski@gmail.com / PieGod08!! (used). Aurora albanaszak@ymail.com / AuroraTest123! (not exercised this run)",
+  "seed_data_creation": "None — used existing TEST_V619_AnimeEli (3ca31d4b9a8945d69bbf3b4cfde57f90) and Anime 5E camp (2d31c25354e4415f84a31704fe78a795). Consent toggle was flipped ON then OFF to leave state unchanged.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "InviteTab consent panels confirmed working as of 2026-01-03. Anime5eBudgetAudit 8-stat card confirmed on Mechanics tab. Outstanding: (1) Dnd5e ReferencePicker testids 'dnd-inv-picker*' / 'dnd-spell-picker*' not located on /app/campaigns/{cid}/characters/new — verify whether the builder uses a multi-step wizard and which step exposes Inventory + Spells pickers. (2) WorldCreationTree route is unknown — main agent must provide. PUT /api/campaigns is still full-replace; UI fix in toggle-save spreads camp before merging consent_required.",
+  "rca of the issue": "iter55 'InviteTab missing consent panels' RCA: stale frontend bundle. Frontend supervisor was restarted between iter55 and iter56; the JSX at CampaignDetail.jsx L802-807 was always present. After restart, all four data-testids render and the consent toggle PUT round-trips with status 200 preserving system_id. NO CODE CHANGE REQUIRED."
+}
