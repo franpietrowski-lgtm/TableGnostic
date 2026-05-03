@@ -29,6 +29,107 @@ from routes.character_validation import anime5e_xp_to_cp
 router = APIRouter(prefix="/api", tags=["advancement", "spell-tracker"])
 
 
+# ─── V6.19 — Anime 5E budget audit + class progression endpoints ────────
+
+@router.get("/anime5e/races")
+async def anime5e_race_table(user: dict = Depends(get_current_user)):
+    """Return the Anime 5E race / heritage DP-cost table. Used by the
+    character builder, the reference page, and the homebrew validator."""
+    from system_data.anime5e_race_costs import RACE_DP_COSTS, ANIME5E_TIER_TABLE
+    return {
+        "races": RACE_DP_COSTS,
+        "tier_table": [
+            {"max_level": t[0], "name": t[1], "dp": t[2], "blurb": t[3]}
+            for t in ANIME5E_TIER_TABLE
+        ],
+    }
+
+
+@router.get("/characters/{cid}/anime5e/budget-breakdown")
+async def anime5e_budget_breakdown(
+    cid: str, user: dict = Depends(get_current_user),
+):
+    """Detailed breakdown of an Anime 5E character's DP spend.
+
+    Returns:
+      - tier metadata (level → tier name → canonical DP)
+      - race entry (if matched) with DP cost
+      - point_buys roll-up (each Attribute spend)
+      - bonus_points granted at each level
+      - net unspent (with a flag if it looks suspicious)
+    """
+    from system_data.anime5e_race_costs import (
+        anime5e_tier_for_level, get_race,
+    )
+    ch = await db.characters.find_one({"id": cid}, {"_id": 0})
+    if not ch:
+        raise HTTPException(404, "Character not found")
+    camp = await db.campaigns.find_one({"id": ch["campaign_id"]}, {"_id": 0})
+    if not camp:
+        raise HTTPException(404, "Campaign not found")
+    folio = ch.get("folio") or {}
+    anime = folio.get("anime5e_state") or {}
+    dnd = folio.get("dnd_state") or {}
+    lvl = int(dnd.get("level") or 1)
+    tier = anime5e_tier_for_level(lvl)
+    race_key = (anime.get("race") or dnd.get("race") or "").strip()
+    race = get_race(race_key)
+    race_cost = (race.get("dp_cost") if race else 0)
+    point_buys = anime.get("point_buys") or []
+    spent = sum(int(b.get("cost_per_level") or 0) * int(b.get("level") or 1)
+                 for b in point_buys)
+    budget = int(anime.get("point_budget") or 0)
+    canonical = tier["dp"]
+    suspicious = budget > canonical * 1.5  # Flag if budget is >150% of RAW.
+    return {
+        "character_id": cid,
+        "level": lvl,
+        "tier": tier,
+        "race": race,
+        "race_cost": race_cost,
+        "point_buys": point_buys,
+        "point_buy_total": spent,
+        "stored_point_budget": budget,
+        "canonical_tier_dp": canonical,
+        "net_unspent": budget - spent - race_cost,
+        "raw_unspent": canonical - spent - race_cost,
+        "suspicious_budget": suspicious,
+        "advice": (
+            "Stored budget exceeds 150% of the canonical Tier DP. "
+            "Hit 'Recompute budget' to align with the campaign's "
+            "anime5e_xp_formula."
+            if suspicious
+            else "Budget aligns with the campaign's formula."
+        ),
+    }
+
+
+@router.get("/characters/{cid}/class-progression")
+async def class_progression_for_character(
+    cid: str, user: dict = Depends(get_current_user),
+):
+    """Cumulative class features + proficiencies + spell progression for
+    levels 1 → current. Resolves the character's class+level from the
+    folio's `dnd_state` block (Anime 5E reads through this too)."""
+    from system_data.class_progression import cumulative_features
+    ch = await db.characters.find_one({"id": cid}, {"_id": 0})
+    if not ch:
+        raise HTTPException(404, "Character not found")
+    camp = await db.campaigns.find_one({"id": ch["campaign_id"]}, {"_id": 0})
+    if not camp:
+        raise HTTPException(404, "Campaign not found")
+    user_id = user["id"]
+    if (user_id != ch.get("owner_id")
+        and user_id != camp["gm_id"]
+        and user_id not in (camp.get("member_ids") or [])
+        and user.get("role") != "admin"):
+        raise HTTPException(403, "Not a table member.")
+    dnd = (ch.get("folio") or {}).get("dnd_state") or {}
+    cls = dnd.get("class") or ""
+    lvl = int(dnd.get("level") or 1)
+    return cumulative_features(cls, lvl)
+
+
 # ─── Helpers ────────────────────────────────────────────────────────────
 
 async def _load_character_with_permission(cid: str, user: dict):

@@ -534,21 +534,33 @@ async def gm_approve_for_play(cid: str, body: ApprovalIn,
 
 # ─── V6.4 — Anime 5E XP→CP conversion ────────────────────────────────
 
-def anime5e_xp_to_cp(level: int, formula: str = "flat") -> int:
-    """Return the CP budget for a new Anime 5E character at the given
-    adventure level, using the campaign's configured formula.
+def anime5e_xp_to_cp(level: int, formula: str = "tier") -> int:
+    """Return the DP/CP budget for a new Anime 5E character at the given
+    level, using the campaign's configured formula.
 
-    Formulas (both user-approved for V6.4):
-      * "flat"  — CP = 50 + 8 × level
-      * "curve" — CP = 40 + level × (10 if level ≤ 5
-                                      else 12 if level ≤ 10
-                                      else 15)
+    V6.19 — budget formulas rebalanced to match Anime 5E core p.7-8 Tier
+    table. The previous flat/curve constants (50+8L / 40+10L) over-budgeted
+    by ~2-3x and have been retuned downward; existing campaigns can opt
+    into the new defaults via the campaign primer's `Recompute budget`
+    button (which writes a fresh `point_budget` onto each character).
+
+    Formulas:
+      * "tier"  — RAW-correct: returns the canonical Tier budget
+                  (10 / 20 / 40 / 60 / 80) per level bracket.
+      * "flat"  — Linear house-rule: 5 + 3 × level (level 5 = 20).
+      * "curve" — Heroic house-rule: 5 + 5 × level (level 5 = 30).
     """
-    lvl = max(0, int(level or 0))
-    if formula == "curve":
-        per = 10 if lvl <= 5 else (12 if lvl <= 10 else 15)
-        return 40 + lvl * per
-    return 50 + lvl * 8
+    from system_data.anime5e_race_costs import anime5e_tier_for_level
+    lvl = max(1, int(level or 1))
+    f = (formula or "tier").lower()
+    if f == "tier":
+        return anime5e_tier_for_level(lvl)["dp"]
+    if f == "curve":
+        return 5 + 5 * lvl
+    if f == "flat":
+        return 5 + 3 * lvl
+    # Unknown formula → fall back to RAW tier.
+    return anime5e_tier_for_level(lvl)["dp"]
 
 
 @router.get("/campaigns/{cid}/anime5e-xp-curve")

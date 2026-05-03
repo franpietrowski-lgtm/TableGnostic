@@ -7,6 +7,7 @@ import XPApprovalQueue from "./XPApprovalQueue";
 import EpicCampaignPanel from "./EpicCampaignPanel";
 import ReferenceEditor from "./ReferenceEditor";
 import TimelinePanel from "./TimelinePanel";
+import AtelierWorkshop from "./AtelierWorkshop";
 
 /**
  * AtelierTab — V4.4 dynamic-scaling tiers.
@@ -157,6 +158,7 @@ export default function AtelierTab({ campId, camp }) {
            data-testid="atelier-subtabs">
         {[
           ["workshop",   "Workshop"],
+          ["table-tools","Table Tools"],
           ["genesis",    "Genesis (7 Phases)"],
           ["epic",       "Epic Campaign"],
           ["timeline",   "Timeline"],
@@ -201,6 +203,12 @@ export default function AtelierTab({ campId, camp }) {
         <div data-testid="atelier-references-pane">
           <ReferenceEditor campaignId={campId} systemId={camp?.system_id}
                             isGm={camp?.is_gm}/>
+        </div>
+      )}
+
+      {subtab === "table-tools" && (
+        <div data-testid="atelier-table-tools-pane">
+          <AtelierWorkshop campId={campId}/>
         </div>
       )}
 

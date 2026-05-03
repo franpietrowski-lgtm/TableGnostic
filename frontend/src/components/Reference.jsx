@@ -369,8 +369,49 @@ function SystemReferenceView({ ref_, systemId, q }) {
   const ql = (q || "").toLowerCase();
   const f = (arr) => (arr || []).filter((x) =>
     JSON.stringify(x).toLowerCase().includes(ql));
+
+  // V6.19 — Build the quick_ref nav (left rail) by detecting which
+  // sections will actually render. Mirrors BESM's tab-strip cadence so
+  // every system's reference page feels symmetrical.
+  const sectionList = [];
+  const has = (arr) => f(arr).length > 0;
+  if (ref_.abilities || ref_.stat_pools) sectionList.push({ slug: ref_.stat_pools ? "stat-pools" : "abilities", label: ref_.stat_pools ? "Stat Pools" : "Abilities" });
+  if (has(ref_.classes)) sectionList.push({ slug: "classes", label: "Classes" });
+  if (has(ref_.types)) sectionList.push({ slug: "types", label: "Types" });
+  if (has(ref_.foci)) sectionList.push({ slug: "foci", label: "Foci" });
+  if (has(ref_.descriptors)) sectionList.push({ slug: "descriptors", label: "Descriptors" });
+  if (has(ref_.races || ref_.heritages)) sectionList.push({ slug: ref_.races ? "races" : "heritages", label: ref_.races ? "Races" : "Heritages" });
+  if (has(ref_.point_buy_attributes)) sectionList.push({ slug: "point-buy-attributes-tri-stat-mode", label: "Point-Buy Attributes" });
+  if (has(ref_.weapons)) sectionList.push({ slug: "weapons", label: "Weapons" });
+  if (has(ref_.armor)) sectionList.push({ slug: "armor", label: "Armor" });
+  if (has(ref_.spells)) sectionList.push({ slug: "spells-(sample)", label: "Spells" });
+  if (has(ref_.cyphers)) sectionList.push({ slug: "cyphers", label: "Cyphers" });
+  if (has(ref_.artifacts)) sectionList.push({ slug: "artifacts", label: "Artifacts" });
+  if (has(ref_.skills)) sectionList.push({ slug: "skills", label: "Skills" });
+  if (has(ref_.conditions)) sectionList.push({ slug: "conditions", label: "Conditions" });
+  if (has(ref_.actions)) sectionList.push({ slug: "actions", label: "Actions" });
+  if (has(ref_.power_levels)) sectionList.push({ slug: "power-levels", label: "Power Levels" });
+  if (ref_.gm_intrusion) sectionList.push({ slug: "gm-intrusion", label: "GM Intrusion" });
+
   return (
-    <div className="mt-6 space-y-6" data-testid={`system-ref-${systemId}`}>
+    <div className="mt-6 grid md:grid-cols-[180px_1fr] gap-6"
+         data-testid={`system-ref-${systemId}`}>
+      {/* V6.19 — Left rail quick_ref. Mirrors BESM tab-group style. */}
+      <aside className="md:sticky md:top-4 self-start"
+             data-testid={`system-ref-quickref-${systemId}`}>
+        <div className="label-ref mb-2">Quick reference</div>
+        <nav className="space-y-0.5">
+          {sectionList.map((s) => (
+            <a key={s.slug} href={`#system-ref-section-${s.slug}`}
+               className="block text-[11px] font-ui px-2 py-1 text-mist hover:text-gold-bright hover:bg-gold/5 rounded-sm transition-colors"
+               data-testid={`quickref-${systemId}-${s.slug}`}>
+              {s.label}
+            </a>
+          ))}
+        </nav>
+      </aside>
+
+      <div className="space-y-6 min-w-0">
       <div className="card-mystic p-4">
         <div className="label-ref mb-1">Rule of thumb</div>
         <div className="text-sm text-parchment/90 leading-snug">{ref_.rule_note}</div>
@@ -515,6 +556,7 @@ function SystemReferenceView({ ref_, systemId, q }) {
           <Card title="The Cypher Tax" sub={ref_.gm_intrusion.summary} page={ref_.gm_intrusion.page}/>
         </Section>
       )}
+      </div>
     </div>
   );
 }
@@ -522,8 +564,11 @@ function SystemReferenceView({ ref_, systemId, q }) {
 function Section({ title, children }) {
   const arr = React.Children.toArray(children);
   if (arr.length === 0) return null;
+  const slug = title.toLowerCase().replace(/\s+/g, "-");
   return (
-    <div data-testid={`system-ref-section-${title.toLowerCase().replace(/\s+/g, "-")}`}>
+    <div id={`system-ref-section-${slug}`}
+         data-testid={`system-ref-section-${slug}`}
+         className="scroll-mt-4">
       <div className="label-ref mb-2">{title}</div>
       <div className="grid md:grid-cols-2 gap-2">{arr}</div>
     </div>

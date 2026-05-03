@@ -16,6 +16,8 @@ import { AdvancementBadge } from "./AdvancementWizard";
 import AdvancementWizard from "./AdvancementWizard";
 import SpellTracker from "./SpellTracker";
 import PendingAdvancementPanel from "./PendingAdvancementPanel";
+import ClassProgressionPanel from "./ClassProgressionPanel";
+import Anime5eBudgetAudit from "./Anime5eBudgetAudit";
 
 export default function CharacterSheet() {
   const { id } = useParams();
@@ -325,6 +327,12 @@ export default function CharacterSheet() {
       {sheetTab === "mechanics" && (<>
       {/* V6.17 — Spell + Cooldown tracker (renders only when sheet has slots/bundles/EP). */}
       <SpellTracker characterId={ch.id} isOwnerOrGm={canEditMech}/>
+      {/* V6.19 — Class progression (saves/armor/weapons/tools + per-level features timeline). */}
+      <ClassProgressionPanel characterId={ch.id}/>
+      {/* V6.19 — Anime 5E DP/CP audit (only renders for anime-5e campaigns). */}
+      {(campaign?.system_id === "anime-5e") && (
+        <Anime5eBudgetAudit characterId={ch.id} isOwnerOrGm={canEditMech}/>
+      )}
       {/* System-shaped read view — D&D 5E / Cypher get their own block;
           BESM 4E (and Anime 5E by default) keep the original tri-stat layout. */}
       {dndState && <DndSheetView state={dndState} folio={ch.folio} roll={roll}/>}
@@ -819,22 +827,59 @@ function SheetInventoryPanel({ character, canEditMech }) {
                 <th className="text-left py-1.5">Item</th>
                 <th className="text-left py-1.5">Slot</th>
                 <th className="text-left py-1.5">Tag</th>
+                <th className="text-left py-1.5">Attunement</th>
+                <th className="text-left py-1.5">Charges</th>
                 <th className="text-left py-1.5 pl-2">Notes</th>
               </tr>
             </thead>
             <tbody>
               {magicItems.map((it, i) => (
-                <tr key={i} className="border-b border-gold/5">
+                <tr key={i} className="border-b border-gold/5"
+                    data-testid={`magic-item-row-${i}`}>
                   <td className="py-1.5 text-parchment">{it.name}</td>
                   <td className="py-1.5 text-mist text-xs font-ui uppercase tracking-widest">{it.slot || "—"}</td>
                   <td className="py-1.5">
                     {it.tag && <span className="tag border-gold/50 text-gold-bright text-[10px]">{it.tag}</span>}
+                  </td>
+                  {/* V6.19 — attunement column. Renders ✓ Attuned / ⚪ Available / — None */}
+                  <td className="py-1.5 text-xs"
+                      data-testid={`magic-item-attunement-${i}`}>
+                    {it.requires_attunement ? (
+                      it.attuned_to ? (
+                        <span className="text-gold-bright">✓ Attuned ({it.attuned_to})</span>
+                      ) : (
+                        <span className="text-mist">⚪ Available</span>
+                      )
+                    ) : (
+                      <span className="text-mist/50">—</span>
+                    )}
+                  </td>
+                  {/* V6.19 — charges column. Renders X/Y for charged items, regen note. */}
+                  <td className="py-1.5 text-xs"
+                      data-testid={`magic-item-charges-${i}`}>
+                    {it.charges_max ? (
+                      <span className="font-display text-gold-bright">
+                        {it.charges_current ?? it.charges_max}
+                        <span className="text-mist text-[10px]">/{it.charges_max}</span>
+                        {it.regen && <span className="text-mist text-[10px] ml-1">· {it.regen}</span>}
+                      </span>
+                    ) : (
+                      <span className="text-mist/50">—</span>
+                    )}
                   </td>
                   <td className="py-1.5 pl-2 text-mist text-xs">{it.notes || ""}</td>
                 </tr>
               ))}
             </tbody>
           </table>
+          {/* V6.19 — Attunement summary footer */}
+          <div className="mt-2 text-[10px] text-mist border-t border-gold/10 pt-2"
+               data-testid="attunement-summary">
+            Attuned items: {magicItems.filter((it) => it.attuned_to).length}
+            <span className="ml-2 text-mist/60">
+              (D&amp;D 5E baseline: 3 max — homebrew may override)
+            </span>
+          </div>
         </div>
       )}
       {cyphers.length > 0 && (

@@ -1,0 +1,36 @@
+{
+  "summary": "V6.19 backend verified: 16/16 pytest pass. Formula rebalance correct — tier=20/flat=20/curve=30 at L5; Eli-equivalent TEST character with stored 90 DP recomputes to 20 DP (previous=90, new=20, formula=flat). /api/anime5e/races returns all 8 races with DP costs in 1-5 range + tier table [10,20,40,60,80]. budget-breakdown returns tier metadata (Tier 2, dp=20) and flags suspicious_budget=true when stored 90>150% of 20. class-progression returns full Artificer L5 block. Surprise Bag + Scene-Break Cards: seed idempotent, draw returns a random entry, GM-only enforcement verified (Aurora→403 on draw, create, and Scene-Break create). IMPORTANT — review request's character/campaign IDs were ALL STALE (DB appears to have been reset; Eli doesn't exist). Tests adapted to create a TEST_V619_AnimeEli Artificer L5 in the live anime-5e campaign 2d31c25354e4415f84a31704fe78a795. Frontend BUG FOUND + FIXED: AtelierWorkshop.jsx lines 110/367 used bare confirm() which ESLint no-restricted-globals blocks — whole app failed to compile. Changed to window.confirm(). UI not fully re-verified after fix due to HMR cycle timing.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "AtelierWorkshop.jsx", "issue": "Bare confirm() calls (lines 110, 367) violated ESLint no-restricted-globals — blocked entire frontend compile. Fixed inline by converting to window.confirm().", "selector": "src/components/AtelierWorkshop.jsx", "priority": "CRITICAL_FIXED"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter53_v619_atelier_audit.py",
+    "/app/test_reports/pytest/iter53_v619.xml"
+  ],
+  "action_items": [
+    "Re-verify frontend UI end-to-end after HMR picks up the window.confirm() fix — main agent should load /app/characters/<anime5e cid>, check Mechanics tab renders ClassProgressionPanel + Anime5eBudgetAudit + PendingAdvancementPanel, and /app/atelier → Table Tools subtab renders AtelierWorkshop with Surprise Bag + Scene-Break tabs.",
+    "Review request shipped STALE character/campaign IDs — Eli anime-5e 29aaf1ce..., campaign f68e1b23..., D&D Eli 2c68ff49..., Cypher Eli 48e2358e..., BESM Eli 244db025... ALL return 404. Live GMFran anime-5e campaign is 2d31c25354e4415f84a31704fe78a795; no Eli characters exist. Update /app/memory test data or reseed Evereantha before next iteration.",
+    "Add a frontend lint gate to CI to catch future confirm()/alert()/prompt() regressions before they hit preview."
+  ],
+  "critical_code_review_comments": [
+    "routes/advancement.py is now 1142 lines — well past the 700-line threshold. Split into advancement_core.py / budget_audit.py / spell_tracker.py / anime5e_seed.py.",
+    "AtelierWorkshop.jsx bare confirm() is a class of bug that will recur unless eslint runs pre-commit.",
+    "anime5e_xp_to_cp correctly delegates to the canonical tier table for 'tier' formula and documents the 5+3L / 5+5L house-rule variants in the docstring."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter53_v619_atelier_audit.py",
+    "/app/frontend/src/components/AtelierWorkshop.jsx (confirm → window.confirm x2)"
+  ],
+  "success_rate": {"backend": "100% (16/16)", "frontend": "uncertain — compile fix applied but not fully re-verified end-to-end"},
+  "test_credentials": "franpietrowski@gmail.com / PieGod08!! (GMFran admin); albanaszak@ymail.com / AuroraTest123! (Aurora player)",
+  "seed_data_creation": "Created TEST_V619_AnimeEli (b48056a94d4a4759953b570842cf5a2c) in anime-5e campaign 2d31c25354e4415f84a31704fe78a795 with folio.dnd_state={Artificer,L5,Human} + folio.anime5e_state.point_budget=90. Also TEST_V619_DnDChar in the dnd-5e campaign. Surprise Bag (6) + Scene-Break (4) seeded on the anime-5e campaign via /seed endpoints.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend green for V6.19. Eli IDs from review request are stale — use TEST_V619_AnimeEli b48056a94d4a4759953b570842cf5a2c in camp 2d31c25354e4415f84a31704fe78a795 or create fresh via _ensure_anime_eli fixture. Frontend compile was broken by bare confirm() in AtelierWorkshop.jsx; fix applied but UI verification incomplete.",
+  "rca of the issue": "AtelierWorkshop.jsx introduced in V6.19 used bare confirm() which CRA's ESLint no-restricted-globals rule (default config) fails the compile step. Any new component using confirm/alert/prompt must prefix with window. — fixed in this iteration."
+}
