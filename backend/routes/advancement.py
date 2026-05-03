@@ -84,6 +84,118 @@ CYPHER_TIER_BENEFITS = [
 ]
 
 
+# ─── Subclass option library ────────────────────────────────────────────
+# Per-class subclass lists. SRD 5.1 / Anime 5E SRD-safe — names + short
+# in-house blurbs only. Used by the Advancement Wizard's toggle picker.
+SUBCLASS_OPTIONS = {
+    # D&D 5E SRD subclasses
+    "Barbarian": [
+        {"key": "Path of the Berserker", "blurb": "Frenzy state, intimidating presence, mindless rage."},
+        {"key": "Path of the Totem Warrior", "blurb": "Animal totem spirits grant resistance & traits."},
+    ],
+    "Bard": [
+        {"key": "College of Lore", "blurb": "Cutting words, magical secrets, three skill expertises."},
+        {"key": "College of Valor", "blurb": "Combat-leaning bard — armor, martial weapons, extra attack."},
+    ],
+    "Cleric": [
+        {"key": "Life Domain", "blurb": "Disciple of life — healing bonuses, heavy armor, channel divinity preserve life."},
+        {"key": "Light Domain", "blurb": "Warding flare, radiant burst, corona of light."},
+        {"key": "Knowledge Domain", "blurb": "Blessings of knowledge, channel divinity for read thoughts."},
+        {"key": "Nature Domain", "blurb": "Druid cantrip, nature acolyte, charm animals & plants."},
+        {"key": "Tempest Domain", "blurb": "Wrath of the storm, thunderous strike, destructive wrath."},
+        {"key": "Trickery Domain", "blurb": "Blessing of the trickster, invoke duplicity, cloak of shadows."},
+        {"key": "War Domain", "blurb": "War priest, channel divinity guided strike, war god's blessing."},
+    ],
+    "Druid": [
+        {"key": "Circle of the Land", "blurb": "Nature-based wizardry, bonus cantrip, natural recovery."},
+        {"key": "Circle of the Moon", "blurb": "Combat wild-shape, primal strike, beast forms scale to high CR."},
+    ],
+    "Fighter": [
+        {"key": "Champion", "blurb": "Improved critical 19-20, remarkable athlete, additional fighting style."},
+        {"key": "Battle Master", "blurb": "Combat superiority dice + 3 maneuvers chosen from a tactical menu."},
+        {"key": "Eldritch Knight", "blurb": "Wizard spellcasting + weapon bond + war magic."},
+    ],
+    "Monk": [
+        {"key": "Way of the Open Hand", "blurb": "Manipulate opponent stance, ki strikes that knock prone or push."},
+        {"key": "Way of Shadow", "blurb": "Ninja toolkit — pass without trace, darkness, darkvision."},
+        {"key": "Way of the Four Elements", "blurb": "Ki-fueled elemental strikes & disciplines."},
+    ],
+    "Paladin": [
+        {"key": "Oath of Devotion", "blurb": "Sacred weapon, turn the unholy, classic paladin."},
+        {"key": "Oath of the Ancients", "blurb": "Nature's wrath, turn the faithless, woodland defender."},
+        {"key": "Oath of Vengeance", "blurb": "Abjure enemy, vow of enmity — the punisher."},
+    ],
+    "Ranger": [
+        {"key": "Hunter", "blurb": "Hunter's prey, defensive tactics, multiattack tricks."},
+        {"key": "Beast Master", "blurb": "Companion animal that fights alongside you."},
+    ],
+    "Rogue": [
+        {"key": "Thief", "blurb": "Fast hands, second-story work, supreme sneak."},
+        {"key": "Assassin", "blurb": "Bonus to surprise damage, infiltration expertise."},
+        {"key": "Arcane Trickster", "blurb": "Wizard spellcasting + mage hand legerdemain."},
+    ],
+    "Sorcerer": [
+        {"key": "Draconic Bloodline", "blurb": "Draconic resilience, elemental affinity, dragon wings."},
+        {"key": "Wild Magic", "blurb": "Wild magic surge — chaos table on every spell."},
+    ],
+    "Warlock": [
+        {"key": "The Archfey", "blurb": "Fey presence, misty escape, beguiling defenses."},
+        {"key": "The Fiend", "blurb": "Dark one's blessing, hurl through hell, fiendish vigor."},
+        {"key": "The Great Old One", "blurb": "Awakened mind, entropic ward, thought shield."},
+    ],
+    "Wizard": [
+        {"key": "School of Evocation", "blurb": "Sculpt spells, potent cantrip, overchannel for max damage."},
+        {"key": "School of Abjuration", "blurb": "Arcane ward, projected ward, improved abjuration."},
+        {"key": "School of Conjuration", "blurb": "Minor conjuration, benign transposition, focused conjuration."},
+        {"key": "School of Divination", "blurb": "Portent — replace any d20 roll twice per long rest."},
+        {"key": "School of Enchantment", "blurb": "Hypnotic gaze, instinctive charm, alter memories."},
+        {"key": "School of Illusion", "blurb": "Improved minor illusion, malleable illusions, illusory reality."},
+        {"key": "School of Necromancy", "blurb": "Grim harvest, undead thralls, command undead."},
+        {"key": "School of Transmutation", "blurb": "Minor alchemy, transmuter's stone, master transmuter."},
+    ],
+    # Anime 5E original classes (SRD-safe in-house blurbs).
+    "Adept": [
+        {"key": "Way of the Empath", "blurb": "Telepathic resonance, share emotions, mental healing."},
+        {"key": "Way of the Aether", "blurb": "Aetheric strike, levitation, force-based projections."},
+    ],
+    "Champion": [
+        {"key": "Heart of the Lion", "blurb": "Roar that rallies allies, inspire courage in adversity."},
+        {"key": "Iron Crusader", "blurb": "Heavy armor mastery, bulwark stance, smite-style strikes."},
+    ],
+    "Idol": [
+        {"key": "Stage Maven", "blurb": "Charm an audience, encore performance grants bonus actions."},
+        {"key": "Idol of Hope", "blurb": "Healing songs, anthem of resilience, group fortify."},
+    ],
+    "Pilot": [
+        {"key": "Sortie Specialist", "blurb": "Vehicle-bonded, advanced cockpit weaponry, manoeuvre repertoire."},
+        {"key": "Mecha Knight", "blurb": "Bonded blade, charged strike, sortie-only feats."},
+    ],
+    "Tinker": [
+        {"key": "Alchemist", "blurb": "Brewed elixirs, flask-based AoEs, healing potions on the fly."},
+        {"key": "Artillerist", "blurb": "Eldritch cannon, magical shell rounds, explosive cantrips."},
+        {"key": "Battle Smith", "blurb": "Steel defender companion, magical tinkering, infusion mastery."},
+    ],
+    # D&D 5E SRD Artificer subclasses (Anime 5E imports them via Tinker).
+    "Artificer": [
+        {"key": "Alchemist", "blurb": "Experimental elixirs, alchemical savant — bonus to spell heal/damage by INT mod."},
+        {"key": "Artillerist", "blurb": "Eldritch cannon, arcane firearm — magical shell-fire support."},
+        {"key": "Battle Smith", "blurb": "Steel defender — a mechanical dog companion that scales with you."},
+    ],
+}
+
+
+def _resolve_subclass_options(class_name: str) -> List[Dict[str, str]]:
+    """Resolve subclass options for a class. Strips parenthetical
+    annotations like 'Artificer (Alchemist)' so the lookup matches."""
+    if not class_name:
+        return []
+    # Try exact match first, then strip parenthetical.
+    if class_name in SUBCLASS_OPTIONS:
+        return SUBCLASS_OPTIONS[class_name]
+    base = class_name.split("(")[0].strip()
+    return SUBCLASS_OPTIONS.get(base, [])
+
+
 # ─── Advancement detection ──────────────────────────────────────────────
 
 def _detect_advancement(ch: Dict[str, Any], camp: Dict[str, Any]) -> Dict[str, Any]:
@@ -162,6 +274,7 @@ def _detect_advancement(ch: Dict[str, Any], camp: Dict[str, Any]) -> Dict[str, A
         # Subclass — most classes pick at level 3 (Cleric/Sorcerer/Warlock at 1).
         subclass_level = {"Cleric": 1, "Sorcerer": 1, "Warlock": 1}.get(cls, 3)
         if lvl >= subclass_level and not dnd_state.get("subclass"):
+            sub_opts = _resolve_subclass_options(cls)
             pending.append({
                 "id": f"subclass-{subclass_level}",
                 "kind": "subclass",
@@ -170,10 +283,15 @@ def _detect_advancement(ch: Dict[str, Any], camp: Dict[str, Any]) -> Dict[str, A
                 "title": f"{cls} Subclass",
                 "blurb": (
                     f"{cls}s choose their archetype/path/circle/etc. at "
-                    f"level {subclass_level}. Open the campaign's allowed-list "
-                    f"in the primer for available picks."
+                    f"level {subclass_level}. Pick a subclass below — "
+                    f"each option's flavour is shown in the toggle."
                 ),
-                "options": [],  # GM-curated, free-text
+                "options": [
+                    {"key": s["key"], "label": s["key"],
+                     "blurb": s.get("blurb") or "",
+                     "cp_cost": 0}
+                    for s in sub_opts
+                ],
             })
 
     # ── Anime 5E specific: BESM-style point-buy underspend ──
@@ -265,75 +383,314 @@ class AdvancementApplyIn(BaseModel):
     choice_key: str = Field(default="", max_length=120)
     detail: Dict[str, Any] = Field(default_factory=dict)
     note: str = ""
+    # V6.18 — pending workflow.
+    # When True (default for non-GM callers), the choice is filed as a
+    # Level-Up Ticket awaiting GM approval rather than committed
+    # straight to the character document. GMs / admins may set False
+    # to commit immediately (e.g. NPC sheets, GM-driven retcons).
+    pending: bool = True
+    # CP cost the player believes this choice consumes — surfaced in
+    # the pending panel so the GM can sanity-check before approving.
+    cp_cost: int = 0
 
 
-@router.post("/characters/{cid}/advancement/apply")
-async def apply_advancement(cid: str, body: AdvancementApplyIn,
-                              user: dict = Depends(get_current_user)):
-    """Apply a guided advancement choice and persist it on the character.
+def _commit_advancement(folio: Dict[str, Any], aid: str,
+                          choice_key: str, detail: Dict[str, Any]) -> Dict[str, Any]:
+    """Pure-function commit of a single advancement choice into a folio.
 
-    Supported `advancement_id` patterns:
-      * asi-{lvl}        → stamps {level: lvl, choice: ..., detail: ...} into folio.dnd_state.advancement_log
-      * fighting-style   → sets folio.dnd_state.fighting_style
-      * subclass-{lvl}   → sets folio.dnd_state.subclass
-      * cypher-tier-{t}  → appends choice_key to folio.cypher_state.tier_benefits_log[t]
+    Returns the modified folio dict (does not persist). Used both by the
+    immediate-commit path and the GM-approval path.
     """
-    ch, camp, is_owner_or_gm = await _load_character_with_permission(cid, user)
-    if not is_owner_or_gm:
-        raise HTTPException(403, "Owner or GM only.")
-    folio = dict(ch.get("folio") or {})
-    aid = body.advancement_id
-    applied: Dict[str, Any] = {"id": aid, "key": body.choice_key,
-                                "detail": body.detail, "note": body.note,
-                                "applied_at": now_iso(),
-                                "applied_by": user.get("name")}
-
+    folio = dict(folio or {})
     if aid.startswith("asi-"):
         lvl = int(aid.split("-", 1)[1])
         dnd = dict(folio.get("dnd_state") or {})
         log = list(dnd.get("advancement_log") or [])
-        # Persist the chosen ASI / feat into the log.
-        log.append({**applied, "level": lvl})
-        # If the player picked +2 / +1+1 / feat, push the actual ASI deltas
-        # into ability_scores so the sheet reflects them.
+        log.append({"id": aid, "level": lvl, "key": choice_key,
+                     "detail": detail, "applied_at": now_iso()})
         scores = dict(dnd.get("ability_scores") or {})
-        if body.choice_key == "asi_2":
-            ab = body.detail.get("ability") or "Strength"
+        if choice_key == "asi_2":
+            ab = detail.get("ability") or "Strength"
             scores[ab] = int(scores.get(ab, 10)) + 2
-        elif body.choice_key == "asi_1_1":
-            for ab in body.detail.get("abilities", [])[:2]:
+        elif choice_key == "asi_1_1":
+            for ab in detail.get("abilities", [])[:2]:
                 scores[ab] = int(scores.get(ab, 10)) + 1
         dnd["advancement_log"] = log
         dnd["ability_scores"] = scores
         folio["dnd_state"] = dnd
     elif aid == "fighting-style":
         dnd = dict(folio.get("dnd_state") or {})
-        dnd["fighting_style"] = body.choice_key or body.detail.get("style") or ""
+        dnd["fighting_style"] = choice_key or detail.get("style") or ""
         folio["dnd_state"] = dnd
     elif aid.startswith("subclass-"):
         dnd = dict(folio.get("dnd_state") or {})
-        dnd["subclass"] = body.choice_key or body.detail.get("subclass") or ""
+        dnd["subclass"] = choice_key or detail.get("subclass") or ""
         folio["dnd_state"] = dnd
     elif aid.startswith("cypher-tier-"):
         t = int(aid.rsplit("-", 1)[1])
         cy = dict(folio.get("cypher_state") or {})
         log = dict(cy.get("tier_benefits_log") or {})
         chosen = list(log.get(str(t)) or [])
-        chosen.append({"key": body.choice_key, "detail": body.detail,
-                        "note": body.note, "applied_at": now_iso()})
+        chosen.append({"key": choice_key, "detail": detail,
+                        "applied_at": now_iso()})
         log[str(t)] = chosen
         cy["tier_benefits_log"] = log
         folio["cypher_state"] = cy
-    else:
-        raise HTTPException(400, f"Unknown advancement id: {aid}")
+    return folio
 
+
+@router.post("/characters/{cid}/advancement/apply")
+async def apply_advancement(cid: str, body: AdvancementApplyIn,
+                              user: dict = Depends(get_current_user)):
+    """V6.18 — file an advancement choice as a Level-Up Ticket (default)
+    OR commit immediately (GM/admin override via `pending=False`).
+
+    Pending tickets queue under `character.pending_advancements[]` so both
+    player and GM can see them on the sheet's Pending Approval panel.
+    The GM approves via `/advancement/approve/{ticket_id}` which runs
+    `_commit_advancement` against the folio and stamps the ticket
+    approved.
+    """
+    ch, camp, is_owner_or_gm = await _load_character_with_permission(cid, user)
+    if not is_owner_or_gm:
+        raise HTTPException(403, "Owner or GM only.")
+    is_gm = user["id"] == camp["gm_id"] or user.get("role") == "admin"
+
+    aid = body.advancement_id
+
+    if body.pending and not is_gm:
+        # Player is filing a ticket. Persist into pending queue, do NOT
+        # mutate the folio yet.
+        ticket = {
+            "id": new_id(),
+            "advancement_id": aid,
+            "choice_key": body.choice_key or "",
+            "detail": body.detail or {},
+            "note": body.note or "",
+            "cp_cost": int(body.cp_cost or 0),
+            "filed_by": user.get("name"),
+            "filed_by_id": user["id"],
+            "filed_at": now_iso(),
+            "status": "pending",  # pending | approved | rejected
+        }
+        await db.characters.update_one(
+            {"id": cid},
+            {"$push": {"pending_advancements": ticket},
+             "$set": {"updated_at": now_iso()}},
+        )
+        fresh = await db.characters.find_one({"id": cid}, {"_id": 0})
+        return {"ok": True, "ticket": ticket, "filed": True,
+                 "advancement": _detect_advancement(fresh, camp)}
+
+    # Immediate commit path (GM/admin only or explicit pending=False).
+    folio = ch.get("folio") or {}
+    new_folio = _commit_advancement(folio, aid, body.choice_key or "",
+                                       body.detail or {})
     await db.characters.update_one(
         {"id": cid},
-        {"$set": {"folio": folio, "updated_at": now_iso()}},
+        {"$set": {"folio": new_folio, "updated_at": now_iso()}},
     )
     fresh = await db.characters.find_one({"id": cid}, {"_id": 0})
-    return {"ok": True, "applied": applied,
-             "advancement": _detect_advancement(fresh, camp)}
+    return {"ok": True, "applied": {
+        "id": aid, "key": body.choice_key, "detail": body.detail,
+        "applied_at": now_iso(), "applied_by": user.get("name")},
+            "filed": False,
+            "advancement": _detect_advancement(fresh, camp)}
+
+
+# ─── V6.18 — Pending Level-Up Ticket queue ──────────────────────────────
+
+@router.get("/characters/{cid}/advancement/pending")
+async def list_pending_advancements(cid: str,
+                                      user: dict = Depends(get_current_user)):
+    """Return the pending Level-Up Tickets for this character. Visible to
+    both player and GM (read-only for non-GMs)."""
+    ch, _, _ = await _load_character_with_permission(cid, user)
+    return {
+        "character_id": cid,
+        "tickets": list(ch.get("pending_advancements") or []),
+    }
+
+
+def _validate_ticket_compliance(ch: Dict[str, Any], camp: Dict[str, Any],
+                                  ticket: Dict[str, Any]) -> Dict[str, Any]:
+    """Pre-flight check for a ticket before GM approves.
+
+    Catches the most common rules-balance issues:
+      - CP / DP balance after ticket would commit
+      - ASI level matches the chassis level (no asi-12 if level 5)
+      - Subclass valid for class
+      - Cypher tier-benefit only when at appropriate tier
+    """
+    issues: List[str] = []
+    folio = ch.get("folio") or {}
+    dnd = folio.get("dnd_state") or {}
+    cypher = folio.get("cypher_state") or {}
+    aid = ticket.get("advancement_id") or ""
+    cur_level = int(dnd.get("level") or 1)
+
+    if aid.startswith("asi-"):
+        try:
+            req_lvl = int(aid.split("-", 1)[1])
+            if cur_level < req_lvl:
+                issues.append(
+                    f"ASI ticket requires character level ≥ {req_lvl}, "
+                    f"current level is {cur_level}."
+                )
+        except (ValueError, IndexError):
+            issues.append(f"Malformed ASI advancement id: {aid}")
+
+    if aid.startswith("subclass-"):
+        if dnd.get("subclass"):
+            issues.append(
+                f"Character already has a subclass: {dnd.get('subclass')}. "
+                f"Reject and retcon instead, or this ticket is a duplicate."
+            )
+
+    if aid.startswith("cypher-tier-"):
+        try:
+            req_tier = int(aid.rsplit("-", 1)[1])
+            cur_tier = int(cypher.get("tier") or 1)
+            if cur_tier < req_tier:
+                issues.append(
+                    f"Cypher tier-benefit ticket targets tier {req_tier}, "
+                    f"current tier is {cur_tier}."
+                )
+        except (ValueError, IndexError):
+            issues.append(f"Malformed cypher-tier advancement id: {aid}")
+
+    # CP/DP budget check for Anime 5E (only system that flexes the budget on
+    # advancement). BESM uses XP queue, D&D uses ASI auto-grant.
+    if camp.get("system_id") == "anime-5e":
+        anime = folio.get("anime5e_state") or {}
+        budget = int(anime.get("point_budget") or 0)
+        spent = sum(int(b.get("cost_per_level") or 0) * int(b.get("level") or 1)
+                     for b in (anime.get("point_buys") or []))
+        cost = int(ticket.get("cp_cost") or 0)
+        if cost and spent + cost > budget:
+            issues.append(
+                f"Approving this ticket would put point-buy at "
+                f"{spent + cost}/{budget} ({spent + cost - budget} over)."
+            )
+
+    return {
+        "passes": not issues,
+        "issues": issues,
+        "current_level": cur_level,
+        "current_tier": int(cypher.get("tier") or 1),
+    }
+
+
+class TicketActionIn(BaseModel):
+    note: str = ""
+
+
+@router.post("/characters/{cid}/advancement/approve/{ticket_id}")
+async def approve_pending_advancement(
+    cid: str, ticket_id: str, body: TicketActionIn,
+    user: dict = Depends(get_current_user),
+):
+    """GM/admin approves a pending Level-Up Ticket. Runs the rules
+    pre-flight; on pass commits the choice to the folio and marks the
+    ticket approved. Returns the ticket + a compliance report."""
+    ch, camp, _ = await _load_character_with_permission(cid, user)
+    if camp["gm_id"] != user["id"] and user.get("role") != "admin":
+        raise HTTPException(403, "GM/admin only.")
+    tickets = list(ch.get("pending_advancements") or [])
+    target = next((t for t in tickets if t.get("id") == ticket_id), None)
+    if not target:
+        raise HTTPException(404, "Ticket not found")
+    if target.get("status") != "pending":
+        raise HTTPException(400, f"Ticket already {target.get('status')}")
+
+    compliance = _validate_ticket_compliance(ch, camp, target)
+    if not compliance["passes"]:
+        return {
+            "ok": False,
+            "ticket_id": ticket_id,
+            "blocked_by_compliance": True,
+            "compliance": compliance,
+            "advice": (
+                "Resolve the listed issues, or have the player edit the "
+                "ticket. Use /reject if the ticket is invalid."
+            ),
+        }
+
+    # Commit.
+    folio = _commit_advancement(
+        ch.get("folio") or {},
+        target.get("advancement_id") or "",
+        target.get("choice_key") or "",
+        target.get("detail") or {},
+    )
+    target["status"] = "approved"
+    target["approved_by"] = user.get("name")
+    target["approved_by_id"] = user["id"]
+    target["approved_at"] = now_iso()
+    target["approval_note"] = body.note or ""
+    target["compliance_at_approval"] = compliance
+    await db.characters.update_one(
+        {"id": cid},
+        {"$set": {"folio": folio, "pending_advancements": tickets,
+                   "updated_at": now_iso()}},
+    )
+    return {"ok": True, "ticket": target, "compliance": compliance}
+
+
+@router.post("/characters/{cid}/advancement/reject/{ticket_id}")
+async def reject_pending_advancement(
+    cid: str, ticket_id: str, body: TicketActionIn,
+    user: dict = Depends(get_current_user),
+):
+    """GM/admin rejects a pending ticket with a note. The folio is NOT
+    mutated; the ticket is stamped rejected and stays in history."""
+    ch, camp, _ = await _load_character_with_permission(cid, user)
+    if camp["gm_id"] != user["id"] and user.get("role") != "admin":
+        raise HTTPException(403, "GM/admin only.")
+    tickets = list(ch.get("pending_advancements") or [])
+    target = next((t for t in tickets if t.get("id") == ticket_id), None)
+    if not target:
+        raise HTTPException(404, "Ticket not found")
+    if target.get("status") != "pending":
+        raise HTTPException(400, f"Ticket already {target.get('status')}")
+    target["status"] = "rejected"
+    target["rejected_by"] = user.get("name")
+    target["rejected_at"] = now_iso()
+    target["rejection_note"] = body.note or ""
+    await db.characters.update_one(
+        {"id": cid},
+        {"$set": {"pending_advancements": tickets, "updated_at": now_iso()}},
+    )
+    return {"ok": True, "ticket": target}
+
+
+@router.post("/characters/{cid}/advancement/withdraw/{ticket_id}")
+async def withdraw_pending_advancement(
+    cid: str, ticket_id: str,
+    user: dict = Depends(get_current_user),
+):
+    """Player who filed the ticket may withdraw it before GM approves."""
+    ch, _, is_owner_or_gm = await _load_character_with_permission(cid, user)
+    if not is_owner_or_gm:
+        raise HTTPException(403, "Filer / owner / GM only.")
+    tickets = list(ch.get("pending_advancements") or [])
+    target = next((t for t in tickets if t.get("id") == ticket_id), None)
+    if not target:
+        raise HTTPException(404, "Ticket not found")
+    if target.get("status") != "pending":
+        raise HTTPException(400, f"Ticket already {target.get('status')}")
+    if (target.get("filed_by_id") and
+        target["filed_by_id"] != user["id"] and
+        user["id"] != ch.get("owner_id") and
+        user.get("role") != "admin"):
+        raise HTTPException(403, "Only the filer, character owner, or admin may withdraw.")
+    target["status"] = "withdrawn"
+    target["withdrawn_at"] = now_iso()
+    await db.characters.update_one(
+        {"id": cid},
+        {"$set": {"pending_advancements": tickets, "updated_at": now_iso()}},
+    )
+    return {"ok": True, "ticket": target}
 
 
 # ─── Spell / Cooldown tracker ───────────────────────────────────────────

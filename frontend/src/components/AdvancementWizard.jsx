@@ -108,17 +108,29 @@ export default function AdvancementWizard({ characterId, isOwnerOrGm, onClose, o
     setBusy(true);
     setError("");
     try {
-      await api.post(`/characters/${characterId}/advancement/apply`, {
+      // V6.18 — file as pending Level-Up Ticket (player path).
+      // GM/admin sheets can use the Pending panel to commit instantly
+      // via the "approve" button; the wizard always files a ticket so
+      // the workflow is uniform.
+      const cpCost = Number(pick.cp_cost || 0);
+      const r = await api.post(`/characters/${characterId}/advancement/apply`, {
         advancement_id: step.id,
         choice_key: pick.key || "",
         detail: pick.detail || {},
         note: pick.note || "",
+        pending: true,
+        cp_cost: cpCost,
       });
       window.dispatchEvent(new CustomEvent("tg:advancement-applied"));
       onApplied && onApplied();
-      // Refresh and stay open — the user might have multiple pending choices.
+      const filed = !!(r.data && r.data.filed);
+      // If filed as ticket, show a toast-style note rather than auto-clearing.
+      if (filed) {
+        setError(""); // clear any prior errors
+        setPick({ key: "", detail: {}, note: "", cp_cost: 0,
+                   _toast: "Filed as Level-Up Ticket — awaiting GM approval." });
+      }
       await refresh();
-      setActiveIdx(0);
     } catch (e) {
       setError(formatApiErrorDetail(e.response?.data?.detail) || e.message);
     } finally {
@@ -183,6 +195,11 @@ export default function AdvancementWizard({ characterId, isOwnerOrGm, onClose, o
       {error && (
         <div className="text-ember text-xs mt-2" data-testid="advancement-error">{error}</div>
       )}
+      {pick._toast && (
+        <div className="text-gold-bright text-xs mt-2" data-testid="advancement-toast">
+          {pick._toast}
+        </div>
+      )}
 
       <div className="flex items-center justify-between mt-4 gap-2 flex-wrap">
         <div className="flex items-center gap-1">
@@ -193,14 +210,22 @@ export default function AdvancementWizard({ characterId, isOwnerOrGm, onClose, o
                   disabled={idx === pending.length - 1} className="btn btn-ghost text-xs"
                   data-testid="advancement-next">Next ›</button>
         </div>
-        <button onClick={apply}
-                disabled={busy || !isOwnerOrGm}
-                className="btn btn-primary text-xs flex items-center gap-1"
-                data-testid="advancement-apply-btn">
-          {busy ? "Saving…" : (
-            <>Apply &amp; record <ArrowRight className="w-3.5 h-3.5"/></>
+        <div className="flex items-center gap-2">
+          {pick.cp_cost > 0 && (
+            <span className="text-[10px] uppercase tracking-widest text-gold-bright"
+                  data-testid="advancement-cp-cost">
+              {pick.cp_cost} CP
+            </span>
           )}
-        </button>
+          <button onClick={apply}
+                  disabled={busy || !isOwnerOrGm}
+                  className="btn btn-primary text-xs flex items-center gap-1"
+                  data-testid="advancement-apply-btn">
+            {busy ? "Filing…" : (
+              <>Submit for GM approval <ArrowRight className="w-3.5 h-3.5"/></>
+            )}
+          </button>
+        </div>
       </div>
     </Modal>
   );
@@ -288,16 +313,37 @@ function OptionListPicker({ step, pick, setPick }) {
                  placeholder="e.g. School of Evocation"
                  data-testid="option-free-text"/>
         </div>
-      ) : opts.map((o) => (
-        <label key={o.key}
-               className={`block border ${pick.key === o.key ? "border-gold bg-gold/10" : "border-gold/15"} rounded-sm p-2.5 cursor-pointer hover:border-gold/40 transition-colors`}
-               data-testid={`option-${o.key}`}>
-          <input type="radio" name="opt" className="mr-2"
-                 checked={pick.key === o.key}
-                 onChange={() => setPick({ ...pick, key: o.key })}/>
-          <span className="text-sm text-parchment font-ui">{o.label}</span>
-        </label>
-      ))}
+      ) : opts.map((o) => {
+        const selected = pick.key === o.key;
+        return (
+          <label key={o.key}
+                 className={`block border ${selected ? "border-gold bg-gold/10" : "border-gold/15"} rounded-sm p-2.5 cursor-pointer hover:border-gold/40 transition-colors`}
+                 data-testid={`option-${o.key}`}>
+            <div className="flex items-baseline justify-between gap-2 flex-wrap">
+              <div className="min-w-0 flex-1">
+                <input type="radio" name="opt" className="mr-2"
+                       checked={selected}
+                       onChange={() => setPick({ ...pick, key: o.key, cp_cost: o.cp_cost || 0 })}/>
+                <span className="text-sm text-parchment font-ui">{o.label}</span>
+              </div>
+              {(o.cp_cost != null && o.cp_cost > 0) && (
+                <span className="text-[10px] font-ui uppercase tracking-widest text-gold-bright">
+                  {o.cp_cost} CP
+                </span>
+              )}
+            </div>
+            {/* V6.18 — toggle-picker reveals the option's blurb only when
+                selected, keeping the list tight while exposing detail
+                on demand. */}
+            {selected && o.blurb && (
+              <div className="mt-1.5 ml-6 text-[11px] text-mist italic"
+                   data-testid={`option-blurb-${o.key}`}>
+                {o.blurb}
+              </div>
+            )}
+          </label>
+        );
+      })}
     </div>
   );
 }

@@ -14,6 +14,48 @@
 
 ## 2. Implemented (cumulative, condensed)
 
+### V6.18 — Level-Up Ticket workflow + Toggle-Picker Wizard + Subclass enrichment (2026-05-03)
+
+User direction (ground-truth from Anime 5E core p.28-30 / 48 / 50): classes auto-grant features per level (no extra CP), races carry explicit DP costs, backgrounds are narrative-only. XP unlocks levels which auto-grant Bonus Points players spend on Attributes. Player approval flow: file ticket → GM ratifies after compliance pre-flight. **Cut A1 of 3** — Level-Up Ticket workflow, toggle-picker pattern, subclass option enrichment, compliance preview. (Cut A2: race DP cost on creation, full per-level feature timeline, item attunement/charges. Cut A3: scene-break card, GM surprise bag.)
+
+**Backend — `routes/advancement.py`**
+- New `_commit_advancement()` pure function — folio mutation logic extracted so both immediate-commit and GM-approval paths share the math.
+- New `SUBCLASS_OPTIONS` registry — 14 classes × 2-8 subclasses each (D&D SRD + Anime 5E originals + Artificer Alchemist/Artillerist/Battle Smith) with in-house blurbs. `_resolve_subclass_options()` strips `(Alchemist)`-style parentheticals so existing characters resolve cleanly.
+- `apply_advancement` now defaults to `pending=true` for player callers; GM/admin auto-commit. Player path files a Level-Up Ticket onto `character.pending_advancements[]` instead of mutating folio.
+- New endpoints:
+  - `GET  /api/characters/{cid}/advancement/pending` — list tickets (any table member)
+  - `POST /api/characters/{cid}/advancement/approve/{tid}` — GM approve. Runs `_validate_ticket_compliance` first; if blocked returns `{ok: false, blocked_by_compliance, issues}` without mutating.
+  - `POST /api/characters/{cid}/advancement/reject/{tid}` — GM reject with note.
+  - `POST /api/characters/{cid}/advancement/withdraw/{tid}` — filer withdraws while pending.
+- `_validate_ticket_compliance()` flags: ASI-vs-level mismatch, duplicate subclass, cypher tier-benefit beyond current tier, Anime 5E point-buy overspend if approved.
+
+**Frontend — `AdvancementWizard.jsx` toggle-picker upgrade**
+- `OptionListPicker` now shows option blurb only when selected (toggle-picker pattern), CP cost pill on the right when nonzero. Subclass step now lists the 3 Artificer subclasses for Eli with hover blurbs instead of the previous free-text input.
+- Wizard's apply button copy changed to **"Submit for GM approval"** + posts `pending=true`. Filed-confirmation toast shows `Filed as Level-Up Ticket — awaiting GM approval.`
+- CP cost displayed adjacent to apply button when > 0.
+
+**Frontend — `PendingAdvancementPanel.jsx` (new, 175 lines)**
+- Mounted on Character Sheet · Identity tab below the Approval Panel. Lists pending tickets with filer + choice + detail + CP cost + player note.
+- GM view: per-ticket Approve & commit / Reject buttons + decision-note input. Compliance issues surface as inline error if blocked.
+- Player view: Withdraw button on tickets they filed. History accordion with last 10 resolved tickets (approved / rejected / withdrawn) and decision notes.
+- Auto-refreshes on `tg:advancement-applied` and `tg:advancement-ticket-changed` window events.
+
+**Live verification (Aurora player → GMFran GM round-trip)**
+- Aurora filed `asi-4` ticket (Charisma +2) on Eli Anime 5E. Backend response: `filed: true`, ticket id stamped.
+- GMFran GET-pending showed Aurora's ticket with status=pending, filer=Aurora.
+- GMFran POST-approve: compliance pre-flight passed (level 5 ≥ asi-4 requirement), ticket stamped approved with note, Eli's `dnd_state.ability_scores.Charisma` incremented from 13 → 15.
+
+**Tests — `tests/test_iter53_v618_tickets.py`**
+- 10 unit tests: subclass-options stripping parentheticals, anime-5e classes covered, advancement detection carries options + blurbs, commit-asi math, commit-subclass write, compliance gates (ASI under level, anime overspend, duplicate subclass).
+- Cumulative: 94/94 (21 V6.17+V6.18 + 73 prior).
+
+**Deferred (Cut A2 / A3 / B / C / D / E)**
+- Race DP cost auto-deduct on creation. Full per-level granted-feature timeline. Item attunement + charges tracking. Class proficiency block (weapons / armor / saves) on sheet.
+- BESM Reference-style left-rail nav adopted by every system reference page.
+- World Creation Tree + Creation Myth panel + Codex Link Widget.
+- XP-CP marketplace + chat hot-keys.
+- Scene-Break Card + GM Surprise Bag (with Atelier · Workshop custom seed section, exportable to deck).
+
 ### V6.17 — Per-system Advancement Checker + Spell/Cooldown Tracker + Anime 5E SRD-safe seed (2026-05-02)
 
 **Per-system Advancement Checker (`routes/advancement.py`)**

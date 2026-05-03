@@ -15,6 +15,7 @@ import ConvertCharacterButton from "./ConvertCharacterButton";
 import { AdvancementBadge } from "./AdvancementWizard";
 import AdvancementWizard from "./AdvancementWizard";
 import SpellTracker from "./SpellTracker";
+import PendingAdvancementPanel from "./PendingAdvancementPanel";
 
 export default function CharacterSheet() {
   const { id } = useParams();
@@ -301,6 +302,11 @@ export default function CharacterSheet() {
             characterId={ch.id}
             isGm={!!(campaign?.is_gm)}
             campaignHouseRules={campaign?.house_rules || ""}
+            onChanged={load}/>
+          <PendingAdvancementPanel
+            characterId={ch.id}
+            isGm={!!(campaign?.is_gm)}
+            ownerId={ch.owner_id}
             onChanged={load}/>
           {campaign?.is_gm && (
             <CompanionAssignPanel
