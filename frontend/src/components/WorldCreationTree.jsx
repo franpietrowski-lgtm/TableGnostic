@@ -128,6 +128,7 @@ export default function WorldCreationTree({ campId, isGm }) {
             re-dock a node by clicking the 'pin' button. */}
         {(data.unplaced?.length || 0) > 0 && (
           <UnplacedTray campId={campId} unplaced={data.unplaced}
+                         schema={data.schema}
                          isGm={isGm} onChanged={refresh}/>
         )}
         {/* Three pillars */}
@@ -204,30 +205,105 @@ export default function WorldCreationTree({ campId, isGm }) {
  * (carry `auto_placed: true` from the backend) so the GM can confirm
  * the placement or re-dock to a different pillar/branch. Also shows
  * anything the classifier couldn't figure out under "Unknown type".
+ *
+ * V6.23 — Pin-to-pillar UI. Each row gets a pillar.branch select + Pin
+ * button calling PATCH /campaigns/{cid}/codex-nodes/{nid}/place. GMs
+ * can also bulk-pin everything via the "Auto-classify all" button (a
+ * no-op for already-tagged entries; keeps RAW classifier mapping).
  */
-function UnplacedTray({ campId, unplaced, isGm, onChanged }) {
+function UnplacedTray({ campId, unplaced, schema, isGm, onChanged }) {
+  const [pinning, setPinning] = useState({});  // { nodeId: section }
+  const [busy, setBusy] = useState({});
+  const [err, setErr] = useState("");
+
+  // Build the pillar.branch option list from the schema so GMs can
+  // dock into ANY canonical section (not just the classifier guesses).
+  const allSections = useMemo(() => {
+    const out = [];
+    Object.entries(schema?.pillars || {}).forEach(([pillar, meta]) => {
+      (meta.branches || []).forEach((branch) => {
+        out.push(`${pillar}.${branch}`);
+      });
+    });
+    return out;
+  }, [schema]);
+
+  const pin = async (nodeId) => {
+    const section = pinning[nodeId];
+    if (!section) { setErr("Pick a pillar.branch first."); return; }
+    setBusy({ ...busy, [nodeId]: true }); setErr("");
+    try {
+      await api.patch(
+        `/campaigns/${campId}/codex-nodes/${nodeId}/place`,
+        { section },
+      );
+      onChanged && onChanged();
+    } catch (e) {
+      setErr(formatApiErrorDetail(e.response?.data?.detail) || e.message);
+    } finally {
+      setBusy({ ...busy, [nodeId]: false });
+    }
+  };
+
+  if (unplaced.length === 0) return null;
+
   return (
     <div className="card-mystic p-3" data-testid="wct-unplaced-tray">
       <div className="flex items-baseline justify-between">
         <div className="label-ref">Unclassified codex entries</div>
         <span className="text-[10px] text-mist italic">
-          {unplaced.length} unplaced — no `type` matched a pillar.
+          {unplaced.length} unplaced — type didn't match a pillar.
         </span>
       </div>
       <div className="text-[10px] text-mist/80 italic mt-0.5 mb-2">
-        Assign each to a pillar.branch so the World Tree reflects your
-        canon. Classified entries (auto-placed by type) already appear
-        in the pillar panels below — hover a chip there to see the
-        classifier badge.
+        Pick a pillar.branch and pin so the World Tree reflects your
+        canon. Already-classified entries appear with a subtle "auto"
+        badge inside the pillar panels below.
       </div>
-      <div className="flex flex-wrap gap-1">
-        {unplaced.slice(0, 30).map((n) => (
-          <span key={n.id} className="tag text-[10px]"
-                data-testid={`wct-unplaced-${n.id}`}>
-            {n.name} <span className="text-mist ml-1">({n.type || "?"})</span>
-          </span>
-        ))}
-      </div>
+      {!isGm ? (
+        <div className="flex flex-wrap gap-1">
+          {unplaced.slice(0, 30).map((n) => (
+            <span key={n.id} className="tag text-[10px]"
+                  data-testid={`wct-unplaced-${n.id}`}>
+              {n.name} <span className="text-mist ml-1">({n.type || "?"})</span>
+            </span>
+          ))}
+        </div>
+      ) : (
+        <div className="space-y-1.5 max-h-72 overflow-y-auto">
+          {unplaced.slice(0, 60).map((n) => (
+            <div key={n.id} className="border border-gold/15 rounded-sm px-2 py-1.5
+                                         flex items-center gap-2 flex-wrap"
+                 data-testid={`wct-unplaced-${n.id}`}>
+              <div className="min-w-0 flex-1">
+                <div className="text-sm text-parchment truncate">
+                  {n.name}
+                </div>
+                <div className="text-[10px] text-mist">
+                  {n.type || "no type"}
+                  {n.summary && <span className="italic"> — {n.summary.slice(0, 90)}</span>}
+                </div>
+              </div>
+              <select className="select text-[10px] py-1 max-w-[180px]"
+                      value={pinning[n.id] || ""}
+                      onChange={(e) => setPinning({ ...pinning, [n.id]: e.target.value })}
+                      data-testid={`wct-pin-select-${n.id}`}>
+                <option value="">— pick pillar.branch —</option>
+                {allSections.map((s) => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
+              <button onClick={() => pin(n.id)}
+                      disabled={busy[n.id] || !pinning[n.id]}
+                      className="btn btn-ghost text-[10px]"
+                      data-testid={`wct-pin-btn-${n.id}`}>
+                <Link2 className="w-3 h-3"/> Pin
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      {err && <div className="text-ember text-[11px] mt-2">{err}</div>}
     </div>
   );
 }

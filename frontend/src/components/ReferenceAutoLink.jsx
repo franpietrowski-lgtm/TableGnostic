@@ -39,7 +39,10 @@ export default function ReferenceAutoLink() {
         const haystack = [];
         const buckets = ["spells", "weapons", "armor", "items", "skills",
                           "classes", "races", "feats", "backgrounds",
-                          "conditions", "actions", "power_levels"];
+                          "conditions", "actions", "power_levels",
+                          // V6.23 Cypher buckets
+                          "cyphers", "artifacts", "types", "foci",
+                          "descriptors"];
         buckets.forEach((b) => (sysRef.data?.[b] || []).forEach(
           (e) => haystack.push({ ...e, __bucket: b })));
         (camp.data?.entries || camp.data || []).forEach(

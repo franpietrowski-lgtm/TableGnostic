@@ -14,6 +14,42 @@
 
 ## 2. Implemented (cumulative, condensed)
 
+### V6.23 — Pin-to-pillar UI + Cypher ReferencePicker + Anime 5E DP overspend gate (2026-05-03)
+
+User asked to follow up on three Next-Action items from V6.22:
+
+**🟧 P1.1 — Pin-to-pillar UI** (`/app/frontend/src/components/WorldCreationTree.jsx`)
+- Replaces the read-only `UnplacedTray` chip-list with an interactive GM-only docking panel: each unclassified codex entry now renders with a `pillar.branch` `<select>` populated from `data.schema.pillars[*].branches` + a "Pin" button calling `PATCH /api/campaigns/{cid}/codex-nodes/{nid}/place`.
+- Players still see the read-only chip view.
+- Hides itself when `unplaced.length === 0` (current Evereantha state — classifier covers every codex type).
+- Verified via `tests/test_v623_pin_dp_gate.py::test_patch_codex_node_place_endpoint_works` (PATCH wires + `creation-tree` reflects the new section).
+
+**🟧 P1.2 — Wire ReferencePicker into Cypher builder** (`/app/frontend/src/components/builders/Cypher.jsx`)
+- "Cyphers Carried" `FreeList` → `ReferencePicker` with `systemId="cypher"` and `kinds=["cyphers", "artifacts"]`. Picker now surfaces 12 SRD cyphers + 6 artifacts with `level / form / effect / cost` shown inline.
+- `ReferencePicker` extended with three new visible fields (`effect`, `role`, `form`) for cypher-shaped reference rows; search filter also matches `effect` + `role`.
+- `ReferenceAutoLink` modal extended with cypher-aware buckets (`cyphers / artifacts / types / foci / descriptors`).
+- "Type/Focus Abilities" stays a `FreeList` — no SRD catalog exists; abilities are per-Type narrative grants (would need separate per-Type endpoint to enumerate).
+- Anime 5E builder already inherits the DnD picker via `Anime5eHybridSupplement`; no additional wiring required.
+
+**🟧 P1.3 — DP overspend gate (frontend + server-side, with GM override)**
+- **Frontend** (`Dnd5e.jsx` `save()` + `Anime5eHybridSupplement.jsx`):
+  - `Anime5eHybridSupplement` renders a new "Anime 5E Discretionary Points (RAW)" panel below the BESM point-budget input. Sums `ability score values + race DP cost + BESM point-buys` against `80 + (level − 1)`. Border + "Spent x/y" goes ember when overbudget; sub-line reads `abil 84 · race 7 · buys 0`. GMs see a `gm_dp_override` checkbox.
+  - `save()` blocks submission if `totalSpent > rawBudget && !gm_dp_override` and surfaces a structured error explaining each component's cost.
+- **Server-side** (`/app/backend/routes/characters.py`):
+  - New `_enforce_anime5e_dp_gate(doc, camp, user)` helper called from both `POST /characters` and `PUT /characters/{cid}`. Same math as the front-end — server is the source of truth so a malicious client can't bypass.
+  - Returns `400` with the structured detail string on overrun. No-op on non–anime-5e systems.
+  - GM override only honored when the caller is the campaign GM (or admin).
+- **Tests** (`tests/test_v623_pin_dp_gate.py`, 6/6 pass):
+  - 6 × 18 abilities + Human (7 DP) = 115 vs budget 80 → blocks (HTTP 400, "DP overspend").
+  - 6 × 12 abilities + Fairy (4 DP) = 76 vs budget 80 → passes.
+  - GM override flag bypasses the block.
+  - D&D 5E campaigns aren't gated.
+
+**Testing**
+- 6/6 new V6.23 backend tests pass.
+- 69/69 prior pytest still pass (V6.22 tests loosened from `==43` to `≥43` because new test fixtures grew the codex-node count to 47).
+- Frontend: visual verification — Anime 5E builder shows new DP gate panel + GM override checkbox; Cypher builder shows new "Cyphers Carried" reference picker.
+
 ### V6.22 — World-tree codex-awareness + ReferencePicker z-index + Cut A2 class library expansion (2026-05-03)
 
 User-reported bug list addressed:

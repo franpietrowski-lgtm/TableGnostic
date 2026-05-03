@@ -103,6 +103,39 @@ export function Dnd5eBuilder({ campaign, ref_, charId, hybridSupplement }) {
     setErr("");
     try {
       const payload = { ...ch };
+      // V6.23 — DP overspend gate (Anime 5E hybrid only). The
+      // canonical RAW budget is 80 + (level − 1); the spend bucket is
+      // ability scores + race + BESM point-buys. If the player is over
+      // budget AND the GM hasn't toggled an override, block the save.
+      // Race + ability cost lookup is done locally; the BESM layer
+      // already lives on `folio.anime5e_state.point_buys`.
+      if (hybridSupplement) {
+        const aState = ch.folio?.anime5e_state || {};
+        const lvl = Math.max(1, +s.level || 1);
+        const budget = +(aState.point_budget || 0) || (80 + (lvl - 1));
+        const abilityCost = Object.values(s.ability_scores || {})
+          .reduce((sum, v) => sum + (+v || 10), 0);
+        const raceObj = (hybridSupplement.heritages
+                         || hybridSupplement.races
+                         || ref_.races || []).find((r) =>
+          (r.name || r.key || "").toLowerCase() === (s.race || "").toLowerCase());
+        const raceCost = +(raceObj?.dp_cost || 0) || 0;
+        const buyTotal = (aState.point_buys || []).reduce(
+          (sum, b) => sum + (+b.cost_per_level || 0) * (+b.level || 1), 0);
+        const totalSpent = abilityCost + raceCost + buyTotal;
+        const overBy = totalSpent - budget;
+        const gmOverride = !!aState.gm_dp_override;
+        if (overBy > 0 && !gmOverride) {
+          setErr(
+            `Over Anime 5E DP budget by ${overBy} — abilities ${abilityCost}` +
+            ` + race ${raceCost} + point-buys ${buyTotal} = ${totalSpent}` +
+            ` (budget ${budget}). Lower a stat / drop a point-buy / pick` +
+            ` a cheaper race, or have the GM tick the override checkbox` +
+            ` on the BESM Point-Buy Layer card below.`,
+          );
+          return;
+        }
+      }
       if (charId && window.location.pathname.includes("/edit")) {
         const { data } = await api.put(`/characters/${charId}`, payload);
         nav(`/app/characters/${data.id}`);
@@ -292,7 +325,8 @@ export function Dnd5eBuilder({ campaign, ref_, charId, hybridSupplement }) {
       {/* Anime 5E hybrid — Tri-Stat point-buy supplement on top of d20 sheet */}
       {hybridSupplement && (
         <Anime5eHybridSupplement ch={ch} setCh={setCh}
-                                  ref_={hybridSupplement}/>
+                                  ref_={hybridSupplement}
+                                  isGm={!!campaign?.is_gm}/>
       )}
 
       <div className="mt-6">

@@ -24,7 +24,7 @@
 import React from "react";
 import { X } from "lucide-react";
 
-export function Anime5eHybridSupplement({ ch, setCh, ref_ }) {
+export function Anime5eHybridSupplement({ ch, setCh, ref_, isGm = false }) {
   const state = ch.folio?.anime5e_state || {
     point_budget: 50, point_buys: [],
   };
@@ -35,6 +35,21 @@ export function Anime5eHybridSupplement({ ch, setCh, ref_ }) {
   const totalSpent = buys.reduce(
     (sum, b) => sum + ((b.cost_per_level || 0) * (b.level || 1)), 0);
   const remaining = (state.point_budget || 0) - totalSpent;
+
+  // V6.23 — DP-gate overlay. Sum ability scores + race DP cost + BESM
+  // point-buys against the canonical RAW DP budget (80 + L-1) so the
+  // builder shows the same overbudget signal the save() check enforces.
+  const dndState = ch.folio?.dnd_state || {};
+  const lvl = Math.max(1, +(dndState.level) || 1);
+  const rawBudget = 80 + (lvl - 1);
+  const abilityCost = Object.values(dndState.ability_scores || {})
+    .reduce((sum, v) => sum + (+v || 10), 0);
+  const raceObj = (ref_?.heritages || ref_?.races || []).find((r) =>
+    (r.name || r.key || "").toLowerCase() === (dndState.race || "").toLowerCase());
+  const raceCost = +(raceObj?.dp_cost || 0) || 0;
+  const totalDp = abilityCost + raceCost + totalSpent;
+  const dpOverBy = totalDp - rawBudget;
+  const gmOverride = !!state.gm_dp_override;
 
   const addAttribute = (name) => {
     const opt = (ref_.point_buy_attributes || []).find((a) => a.name === name);
@@ -95,6 +110,55 @@ export function Anime5eHybridSupplement({ ch, setCh, ref_ }) {
             </option>
           ))}
         </select>
+      </div>
+
+      {/* V6.23 — DP-gate overlay. Surfaces the canonical RAW
+          (80 + L−1) DP math for the entire character (ability scores
+          + race + point-buys) and pairs with the save() gate that
+          blocks save when overbudget. GMs see an override checkbox. */}
+      <div className={`mt-3 p-2.5 rounded-sm border ${dpOverBy > 0 && !gmOverride
+                       ? "border-ember bg-ember/10"
+                       : "border-gold/15 bg-gold/[0.03]"}`}
+           data-testid="anime5e-dp-gate">
+        <div className="flex items-baseline justify-between flex-wrap gap-2">
+          <div>
+            <div className="label-ref">Anime 5E Discretionary Points (RAW)</div>
+            <div className="text-[10px] text-mist italic">
+              80 DP + 1/level above 1st (Anime 5E core p.20). Ability
+              scores cost DP = value; classes cost 0; races per Table 04.
+            </div>
+          </div>
+          <div className="text-[11px] text-right">
+            <div>
+              <span className="text-mist">Spent </span>
+              <span className={dpOverBy > 0 ? "text-ember font-display" : "text-gold-bright font-display"}>
+                {totalDp}
+              </span>
+              <span className="text-mist"> / {rawBudget}</span>
+            </div>
+            <div className="text-[9px] text-mist">
+              abil {abilityCost} · race {raceCost} · buys {totalSpent}
+            </div>
+          </div>
+        </div>
+        {dpOverBy > 0 && (
+          <div className="mt-2 text-[11px] text-ember"
+               data-testid="anime5e-dp-over">
+            Over by {dpOverBy} DP. Save is{" "}
+            <b>{gmOverride ? "ALLOWED (GM override)" : "BLOCKED"}</b>.
+          </div>
+        )}
+        {isGm && (
+          <label className="flex items-center gap-2 mt-2 text-[11px] cursor-pointer"
+                 title="Allow this character to save while over the RAW DP budget. Use sparingly — house-rule grants only.">
+            <input type="checkbox" checked={gmOverride}
+                   onChange={(e) => setState({ gm_dp_override: e.target.checked })}
+                   data-testid="anime5e-gm-dp-override"/>
+            <span className="text-parchment">
+              GM override — allow over-budget save
+            </span>
+          </label>
+        )}
       </div>
 
       {buys.length === 0 ? (

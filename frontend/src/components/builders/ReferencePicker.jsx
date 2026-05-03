@@ -96,7 +96,9 @@ export default function ReferencePicker({
         (e.name || "").toLowerCase().includes(q) ||
         (e.damage || "").toLowerCase().includes(q) ||
         (e.school || "").toLowerCase().includes(q) ||
-        (e.kind || "").toLowerCase().includes(q)
+        (e.kind || "").toLowerCase().includes(q) ||
+        (e.effect || "").toLowerCase().includes(q) ||  // V6.23 — cypher
+        (e.role || "").toLowerCase().includes(q)       // V6.23 — cypher focus
       );
     }
     return out.slice(0, 12);
@@ -179,7 +181,8 @@ export default function ReferencePicker({
           const name = isObj ? (v.name || "—") : String(v);
           const hint = isObj
             ? [v.damage, v.ac, v.level != null ? `L${v.level}` : null,
-                v.school, v.cost, v.kind, v.category]
+                v.school, v.cost, v.kind, v.category,
+                v.effect, v.role, v.form]  // V6.23 cypher fields
               .filter(Boolean).join(" · ")
             : "";
           return (
@@ -250,7 +253,8 @@ export default function ReferencePicker({
                   </span>
                 </div>
                 <div className="text-[11px] text-mist mt-0.5">
-                  {[e.damage, e.ac, e.school, e.range, e.cost, e.weight, e.category]
+                  {[e.damage, e.ac, e.school, e.range, e.cost, e.weight, e.category,
+                    e.effect, e.role, e.form, e.intrusion]  // V6.23 cypher fields
                     .filter(Boolean).join(" · ")}
                 </div>
               </button>

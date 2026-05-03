@@ -32,6 +32,9 @@ async def create_character(body: CharacterIn, user: dict = Depends(get_current_u
     if user["id"] != camp["gm_id"] and user["id"] not in camp.get("member_ids", []):
         raise HTTPException(403, "Join the campaign first")
     doc = body.model_dump()
+    # V6.23 — server-side DP overspend gate (Anime 5E only). Mirrors
+    # the front-end save() check so a malicious client can't bypass.
+    _enforce_anime5e_dp_gate(doc, camp, user)
     doc["id"] = new_id()
     doc["owner_id"] = user["id"]
     doc["owner_name"] = user["name"]
@@ -40,6 +43,48 @@ async def create_character(body: CharacterIn, user: dict = Depends(get_current_u
     doc["spent"] = calc_spent_points(doc)
     await db.characters.insert_one(doc)
     return sanitize(_decorate(doc))
+
+
+def _enforce_anime5e_dp_gate(doc: dict, camp: dict, user: dict) -> None:
+    """V6.23 — block save when Anime 5E character is over the RAW DP
+    budget (80 + L−1) UNLESS folio.anime5e_state.gm_dp_override is on
+    and the caller is the campaign's GM. Race + ability + point-buy
+    spend totals are summed; raises HTTPException(400) on overrun."""
+    if camp.get("system_id") != "anime-5e":
+        return
+    folio = doc.get("folio") or {}
+    anime = folio.get("anime5e_state") or {}
+    dnd = folio.get("dnd_state") or {}
+    lvl = max(1, int(dnd.get("level") or 1))
+    raw_budget = 80 + (lvl - 1)
+    abilities = dnd.get("ability_scores") or {}
+    ability_cost = sum(int(abilities.get(k) or 10) for k in (
+        "Strength", "Dexterity", "Constitution",
+        "Intelligence", "Wisdom", "Charisma",
+    ))
+    # Race lookup — accept either the anime5e_state.race or dnd_state.race.
+    from system_data.anime5e_race_costs import get_race
+    race_key = (anime.get("race") or dnd.get("race") or "").strip()
+    race = get_race(race_key)
+    race_cost = int((race or {}).get("dp_cost") or 0)
+    buy_total = sum(int(b.get("cost_per_level") or 0) * int(b.get("level") or 1)
+                    for b in (anime.get("point_buys") or []))
+    total = ability_cost + race_cost + buy_total
+    if total <= raw_budget:
+        return
+    # Over-budget. Allow only if the GM has flipped the override.
+    is_gm = (user["id"] == camp.get("gm_id")) or (user.get("role") == "admin")
+    if anime.get("gm_dp_override") and is_gm:
+        return
+    over = total - raw_budget
+    raise HTTPException(
+        400,
+        f"Anime 5E DP overspend: {total}/{raw_budget} (over by {over}). "
+        f"Components — abilities {ability_cost} + race {race_cost} + "
+        f"point-buys {buy_total}. Lower a stat / drop a point-buy / "
+        f"pick a cheaper race, or have the GM tick the override on "
+        f"the BESM Point-Buy Layer.",
+    )
 
 
 @router.get("/campaigns/{cid}/characters")
@@ -82,6 +127,8 @@ async def update_character(ch_id: str, body: CharacterIn,
     if user["id"] != ch["owner_id"] and user["id"] != camp["gm_id"]:
         raise HTTPException(403, "Not permitted")
     update = body.model_dump()
+    # V6.23 — server-side DP overspend gate.
+    _enforce_anime5e_dp_gate(update, camp, user)
     update["id"] = ch_id
     update["owner_id"] = ch["owner_id"]
     update["owner_name"] = ch["owner_name"]

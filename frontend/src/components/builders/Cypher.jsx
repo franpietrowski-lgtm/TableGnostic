@@ -12,6 +12,7 @@ import { useNavigate, Link } from "react-router-dom";
 import { api, formatApiErrorDetail } from "../../lib/api";
 import { Save, Sparkles } from "lucide-react";
 import { FreeList } from "./shared";
+import ReferencePicker from "./ReferencePicker";
 
 export const emptyCypher = (cid) => ({
   campaign_id: cid, name: "", concept: "", power_level: "Heroic", total_points: 0,
@@ -367,10 +368,17 @@ export function CypherBuilder({ campaign, ref_, charId }) {
         </div>
       </div>
 
-      {/* Cyphers carried */}
-      <FreeList title="Cyphers Carried" placeholder="Adhesion Patch, Spatial Warp, …"
-                values={c.cyphers} onChange={(v) => setC({ cyphers: v })}
-                testidPrefix="cypher-cypher"/>
+      {/* V6.23 — ReferencePicker for cyphers (SRD cyphers + artifacts).
+          Replaces the prior FreeList so players see effect/level/form
+          inline. Type/Focus Abilities stays a FreeList — no SRD list
+          exists; they're per-Type narrative grants. */}
+      <ReferencePicker title="Cyphers Carried"
+                       placeholder="Adhesion Patch, Spatial Warp…"
+                       values={c.cyphers} onChange={(v) => setC({ cyphers: v })}
+                       testidPrefix="cypher-cypher"
+                       systemId="cypher"
+                       kinds={["cyphers", "artifacts"]}
+                       campaignId={ch.campaign_id}/>
       <FreeList title="Type/Focus Abilities" placeholder="e.g. 'Trained Without Armor', 'Bonus Recovery'"
                 values={c.abilities} onChange={(v) => setC({ abilities: v })}
                 testidPrefix="cypher-ability"/>
