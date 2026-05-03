@@ -1,153 +1,167 @@
-"""V6.19 — Anime 5E race / heritage Discretionary Point cost table.
+"""V6.21 — Anime 5E + PHB race DP cost table (RAW-correct).
 
-Anime 5E core p.28-30 race table (in-house authored summaries — no
-verbatim copy of rulebook prose). Each entry is a "race template" with
-its base DP cost, the traits it grants for that cost, and a short
-narrative blurb.
+Source: Anime 5E core p.28-30 Race list + Table 04 (p.31-32) for
+PHB cross-cost breakdown. Each entry lists the canonical DP cost and a
+short in-house summary of the race's thematic / mechanical identity.
 
-Used by:
-  - Character creation flow (auto-deduct race cost from `point_budget`)
-  - Pending compliance checks (validate races match permitted list)
-  - Reference page (left-rail Race quick_ref section)
+Classes are FREE (no DP cost) — balancing happens through level
+progression only. Race is the first big DP sink at creation.
+
+Core references:
+  - p.7  tier table (combat scaling, NOT the DP budget)
+  - p.20 Discretionary Points: 80 base + 1/level above 1st
+  - p.24 Ability Scores cost DP equal to the score value
+  - p.28-45 Race profiles
 """
 from __future__ import annotations
 from typing import Any, Dict, List
 
-# Each race carries: dp_cost, traits (list of human-readable feature
-# strings), page_ref (orientation citation only).
-RACE_DP_COSTS: List[Dict[str, Any]] = [
-    {
-        "key": "human", "name": "Human", "dp_cost": 1,
-        "page_ref": "Anime 5E SRD p.19",
-        "traits": [
-            "+1 to all six ability scores",
-            "1 extra skill proficiency of your choice",
-            "Versatile feat option at character creation",
-        ],
-        "blurb": "The genre's everyman — the trainer, the ordinary teen, the salaryman thrown into the unknown.",
-    },
-    {
-        "key": "beastfolk", "name": "Beastfolk", "dp_cost": 3,
-        "page_ref": "Anime 5E SRD p.21",
-        "traits": [
-            "+2 to one ability of choice (Str/Dex/Wis)",
-            "Lunar Sense — advantage on scent/hearing Perception",
-            "Track creatures by scent at travel pace",
-            "Natural weapon (claw 1d4 slashing) at level 1",
-        ],
-        "blurb": "Sapient cat-people, fox-folk, wolf-kin and others walking the line between bestial and civilised.",
-    },
-    {
-        "key": "construct", "name": "Construct", "dp_cost": 4,
-        "page_ref": "Anime 5E SRD p.23",
-        "traits": [
-            "+2 Constitution, +1 Intelligence",
-            "Tireless Frame — no need to sleep / breathe / eat",
-            "Long rest = 6 hours of standby (immune to sleep)",
-            "Immune to poison damage and the poisoned condition",
-            "Vulnerable to lightning damage",
-        ],
-        "blurb": "Mechanical or magitechnical autonomous beings — soulbound automata, doll-cores, genuine androids.",
-    },
-    {
-        "key": "half-demon", "name": "Half-Demon", "dp_cost": 4,
-        "page_ref": "Anime 5E SRD p.25",
-        "traits": [
-            "+2 Charisma, +1 Strength",
-            "Hellbrand — +1d4 fire damage on melee weapon hits",
-            "Once/long rest — Hellbrand becomes 1d6 + 1/4 levels",
-            "Resistance to fire damage",
-            "Disadvantage on social rolls vs religious authorities",
-        ],
-        "blurb": "Born of mortal and infernal lineage — the 'cursed bloodline' trope made playable.",
-    },
-    {
-        "key": "faerie", "name": "Faerie", "dp_cost": 4,
-        "page_ref": "Anime 5E SRD p.27",
-        "traits": [
-            "+2 Dexterity, +1 Charisma",
-            "Disguise Self at-will (cosmetic only)",
-            "Reflection in cold iron always shows true form",
-            "Iron weapons deal +1 damage against you",
-            "Misty Step 1/short rest at level 5+",
-        ],
-        "blurb": "The fey-touched — kitsune, goblins, sprites, half-elves with otherworldly poise.",
-    },
-    {
-        "key": "spirit", "name": "Spirit", "dp_cost": 5,
-        "page_ref": "Anime 5E SRD p.29",
-        "traits": [
-            "+2 Wisdom, +1 Dexterity",
-            "Incorporeal Step — pass through 5ft of solid matter 1/short rest",
-            "Resistance to necrotic damage",
-            "Detect Spirits at 30 ft (cantrip equivalent)",
-            "Vulnerable to radiant damage",
-        ],
-        "blurb": "Yokai, ghost-touched, the not-quite-departed — semi-corporeal shrine guardians and household spirits.",
-    },
-    {
-        "key": "animal", "name": "Animal", "dp_cost": 2,
-        "page_ref": "Anime 5E SRD p.31",
-        "traits": [
-            "+2 Dexterity (or +1 to two stats)",
-            "Bestial Form — sapient beast (fox/cat/dog/hawk/otter)",
-            "Carrying capacity halved",
-            "Natural attack (bite 1d4 piercing OR claw 1d4 slashing)",
-            "Speak one bonded language only your compatriots understand",
-        ],
-        "blurb": "The sapient beast companion turned PC — talking foxes, scholar-cats, wandering wolves.",
-    },
-    {
-        "key": "apprentice", "name": "Apprentice", "dp_cost": 1,
-        "page_ref": "Anime 5E SRD p.33",
-        "traits": [
-            "+1 Intelligence or Wisdom",
-            "Mentor's Boon — once/long rest, expertise on one INT or WIS check",
-            "Begin play with 1 free downtime contact (mentor NPC)",
-        ],
-        "blurb": "Still in training — the disciple, the hopeful magic-girl trainee, the salt-rookie of the squad.",
-    },
+# V6.21 — canonical race table. dp_cost = the Point total the Race's
+# features add up to per the core rulebook. The UI shows this next to
+# the race picker and auto-deducts from the DP pool on selection.
+
+ANIME_5E_RACES: List[Dict[str, Any]] = [
+    {"key": "archfiend",  "name": "Archfiend",  "dp_cost": 15,
+     "size": "Huge",
+     "blurb": "Towering demonic brawler — 15-ton bruiser with Conversion, Tunnelling, Mind Control (Lesser), Massive Damage, and fire/infernal heritage. Poor social / exploration, unmatched in melee."},
+    {"key": "asrai",      "name": "Asrai",      "dp_cost": 11,
+     "size": "Medium",
+     "blurb": "Water-fey dancer with liquid-form evasion, aquatic grace, and aether-touched grace."},
+    {"key": "blinkbeast", "name": "Blinkbeast", "dp_cost": 10,
+     "size": "Medium",
+     "blurb": "Short-hop teleporter with predatory instincts — blink, pounce, repeat."},
+    {"key": "demonaga",   "name": "Demonaga",   "dp_cost": 14,
+     "size": "Medium",
+     "blurb": "Serpentine demon-kin — poison-touched, naga-tailed, infernal bloodline."},
+    {"key": "fairy",      "name": "Fairy",      "dp_cost": 4,
+     "size": "Tiny",
+     "blurb": "Tiny winged fey — natural flight at a cost of hit points and carrying capacity."},
+    {"key": "grey",       "name": "Grey",       "dp_cost": 12,
+     "size": "Medium",
+     "blurb": "Psionic grey-alien — telepathy, mind-shield, detached analytical stare."},
+    {"key": "half-dragon","name": "Half-Dragon","dp_cost": 13,
+     "size": "Medium",
+     "blurb": "Scaled heritage — breath weapon, elemental resistance, dragon-blooded poise."},
+    {"key": "half-troll", "name": "Half-Troll", "dp_cost": 9,
+     "size": "Medium",
+     "blurb": "Regenerating bruiser — heals wounds over rounds, vulnerability to fire/acid."},
+    {"key": "haud",       "name": "Haud",       "dp_cost": 12,
+     "size": "Medium",
+     "blurb": "Four-armed martial adept — extra actions, ambidextrous mastery."},
+    {"key": "kodama",     "name": "Kodama",     "dp_cost": 10,
+     "size": "Small",
+     "blurb": "Tree-spirit guardian — plant-kinship, forest-walk, woodland empath."},
+    {"key": "nekojin",    "name": "Nekojin",    "dp_cost": 8,
+     "size": "Medium",
+     "blurb": "Catfolk — feline agility, landing grace, cultural curiosity."},
+    {"key": "parasite",   "name": "Parasite",   "dp_cost": 16,
+     "size": "Small",
+     "blurb": "Host-riding symbiote — possesses vessels, transfers between hosts. Steep cost for dramatic flexibility."},
+    {"key": "satyr",      "name": "Satyr",      "dp_cost": 7,
+     "size": "Medium",
+     "blurb": "Goat-legged reveller — charm magic, pipe-melodies, forest charm."},
+    {"key": "slime",      "name": "Slime",      "dp_cost": 11,
+     "size": "Medium",
+     "blurb": "Gelatinous shapechanger — squeeze through cracks, absorb small items."},
+    # ── PHB crossover races (per Table 04 costs, Anime 5E p.31-32) ──
+    {"key": "dragonborn",        "name": "Dragonborn",        "dp_cost":  9, "size": "Medium",
+     "blurb": "Draconic humanoid — breath weapon, elemental resistance, Common + Draconic."},
+    {"key": "dwarf-hill",        "name": "Dwarf (Hill)",      "dp_cost": 12, "size": "Medium",
+     "blurb": "Stonecunning hillfolk — +2 CON / +1 WIS, +1 HP/level, 25ft heavy-armor."},
+    {"key": "dwarf-mountain",    "name": "Dwarf (Mountain)",  "dp_cost": 14, "size": "Medium",
+     "blurb": "Armored peakfolk — +2 CON / +2 STR, light + medium armor proficient."},
+    {"key": "elf-dark",          "name": "Elf (Dark / Drow)", "dp_cost": 13, "size": "Medium",
+     "blurb": "Drow — 120' darkvision, Drow magic, sunlight disadvantage, +2 DEX / +1 CHA."},
+    {"key": "elf-high",          "name": "Elf (High)",        "dp_cost": 12, "size": "Medium",
+     "blurb": "High Elf — +2 DEX / +1 INT, one cantrip, extra martial weapon training."},
+    {"key": "elf-wood",          "name": "Elf (Wood)",        "dp_cost": 11, "size": "Medium",
+     "blurb": "Wood Elf — +2 DEX / +1 WIS, 35ft speed, Mask of the Wild."},
+    {"key": "gnome-forest",      "name": "Gnome (Forest)",    "dp_cost":  4, "size": "Small",
+     "blurb": "Forest gnome — +2 INT / +1 DEX, minor illusion, small-beast speech."},
+    {"key": "gnome-rock",        "name": "Gnome (Rock)",      "dp_cost":  4, "size": "Small",
+     "blurb": "Rock gnome — +2 INT / +1 CON, Artificer's Lore, tinker's tools."},
+    {"key": "half-elf",          "name": "Half-Elf",          "dp_cost": 11, "size": "Medium",
+     "blurb": "Half-Elf — +2 CHA, +1 to two other abilities, skill versatility, fey resilience."},
+    {"key": "half-orc",          "name": "Half-Orc",          "dp_cost":  8, "size": "Medium",
+     "blurb": "Half-Orc — +2 STR / +1 CON, Relentless Endurance, Savage Attacks, Intimidation."},
+    {"key": "halfling-lightfoot","name": "Halfling (Lightfoot)","dp_cost": 3, "size": "Small",
+     "blurb": "Lightfoot halfling — +2 DEX / +1 CHA, stealthy, Lucky, 25ft speed."},
+    {"key": "halfling-stout",    "name": "Halfling (Stout)",  "dp_cost":  5, "size": "Small",
+     "blurb": "Stout halfling — +2 DEX / +1 CON, poison resistance + save advantage, Lucky."},
+    {"key": "human",             "name": "Human",             "dp_cost":  7, "size": "Medium",
+     "blurb": "Standard human — +1 to every ability, one extra language, 30ft speed. The versatile baseline."},
+    {"key": "tiefling",          "name": "Tiefling",          "dp_cost": 12, "size": "Medium",
+     "blurb": "Tiefling — +2 CHA / +1 INT, Infernal Legacy (cantrip + spells), fire resistance."},
 ]
+
+# Back-compat alias so existing callers (anime5e/races endpoint,
+# budget-breakdown helper, tests) keep working.
+RACE_DP_COSTS = ANIME_5E_RACES
+
+
+# ─── Raceless option (user spec / core p.28 sidebar) ────────────────────
+RACELESS = {
+    "key": "raceless", "name": "Raceless", "dp_cost": 0, "size": "Medium",
+    "blurb": "Skip the race template. Save the DP for Attributes, or craft a bespoke identity with your DM. Companions and monsters are Raceless by default.",
+}
 
 
 def get_race(key: str) -> Dict[str, Any] | None:
-    """Lookup a race by canonical key (case-insensitive)."""
+    """Lookup a race by canonical key or display name (case-insensitive)."""
     if not key:
         return None
     k = key.strip().lower()
-    for r in RACE_DP_COSTS:
-        if r["key"] == k or r["name"].lower() == k:
+    if k in ("raceless", "none", ""):
+        return RACELESS
+    for r in ANIME_5E_RACES:
+        if r["key"].lower() == k or r["name"].lower() == k:
             return r
     return None
 
 
-# ─── Anime 5E Tier table (core p.7-8) — RAW-correct DP budget ───────────
-# These are the canonical Discretionary Point budgets per Tier. The
-# `tier` formula honours this strictly; "flat" / "curve" are tunable
-# house-rule variants for GMs who want different scaling.
-
+# ─── Anime 5E combat tier table (core p.7) — NOT the DP budget ─────────
+# These tiers cap ability scores, proficiency bonus, AC, and damage by
+# character level. The *DP budget* is a different mechanic — see below.
 ANIME5E_TIER_TABLE = [
-    # (max_level_inclusive, tier_name, dp_budget, tier_blurb)
-    (2,  "Tier 1 · Beginner",  10,
-     "Slice-of-life campaigns, school arcs, day-job adventures."),
-    (5,  "Tier 2 · Adventurer", 20,
-     "First-arc heroes, fledgling magical girls, rookie pilots."),
-    (10, "Tier 3 · Hero",       40,
-     "Established protagonists, recurring villains' equals."),
-    (15, "Tier 4 · Champion",   60,
-     "Saviour-level — the final arc of a 26-episode anime."),
-    (20, "Tier 5 · Legend",     80,
-     "Cosmic stakes — the multi-season finale, the demigod-tier."),
+    (1,  "Novice",    {"max_ability_high": 18, "max_ability_mid": 17,
+                       "max_attr_ranks": 4,  "max_prof": 3, "max_ac": 20, "max_normal_dmg": 25}),
+    (4,  "Capable",   {"max_ability_high": 19, "max_ability_mid": 18,
+                       "max_attr_ranks": 5,  "max_prof": 4, "max_ac": 22, "max_normal_dmg": 40}),
+    (10, "Seasoned",  {"max_ability_high": 20, "max_ability_mid": 19,
+                       "max_attr_ranks": 6,  "max_prof": 5, "max_ac": 24, "max_normal_dmg": 60}),
+    (16, "Veteran",   {"max_ability_high": 22, "max_ability_mid": 20,
+                       "max_attr_ranks": 8,  "max_prof": 7, "max_ac": 26, "max_normal_dmg": 100}),
+    (20, "Mythical",  {"max_ability_high": 24, "max_ability_mid": 22,
+                       "max_attr_ranks": 10, "max_prof": 10, "max_ac": 30, "max_normal_dmg": 200}),
+    (99, "Epic",      {"max_ability_high": 99, "max_ability_mid": 99,
+                       "max_attr_ranks": 99, "max_prof": 99, "max_ac": 99, "max_normal_dmg": 9999}),
 ]
 
 
 def anime5e_tier_for_level(level: int) -> Dict[str, Any]:
-    """Return the canonical Tier metadata for a given level."""
+    """Return the combat tier metadata for a given level (NOT budget)."""
     lvl = max(1, int(level or 1))
-    for max_lvl, name, dp, blurb in ANIME5E_TIER_TABLE:
+    for max_lvl, name, caps in ANIME5E_TIER_TABLE:
         if lvl <= max_lvl:
-            return {"max_level": max_lvl, "name": name,
-                     "dp": dp, "blurb": blurb, "level": lvl}
-    final = ANIME5E_TIER_TABLE[-1]
-    return {"max_level": final[0], "name": final[1],
-             "dp": final[2], "blurb": final[3], "level": lvl}
+            return {"max_level": max_lvl, "name": name, "level": lvl,
+                     "dp": dp_budget_for_level(lvl),  # back-compat: audit pulls `dp` for display
+                     "blurb": f"Tier '{name}' caps: ability {caps['max_ability_high']}/{caps['max_ability_mid']}, prof +{caps['max_prof']}, AC {caps['max_ac']}.",
+                     "caps": caps}
+    last = ANIME5E_TIER_TABLE[-1]
+    return {"max_level": last[0], "name": last[1], "level": lvl,
+             "dp": dp_budget_for_level(lvl),
+             "blurb": "Epic — no caps.", "caps": last[2]}
+
+
+# ─── Discretionary Points budget (core p.20 — RAW-correct) ─────────────
+def dp_budget_for_level(level: int) -> int:
+    """RAW Anime 5E Discretionary Points budget.
+
+    Core p.20: '80 Discretionary Points during character creation.
+    If a character begins above 1st Level, the DM can also award an
+    additional 1 Point for each Level above 1st as a bonus.'
+
+    So: budget = 80 + (level - 1).
+    """
+    lvl = max(1, int(level or 1))
+    return 80 + (lvl - 1)
