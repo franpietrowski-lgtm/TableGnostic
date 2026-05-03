@@ -14,6 +14,47 @@
 
 ## 2. Implemented (cumulative, condensed)
 
+### V6.20 — Critical sheet bug fixes + Cut D (World Creation Tree + Codex Link Widget) + Surprise Bag PBP auto-post + DndDerivedAndEquipment (2026-05-03)
+
+User-flagged production-breaking bugs (all 3 fixed and back-filled in DB):
+
+🔴 **Bug A — Ability scores all 0 with -5 modifiers**: `DndSheetView` was reading `sc[ability] | 0` so any unset ability fell to 0, then mod = -5. Patched the `mod()` helper + display value to default to 10 when unset. Also fixed at the source: every cross-system conversion now passes through `_hydrate_dnd_state()` which rewrites any score < 1 to 10 and ensures `saving_throw_profs / skill_profs / inventory / spells_known` arrays exist.
+
+🔴 **Bug B — Energy Points displaying -15**: Anime 5E EP formula `10 + CHA mod × level` fell to -15 with CHA=0 and level=5. EP max + current both clamp at 0 minimum now.
+
+🔴 **Bug C — `Cannot read properties of undefined (reading 'includes')` blocking inventory edit**: `Dnd5eBuilder` called `s.saving_throw_profs.includes(...)` and `s.skill_profs.includes(...)` which crashed when the loaded character lacked those arrays (legacy converter output). Fix is two layers deep — defensive `Array.isArray() ? ... : []` accessors at render time, plus a load-time merge of all empty5e baseline arrays into the existing dnd_state.
+
+**One-shot DB repair**: New admin endpoint `POST /api/admin/repair-dnd-states` (idempotent) hydrates every existing character's dnd_state. Live run during dev: `scanned=3, repaired=3`. Confirmed all 6 abilities now ≥ 10 baseline + arrays initialised.
+
+**Cut D — World Creation Tree + Creation Myth + Codex Link Widget** (`routes/world_creation.py`, ~370 lines):
+- Canonical 3-pillar schema (Population / Geography / History) with 18 explicit cross-pillar links per the user spec.
+- `GET /api/campaigns/{cid}/creation-tree` returns schema + populated codex nodes grouped by `creation_tree.section`.
+- `GET/POST/PATCH/DELETE /api/campaigns/{cid}/creation-myths` — root campaign myth + per-codex-node myths. Auto-stamps `has_creation_myth=true` on the parent codex node so the codex view can deep-link.
+- `GET/POST/PATCH/DELETE /api/campaigns/{cid}/codex-links` — extended edge schema with `relationship_type` (free-text + 26 presets), `color` (hex with regex validation), `weight` (1-10 with Pydantic constraint), `bidirectional` flag, free-text notes.
+- `WorldCreationTree.jsx` (~600 lines): `CreationMythRootCard` (read-only with edit toggle), 3 × `PillarPanel` (color-coded border, branch-row accordion with sow-to-codex prompt input), `CrossPillarLinks` (collapsible accordion of all 18 connectors), `CodexLinkWidget` (modal with source/target node dropdowns, relationship datalist of 26 presets, 8 color presets + custom-color picker, 1-10 weight slider with loose/tied/core copy, bidirectional toggle).
+- Mounted as new "World Tree" subtab in Atelier (between Table Tools and Genesis).
+
+**`DndDerivedAndEquipment.jsx`** (NEW comprehensive panel, addresses user's "feats / spell list / subclass / weapons / armor / derived not visible" concern):
+- **Derived Values strip**: AC (auto-computed from equipped armor + DEX), Initiative, Passive Perception (Wisdom + Perception prof), Spell Save DC (8 + prof + caster mod), Spell Attack (+ prof + caster mod). Class-aware caster ability lookup for 11 classes including Anime 5E originals.
+- **Equipment slot cards**: weapon (main + off-hand) + armor with don/doff hint, attack & damage line auto-calculated from STR/DEX mod.
+- **Subclass picker prompt**: when subclass is empty, shows the prompt + nudges to file a Level-Up Ticket via the pending badge. When chosen, displays it cleanly.
+- **Feats / advancement log**: renders entries from `dnd_state.advancement_log` with level marker + ASI / feat / subclass labels + GM/player notes.
+- **Spell preparation**: each known spell shows a checkbox for "Prepared today" — toggling persists to `dnd_state.spells_prepared` via a PUT to the character endpoint. Visual: gold-outlined checked rows + 🗸 indicator.
+
+**Surprise Bag → PBP auto-post (the delight feature)**:
+- `_post_to_active_pbp()` helper looks up the active session for the campaign and inserts a `kind=system / user_name=WORKSHOP` chat log line.
+- Surprise draw → `🎲 GM drew "Title" (category): blurb` posted into chat.
+- Scene-Break draw → `🎴 Scene break · mood · Title\n\nbody ♪ music_cue` posted.
+- Returns `posted_to_session: bool` so the GM knows whether the line landed (false when no active session — silent no-op).
+- Drawn doc has `_id` stripped before return (no ObjectId leakage).
+
+**Refactor / health check**:
+- All `insert_one()` paths in V6.18-20 routes audited; `_id` stripped before any return.
+- `WorldCreationTree.jsx`, `DndDerivedAndEquipment.jsx`, `Anime5eBudgetAudit.jsx`, `ClassProgressionPanel.jsx`, `PendingAdvancementPanel.jsx`, `AdvancementWizard.jsx`, `SpellTracker.jsx`, `QuickCastDock.jsx`, `AtelierWorkshop.jsx` all lint-clean.
+- Backend: `world_creation.py`, `atelier_workshop.py`, `advancement.py`, `system_data/anime5e_race_costs.py`, `system_data/class_progression.py`, `system_data/anime5e_reference_seed.py`, `core/conversion_engine.py` all lint-clean.
+- Pre-existing test failures (`test_iter49_v616_api`, `test_iter52_v617_api`) are stale fixtures referencing deleted Eli IDs — NOT regressions. The 34 V6.17-19 unit pytest still pass 100%.
+- iteration_54 testing-agent: backend 100% (15/15), zero critical / zero minor issues. Frontend wiring source-verified.
+
 ### V6.19 — Cut A2 (correctness sweep) + Cut A3 (lite) + Cut C (reference unification) (2026-05-03)
 
 **Cut A2 — Anime 5E correctness + per-level visibility**
