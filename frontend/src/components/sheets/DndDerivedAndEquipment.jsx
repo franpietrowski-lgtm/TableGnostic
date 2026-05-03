@@ -126,14 +126,17 @@ export default function DndDerivedAndEquipment({
                    testid="slot-weapon-main">
           {equippedWeapon ? (
             <div className="text-sm text-parchment">
-              <div className="font-ui">{equippedWeapon.name}</div>
+              <div className="font-ui">{typeof equippedWeapon.name === "string" ? equippedWeapon.name : "—"}</div>
               <div className="text-[10px] text-mist mt-0.5">
-                {equippedWeapon.damage} {equippedWeapon.damage_type ? `· ${equippedWeapon.damage_type}` : ""}
-                {equippedWeapon.props ? ` · ${equippedWeapon.props.join(", ")}` : ""}
+                {typeof equippedWeapon.damage === "string" ? equippedWeapon.damage : ""}
+                {typeof equippedWeapon.damage_type === "string" ? ` · ${equippedWeapon.damage_type}` : ""}
+                {Array.isArray(equippedWeapon.props)
+                  ? ` · ${equippedWeapon.props.filter((p) => typeof p === "string").join(", ")}`
+                  : ""}
               </div>
               <div className="text-[10px] text-gold-bright mt-1">
                 Atk: +{profBonus + Math.max(mod("Strength"), mod("Dexterity"))}
-                {" "}· Dmg: {equippedWeapon.damage}{Math.max(mod("Strength"), mod("Dexterity")) >= 0 ? `+${Math.max(mod("Strength"), mod("Dexterity"))}` : Math.max(mod("Strength"), mod("Dexterity"))}
+                {" "}· Dmg: {typeof equippedWeapon.damage === "string" ? equippedWeapon.damage : "—"}{Math.max(mod("Strength"), mod("Dexterity")) >= 0 ? `+${Math.max(mod("Strength"), mod("Dexterity"))}` : Math.max(mod("Strength"), mod("Dexterity"))}
               </div>
             </div>
           ) : (

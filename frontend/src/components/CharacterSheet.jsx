@@ -906,9 +906,37 @@ function SheetInventoryPanel({ character, canEditMech }) {
         <div className="card-mystic p-5" data-testid="sheet-inventory-dnd">
           <div className="label-ref mb-2">Inventory</div>
           <ul className="space-y-1">
-            {dndInventory.map((it, i) => (
-              <li key={i} className="text-sm text-parchment font-body">· {it}</li>
-            ))}
+            {/* V6.23.1 — tolerant of both legacy string entries and
+                rich ReferencePicker objects ({name, kind, damage,
+                props, __kind}). Clicking a row opens the reference
+                auto-link modal for details. */}
+            {dndInventory.map((it, i) => {
+              const isObj = typeof it === "object" && it !== null;
+              const name = isObj ? (it.name || it.title || "Unknown") : String(it);
+              const bits = isObj
+                ? [it.kind, it.damage, it.ac,
+                    Array.isArray(it.props) ? it.props.filter((p) => typeof p === "string").join(", ") : null,
+                    it.category, it.weight, it.cost]
+                  .filter(Boolean).join(" · ")
+                : "";
+              const systemId = folio.anime5e_state ? "anime-5e" : "dnd-5e";
+              const openRef = () => {
+                window.dispatchEvent(new CustomEvent("tg:open-reference", {
+                  detail: { system_id: systemId,
+                             kind: (isObj && it.__kind) || "items",
+                             name },
+                }));
+              };
+              return (
+                <li key={i}
+                    className="text-sm text-parchment font-body cursor-pointer hover:text-gold-bright"
+                    onClick={openRef}
+                    data-testid={`sheet-inventory-dnd-item-${i}`}>
+                  <span>· <b>{name}</b></span>
+                  {bits && <span className="text-mist text-[11px] ml-2">· {bits}</span>}
+                </li>
+              );
+            })}
           </ul>
         </div>
       )}

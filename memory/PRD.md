@@ -14,6 +14,21 @@
 
 ## 2. Implemented (cumulative, condensed)
 
+### V6.23.1 — CharacterSheet inventory render crash hotfix (2026-05-03)
+
+User reported: after picking a weapon/spell via ReferencePicker on the edit screen, navigating to the Inventory tab threw  
+`Uncaught runtime errors: Objects are not valid as a React child (found: object with keys {name, kind, damage, props, __kind})`.
+
+**Root cause**: `SheetInventoryPanel` in `CharacterSheet.jsx` (line 910) rendered each inventory entry as `· {it}`. After V6.21 wired ReferencePicker, `it` became a rich dict for newly-picked items. React threw on the first render.
+
+**Fix**:
+- `CharacterSheet.jsx` `SheetInventoryPanel` — tolerant renderer for both legacy strings and rich picker dicts. Shows `{name}` bolded + `· kind · damage · props · category · weight · cost` as a hint line. Clicking the row opens the `ReferenceAutoLink` modal (kind defaults to `items`, falls back to `it.__kind`).
+- `DndDerivedAndEquipment.jsx` equipped-weapon slot — every rendered field now passes through a `typeof === "string"` / `Array.isArray()` guard so a malformed `damage_type` or `props` entry can never crash the slot card.
+
+**Tests**:
+- Live end-to-end screenshot flow (edit → pick "Longsword" from SRD → save → Inventory tab → click row → ReferenceAutoLink opens) — no `Objects are not valid as a React child` error observed. `sheet-inventory-dnd`, `sheet-inventory-dnd-item-0`, "Longsword", "1d8", `reference-autolink-modal` all rendered.
+- Regression test (`tests/test_v6231_inventory_render.py`): POSTs a character with a 3-entry mixed inventory (weapon dict + legacy string + armor dict) and a spell dict; GET round-trips verifies all shapes are preserved as-stored (no silent coercion).
+
 ### V6.23 — Pin-to-pillar UI + Cypher ReferencePicker + Anime 5E DP overspend gate (2026-05-03)
 
 User asked to follow up on three Next-Action items from V6.22:
