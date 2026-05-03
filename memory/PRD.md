@@ -14,6 +14,51 @@
 
 ## 2. Implemented (cumulative, condensed)
 
+### V6.19 — Cut A2 (correctness sweep) + Cut A3 (lite) + Cut C (reference unification) (2026-05-03)
+
+**Cut A2 — Anime 5E correctness + per-level visibility**
+- 🔴 **Budget formula rebalanced**: User flagged Eli's 90 CP at level 5 as wrong. The V6.4 formula `50 + 8L` over-budgeted by ~3x. Rewritten:
+  - `tier` (RAW-correct from Anime 5E core p.7-8): canonical tier table (10 / 20 / 40 / 60 / 80 DP).
+  - `flat`: `5 + 3 × level` (level 5 = 20).
+  - `curve`: `5 + 5 × level` (level 5 = 30, heroic house-rule).
+  - Unknown formula → falls back to `tier` (RAW).
+- `system_data/anime5e_race_costs.py` — 8 race templates (Human/Beastfolk/Construct/Half-Demon/Faerie/Spirit/Animal/Apprentice) with DP costs (1-5) + traits + page citations. Plus `ANIME5E_TIER_TABLE` and `anime5e_tier_for_level()` helper.
+- `system_data/class_progression.py` — 7 class progressions (Artificer/Wizard/Fighter + Anime 5E Adept/Idol/Pilot/Tinker) with hit die / saves / weapon / armor / tool / skill profs + spell progression bracket + per-level granted features list. Strips `(Subclass)` parentheticals so existing characters resolve.
+- New endpoints (`routes/advancement.py`):
+  - `GET /api/anime5e/races` — race table + tier table for the builder & reference.
+  - `GET /api/characters/{cid}/anime5e/budget-breakdown` — full audit: tier metadata, race cost, point-buy total, net unspent, RAW unspent, suspicious flag (true if stored > 150% of canonical).
+  - `GET /api/characters/{cid}/class-progression` — cumulative timeline + proficiency block.
+- Frontend:
+  - `Anime5eBudgetAudit.jsx` — Mechanics-tab card showing tier / canonical DP / stored / race cost / spent / net unspent. Owner/GM gets 1-click **Recompute** button. Suspicious-budget warning surfaces inline.
+  - `ClassProgressionPanel.jsx` — Mechanics-tab card showing saves / armor / weapons / tools / skills / spell progression + level-1 → current timeline of granted features. Unknown classes show a homebrew callout with link to the Reference editor.
+  - Magic items table in `SheetInventoryPanel` extended with **Attunement** column (✓ Attuned to X / ⚪ Available / —) and **Charges** column (X/Y · regen). Footer summary tracks attuned-item count vs the D&D-5E baseline of 3.
+- **Live verification**: Eli (Anime 5E lvl 5) recomputed from `point_budget=90` → `point_budget=20`. Audit then reports `Tier 2 · Adventurer / canonical 20 / spent 3 / race-cost 1 / net-unspent 16 / suspicious=false`. ✅
+
+**Cut A3 (lite) — Scene-Break Cards + GM Surprise Bag**
+- `routes/atelier_workshop.py` — 9 endpoints: list / create / patch / delete / draw / seed for both `surprise-bag` and `scene-break-cards`. Storage in two new Mongo collections.
+- Surprise Bag: weighted random draw (1-10 weight), category filter (complication / boon / twist / mood), system-tag filter, use-count cap with auto-exhaust, draw count tracking.
+- Scene-Break Cards: mood filter (transition / cliffhanger / cooldown / arrival), optional music_cue field for Spotify URI / track name.
+- `AtelierWorkshop.jsx` (700 lines) — full GM-only UI with two tabs:
+  - "🎲 Surprise Bag" — filter dropdowns + Draw button + custom-entry seed form ("workshop seed" the user requested with 8 fields: title / category / blurb / weight / system tag / tags / max-uses).
+  - "🎴 Scene-Break Cards" — mood filter + Draw + custom-card form.
+  - Both panels have "Seed defaults" one-shot button (idempotent).
+  - Drawn cards animate in via a centred modal with the read-aloud body, mood pill, and music cue.
+- Mounted as a new "Table Tools" subtab under Atelier (next to Workshop / Genesis / Epic / Timeline / References).
+- **Live verification**: Seeded 6 surprise entries + 4 scene-break cards on the Anime 5E Evereantha campaign. Drew "A small kindness" (boon, weight 2) and "Cliffhanger" (mood). GM-only enforcement: Aurora gets 403 on `create / draw / seed`. ✅
+
+**Cut C — Reference page unification (left-rail quick_ref nav)**
+- `Reference.jsx` SystemReferenceView refactored to a 2-column grid: **left rail** with a sticky quick_ref anchor list, **right pane** with all sections rendered as scroll-targets (`scroll-mt-4` so anchors land below the page header).
+- 16 detected sections (Stat Pools / Abilities / Classes / Types / Foci / Descriptors / Races / Heritages / Point-Buy Attributes / Weapons / Armor / Spells / Cyphers / Artifacts / Skills / Conditions / Actions / Power Levels / GM Intrusion) auto-populate the sidebar based on the actual ref data shape.
+- BESM 4E retains its existing tab-strip layout (already symmetrical with the broader UX); D&D / Anime 5E / Cypher now match.
+
+**Tests — `tests/test_iter54_v619_race_class_audit.py`**
+- 14 unit tests covering: 8 races present, tier brackets at every boundary, `tier` formula matches canonical, `flat` no longer over-scales (5+3L = 20 at L5), `curve` heroic house-rule (5+5L = 30 at L5), unknown formula falls back to tier, parenthetical stripping in class-progression, Anime 5E originals expose chassis data.
+- Cumulative: 34 V6.17/V6.18/V6.19 + 50+ prior unit tests pass. (Older `test_iter12_v40` battlemap suite has pre-existing failures unrelated to this work.)
+- Iteration 53 testing agent: backend 100% (16/16). Frontend bug found + fixed: `confirm()` → `window.confirm()` (ESLint `no-restricted-globals`); whole frontend was failing to compile, agent patched inline.
+
+**Deferred (Cut D)**
+- World Creation Tree (3-pillar Population/Geography/History hierarchy with cross-pillar links) + Creation Myth Atelier section + Codex Link Widget modal (relationship type, color picker, 1-10 weight scale). Carries to V6.20 — the graph engine deserves its own iteration.
+
 ### V6.18 — Level-Up Ticket workflow + Toggle-Picker Wizard + Subclass enrichment (2026-05-03)
 
 User direction (ground-truth from Anime 5E core p.28-30 / 48 / 50): classes auto-grant features per level (no extra CP), races carry explicit DP costs, backgrounds are narrative-only. XP unlocks levels which auto-grant Bonus Points players spend on Attributes. Player approval flow: file ticket → GM ratifies after compliance pre-flight. **Cut A1 of 3** — Level-Up Ticket workflow, toggle-picker pattern, subclass option enrichment, compliance preview. (Cut A2: race DP cost on creation, full per-level feature timeline, item attunement/charges. Cut A3: scene-break card, GM surprise bag.)
