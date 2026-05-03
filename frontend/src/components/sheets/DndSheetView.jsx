@@ -5,7 +5,7 @@ import React from "react";
 import { Stat, SimpleListCard, DiceCard, Anime5eSupplementView } from "./sheetCommon";
 import DndDerivedAndEquipment from "./DndDerivedAndEquipment";
 
-export default function DndSheetView({ state, folio, roll, characterId, isOwnerOrGm }) {
+export default function DndSheetView({ state, folio, roll, characterId, isOwnerOrGm, systemId = "dnd-5e" }) {
   const sc = state.ability_scores || {};
   const lvl = Math.max(1, +(state.level || 1));
   const profBonus = Math.max(2, 2 + Math.floor((lvl - 1) / 4));
@@ -354,11 +354,13 @@ export default function DndSheetView({ state, folio, roll, characterId, isOwnerO
       )}
 
       {(state.inventory?.length || 0) > 0 && (
-        <SimpleListCard title="Inventory" items={state.inventory} testid="dnd-sheet-inv"/>
+        <SimpleListCard title="Inventory" items={state.inventory} testid="dnd-sheet-inv"
+                         systemId={systemId} autoLinkKind="items"/>
       )}
       {(state.spells_known?.length || 0) > 0 && (
         <SimpleListCard title="Spells Known / Prepared" items={state.spells_known}
-                         testid="dnd-sheet-spells"/>
+                         testid="dnd-sheet-spells"
+                         systemId={systemId} autoLinkKind="spells"/>
       )}
       {state.notes && (
         <div className="card-mystic p-6 mt-4">

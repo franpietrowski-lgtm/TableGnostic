@@ -13,8 +13,9 @@ import { api, formatApiErrorDetail } from "../../lib/api";
 import { Save } from "lucide-react";
 import {
   ABILITIES_5E, ABBR_5E, modOf, profByLevel,
-  Stat, FreeList,
+  Stat,
 } from "./shared";
+import ReferencePicker from "./ReferencePicker";
 import { Anime5eHybridSupplement } from "./Anime5eHybridSupplement";
 
 export const empty5e = (cid) => ({
@@ -267,15 +268,25 @@ export function Dnd5eBuilder({ campaign, ref_, charId, hybridSupplement }) {
         <Stat label="Initiative" v={modOf(s.ability_scores.Dexterity) >= 0 ? `+${modOf(s.ability_scores.Dexterity)}` : modOf(s.ability_scores.Dexterity)}/>
       </div>
 
-      {/* Inventory + spells (free-text JSON-shaped lists) */}
-      <FreeList title="Inventory / Equipment" placeholder="Longsword, Chain Mail, Healer's Kit…"
-                values={s.inventory} onChange={(v) => setS({ inventory: v })}
-                testidPrefix="dnd-inv"/>
+      {/* V6.21 — Reference-backed dropdown selectors replace free-text
+          FreeList. Inventory pulls from SRD 5.1 weapons + armor + items
+          catalog; spells filter by max slot level the character can cast. */}
+      <ReferencePicker title="Inventory / Equipment"
+                       placeholder="Longsword, Chain Mail, Healer's Kit…"
+                       values={s.inventory} onChange={(v) => setS({ inventory: v })}
+                       testidPrefix="dnd-inv"
+                       systemId={hybridSupplement ? "anime-5e" : "dnd-5e"}
+                       kinds={["weapons", "armor", "items"]}
+                       campaignId={ch.campaign_id}/>
       {cls?.casting !== "none" && (
-        <FreeList title="Spells Known / Prepared"
-                  placeholder="Fire Bolt, Magic Missile, Cure Wounds…"
-                  values={s.spells_known} onChange={(v) => setS({ spells_known: v })}
-                  testidPrefix="dnd-spell"/>
+        <ReferencePicker title="Spells Known / Prepared"
+                         placeholder="Fire Bolt, Magic Missile, Cure Wounds…"
+                         values={s.spells_known} onChange={(v) => setS({ spells_known: v })}
+                         testidPrefix="dnd-spell"
+                         systemId={hybridSupplement ? "anime-5e" : "dnd-5e"}
+                         kinds={["spells"]}
+                         campaignId={ch.campaign_id}
+                         maxSpellLevel={Math.min(9, Math.ceil((s.level || 1) / 2))}/>
       )}
 
       {/* Anime 5E hybrid — Tri-Stat point-buy supplement on top of d20 sheet */}

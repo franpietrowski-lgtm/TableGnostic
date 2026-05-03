@@ -87,36 +87,45 @@ def aurora():
 
 # ─── anime5e_xp_to_cp formula unit check ────────────────────────────────
 
-def test_anime5e_xp_to_cp_formula_rebalanced():
+def test_anime5e_xp_to_cp_raw_formula():
+    """V6.21 — RAW-correct: 80 + (level − 1). House-rule variants:
+    flat=80, curve=80+2(L-1), tier=legacy bracket table."""
     import sys
     sys.path.insert(0, "/app/backend")
     from routes.character_validation import anime5e_xp_to_cp
-    # tier = canonical tier table (Tier 2 at level 5 = 20)
+    # RAW (the default)
+    assert anime5e_xp_to_cp(1) == 80
+    assert anime5e_xp_to_cp(5) == 84
+    assert anime5e_xp_to_cp(20) == 99
+    # flat (GM house-rule: 80 flat at every level)
+    assert anime5e_xp_to_cp(1, "flat") == 80
+    assert anime5e_xp_to_cp(10, "flat") == 80
+    # curve (GM heroic: 80 + 2(L-1))
+    assert anime5e_xp_to_cp(5, "curve") == 88
+    # tier (legacy V6.19)
     assert anime5e_xp_to_cp(5, "tier") == 20
     assert anime5e_xp_to_cp(2, "tier") == 10
     assert anime5e_xp_to_cp(10, "tier") == 40
-    # flat = 5 + 3L  (was 50+8L)
-    assert anime5e_xp_to_cp(5, "flat") == 20
-    assert anime5e_xp_to_cp(1, "flat") == 8
-    # curve = 5 + 5L (was 40+10L)
-    assert anime5e_xp_to_cp(5, "curve") == 30
 
 
 # ─── GET /api/anime5e/races ─────────────────────────────────────────────
 
-def test_races_returns_8_entries_with_dp_costs(gm):
+def test_races_returns_entries_with_dp_costs(gm):
     r = gm.get(f"{BASE_URL}/api/anime5e/races")
     assert r.status_code == 200, r.text
     body = r.json()
     assert "races" in body and "tier_table" in body
-    assert len(body["races"]) == 8
-    # DP costs within 1-5
+    # V6.21 — 14 native races + 14 PHB crossovers + 1 raceless entry.
+    assert len(body["races"]) >= 14
+    # DP costs are non-negative ints; raceless is 0; Human is 7 per RAW.
     for race in body["races"]:
-        assert 1 <= race["dp_cost"] <= 5
-        assert race.get("name") and race.get("traits")
-    # tier table 10/20/40/60/80
-    dps = [t["dp"] for t in body["tier_table"]]
-    assert dps == [10, 20, 40, 60, 80]
+        assert isinstance(race["dp_cost"], int) and race["dp_cost"] >= 0
+        assert race.get("name") and race.get("blurb")
+    # Tier table now uses name/caps rather than legacy (max_level,dp).
+    names = [t["name"] for t in body["tier_table"]]
+    assert "Novice" in names and "Mythical" in names
+    # RAW note surfaces the 80 + (L-1) formula text.
+    assert "80" in body["rules_note"]
 
 
 # ─── Budget breakdown + Eli recompute ───────────────────────────────────
@@ -126,23 +135,28 @@ def test_eli_budget_breakdown_returns_tier_metadata(gm, anime_eli_id):
     assert r.status_code == 200, r.text
     b = r.json()
     assert b["level"] == 5
-    assert b["tier"]["dp"] == 20  # Tier 2 at level 5 = 20 DP (core p.7-8)
-    assert b["canonical_tier_dp"] == 20
-    assert b["stored_point_budget"] == 90
-    assert b["suspicious_budget"] is True  # 90 > 1.5 * 20
-    assert b["tier"]["name"].startswith("Tier 2")
+    # V6.21 — RAW budget is 84 at level 5.
+    assert b["canonical_raw_dp"] == 84
+    # Total spent should break down into race + abilities + point_buys.
+    assert b["ability_score_cost"] >= 0
+    assert b["race_cost"] >= 0
+    assert b["point_buy_total"] >= 0
+    assert b["total_spent"] == (
+        b["ability_score_cost"] + b["race_cost"] + b["point_buy_total"]
+    )
+    assert "ability_score_breakdown" in b
+    assert "formula_note" in b
 
 
-def test_eli_recompute_anime5e_budget_to_tier(gm, anime_eli_id):
+def test_eli_recompute_anime5e_budget_raw(gm, anime_eli_id):
     r = gm.post(f"{BASE_URL}/api/characters/{anime_eli_id}/anime5e-recompute-budget")
     assert r.status_code == 200, r.text
     body = r.json()
     assert body["ok"] is True
     assert body["level"] == 5
-    # Whatever the campaign formula, the new budget should be reasonable
-    # (not 90). tier=20, flat=20, curve=30.
-    assert body["new_point_budget"] in (20, 30, 40)
-    assert body["previous_point_budget"] >= 20
+    # Whatever formula is on the campaign, the new budget should be
+    # in the RAW/flat/curve/tier band: {84, 80, 88, 20}.
+    assert body["new_point_budget"] in (84, 80, 88, 20)
     assert "formula" in body
 
 

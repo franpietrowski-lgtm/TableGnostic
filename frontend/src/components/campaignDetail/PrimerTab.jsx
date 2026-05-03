@@ -29,7 +29,7 @@ function PrimerTab({ camp, onRefresh }) {
   const [primerTierSuggest, setPrimerTierSuggest] = useState(camp.primer_tier_suggest || 1);
   const [primerXpCap, setPrimerXpCap] = useState(camp.primer_xp_cap || 0);
   const [houseRules, setHouseRules] = useState(camp.house_rules || "");
-  const [anime5eXpFormula, setAnime5eXpFormula] = useState(camp.anime5e_xp_formula || "flat");
+  const [anime5eXpFormula, setAnime5eXpFormula] = useState(camp.anime5e_xp_formula || "raw");
   const [saved, setSaved] = useState(false);
   const [err, setErr] = useState("");
   const parse = (s) => s.split(",").map((x) => x.trim()).filter(Boolean);
@@ -307,31 +307,51 @@ function PrimerTab({ camp, onRefresh }) {
             <div className="text-[10px] text-mist/70 italic mt-1">Surfaced on the player primer card so the table sees deviations from RAW. Also bypasses the app-internal character-approval rules gate so the GM can ratify house-rule-legal PCs.</div>
           </div>
 
-          {/* V6.4 — Anime 5E XP→CP formula selector. Only relevant when
-              players can use the optional BESM point-buy layer. */}
+          {/* V6.21 — Anime 5E DP formula selector. RAW is Anime 5E core
+              p.20 (80 + L−1). GMs can house-rule to a flatter or more
+              heroic curve, or keep the legacy tier brackets. */}
           {camp.system_id === "anime-5e" && (
             <div className="mt-4" data-testid="primer-anime5e-xp-formula">
-              <label className="label-ref block mb-1">Anime 5E XP → CP formula</label>
-              <div className="flex items-center gap-2 flex-wrap">
+              <label className="label-ref block mb-1">Anime 5E DP budget formula</label>
+              <div className="flex items-center gap-3 flex-wrap">
                 <label className="inline-flex items-center gap-1 text-xs cursor-pointer"
-                       title="CP = 50 + 8 × adventure level. Flat linear climb; good for gritty / narrow-power campaigns.">
+                       title="RAW (Anime 5E core p.20): 80 DP at 1st level + 1 DP per level above 1st. Default.">
+                  <input type="radio" name="anime5e-xp-formula" value="raw"
+                         checked={anime5eXpFormula === "raw"}
+                         onChange={() => setAnime5eXpFormula("raw")}
+                         data-testid="anime5e-xp-formula-raw"/>
+                  <span>RAW <span className="text-mist">(80 + L−1)</span></span>
+                </label>
+                <label className="inline-flex items-center gap-1 text-xs cursor-pointer"
+                       title="House-rule: flat 80 DP at every level. No per-level bonus.">
                   <input type="radio" name="anime5e-xp-formula" value="flat"
                          checked={anime5eXpFormula === "flat"}
                          onChange={() => setAnime5eXpFormula("flat")}
                          data-testid="anime5e-xp-formula-flat"/>
-                  <span>Flat <span className="text-mist">(50 + 8 × Lvl)</span></span>
+                  <span>Flat <span className="text-mist">(80)</span></span>
                 </label>
                 <label className="inline-flex items-center gap-1 text-xs cursor-pointer"
-                       title="CP = 40 + Lvl × {10 if Lvl ≤ 5 else 12 if Lvl ≤ 10 else 15}. Sharper mid-tier bump for power-fantasy campaigns.">
+                       title="House-rule heroic curve: 80 + 2 × (level − 1). Extra DP per level for a more powerful party.">
                   <input type="radio" name="anime5e-xp-formula" value="curve"
                          checked={anime5eXpFormula === "curve"}
                          onChange={() => setAnime5eXpFormula("curve")}
                          data-testid="anime5e-xp-formula-curve"/>
-                  <span>Curve <span className="text-mist">(40 + Lvl × 10/12/15)</span></span>
+                  <span>Curve <span className="text-mist">(80 + 2×(L−1))</span></span>
+                </label>
+                <label className="inline-flex items-center gap-1 text-xs cursor-pointer"
+                       title="Legacy V6.19 tier brackets — 10/20/40/60/80 DP. Kept for back-compat with pre-V6.21 campaigns.">
+                  <input type="radio" name="anime5e-xp-formula" value="tier"
+                         checked={anime5eXpFormula === "tier"}
+                         onChange={() => setAnime5eXpFormula("tier")}
+                         data-testid="anime5e-xp-formula-tier"/>
+                  <span>Tier (legacy)</span>
                 </label>
               </div>
               <div className="text-[10px] text-mist/70 italic mt-1">
-                Sets the default CP budget the BESM-style point-buy layer gets when a player forges a new PC at the campaign's level floor.
+                Sets the default DP budget a new character receives. RAW is the core rulebook default
+                (Anime 5E p.20). Ability scores cost DP equal to their value; classes cost 0 DP; races
+                cost per Table 04. The "Recompute budget" button on a character's Mechanics tab re-derives
+                the stored DP from whichever formula is selected here.
               </div>
             </div>
           )}

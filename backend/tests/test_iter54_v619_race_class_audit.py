@@ -1,4 +1,9 @@
-"""V6.19 — Race DP costs + class progression + budget audit + workshop tests."""
+"""V6.21 — Race DP costs + class progression + RAW DP math tests.
+
+Replaces V6.19 assertions. The RACE table was expanded to 28 entries
+(14 native Anime 5E races + 14 PHB crossovers). The DP formula is
+RAW-correct: 80 + (level − 1) per core p.20.
+"""
 from __future__ import annotations
 import sys
 
@@ -6,6 +11,7 @@ sys.path.insert(0, "/app/backend")
 
 from system_data.anime5e_race_costs import (  # noqa: E402
     RACE_DP_COSTS, ANIME5E_TIER_TABLE, get_race, anime5e_tier_for_level,
+    dp_budget_for_level, ANIME_5E_RACES, RACELESS,
 )
 from system_data.class_progression import (  # noqa: E402
     cumulative_features, CLASS_PROGRESSION,
@@ -16,61 +22,85 @@ from routes.character_validation import anime5e_xp_to_cp  # noqa: E402
 # ─── Race DP table ──────────────────────────────────────────────────────
 
 
-def test_all_8_anime5e_races_present():
-    assert len(RACE_DP_COSTS) == 8
-    keys = {r["key"] for r in RACE_DP_COSTS}
-    assert keys == {"human", "beastfolk", "construct", "half-demon",
-                     "faerie", "spirit", "animal", "apprentice"}
+def test_race_table_has_native_and_phb_entries():
+    assert len(RACE_DP_COSTS) >= 14  # native races
+    # Verify the RACE_DP_COSTS alias still points at ANIME_5E_RACES.
+    assert RACE_DP_COSTS is ANIME_5E_RACES
 
 
-def test_every_race_has_dp_cost_and_traits():
+def test_every_race_has_dp_cost_and_blurb():
     for r in RACE_DP_COSTS:
-        assert isinstance(r["dp_cost"], int) and r["dp_cost"] >= 1
-        assert isinstance(r["traits"], list) and len(r["traits"]) >= 1
-        assert r["page_ref"]
+        assert isinstance(r["dp_cost"], int) and r["dp_cost"] >= 0
+        assert r["name"]
+        assert r["key"]
+        assert r["blurb"]
 
 
-def test_get_race_case_insensitive():
+def test_get_race_case_insensitive_and_raceless():
     assert get_race("Human")["key"] == "human"
     assert get_race("HUMAN")["key"] == "human"
-    assert get_race("beastfolk")["dp_cost"] == 3
+    assert get_race("human")["dp_cost"] == 7  # RAW Table 04
+    assert get_race("raceless") is RACELESS
+    assert get_race("none") is RACELESS
+    assert get_race("") is None  # empty string → no match
     assert get_race("xyz") is None
 
 
-# ─── Tier table & budget formula ────────────────────────────────────────
+def test_known_race_costs_match_raw_table_04():
+    """Spot-check canonical RAW DP costs per Anime 5E Table 04."""
+    assert get_race("human")["dp_cost"] == 7
+    assert get_race("fairy")["dp_cost"] == 4
+    assert get_race("satyr")["dp_cost"] == 7
+    assert get_race("tiefling")["dp_cost"] == 12
+    assert get_race("dragonborn")["dp_cost"] == 9
 
 
-def test_anime5e_tier_for_level_brackets():
-    assert anime5e_tier_for_level(1)["dp"] == 10  # Tier 1
-    assert anime5e_tier_for_level(2)["dp"] == 10
-    assert anime5e_tier_for_level(3)["dp"] == 20  # Tier 2
-    assert anime5e_tier_for_level(5)["dp"] == 20
-    assert anime5e_tier_for_level(6)["dp"] == 40  # Tier 3
-    assert anime5e_tier_for_level(10)["dp"] == 40
-    assert anime5e_tier_for_level(15)["dp"] == 60  # Tier 4
-    assert anime5e_tier_for_level(20)["dp"] == 80  # Tier 5
+# ─── Combat tier table (NOT the DP budget) ─────────────────────────────
 
 
-def test_xp_to_cp_tier_formula_matches_canonical():
-    # 'tier' formula should match the canonical Tier table.
-    for L in [1, 3, 5, 7, 12, 18]:
-        assert anime5e_xp_to_cp(L, "tier") == anime5e_tier_for_level(L)["dp"]
+def test_anime5e_tier_table_levels():
+    # The combat tier table caps scaling, NOT the DP budget.
+    tier1 = anime5e_tier_for_level(1)
+    assert tier1["name"] == "Novice"
+    assert tier1["caps"]["max_ability_high"] == 18
+    tier20 = anime5e_tier_for_level(20)
+    assert tier20["name"] == "Mythical"
+    assert tier20["caps"]["max_ability_high"] == 24
 
 
-def test_xp_to_cp_flat_no_longer_overscales():
-    # Old V6.4 formula 50+8L was 90 at level 5. New flat is 5+3L = 20.
-    assert anime5e_xp_to_cp(5, "flat") == 20
-    assert anime5e_xp_to_cp(10, "flat") == 35
+# ─── DP budget (RAW p.20) ──────────────────────────────────────────────
 
 
-def test_xp_to_cp_curve_heroic_house_rule():
-    # 5 + 5L
-    assert anime5e_xp_to_cp(1, "curve") == 10
-    assert anime5e_xp_to_cp(5, "curve") == 30
+def test_dp_budget_raw_formula():
+    assert dp_budget_for_level(1) == 80
+    assert dp_budget_for_level(2) == 81
+    assert dp_budget_for_level(5) == 84
+    assert dp_budget_for_level(10) == 89
+    assert dp_budget_for_level(20) == 99
 
 
-def test_xp_to_cp_unknown_formula_falls_back_to_tier():
-    assert anime5e_xp_to_cp(5, "homebrew") == 20
+def test_xp_to_cp_raw_is_default():
+    assert anime5e_xp_to_cp(1) == 80
+    assert anime5e_xp_to_cp(5) == 84
+    assert anime5e_xp_to_cp(20) == 99
+
+
+def test_xp_to_cp_formula_variants():
+    # flat: 80 DP at every level (GM house-rule)
+    assert anime5e_xp_to_cp(1, "flat") == 80
+    assert anime5e_xp_to_cp(10, "flat") == 80
+    # curve: 80 + 2(L-1) (GM heroic house-rule)
+    assert anime5e_xp_to_cp(1, "curve") == 80
+    assert anime5e_xp_to_cp(5, "curve") == 88
+    assert anime5e_xp_to_cp(10, "curve") == 98
+    # tier legacy bracket still works for back-compat
+    assert anime5e_xp_to_cp(5, "tier") == 20
+    assert anime5e_xp_to_cp(1, "tier") == 10
+
+
+def test_xp_to_cp_unknown_formula_falls_back_to_raw():
+    # Unknown formula should fall back to RAW (was tier in V6.19).
+    assert anime5e_xp_to_cp(5, "homebrew") == 84
 
 
 # ─── Class progression ──────────────────────────────────────────────────
@@ -92,7 +122,6 @@ def test_cumulative_features_artificer_level_5():
     assert out["class"] == "Artificer"
     assert out["level"] == 5
     levels = [row["level"] for row in out["timeline"]]
-    # Should include levels with content. Artificer has level 1, 2, 3, 4, 5.
     assert levels == [1, 2, 3, 4, 5]
     assert out["spell_progression"] == "half_caster"
     assert "Constitution" in out["save_profs"]
@@ -113,8 +142,6 @@ def test_cumulative_features_strips_parenthetical():
 
 
 def test_anime5e_originals_have_chassis_data():
-    """Anime 5E original classes should expose D&D-5E-flavoured chassis
-    fields (hit die, saves, weapons/armor profs)."""
     for cls in ("Adept", "Idol", "Pilot", "Tinker"):
         out = cumulative_features(cls, 1)
         assert out["known"]

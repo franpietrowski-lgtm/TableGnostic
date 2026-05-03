@@ -15,20 +15,52 @@ export function Stat({ label, v }) {
   );
 }
 
-export function SimpleListCard({ title, items, testid }) {
+export function SimpleListCard({ title, items, testid, systemId, autoLinkKind }) {
+  // V6.21 — each item is clickable to open its reference entry. Items
+  // may be plain strings (legacy) or rich dicts from ReferencePicker.
   // Tolerant of strings OR objects ({name, tier, cost, description}).
   // Ability/cypher lists from cross-system conversions return rich
   // dicts; legacy seeds + manual entry use plain strings.
+  const handleClick = (it) => {
+    if (!systemId) return;
+    const name = typeof it === "string" ? it : (it?.name || it?.title);
+    if (!name) return;
+    window.dispatchEvent(new CustomEvent("tg:open-reference", {
+      detail: {
+        system_id: systemId,
+        kind: (typeof it === "object" && it?.__kind) || autoLinkKind || "items",
+        name,
+      },
+    }));
+  };
   const renderItem = (it, i) => {
     if (it == null) return null;
+    const clickable = !!systemId;
+    const cls = `text-sm text-parchment font-body${clickable ? " cursor-pointer hover:text-gold-bright" : ""}`;
     if (typeof it === "string" || typeof it === "number") {
-      return <li key={i} className="text-sm text-parchment font-body">· {it}</li>;
+      return (
+        <li key={i} className={cls}
+            onClick={() => handleClick(it)}
+            data-testid={clickable ? `${testid}-item-${i}` : undefined}>
+          · {it}
+        </li>
+      );
     }
-    // Object with name + optional tier/cost/description
-    const head = [it.name || it.title, it.tier ? `T${it.tier}` : null, it.level ? `L${it.level}` : null,
-                  it.cost ? `cost ${it.cost}` : null].filter(Boolean).join(" · ");
+    // Object with name + optional tier/cost/description/damage/school
+    const head = [it.name || it.title,
+                   it.tier ? `T${it.tier}` : null,
+                   it.level != null ? `L${it.level}` : null,
+                   it.school,
+                   it.damage,
+                   it.ac,
+                   it.category,
+                   it.cost ? `cost ${it.cost}` : null,
+                  ].filter(Boolean).join(" · ");
     return (
-      <li key={i} className="text-sm text-parchment font-body">
+      <li key={i}
+          className={`text-sm text-parchment font-body${systemId ? " cursor-pointer hover:text-gold-bright" : ""}`}
+          onClick={() => handleClick(it)}
+          data-testid={systemId ? `${testid}-item-${i}` : undefined}>
         <div>· <b>{head || "—"}</b></div>
         {it.description && (
           <div className="text-mist text-[12px] italic ml-3 mt-0.5 leading-snug">

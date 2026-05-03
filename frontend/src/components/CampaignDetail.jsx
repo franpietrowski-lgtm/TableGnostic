@@ -13,6 +13,7 @@ import SystemBadge from "./SystemBadge";
 import CardDeckPanel from "./CardDeckPanel";
 import XPLedgerPanel from "./XPLedgerPanel";
 import DeltaDropPanel from "./DeltaDropPanel";
+import { SeatApplicationsPanel, ConsentRollPanel } from "./ConsentPanel";
 import { useAuth } from "../lib/api";
 import { NODE_TYPES, NODE_TEMPLATES, colorForType, labelForType } from "../lib/nodeTemplates";
 
@@ -799,6 +800,43 @@ function InviteTab({ camp, onRefresh }) {
         </div>
       </div>
       <CanonPublishCard camp={camp} onRefresh={onRefresh}/>
+      {/* V6.21 — GM/Player consent flow: seat applications queue +
+          consent-required toggle + consent roll summary. */}
+      <ConsentRequiredToggle camp={camp} onRefresh={onRefresh}/>
+      <SeatApplicationsPanel campaignId={camp.id} onChanged={onRefresh}/>
+      <ConsentRollPanel campaignId={camp.id}/>
+    </div>
+  );
+}
+
+function ConsentRequiredToggle({ camp, onRefresh }) {
+  const [req, setReq] = useState(!!camp.consent_required);
+  const [busy, setBusy] = useState(false);
+  const save = async (next) => {
+    setBusy(true);
+    try {
+      await api.put(`/campaigns/${camp.id}`, { ...camp, consent_required: next });
+      setReq(next);
+      onRefresh?.();
+    } finally { setBusy(false); }
+  };
+  return (
+    <div className="card-mystic p-4 mt-4" data-testid="consent-required-toggle">
+      <label className="flex items-center gap-2 cursor-pointer">
+        <input type="checkbox" checked={req} disabled={busy}
+               onChange={(e) => save(e.target.checked)}
+               data-testid="consent-required-checkbox"/>
+        <span className="text-xs">
+          <b>Require player consent</b> before character sheets become
+          editable.
+        </span>
+      </label>
+      <div className="text-[10px] text-mist/70 italic mt-1">
+        When on, seated players must tick the primer / house-rules /
+        safety-tags acknowledgement from their character sheet before
+        they can make changes. Re-consent is required whenever the
+        primer or house-rules text changes.
+      </div>
     </div>
   );
 }

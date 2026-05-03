@@ -16,6 +16,7 @@ import { AdvancementBadge } from "./AdvancementWizard";
 import AdvancementWizard from "./AdvancementWizard";
 import SpellTracker from "./SpellTracker";
 import PendingAdvancementPanel from "./PendingAdvancementPanel";
+import { ConsentCheckbox } from "./ConsentPanel";
 import ClassProgressionPanel from "./ClassProgressionPanel";
 import Anime5eBudgetAudit from "./Anime5eBudgetAudit";
 
@@ -310,6 +311,13 @@ export default function CharacterSheet() {
             isGm={!!(campaign?.is_gm)}
             ownerId={ch.owner_id}
             onChanged={load}/>
+          {/* V6.21 — Player-facing consent checkbox. Only shows when the
+              campaign has consent_required=true OR the caller already
+              has a consent record (so they can withdraw / leave). */}
+          {(campaign?.consent_required
+              || (ch.owner_id === user?.id && !campaign?.is_gm)) && (
+            <ConsentCheckbox campaignId={ch.campaign_id} onChanged={load}/>
+          )}
           {campaign?.is_gm && (
             <CompanionAssignPanel
               characterId={ch.id}
@@ -336,7 +344,8 @@ export default function CharacterSheet() {
       {/* System-shaped read view — D&D 5E / Cypher get their own block;
           BESM 4E (and Anime 5E by default) keep the original tri-stat layout. */}
       {dndState && <DndSheetView state={dndState} folio={ch.folio} roll={roll}
-                                    characterId={ch.id} isOwnerOrGm={canEditMech}/>}
+                                    characterId={ch.id} isOwnerOrGm={canEditMech}
+                                    systemId={campaign?.system_id || "dnd-5e"}/>}
       {cypherState && <CypherSheetView state={cypherState} roll={roll}/>}
       {!dndState && !cypherState && (
       <div className="mt-8 grid lg:grid-cols-3 gap-6">

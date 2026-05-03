@@ -49,6 +49,7 @@ from routes import conversion as conversion_routes
 from routes import advancement as advancement_routes
 from routes import atelier_workshop as atelier_workshop_routes
 from routes import world_creation as world_creation_routes
+from routes import consent_flow as consent_flow_routes
 
 app = FastAPI(title="Table-Gnostic API")
 
@@ -116,6 +117,7 @@ app.include_router(conversion_routes.router)
 app.include_router(advancement_routes.router)
 app.include_router(atelier_workshop_routes.router)
 app.include_router(world_creation_routes.router)
+app.include_router(consent_flow_routes.router)
 
 # Static-file mount: serve uploaded battlemap images from disk so GMs can
 # drop in renders from Inkarnate / DungeonCraft / Talespire / RPGEngine

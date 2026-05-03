@@ -103,18 +103,25 @@ class CampaignIn(BaseModel):
     primer_xp_cap: int = 0
     # Free-text house rules — surfaced in the primer card.
     house_rules: str = ""
-    # V6.4 — Anime 5E XP→CP conversion formula for the optional BESM
-    # point-buy layer when forging a new character.
-    #   * "flat"  — CP = 50 + 8 × adventure_level (CSR house default)
-    #   * "curve" — CP = 40 + level × (10 if level ≤ 5
-    #                                 else 12 if level ≤ 10
-    #                                 else 15) (sharper mid-tier bump)
-    anime5e_xp_formula: Literal["flat", "curve"] = "flat"
+    # V6.4 / V6.21 — Anime 5E DP→character-point formula.
+    # RAW default per Anime 5E core p.20: 80 + (level − 1).
+    # GM overrides:
+    #   * "raw"    — 80 + (level − 1). The core rulebook default.
+    #   * "flat"   — Flat 80 DP at every level (no per-level bonus).
+    #   * "curve"  — Heroic: 80 + 2 × (level − 1). Extra DP per level
+    #                for a more powerful party.
+    #   * "tier"   — Legacy V6.19 tier brackets (10/20/40/60/80).
+    #                Preserved for back-compat with pre-V6.21 campaigns.
+    anime5e_xp_formula: Literal["raw", "flat", "curve", "tier"] = "raw"
     # V6.13 — Canon Registry. GMs may publish their campaign to the public
     # Canon Registry so fellow GMs can discover its Delta Drops and
     # subscribe. Does NOT expose player seats — that's `visibility=public`.
     canon_published: bool = False
     canon_blurb: str = ""   # short pitch shown on the registry card
+    # V6.21 — GM/Player consent flow. When true, members must tick the
+    # primer acknowledgement (via `POST /api/campaigns/{cid}/consent`)
+    # before their character sheet becomes editable.
+    consent_required: bool = False
 
 
 class CampaignOut(CampaignIn):

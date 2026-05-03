@@ -3,6 +3,7 @@ import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../lib/api";
 import { Scroll, LayoutGrid, BookOpen, LogOut, UserCircle2, Compass, Menu, X, User, HelpCircle, Sparkles } from "lucide-react";
 import CmdKPalette from "./CmdKPalette";
+import ReferenceAutoLink from "./ReferenceAutoLink";
 import { TourProvider } from "./TourProvider";
 
 const Sigil = ({ size = 32 }) => (
@@ -129,6 +130,11 @@ export default function Shell() {
 
       {/* V6.13 — Cmd-K / Ctrl-K global search palette */}
       <CmdKPalette/>
+
+      {/* V6.21 — Reference auto-link modal. Listens app-wide for
+          `tg:open-reference` events fired by inventory chips, spell
+          chips, class-feature timeline items, etc. */}
+      <ReferenceAutoLink/>
 
       {/* MOBILE BOTTOM NAV */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-30 flex border-t border-gold/15 bg-void/90 backdrop-blur">

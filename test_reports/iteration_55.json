@@ -1,0 +1,46 @@
+{
+  "summary": "V6.21 backend regression GREEN: 18/18 new V6.21 tests pass (anime5e races shape, budget-breakdown RAW math, recompute formula raw/flat/curve/tier, campaign anime5e_xp_formula + consent_required, /consent GET/POST/DELETE, /consent-roll GM-only, /seat-applications). Plus 89 prior tests pass across iter37/52(advancement_tracker)/53/54 = 107 total green. Frontend smoke: login OK, dashboard OK, campaign detail loads, PrimerTab Anime 5E formula selector renders 4 radios (raw/flat/curve/tier) — VERIFIED. Invite & Share tab is MISSING the new ConsentRequiredToggle, SeatApplicationsPanel, and ConsentRollPanel — only the legacy invite-link + revoke UI is showing. The 12 failures in test_iter52_v617_api.py are pre-existing stale Eli IDs (DB reset) — unrelated to V6.21. Side-effect found+fixed in tests: PUT /api/campaigns/{cid} requires the full payload — sending only {anime5e_xp_formula:'raw'} silently resets system_id to 'besm-4e' (default). Test now fetches+merges before PUT; please harden this on backend (PATCH semantics or 422 on missing required fields).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "PUT /api/campaigns/{cid}", "issue": "Acts as full-replace; omitting system_id silently coerces it to default 'besm-4e'. Recommend PATCH semantics OR explicit 422 on missing system_id, OR preserve unspecified fields server-side."},
+      {"endpoint": "test_iter52_v617_api.py (Eli hardcoded IDs)", "issue": "Pre-existing — 12/30 fail because DB reset wiped the literal Eli character/campaign IDs. Not a V6.21 regression. Suggest discovering IDs via /api/campaigns lookup like test_iter53/54 do."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "CampaignDetail · InviteTab", "issue": "Consent/SeatApplications/ConsentRoll panels not surfaced. The tab still shows only legacy Invite Link + 'Revoke & regenerate'. Keywords 'Consent', 'Seat Application', 'Approve', 'Reject', 'Consent Roll' are NOT present in the rendered DOM for the GM-owned Anime 5E campaign 2d31c25354e4415f84a31704fe78a795.", "selector": "[role=tab]:has-text('Invite & Share')", "priority": "HIGH"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter55_v621.py",
+    "/app/test_reports/pytest/iter55_v621.xml",
+    "/app/test_reports/pytest/iter55_v621_full.xml"
+  ],
+  "action_items": [
+    "FIX: Mount ConsentRequiredToggle + SeatApplicationsPanel + ConsentRollPanel inside CampaignDetail.jsx → InviteTab. Verify ConsentPanel.jsx is actually imported and conditionally rendered for GM (not gated behind a flag that's off).",
+    "HARDEN: PUT /api/campaigns/{cid} should not silently overwrite system_id when caller sends partial payload. Either switch to PATCH or preserve omitted scalar fields.",
+    "HOUSEKEEP (optional): Update test_iter52_v617_api.py to discover Eli IDs at runtime instead of hardcoding (12 stale-ID failures masking real signal).",
+    "RETEST after mounting consent/seat panels: navigate to /app/campaigns/2d31c25354e4415f84a31704fe78a795 → Invite & Share tab and confirm panels render."
+  ],
+  "critical_code_review_comments": [
+    "advancement.py keeps growing — V6.21 added budget-breakdown new fields (ability_score_breakdown, formula_note, canonical_raw_dp, net_unspent) cleanly; race table at 29 entries with rules_note 80+(L−1) ✓.",
+    "consent_flow.py wiring at server.py L~119 is reachable: /consent, /consent-roll, /seat-applications all return correct status (403 for non-GM consent-roll, 200 for GM, 400 for non-public seat application). Endpoints work; the gap is purely frontend mount.",
+    "CampaignDetail.jsx — verify InviteTab actually imports ConsentPanel components. Possible cause: import added but JSX block not yet placed inside the InviteTab render branch."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter55_v621.py (new — 18 pytest cases)"
+  ],
+  "success_rate": {
+    "backend": "100% (18/18 V6.21 + 89/89 prior regression = 107/107). Pre-existing iter52_v617_api stale-ID failures (12) are unrelated to V6.21.",
+    "frontend": "Smoke 70% — login + campaign detail + PrimerTab formula selector verified. InviteTab consent/seat panels NOT rendering (HIGH bug). Did not exercise: Anime5eBudgetAudit card 'Show detail', ReferencePicker dropdown in Dnd5e builder, ReferenceAutoLink modal, WorldTreeGraph toggle, CharacterSheet identity-tab ConsentCheckbox."
+  },
+  "test_credentials": "GMFran franpietrowski@gmail.com / PieGod08!! ; Aurora albanaszak@ymail.com / AuroraTest123! (read from /app/memory/test_credentials.md)",
+  "seed_data_creation": "Tests create+cleanup a TEST_V621_BudgetEli anime-5e L5 Human (in ANIME_CAMP 2d31c25354e4415f84a31704fe78a795) and a TEST_V621_DnDChar (in DND_CAMP a69ff91b592d411894a6210380615bbd). Also POSTs+DELETEs a GM consent record on ANIME_CAMP. All idempotent and cleaned up at module teardown.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "V6.21 backend 18/18 + prior 89/89 = 107 tests green. Use BASE_URL=https://rules-forge.preview.emergentagent.com. Anime camp: 2d31c25354e4415f84a31704fe78a795. D&D camp: a69ff91b592d411894a6210380615bbd. Note: PUT /api/campaigns is a full-replace — always GET first then merge. Once main agent mounts ConsentPanel into InviteTab, retest by navigating Campaign → Invite & Share tab and asserting visible 'Consent Roll', 'Approve'/'Reject' buttons, and a Consent-required checkbox.",
+  "rca of the issue": "InviteTab missing consent/seat panels — RCA suspected: ConsentPanel.jsx + SeatApplicationsPanel + ConsentRollPanel components are implemented (per review-request file list) but CampaignDetail.jsx → InviteTab JSX likely doesn't yet render them OR renders them behind a feature flag that's off in this DB. Confirm by greping CampaignDetail.jsx for '<ConsentRequiredToggle', '<SeatApplicationsPanel', '<ConsentRollPanel' inside the InviteTab branch. Backend endpoints all return 200/403 correctly — server side is fine."
+}

@@ -63,13 +63,30 @@ async def repair_dnd_states(user: dict = Depends(get_current_user)):
 async def anime5e_race_table(user: dict = Depends(get_current_user)):
     """Return the Anime 5E race / heritage DP-cost table. Used by the
     character builder, the reference page, and the homebrew validator."""
-    from system_data.anime5e_race_costs import RACE_DP_COSTS, ANIME5E_TIER_TABLE
+    from system_data.anime5e_race_costs import (
+        RACE_DP_COSTS, ANIME5E_TIER_TABLE, RACELESS,
+    )
     return {
-        "races": RACE_DP_COSTS,
+        "races": [RACELESS] + list(RACE_DP_COSTS),
         "tier_table": [
-            {"max_level": t[0], "name": t[1], "dp": t[2], "blurb": t[3]}
+            {
+                "max_level": t[0],
+                "name": t[1],
+                "caps": t[2],
+                "blurb": (
+                    f"Tier '{t[1]}' caps: ability {t[2]['max_ability_high']}/"
+                    f"{t[2]['max_ability_mid']}, prof +{t[2]['max_prof']}, "
+                    f"AC {t[2]['max_ac']}, normal damage {t[2]['max_normal_dmg']}."
+                ),
+            }
             for t in ANIME5E_TIER_TABLE
         ],
+        "rules_note": (
+            "Anime 5E DP (Discretionary Points) budget: 80 + (level − 1). "
+            "Ability scores cost DP equal to their value (18 STR = 18 DP). "
+            "Classes cost 0 DP — features auto-grant per level. "
+            "Races cost as listed above. Core p.20, p.24, Table 04."
+        ),
     }
 
 
@@ -106,9 +123,27 @@ async def anime5e_budget_breakdown(
     point_buys = anime.get("point_buys") or []
     spent = sum(int(b.get("cost_per_level") or 0) * int(b.get("level") or 1)
                  for b in point_buys)
+
+    # V6.21 — Ability Scores cost DP equal to their value (core p.24).
+    # Sum the 6 ability scores; this is the raw cost. GMs running the
+    # Starting-Array house-rule (8/10/12/13/14/15 = 27 total) can still
+    # reconcile via the Primer's formula selector or a homebrew rule.
+    ability_scores = dnd.get("ability_scores") or {}
+    ability_keys = ["Strength", "Dexterity", "Constitution",
+                    "Intelligence", "Wisdom", "Charisma"]
+    ability_cost_breakdown = {
+        k: int(ability_scores.get(k) or 10) for k in ability_keys
+    }
+    ability_cost = sum(ability_cost_breakdown.values())
+
     budget = int(anime.get("point_budget") or 0)
-    canonical = tier["dp"]
-    suspicious = budget > canonical * 1.5  # Flag if budget is >150% of RAW.
+    # V6.21 — RAW-correct canonical DP at this level.
+    from system_data.anime5e_race_costs import dp_budget_for_level
+    canonical = dp_budget_for_level(lvl)
+    total_spent = spent + race_cost + ability_cost
+    suspicious = (
+        budget > canonical * 1.5 or total_spent > canonical * 1.5
+    )
     return {
         "character_id": cid,
         "level": lvl,
@@ -117,13 +152,23 @@ async def anime5e_budget_breakdown(
         "race_cost": race_cost,
         "point_buys": point_buys,
         "point_buy_total": spent,
+        "ability_score_breakdown": ability_cost_breakdown,
+        "ability_score_cost": ability_cost,
+        "total_spent": total_spent,
         "stored_point_budget": budget,
         "canonical_tier_dp": canonical,
-        "net_unspent": budget - spent - race_cost,
-        "raw_unspent": canonical - spent - race_cost,
+        "canonical_raw_dp": canonical,
+        "net_unspent": budget - total_spent,
+        "raw_unspent": canonical - total_spent,
         "suspicious_budget": suspicious,
+        "formula_note": (
+            "RAW: 80 DP + 1/level above 1st. Ability scores cost DP = "
+            "value; classes are 0 DP; races cost per Table 04. "
+            "GMs can override via primer formula ('raw' / 'flat' / "
+            "'curve' / 'tier')."
+        ),
         "advice": (
-            "Stored budget exceeds 150% of the canonical Tier DP. "
+            "Stored budget + total spend exceeds 150% of canonical DP. "
             "Hit 'Recompute budget' to align with the campaign's "
             "anime5e_xp_formula."
             if suspicious
@@ -692,14 +737,31 @@ def _validate_ticket_compliance(ch: Dict[str, Any], camp: Dict[str, Any],
     # advancement). BESM uses XP queue, D&D uses ASI auto-grant.
     if camp.get("system_id") == "anime-5e":
         anime = folio.get("anime5e_state") or {}
+        dnd = folio.get("dnd_state") or {}
         budget = int(anime.get("point_budget") or 0)
         spent = sum(int(b.get("cost_per_level") or 0) * int(b.get("level") or 1)
                      for b in (anime.get("point_buys") or []))
+        # V6.21 — include race + ability-score DP cost in the compliance
+        # math so approving a ticket that pushes over the RAW budget is
+        # caught before the folio mutation runs.
+        from system_data.anime5e_race_costs import get_race
+        race = get_race((anime.get("race") or dnd.get("race") or ""))
+        race_cost = int((race or {}).get("dp_cost") or 0)
+        ability_scores = dnd.get("ability_scores") or {}
+        ability_cost = sum(
+            int(ability_scores.get(k) or 10)
+            for k in ["Strength", "Dexterity", "Constitution",
+                       "Intelligence", "Wisdom", "Charisma"]
+        )
+        total_spent = spent + race_cost + ability_cost
         cost = int(ticket.get("cp_cost") or 0)
-        if cost and spent + cost > budget:
+        if cost and total_spent + cost > budget:
             issues.append(
-                f"Approving this ticket would put point-buy at "
-                f"{spent + cost}/{budget} ({spent + cost - budget} over)."
+                f"Approving this ticket would put total DP spend at "
+                f"{total_spent + cost}/{budget} "
+                f"({total_spent + cost - budget} DP over budget — "
+                f"attrs {spent} + race {race_cost} + abilities "
+                f"{ability_cost} + ticket {cost})."
             )
 
     return {
@@ -1153,7 +1215,8 @@ async def anime5e_recompute_budget(cid: str, user: dict = Depends(get_current_us
     folio = dict(ch.get("folio") or {})
     dnd = folio.get("dnd_state") or {}
     lvl = int(dnd.get("level") or camp.get("primer_level_min") or 1)
-    formula = (camp.get("anime5e_xp_formula") or "flat").lower()
+    # V6.21 — default to RAW (80 + L-1). GMs can override per campaign.
+    formula = (camp.get("anime5e_xp_formula") or "raw").lower()
     new_budget = anime5e_xp_to_cp(lvl, formula)
     anime = dict(folio.get("anime5e_state") or {})
     old = int(anime.get("point_budget") or 0)

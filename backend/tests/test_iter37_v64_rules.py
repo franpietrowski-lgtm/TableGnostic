@@ -137,11 +137,16 @@ def test_power_pack_vs_bundle_distinct_in_breakdown(gm_token):
     requests.delete(f"{API}/api/characters/{cid}", headers=H(gm_token))
 
 
-# ─── (4) Anime 5E XP→CP curve endpoint ───
+# ─── (4) Anime 5E DP / CP budget formulas (V6.21) ───
 @pytest.mark.parametrize("formula,level,expected", [
-    ("flat", 1, 58), ("flat", 5, 90), ("flat", 10, 130),
-    ("curve", 1, 50), ("curve", 5, 90), ("curve", 6, 112),
-    ("curve", 10, 160), ("curve", 11, 205), ("curve", 20, 340),
+    # RAW: 80 + (L − 1)
+    ("raw", 1, 80), ("raw", 5, 84), ("raw", 10, 89), ("raw", 20, 99),
+    # flat: 80 at every level
+    ("flat", 1, 80), ("flat", 5, 80), ("flat", 20, 80),
+    # curve: 80 + 2(L − 1)
+    ("curve", 1, 80), ("curve", 5, 88), ("curve", 10, 98),
+    # tier (legacy V6.19 brackets)
+    ("tier", 1, 10), ("tier", 5, 20), ("tier", 10, 40),
 ])
 def test_anime5e_xp_to_cp_formulas(gm_token, formula, level, expected):
     from importlib import import_module
@@ -155,11 +160,11 @@ def test_anime5e_xp_curve_endpoint(gm_token):
                       headers=H(gm_token))
     assert r.status_code == 200
     d = r.json()
-    assert d["formula"] in ("flat", "curve")
+    assert d["formula"] in ("raw", "flat", "curve", "tier")
     assert len(d["curve"]) == 20
-    # Level 1 = 58 on flat default
-    if d["formula"] == "flat":
-        assert d["curve"][0]["cp"] == 58
+    # Level 1 RAW default = 80 DP.
+    if d["formula"] == "raw":
+        assert d["curve"][0]["cp"] == 80
 
 
 # ─── (5) Power Bundle templates endpoint ───

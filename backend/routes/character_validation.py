@@ -534,33 +534,54 @@ async def gm_approve_for_play(cid: str, body: ApprovalIn,
 
 # ─── V6.4 — Anime 5E XP→CP conversion ────────────────────────────────
 
-def anime5e_xp_to_cp(level: int, formula: str = "tier") -> int:
-    """Return the DP/CP budget for a new Anime 5E character at the given
-    level, using the campaign's configured formula.
+def anime5e_xp_to_cp(level: int, formula: str = "raw") -> int:
+    """Return the Discretionary Points (DP) budget for a new Anime 5E
+    character at the given level, using the campaign's configured formula.
 
-    V6.19 — budget formulas rebalanced to match Anime 5E core p.7-8 Tier
-    table. The previous flat/curve constants (50+8L / 40+10L) over-budgeted
-    by ~2-3x and have been retuned downward; existing campaigns can opt
-    into the new defaults via the campaign primer's `Recompute budget`
-    button (which writes a fresh `point_budget` onto each character).
+    V6.21 — RAW-CORRECT per Anime 5E core p.20 ("DISCRETIONARY POINTS"):
+      * 80 DP at character creation (1st level).
+      * +1 DP per level above 1st.
+      So: budget = 80 + (level − 1).
 
-    Formulas:
-      * "tier"  — RAW-correct: returns the canonical Tier budget
-                  (10 / 20 / 40 / 60 / 80) per level bracket.
-      * "flat"  — Linear house-rule: 5 + 3 × level (level 5 = 20).
-      * "curve" — Heroic house-rule: 5 + 5 × level (level 5 = 30).
+    Ability Scores cost DP equal to their value (an 18 = 18 DP).
+    Classes cost 0 DP (features auto-grant per level).
+    Races cost the DP listed in the core race table (see
+    `ANIME_5E_RACES` in system_data/anime5e_race_costs.py).
+
+    GM house-rule formula overrides (set at campaign primer or atelier):
+      * "raw"    — 80 + (level − 1). The RAW default.
+      * "flat"   — Flat 80 DP at every level (no per-level bonus).
+      * "curve"  — Heroic: 80 + 2 × (level − 1). Campaigns that hand
+                   out more DP each level for a more powerful party.
+      * "tier"   — Legacy V6.19 tier brackets. Kept for back-compat
+                   with existing test assertions and primers that
+                   still reference the pre-V6.21 math.
     """
-    from system_data.anime5e_race_costs import anime5e_tier_for_level
+    from system_data.anime5e_race_costs import (
+        dp_budget_for_level, anime5e_tier_for_level,
+    )
     lvl = max(1, int(level or 1))
-    f = (formula or "tier").lower()
-    if f == "tier":
-        return anime5e_tier_for_level(lvl)["dp"]
-    if f == "curve":
-        return 5 + 5 * lvl
+    f = (formula or "raw").lower()
+    if f == "raw":
+        return dp_budget_for_level(lvl)            # 80 + (L-1)
     if f == "flat":
-        return 5 + 3 * lvl
-    # Unknown formula → fall back to RAW tier.
-    return anime5e_tier_for_level(lvl)["dp"]
+        return 80
+    if f == "curve":
+        return 80 + 2 * (lvl - 1)
+    if f == "tier":
+        # Legacy bracket-based budget: canonical tier dp the caller
+        # expected pre-V6.21. Preserved to keep old tests + primers
+        # functioning until they opt in to "raw".
+        tier_dp = anime5e_tier_for_level(lvl)
+        # Fall back to tier-bracket style (10/20/40/60/80) for "tier".
+        # The legacy bracket values live in dp_budget_for_level_legacy.
+        brackets = [(2, 10), (5, 20), (10, 40), (15, 60), (99, 80)]
+        for cap, dp in brackets:
+            if lvl <= cap:
+                return dp
+        return tier_dp["dp"]
+    # Unknown formula → fall back to RAW.
+    return dp_budget_for_level(lvl)
 
 
 @router.get("/campaigns/{cid}/anime5e-xp-curve")
@@ -571,7 +592,7 @@ async def anime5e_xp_curve(cid: str, user: dict = Depends(get_current_user)):
     camp = await db.campaigns.find_one({"id": cid}, {"_id": 0})
     if not camp:
         raise HTTPException(404, "Campaign not found")
-    formula = (camp.get("anime5e_xp_formula") or "flat").lower()
+    formula = (camp.get("anime5e_xp_formula") or "raw").lower()
     level = int(camp.get("primer_level_min") or 1)
     return {
         "campaign_id": cid,

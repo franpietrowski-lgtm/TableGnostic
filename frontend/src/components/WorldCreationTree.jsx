@@ -12,7 +12,8 @@
  */
 import React, { useEffect, useMemo, useState, useCallback } from "react";
 import { api, formatApiErrorDetail } from "../lib/api";
-import { Plus, Trash2, X, Sparkles, GitBranch, Link2 } from "lucide-react";
+import { Plus, Trash2, X, Sparkles, GitBranch, Link2, List, Network } from "lucide-react";
+import WorldTreeGraph from "./WorldTreeGraph";
 
 const PILLAR_COLORS = {
   Population: "#9CC4FF",
@@ -23,36 +24,75 @@ const PILLAR_COLORS = {
 export default function WorldCreationTree({ campId, isGm }) {
   const [data, setData] = useState(null);
   const [myths, setMyths] = useState([]);
+  const [codexLinks, setCodexLinks] = useState([]);
+  const [viewMode, setViewMode] = useState("pillars"); // "pillars" | "graph"
   const [err, setErr] = useState("");
   const [linkModal, setLinkModal] = useState(null); // { source, target } or full edge
 
   const refresh = useCallback(async () => {
     try {
-      const [{ data: tree }, { data: m }] = await Promise.all([
+      const [{ data: tree }, { data: m }, linksRes] = await Promise.all([
         api.get(`/campaigns/${campId}/creation-tree`),
         api.get(`/campaigns/${campId}/creation-myths`),
+        api.get(`/campaigns/${campId}/codex-links`).catch(() => ({ data: { edges: [] } })),
       ]);
       setData(tree);
       setMyths(m.myths || []);
+      setCodexLinks(linksRes.data?.edges || linksRes.data?.codex_links || []);
     } catch (e) {
       setErr(formatApiErrorDetail(e.response?.data?.detail) || e.message);
     }
   }, [campId]);
   useEffect(() => { refresh(); }, [refresh]);
 
+  // Flatten populated nodes across all pillars/branches for the graph.
+  // NOTE: must be declared before any early return to satisfy the
+  // react-hooks/rules-of-hooks lint rule.
+  const allNodes = useMemo(() => {
+    const out = [];
+    Object.entries(data?.populated || {}).forEach(([pillar, branches]) => {
+      Object.entries(branches || {}).forEach(([branch, items]) => {
+        (items || []).forEach((n) => {
+          out.push({
+            ...n,
+            fields: { ...(n.fields || {}),
+                       pillar: n.fields?.pillar || pillar,
+                       pillar_branch: n.fields?.pillar_branch || branch },
+          });
+        });
+      });
+    });
+    return out;
+  }, [data]);
+
   if (!data) return null;
   const rootMyth = myths.find((m) => !m.parent_node_id);
 
   return (
     <div data-testid="world-creation-tree" className="space-y-6">
-      <div>
-        <div className="label-ref">Atelier · World Creation Tree</div>
-        <h2 className="font-display text-2xl text-parchment mt-1">
-          Roots, pillars, and cross-currents
-        </h2>
-        <p className="text-mist text-sm mt-1 italic max-w-2xl">
-          {data.schema.root.blurb} {data.schema.logic_notes.join(" ")}
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <div className="label-ref">Atelier · World Creation Tree</div>
+          <h2 className="font-display text-2xl text-parchment mt-1">
+            Roots, pillars, and cross-currents
+          </h2>
+          <p className="text-mist text-sm mt-1 italic max-w-2xl">
+            {data.schema.root.blurb} {data.schema.logic_notes.join(" ")}
+          </p>
+        </div>
+        {/* V6.21 Cut D V2 — view-mode toggle. */}
+        <div className="flex gap-1" data-testid="wct-view-mode">
+          <button onClick={() => setViewMode("pillars")}
+                  className={`btn text-xs ${viewMode === "pillars" ? "btn-primary" : "btn-ghost"}`}
+                  data-testid="wct-view-pillars">
+            <List className="w-3 h-3"/> Pillars
+          </button>
+          <button onClick={() => setViewMode("graph")}
+                  className={`btn text-xs ${viewMode === "graph" ? "btn-primary" : "btn-ghost"}`}
+                  data-testid="wct-view-graph">
+            <Network className="w-3 h-3"/> Graph
+          </button>
+        </div>
       </div>
 
       {err && <div className="text-ember text-xs" data-testid="wct-error">{err}</div>}
@@ -64,22 +104,36 @@ export default function WorldCreationTree({ campId, isGm }) {
         isGm={isGm}
         onChanged={refresh}/>
 
-      {/* Three pillars */}
-      <div className="grid md:grid-cols-3 gap-3" data-testid="wct-pillars">
-        {Object.entries(data.schema.pillars).map(([pillar, meta]) => (
-          <PillarPanel key={pillar}
-                        campId={campId}
-                        pillar={pillar}
-                        meta={meta}
-                        populated={data.populated}
-                        color={PILLAR_COLORS[pillar]}
-                        isGm={isGm}
-                        onChanged={refresh}/>
-        ))}
-      </div>
+      {viewMode === "graph" ? (
+        /* V6.21 Cut D V2 — Graph view clustering. */
+        <WorldTreeGraph nodes={allNodes} edges={codexLinks}
+                         onNodeClick={(n) => {
+                           // Dispatch codex-detail open request the parent
+                           // Atelier tab can listen for.
+                           window.dispatchEvent(new CustomEvent("tg:open-codex-node", {
+                             detail: { node_id: n.id, campaign_id: campId },
+                           }));
+                         }}/>
+      ) : (
+        <>
+        {/* Three pillars */}
+        <div className="grid md:grid-cols-3 gap-3" data-testid="wct-pillars">
+          {Object.entries(data.schema.pillars).map(([pillar, meta]) => (
+            <PillarPanel key={pillar}
+                          campId={campId}
+                          pillar={pillar}
+                          meta={meta}
+                          populated={data.populated}
+                          color={PILLAR_COLORS[pillar]}
+                          isGm={isGm}
+                          onChanged={refresh}/>
+          ))}
+        </div>
 
-      {/* Cross-pillar arrow registry */}
-      <CrossPillarLinks links={data.schema.cross_pillar_links}/>
+        {/* Cross-pillar arrow registry */}
+        <CrossPillarLinks links={data.schema.cross_pillar_links}/>
+        </>
+      )}
 
       {/* Codex Link Widget launcher */}
       <button onClick={() => setLinkModal({ source_id: "", target_id: "" })}
