@@ -8,6 +8,7 @@ import EpicCampaignPanel from "./EpicCampaignPanel";
 import ReferenceEditor from "./ReferenceEditor";
 import TimelinePanel from "./TimelinePanel";
 import AtelierWorkshop from "./AtelierWorkshop";
+import WorldCreationTree from "./WorldCreationTree";
 
 /**
  * AtelierTab — V4.4 dynamic-scaling tiers.
@@ -159,6 +160,7 @@ export default function AtelierTab({ campId, camp }) {
         {[
           ["workshop",   "Workshop"],
           ["table-tools","Table Tools"],
+          ["worldbuild", "World Tree"],
           ["genesis",    "Genesis (7 Phases)"],
           ["epic",       "Epic Campaign"],
           ["timeline",   "Timeline"],
@@ -209,6 +211,12 @@ export default function AtelierTab({ campId, camp }) {
       {subtab === "table-tools" && (
         <div data-testid="atelier-table-tools-pane">
           <AtelierWorkshop campId={campId}/>
+        </div>
+      )}
+
+      {subtab === "worldbuild" && (
+        <div data-testid="atelier-worldbuild-pane">
+          <WorldCreationTree campId={campId} isGm={!!camp?.is_gm}/>
         </div>
       )}
 

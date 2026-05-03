@@ -1,0 +1,33 @@
+{
+  "summary": "V6.20 backend regression: 15/15 pytest pass for the new Cut D + bug fixes + Surprise Bag PBP auto-post stack. Admin /api/admin/repair-dnd-states 200 for admin / 403 for player (Aurora). Creation Tree returns canonical 3-pillar schema with 18 cross-pillar links + populated grouping. Creation Myth POST/GET/DELETE round-trip works (player blocked 403). Codex Links POST validates weight 1-10 (422 on 99) and color hex regex (422 on 'notacolor'); created edge listed and deleted cleanly. Surprise Bag draw + Scene-Break draw both return `posted_to_session` flag (false because no in-progress session — silent no-op confirmed) and strip _id from drawn doc. Frontend smoke: AtelierTab.jsx confirmed at /app/frontend/src/components/AtelierTab.jsx line 163 registers ['worldbuild','World Tree'] subtab + line 217-219 mounts <WorldCreationTree campId isGm/>. Login flow works (Sign In → /app). Did not exercise the World Tree UI inside a specific campaign view due to time budget — main agent should self-test by navigating to a campaign's atelier and clicking World Tree subtab.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter54_v620.py",
+    "/app/test_reports/pytest/iter54_v620.xml"
+  ],
+  "action_items": [
+    "Main agent self-test: load a campaign in /atelier, click 'World Tree' subtab, verify CreationMythRootCard + 3 PillarPanels (Population/Geography/History) + cross-pillar arrows accordion + CodexLinkWidget modal render. Also verify Mechanics tab on a converted character no longer crashes on .includes() (Bug #3) and ability scores display 10/+0 instead of 0/-5 (Bug #1).",
+    "Run /api/admin/repair-dnd-states once on production after deploy (it is idempotent — safe re-run)."
+  ],
+  "critical_code_review_comments": [
+    "world_creation.py is clean (~360 lines, single responsibility, all _id stripped, GM-only mutations, member read).",
+    "atelier_workshop.py _post_to_active_pbp() correctly try/excepts and returns False on no-session — surprise/scene-break draws never fail because of PBP routing.",
+    "advancement.py is now 1170 lines — maintain the V6.19 split-into-modules recommendation (advancement_core / budget_audit / spell_tracker / anime5e_seed). Not a regression but technical debt is growing.",
+    "_post_to_active_pbp uses status filter `{'$in': ['in_progress','scheduled', None]}` — `scheduled` sessions also receive posts; if user wants strict 'live only' that should be `in_progress` only. Confirm semantics with PM."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter54_v620.py (new — 15 pytest cases)"
+  ],
+  "success_rate": {"backend": "100% (15/15)", "frontend": "smoke-only — AtelierTab/WorldCreationTree wiring verified via source, runtime UI not interactively walked"},
+  "test_credentials": "franpietrowski@gmail.com / PieGod08!! (GMFran admin); albanaszak@ymail.com / AuroraTest123! (Aurora player)",
+  "seed_data_creation": "Tests create + clean up TEST_V620 Origin myth and TEST_V620_allies edge in anime-5e camp 2d31c25354e4415f84a31704fe78a795. Surprise/Scene-break decks seeded once via existing /seed endpoints (idempotent skip on subsequent runs).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "V6.20 backend GREEN. All previous Eli IDs from review request remain stale (DB reset). Use anime-5e camp 2d31c25354e4415f84a31704fe78a795. World Tree UI runtime verification was not completed — main agent should screenshot it. Frontend code path is correct: AtelierTab.jsx:163,217-219 → WorldCreationTree.jsx mounted with campId+isGm.",
+  "rca of the issue": "Bug #3 (Dnd5eBuilder .includes() crash) RCA: legacy/converter-imported dnd_state docs were missing saving_throw_profs / skill_profs arrays AND ability_scores keys. Fix shipped in three layers: (a) conversion_engine._hydrate_dnd_state() ensures all arrays + 6 ability scores ≥1 on every cross-system convert, (b) /admin/repair-dnd-states backfills existing docs (3 repaired during dev, verified via test_admin_succeeds), (c) Dnd5eBuilder.jsx defensive defaults on load. Bug #1 (0/-5 modifiers) and Bug #2 (-15 EP) fixed in DndSheetView.jsx by defaulting absent ability scores to 10 and clamping ep_current with Math.max(0, ...). Backend tests cover the repair endpoint; sheet-render fixes are pure-frontend defaults — recommend a Playwright snapshot in next iteration once main agent confirms the World Tree UI also renders for a campaign view."
+}

@@ -33,6 +33,36 @@ router = APIRouter(prefix="/api", tags=["surprise-bag", "scene-break"])
 
 # ─── Helpers ────────────────────────────────────────────────────────────
 
+async def _post_to_active_pbp(cid: str, user: dict, line: str):
+    """V6.20 — Post a /system line into the active session's PBP channel.
+
+    Looks up the most recent in-progress session for the campaign and
+    inserts a system-kind chat log entry. Silent no-op if no session is
+    active (so Workshop draws stay usable in pre-prep).
+    """
+    try:
+        active = await db.sessions.find_one(
+            {"campaign_id": cid, "status": {"$in": ["in_progress", "scheduled", None]}},
+            {"_id": 0},
+            sort=[("created_at", -1)],
+        )
+        if not active:
+            return False
+        await db.chat_logs.insert_one({
+            "id": new_id(), "session_id": active["id"],
+            "message": line,
+            "kind": "system", "user_id": "system",
+            "user_name": "WORKSHOP",
+            "pinned": False,
+            "created_at": now_iso(),
+        })
+        return True
+    except Exception as e:
+        print(f"[surprise-bag pbp post] {e}")
+        return False
+
+
+
 async def _campaign_or_404(cid: str, user: dict, gm_only: bool = False):
     camp = await db.campaigns.find_one({"id": cid}, {"_id": 0})
     if not camp:
@@ -92,6 +122,7 @@ async def create_surprise_entry(
         "created_at": now_iso(),
     }
     await db.campaign_surprise_bag.insert_one(doc)
+    doc.pop("_id", None)
     return {"ok": True, "entry": doc}
 
 
@@ -176,7 +207,15 @@ async def draw_surprise(
          "$set": {"last_drawn_at": now_iso(),
                   "last_drawn_by": user.get("name")}},
     )
-    return {"ok": True, "drawn": pick, "pool_size": len(rows)}
+    # V6.20 — auto-post the draw into the active session's PBP channel.
+    line = (
+        f'🎲 GM drew "{pick.get("title", "Untitled")}" '
+        f'({pick.get("category", "surprise")}): '
+        f'{pick.get("blurb", "—")}'
+    )
+    posted = await _post_to_active_pbp(cid, user, line)
+    return {"ok": True, "drawn": pick, "pool_size": len(rows),
+             "posted_to_session": posted}
 
 
 # ─── Scene-Break Cards ──────────────────────────────────────────────────
@@ -217,6 +256,7 @@ async def create_scene_break(
         "created_at": now_iso(),
     }
     await db.campaign_scene_breaks.insert_one(doc)
+    doc.pop("_id", None)
     return {"ok": True, "card": doc}
 
 
@@ -247,7 +287,15 @@ async def draw_scene_break(
     if not rows:
         raise HTTPException(404, "No scene-break cards match.")
     pick = random.choice(rows)
-    return {"ok": True, "drawn": pick, "pool_size": len(rows)}
+    # V6.20 — auto-post the draw into the active session's PBP channel.
+    music = f' ♪ {pick.get("music_cue")}' if pick.get("music_cue") else ""
+    line = (
+        f'🎴 Scene break · {pick.get("mood", "transition")} · '
+        f'{pick.get("title", "Untitled")}\n\n{pick.get("body", "")}{music}'
+    )
+    posted = await _post_to_active_pbp(cid, user, line)
+    return {"ok": True, "drawn": pick, "pool_size": len(rows),
+             "posted_to_session": posted}
 
 
 # ─── Bulk seed shortcut (helper for first-time GM onboarding) ───────────

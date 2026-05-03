@@ -31,6 +31,34 @@ router = APIRouter(prefix="/api", tags=["advancement", "spell-tracker"])
 
 # ─── V6.19 — Anime 5E budget audit + class progression endpoints ────────
 
+@router.post("/admin/repair-dnd-states")
+async def repair_dnd_states(user: dict = Depends(get_current_user)):
+    """V6.20 — Idempotent backfill: hydrate every character's dnd_state
+    so converter-imported / legacy sheets don't render 0-stat scores or
+    crash the editor on undefined `.includes()` calls. Admin only.
+
+    Touches `folio.dnd_state` only when at least one default was missing.
+    """
+    if user.get("role") != "admin":
+        raise HTTPException(403, "Admin only.")
+    from core.conversion_engine import _hydrate_dnd_state
+    cur = db.characters.find({"folio.dnd_state": {"$exists": True}}, {"_id": 0})
+    repaired = 0
+    scanned = 0
+    async for ch in cur:
+        scanned += 1
+        cur_state = (ch.get("folio") or {}).get("dnd_state") or {}
+        new_state = _hydrate_dnd_state(cur_state)
+        if new_state != cur_state:
+            await db.characters.update_one(
+                {"id": ch["id"]},
+                {"$set": {"folio.dnd_state": new_state,
+                           "updated_at": now_iso()}},
+            )
+            repaired += 1
+    return {"ok": True, "scanned": scanned, "repaired": repaired}
+
+
 @router.get("/anime5e/races")
 async def anime5e_race_table(user: dict = Depends(get_current_user)):
     """Return the Anime 5E race / heritage DP-cost table. Used by the

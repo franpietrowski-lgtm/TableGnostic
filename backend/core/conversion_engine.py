@@ -277,6 +277,41 @@ def normalise_tristat_cost_fields(items, kind: str):
 # ──────────────────────────────────────────────────────────────────────────
 # Per-system wrapper extraction
 
+# V6.20 — Defaults to splice into any 5E-chassis state dict that came
+# back from the LLM converter without a complete shape. Prevents the
+# downstream sheet from rendering all-zero ability scores or the editor
+# from crashing on undefined `.includes()` calls.
+_DND_STATE_DEFAULTS: Dict[str, Any] = {
+    "ability_scores": {"Strength": 10, "Dexterity": 10, "Constitution": 10,
+                        "Intelligence": 10, "Wisdom": 10, "Charisma": 10},
+    "saving_throw_profs": [],
+    "skill_profs": [],
+    "inventory": [],
+    "spells_known": [],
+}
+
+
+def _hydrate_dnd_state(state: Dict[str, Any]) -> Dict[str, Any]:
+    """Splice missing baseline fields into a 5E-chassis state dict.
+
+    - ability_scores: any of the 6 abilities ≤ 0 or missing → 10
+    - saving_throw_profs / skill_profs / inventory / spells_known → []
+    """
+    out = dict(state or {})
+    scores = dict(out.get("ability_scores") or {})
+    for ab, default in _DND_STATE_DEFAULTS["ability_scores"].items():
+        v = scores.get(ab)
+        if not isinstance(v, (int, float)) or v <= 0:
+            scores[ab] = default
+    out["ability_scores"] = scores
+    for k, default in _DND_STATE_DEFAULTS.items():
+        if k == "ability_scores":
+            continue
+        if not isinstance(out.get(k), list):
+            out[k] = list(default)
+    return out
+
+
 def _resolve_wrapper(target_payload: Dict[str, Any], target_system: str):
     """Build the canonical wrapper(s) for the target system.
 
@@ -304,6 +339,8 @@ def _resolve_wrapper(target_payload: Dict[str, Any], target_system: str):
                        **(target_payload.get("dnd_state") or {})}
         if "features" in dnd_wrapper and "class_features" not in dnd_wrapper:
             dnd_wrapper["class_features"] = dnd_wrapper["features"]
+        # V6.20 — hydrate baseline so the sheet never renders 0-stat scores.
+        dnd_wrapper = _hydrate_dnd_state(dnd_wrapper)
         supp_keys = ["point_buys", "point_budget", "stats", "derived",
                      "hp", "ep", "acp", "anime_traits"]
         supp_wrapper = {**{k: target_payload[k] for k in supp_keys if k in target_payload},
@@ -338,6 +375,8 @@ def _resolve_wrapper(target_payload: Dict[str, Any], target_system: str):
                    **(target_payload.get("dnd_state") or {})}
         if "features" in wrapper and "class_features" not in wrapper:
             wrapper["class_features"] = wrapper["features"]
+        # V6.20 — hydrate baseline so the sheet never renders 0-stat scores.
+        wrapper = _hydrate_dnd_state(wrapper)
         return wrapper, {"dnd_state": wrapper}
 
     return {}, {}

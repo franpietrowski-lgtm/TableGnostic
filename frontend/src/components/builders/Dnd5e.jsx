@@ -43,10 +43,24 @@ export function Dnd5eBuilder({ campaign, ref_, charId, hybridSupplement }) {
     if (charId) {
       api.get(`/characters/${charId}`).then((r) => {
         const existing = r.data;
-        if (!existing.folio?.dnd_state) {
-          existing.folio = { ...(existing.folio || {}),
-                              dnd_state: empty5e(campaign?.id).folio.dnd_state };
-        }
+        // V6.20 — merge any missing dnd_state array fields so the editor
+        // can call .includes()/.map() without crashing on
+        // converter-created characters that skipped these initially.
+        const baseDnd = empty5e(campaign?.id).folio.dnd_state;
+        const cur = existing.folio?.dnd_state || {};
+        existing.folio = {
+          ...(existing.folio || {}),
+          dnd_state: {
+            ...baseDnd,
+            ...cur,
+            ability_scores: { ...baseDnd.ability_scores,
+                                ...(cur.ability_scores || {}) },
+            saving_throw_profs: cur.saving_throw_profs || baseDnd.saving_throw_profs,
+            skill_profs: cur.skill_profs || baseDnd.skill_profs,
+            inventory: cur.inventory || baseDnd.inventory,
+            spells_known: cur.spells_known || baseDnd.spells_known,
+          },
+        };
         setCh(existing);
       });
     } else {
@@ -68,7 +82,14 @@ export function Dnd5eBuilder({ campaign, ref_, charId, hybridSupplement }) {
   const setS = (patch) => setCh({ ...ch,
     folio: { ...ch.folio, dnd_state: { ...s, ...patch } } });
   const setScore = (a, v) => setS({ ability_scores: { ...s.ability_scores, [a]: Math.max(1, +v) } });
-  const toggle = (k, v) => setS({ [k]: s[k].includes(v) ? s[k].filter((x) => x !== v) : [...s[k], v] });
+  const toggle = (k, v) => {
+    const list = Array.isArray(s[k]) ? s[k] : [];
+    setS({ [k]: list.includes(v) ? list.filter((x) => x !== v) : [...list, v] });
+  };
+  // V6.20 — defensive accessors so .includes()/.map() can never crash on
+  // a sparse / migrated dnd_state.
+  const savingProfs = Array.isArray(s.saving_throw_profs) ? s.saving_throw_profs : [];
+  const skillProfs = Array.isArray(s.skill_profs) ? s.skill_profs : [];
 
   const cls = ref_.classes.find((c) => c.name === s.class);
   const race = ref_.races.find((r) => r.name === s.race);
@@ -202,7 +223,7 @@ export function Dnd5eBuilder({ campaign, ref_, charId, hybridSupplement }) {
                   <span className="text-gold font-display">mod {m >= 0 ? "+" : ""}{m}</span>
                 </div>
                 <div className="text-[10px] text-mist mt-1 font-ui uppercase tracking-widest">
-                  Save: {ABBR_5E[a]} {m >= 0 ? "+" : ""}{m}{s.saving_throw_profs.includes(a) ? ` +${prof} prof` : ""}
+                  Save: {ABBR_5E[a]} {m >= 0 ? "+" : ""}{m}{savingProfs.includes(a) ? ` +${prof} prof` : ""}
                 </div>
               </div>
             );
@@ -216,7 +237,7 @@ export function Dnd5eBuilder({ campaign, ref_, charId, hybridSupplement }) {
         <div className="flex flex-wrap gap-1.5">
           {ABILITIES_5E.map((a) => (
             <button key={a} type="button" onClick={() => toggle("saving_throw_profs", a)}
-                    className={`tag ${s.saving_throw_profs.includes(a) ? "border-gold text-gold-bright bg-gold/15" : ""}`}
+                    className={`tag ${savingProfs.includes(a) ? "border-gold text-gold-bright bg-gold/15" : ""}`}
                     data-testid={`dnd-save-${ABBR_5E[a]}`}>
               {ABBR_5E[a]}
             </button>
@@ -230,7 +251,7 @@ export function Dnd5eBuilder({ campaign, ref_, charId, hybridSupplement }) {
         <div className="flex flex-wrap gap-1.5">
           {ref_.skills.map((sk) => (
             <button key={sk.name} type="button" onClick={() => toggle("skill_profs", sk.name)}
-                    className={`tag ${s.skill_profs.includes(sk.name) ? "border-gold text-gold-bright bg-gold/15" : ""}`}
+                    className={`tag ${skillProfs.includes(sk.name) ? "border-gold text-gold-bright bg-gold/15" : ""}`}
                     data-testid={`dnd-skill-${sk.name.replace(/\s+/g, "-")}`}>
               {sk.name} <span className="text-mist/60 text-[9px]">({ABBR_5E[sk.ability]})</span>
             </button>

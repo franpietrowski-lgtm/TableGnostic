@@ -335,7 +335,8 @@ export default function CharacterSheet() {
       )}
       {/* System-shaped read view — D&D 5E / Cypher get their own block;
           BESM 4E (and Anime 5E by default) keep the original tri-stat layout. */}
-      {dndState && <DndSheetView state={dndState} folio={ch.folio} roll={roll}/>}
+      {dndState && <DndSheetView state={dndState} folio={ch.folio} roll={roll}
+                                    characterId={ch.id} isOwnerOrGm={canEditMech}/>}
       {cypherState && <CypherSheetView state={cypherState} roll={roll}/>}
       {!dndState && !cypherState && (
       <div className="mt-8 grid lg:grid-cols-3 gap-6">

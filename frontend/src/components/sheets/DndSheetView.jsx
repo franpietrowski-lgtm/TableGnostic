@@ -3,12 +3,16 @@
 // sheet. Spell slots + chassis + abilities + class features. ~390 lines.
 import React from "react";
 import { Stat, SimpleListCard, DiceCard, Anime5eSupplementView } from "./sheetCommon";
+import DndDerivedAndEquipment from "./DndDerivedAndEquipment";
 
-export default function DndSheetView({ state, folio, roll }) {
+export default function DndSheetView({ state, folio, roll, characterId, isOwnerOrGm }) {
   const sc = state.ability_scores || {};
   const lvl = Math.max(1, +(state.level || 1));
   const profBonus = Math.max(2, 2 + Math.floor((lvl - 1) / 4));
-  const mod = (s) => Math.floor(((sc[s] | 0) - 10) / 2);
+  // V6.20 — default ability scores to 10 (not 0) when unset, so the
+  // sheet shows the canonical baseline instead of -5 modifiers across
+  // the board for converter-imported characters that omitted scores.
+  const mod = (s) => Math.floor((((sc[s] != null && sc[s] > 0) ? sc[s] : 10) - 10) / 2);
   const fmt = (n) => (n >= 0 ? `+${n}` : `${n}`);
   const six = ["Strength", "Dexterity", "Constitution",
                 "Intelligence", "Wisdom", "Charisma"];
@@ -139,6 +143,9 @@ export default function DndSheetView({ state, folio, roll }) {
         <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 mt-3 text-center">
           {six.map((s) => {
             const m = mod(s);
+            // V6.20 — show 10 baseline when score is unset (matches the
+            // mod() default), so converter sheets read as canonical.
+            const display = (sc[s] != null && sc[s] > 0) ? sc[s] : 10;
             return (
               <button key={s}
                       onClick={() => roll(`1d20${fmt(m)}`, `${state.class || ""} · ${abbr[s]} check`)}
@@ -146,7 +153,7 @@ export default function DndSheetView({ state, folio, roll }) {
                       data-testid={`dnd-sheet-roll-${abbr[s]}`}
                       title={`Roll d20 ${fmt(m)}`}>
                 <div className="label-ref">{abbr[s]}</div>
-                <div className="font-display text-2xl text-gold">{sc[s] | 0}</div>
+                <div className="font-display text-2xl text-gold">{display}</div>
                 <div className="text-[10px] font-ui text-gold-bright group-hover:text-gold">{fmt(m)}</div>
               </button>
             );
@@ -241,8 +248,11 @@ export default function DndSheetView({ state, folio, roll }) {
 
       {folio?.anime5e_state && (() => {
         const an = folio.anime5e_state;
-        const epMax = an.ep_max ?? 10 + (mod("Charisma") * lvl);
-        const epCur = an.ep_current ?? epMax;
+        // V6.20 — clamp EP at 0 minimum so a freshly-converted character
+        // with default ability scores doesn't display a nonsensical -15.
+        const computed = 10 + (mod("Charisma") * lvl);
+        const epMax = Math.max(0, an.ep_max ?? computed);
+        const epCur = Math.max(0, an.ep_current ?? epMax);
         const pct = epMax > 0 ? Math.max(0, Math.min(100, (epCur / epMax) * 100)) : 0;
         return (
           <div className="card-mystic p-5 mt-4" data-testid="anime5e-ep-pool"
@@ -263,6 +273,12 @@ export default function DndSheetView({ state, folio, roll }) {
           </div>
         );
       })()}
+
+      {/* V6.20 — Derived values + equipment slots + subclass + feats + spell prep */}
+      {characterId && (
+        <DndDerivedAndEquipment characterId={characterId} state={state}
+                                  folio={folio} isOwnerOrGm={!!isOwnerOrGm}/>
+      )}
 
       {((state.magic_items?.length || 0) > 0) && (
         <div className="card-mystic p-5 mt-4" data-testid="dnd-magic-items">
