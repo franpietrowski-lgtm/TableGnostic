@@ -1,0 +1,63 @@
+{
+  "summary": "V6.21 RETEST of two outstanding items from iter56 — DnD5e ReferencePicker testids and WorldCreationTree graph-view toggle. Both routes confirmed correct; testids fully verified on the running app. ReferencePicker (inventory + spell) renders with full search-dropdown→chip flow working. WorldCreationTree mounts at Atelier ▸ World Tree subtab and renders all view-mode toggles. Graph SVG is gated behind non-empty nodes (empty state uses 'world-tree-graph-empty' testid instead) — correct UX, not a bug.",
+  "verified_passes": {
+    "dnd5e_builder_at_/app/campaigns/{dnd_cid}/characters/new": {
+      "dnd5e-builder": "RENDERS",
+      "dnd-inv-picker": "RENDERS",
+      "dnd-inv-input": "RENDERS",
+      "dnd-inv-add": "RENDERS",
+      "dnd-spell-picker_after_class=Wizard": "RENDERS",
+      "dnd-spell-input_after_class=Wizard": "RENDERS",
+      "dnd-inv-dropdown_on_typing_'long'": "RENDERS with 2 options ('Longsword weapons 1d8 slashing', 'Longbow weapons 1d8 piercing')",
+      "dnd-inv-chip-0_after_clicking_first_dropdown_option": "RENDERS — chip flow functional",
+      "campaign_id_used": "a69ff91b592d411894a6210380615bbd (D&D 5E, GMFran-owned)"
+    },
+    "world_creation_tree_at_atelier_worldbuild_subtab": {
+      "route": "/app/campaigns/{cid} → click 'ATELIER' tab text → atelier-subtab-worldbuild",
+      "atelier-tab": "RENDERS",
+      "atelier-subtab-worldbuild": "RENDERS and clickable",
+      "atelier-worldbuild-pane": "RENDERS",
+      "world-creation-tree": "RENDERS (root)",
+      "wct-view-mode": "RENDERS (toggle group)",
+      "wct-view-pillars": "RENDERS (default selected)",
+      "wct-view-graph": "RENDERS and clickable",
+      "wct-pillars": "RENDERS when in pillar view (Population/Geography/History columns)",
+      "world-tree-graph_after_clicking_graph_toggle": "Renders 'world-tree-graph-empty' instead because campaign has 0 seeded codex nodes — confirmed via WorldTreeGraph.jsx L147-157 (empty state branch)",
+      "campaign_id_used": "2d31c25354e4415f84a31704fe78a795 (Anime 5E, Evereantha)"
+    }
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "Campaign deep-link query params (?tab=atelier&atelier=worldbuild)",
+        "issue": "CampaignDetail.jsx does not parse the 'tab' query parameter on initial mount — landing on /app/campaigns/{cid}?tab=atelier still shows the default Characters tab. The 'atelier' sub-param IS read by AtelierTab.jsx (line 36-37) but only AFTER the user manually clicks the Atelier tab. This is the symptom that mis-led iter56 (the URL the request used in good faith never auto-navigated). Manual click of the 'Atelier' tab text resolves it.",
+        "affected_selectors": ["[data-testid=\"atelier-tab\"]"],
+        "priority": "LOW"
+      }
+    ],
+    "design_issues": []
+  },
+  "backend_issues": {"critical": [], "minor": []},
+  "test_report_links": [],
+  "action_items": [
+    "INFO ONLY — DnD5e ReferencePicker (inventory + spell) is fully working including dropdown search and chip persistence. iter56 'testids missing' was caused by the page being scraped while the 'Summoning the forge…' loading splash was still on screen (the testids only mount after ref data resolves). RESOLVED — no fix required.",
+    "INFO ONLY — WorldCreationTree mounts correctly at Atelier ▸ World Tree subtab. All view-mode toggles render. The 'world-tree-graph' SVG is correctly gated to non-empty state; empty state is rendered as 'world-tree-graph-empty' (WorldTreeGraph.jsx L147). To exercise the graph-view circle rendering, seed at least one codex-node into a pillar branch (POST /api/campaigns/{cid}/codex-nodes with creation_tree.section). RESOLVED — no fix required.",
+    "OPTIONAL — Make /app/campaigns/{cid}?tab=atelier deep-link work end-to-end. Currently CampaignDetail.jsx ignores the tab query param, only AtelierTab reads atelier sub-param. Wire up the 'tab' query parser in CampaignDetail to set the active tab on first paint. LOW priority — has no functional impact, just makes shareable atelier URLs cleaner.",
+    "OPTIONAL — Consider whether the request-spec 'world-tree-graph' testid should also be present in empty state for testability. Currently testers cannot assert the SVG wrapper without first seeding nodes. Adding data-testid='world-tree-graph' on the empty-state container too would make the test contract simpler."
+  ],
+  "critical_code_review_comments": [
+    "Dnd5e.jsx L271-290 ReferencePicker invocations are correctly wired with testidPrefix='dnd-inv'/'dnd-spell'. Spell picker is class-conditional (cls?.casting !== 'none') — verified by switching class to Wizard. Good defensive UX.",
+    "WorldCreationTree.jsx L72 root testid + L84-95 toggle testids are all present and correct. The graph/pillars view-mode state is local React state (not URL-synced) — minor consideration if deep-linking the graph view is desired in future.",
+    "WorldTreeGraph.jsx L147 'world-tree-graph-empty' vs L157 'world-tree-graph' — recommend either using the same testid for both states OR documenting the two-testid contract in the component header so testers know which to assert.",
+    "CampaignDetail.jsx — does not respect ?tab= query param on initial render. AtelierTab does respect ?atelier= once mounted. Inconsistent deep-link behavior."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (frontend-only)", "frontend": "5/5 critical-path testids verified for ReferencePicker; 4/4 testids verified for WorldCreationTree (graph empty-state correctly handled). 100% on the two requested retest items."},
+  "test_credentials": "GMFran franpietrowski@gmail.com / PieGod08!! (used). Aurora albanaszak@ymail.com / AuroraTest123! (login verified, but Aurora has 0 consent_required campaigns so consent panel was not exercised — per request note 'no need to re-test those', this is acceptable).",
+  "seed_data_creation": "None — used existing D&D camp (a69ff91b592d411894a6210380615bbd) and Anime camp (2d31c25354e4415f84a31704fe78a795). Empty new-character builder state was opened then abandoned without saving.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "iter56 RESOLVED. Two key learnings: (1) The 'Summoning the forge…' loader on Dnd5e.jsx hides ALL builder testids until ref-data resolves — wait for [data-testid=\"dnd5e-builder\"] before scraping. (2) WorldCreationTree's graph SVG uses two distinct testids — 'world-tree-graph-empty' (empty state) and 'world-tree-graph' (populated). Exercising the populated path requires seeding at least one codex node into a pillar branch first. Also: ?tab=atelier query-param deep-linking does NOT work; tester must click the Atelier tab text manually. ReferencePicker chip flow + dropdown search both work cleanly.",
+  "rca of the issue": "iter56 missed both items because (a) for Dnd5e: testids were checked while 'Summoning the forge…' splash was still on-screen (lazy ref-data load gates the entire builder DOM); (b) for WorldCreationTree: tester searched standalone routes (/app/world etc.) instead of the Atelier subtab, AND ?tab=atelier query-param doesn't auto-switch the active tab. Both are testing-discovery issues, NOT code defects. Underlying components are correctly implemented per spec."
+}
