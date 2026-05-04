@@ -398,6 +398,13 @@ export default function CharacterBuilder() {
             ))}
           </div>
 
+          {/* V6.25.2 — BESM Race / Class template picker. Homebrew races
+              and classes (authored in the Campaign's Custom Rules tab)
+              pre-fill stat adjustments + attributes + skills + defects
+              so the player starts from a canonical base and extends from
+              there within the CP budget. */}
+          <BesmTemplatePicker customs={customs} ch={ch} setCh={setCh}/>
+
           <div className="divider-sigil" />
           <div className="label-ref">Derived · ch.8 p.168 BESM 4E</div>
           <div className="grid grid-cols-3 gap-2 text-center">
@@ -1071,3 +1078,162 @@ function SkillRow({ idx, s, onUpdate, onRemove }) {
     </div>
   );
 }
+
+/* V6.25.2 — BESM Race / Class template picker for the BESM 4E builder.
+ *
+ * Reads `customs` (from `/api/campaigns/{cid}/custom`), filters to
+ * kind=race|class with an `effects` payload, and offers an Apply
+ * button that merges the template's stat_adjustments + components into
+ * the character's working draft. Rows added by a template are tagged
+ * with `_from_template` so they can be cleanly removed later.
+ */
+function BesmTemplatePicker({ customs, ch, setCh }) {
+  const [sel, setSel] = React.useState("");
+  const templates = (customs || []).filter(
+    (c) => (c.kind === "race" || c.kind === "class")
+      && c.effects && (c.effects.components || c.effects.stat_adjustments));
+  if (templates.length === 0) return null;
+  const chosen = templates.find((t) => t.id === sel);
+
+  const apply = () => {
+    if (!chosen) return;
+    const eff = chosen.effects || {};
+    const sa = eff.stat_adjustments || {};
+    const comps = eff.components || [];
+    // Apply stat adjustments.
+    const nextStats = {
+      body: (ch.stats.body || 0) + (+sa.body || 0),
+      mind: (ch.stats.mind || 0) + (+sa.mind || 0),
+      soul: (ch.stats.soul || 0) + (+sa.soul || 0),
+    };
+    // Build attribute / skill / defect additions from components.
+    // Tag with _from_template so downstream removal is possible.
+    const addedAttrs = []; const addedSkills = []; const addedDefects = [];
+    for (const c of comps) {
+      if (c.kind === "attribute") {
+        addedAttrs.push({
+          name: c.name || "Unnamed",
+          level: +c.level || 1,
+          cost_per_level: +c.cost_per_level || 0,
+          enhancements: [], limiters: [],
+          note: c.note || `From ${chosen.name}`,
+          _from_template: chosen.id,
+        });
+      } else if (c.kind === "skill") {
+        addedSkills.push({
+          name: c.name || "Unnamed",
+          level: +c.level || 1,
+          cost_per_level: +c.cost_per_level || 0,
+          _from_template: chosen.id,
+        });
+      } else if (c.kind === "defect") {
+        addedDefects.push({
+          name: c.name || "Unnamed",
+          rank: +c.rank || 1,
+          points_per_rank: -Math.abs(+c.points_per_rank || 1),
+          category: "Template",
+          note: c.note || `From ${chosen.name}`,
+          _from_template: chosen.id,
+        });
+      }
+      // enhancement / limiter rows are attached to their parent
+      // attribute at template-author time; BESM applies them via the
+      // existing component-composer flow on the sheet.
+    }
+    setCh({
+      ...ch,
+      stats: nextStats,
+      attributes: [...(ch.attributes || []), ...addedAttrs],
+      skills: [...(ch.skills || []), ...addedSkills],
+      defects: [...(ch.defects || []), ...addedDefects],
+      _applied_templates: [
+        ...((ch._applied_templates) || []),
+        { id: chosen.id, name: chosen.name, kind: chosen.kind,
+          total_cp: eff.total_cp ?? 0 },
+      ],
+    });
+    setSel("");
+  };
+
+  const removeTemplate = (tid) => {
+    const applied = (ch._applied_templates || []).find((t) => t.id === tid);
+    if (!applied) return;
+    // Reverse stat adjustments from the template's effects (look up on
+    // the source custom entry).
+    const src = (customs || []).find((c) => c.id === tid);
+    const sa = (src && src.effects && src.effects.stat_adjustments) || {};
+    setCh({
+      ...ch,
+      stats: {
+        body: (ch.stats.body || 0) - (+sa.body || 0),
+        mind: (ch.stats.mind || 0) - (+sa.mind || 0),
+        soul: (ch.stats.soul || 0) - (+sa.soul || 0),
+      },
+      attributes: (ch.attributes || []).filter((a) => a._from_template !== tid),
+      skills: (ch.skills || []).filter((s) => s._from_template !== tid),
+      defects: (ch.defects || []).filter((d) => d._from_template !== tid),
+      _applied_templates: (ch._applied_templates || []).filter((t) => t.id !== tid),
+    });
+  };
+
+  return (
+    <div className="mt-3 border border-gold/20 rounded-sm p-3 bg-void/30"
+         data-testid="besm-template-picker">
+      <div className="label-ref mb-2">Campaign Race / Class Templates</div>
+      <div className="flex gap-2 items-end flex-wrap">
+        <div className="flex-1 min-w-[240px]">
+          <label className="label-ref block mb-1 text-[9px]">Template</label>
+          <select className="select" value={sel} onChange={(e) => setSel(e.target.value)}
+                  data-testid="besm-template-select">
+            <option value="">— pick a race or class —</option>
+            <optgroup label="Races">
+              {templates.filter((t) => t.kind === "race").map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name} · {(t.effects?.total_cp ?? 0)} CP
+                </option>
+              ))}
+            </optgroup>
+            <optgroup label="Classes">
+              {templates.filter((t) => t.kind === "class").map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name} · {(t.effects?.total_cp ?? 0)} CP
+                </option>
+              ))}
+            </optgroup>
+          </select>
+        </div>
+        <button type="button" onClick={apply} disabled={!chosen}
+                className="btn btn-primary text-xs"
+                data-testid="besm-template-apply-btn"
+                title={chosen ? `Apply '${chosen.name}' — adds its stat adjustments + components to this character.` : "Pick a template first."}>
+          <Plus className="w-3 h-3"/> Apply
+        </button>
+      </div>
+      {chosen && (
+        <div className="mt-2 text-[11px] text-mist italic" data-testid="besm-template-preview">
+          {chosen.description_note || "No GM description."}
+        </div>
+      )}
+      {(ch._applied_templates || []).length > 0 && (
+        <div className="mt-3" data-testid="besm-template-applied-list">
+          <div className="label-ref block mb-1 text-[9px]">Applied templates</div>
+          <div className="flex flex-wrap gap-1.5">
+            {(ch._applied_templates || []).map((t) => (
+              <span key={t.id} className="tag group inline-flex items-center gap-1"
+                    data-testid={`besm-template-applied-${t.id}`}>
+                {t.name} · {t.kind} · {t.total_cp} CP
+                <button type="button" onClick={() => removeTemplate(t.id)}
+                        className="ml-0.5 hover:text-ember"
+                        title="Remove this template and all its contributed rows."
+                        data-testid={`besm-template-remove-${t.id}`}>
+                  <X className="w-3 h-3 inline"/>
+                </button>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+

@@ -433,6 +433,20 @@ class CustomAttributeIn(BaseModel):
     category: Optional[str] = None
     page_ref: Optional[str] = None
     description_note: str = ""
+    # V6.25.2 — numeric impacts the GM declares so homebrew Race /
+    # Class entries can influence sheet math. Shape is system-aware
+    # and free-form on the backend (frontend owns the schema):
+    #   BESM Race/Class:
+    #     { "stat_adjustments": {"body": 2, "mind": 1, "soul": 0},
+    #       "components": [ {kind, name, level|rank, cost_per_level|points_per_rank, ...} ],
+    #       "total_cp": 35 }
+    #   D&D/Anime 5E Race:
+    #     { "asi": {"Strength": 2, "Dexterity": 1},
+    #       "size": "Medium", "speed": 30, "traits": ["Darkvision"] }
+    #   D&D/Anime 5E Class:
+    #     { "hit_die": 8, "save_profs": ["Strength","Constitution"],
+    #       "armor_profs": [...], "weapon_profs": [...] }
+    effects: Dict[str, Any] = Field(default_factory=dict)
 
 
 class GenesisIn(BaseModel):

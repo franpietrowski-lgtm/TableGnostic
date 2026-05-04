@@ -14,6 +14,47 @@
 
 ## 2. Implemented (cumulative, condensed)
 
+### V6.25.2 — BESM Race/Class Templates with numeric effects + homebrew effects schema + Marketplace roadmap (2026-02-04)
+
+User's ask: BESM race/class should work like normal BESM — combinations of attributes + skills + defects + limiters/enhancements with CP costs — and the UI must distinguish this from the D&D/Anime 5E race/class shape. Reference samples (Half-Dragon, Werewolf Base Form, Werewolf Wolf Form, Artificer, Martial Artist) provided.
+
+**🔴 P1 — Homebrew effects object + numeric impact schema** (`core/models.py`)
+- `CustomAttributeIn.effects: Dict[str, Any] = Field(default_factory=dict)` — free-form per-system payload. Backend stores as-is; frontends own the per-kind schema. Enables downstream sheet math wiring without schema-churn.
+- Schema conventions documented inline:
+  - **BESM Race / Class**: `{stat_adjustments: {body, mind, soul}, components: [{kind, name, level|rank, cost_per_level|points_per_rank, note}], total_cp}`
+  - **D&D/Anime 5E Race**: `{asi: {Strength, …}, size, speed, traits[]}`
+  - **D&D/Anime 5E Class**: `{hit_die, save_profs[], armor_profs[], weapon_profs[]}`
+
+**🟧 P1 — BESM Race/Class Template composer** (`CampaignDetail.jsx`)
+- New `<BesmTemplateComposer/>` card mounts in the Custom Rules form ONLY when `systemId ∈ (besm-4e, anime-5e)` AND `kind ∈ (race, class)`. Non-BESM systems see the simpler flat form.
+- Body / Mind / Soul stat-adjustment trio (matches the BESM Extras "Value — Points — Stat" block in the sample cards).
+- Component editor — reuses the Power Bundle pattern (attribute / skill / defect / enhancement / limiter rows with cost-per-level, level, points-per-rank, rank, note). Live-computes a running **Template total CP** that matches the `TOTAL` row on the BESM Extras cards (Half-Dragon 35 / Werewolf Base 5 / Werewolf Wolf 20 / Artificer 45 / Martial Artist 60).
+- Saved templates render a compact `<BesmTemplateSummary/>` on the custom-rules card: stat deltas + component count + total CP.
+
+**🟧 P1 — BESM Character Builder template picker** (`CharacterBuilder.jsx`)
+- New `<BesmTemplatePicker/>` mounts on the Identity/Core panel right below the Body/Mind/Soul inputs, reading `/campaigns/{cid}/custom` and filtering to kind=race|class with `effects`.
+- Race / Class optgroups with inline CP cost per template. Apply button merges: `stat_adjustments` → ch.stats deltas; `components[]` → ch.attributes / ch.skills / ch.defects (tagged with `_from_template: <tid>` so they can be cleanly reverted).
+- "Applied templates" chip row surfaces every applied template with its kind + CP; each chip has an X that reverses the merge (removes tagged rows + rolls back stat deltas).
+- Defect points_per_rank sign flips on merge — templates store positive magnitudes; BESM character sheet uses negative values (refund).
+- Works inside the existing CP-budget UI — the `spent` useMemo already re-runs, so the budget bar + "remaining" total reflects the template cost the instant it's applied.
+
+**🟡 P2 — Marketplace roadmap** (documented in PRD future backlog)
+- Public Homebrew Marketplace that lists published bundles / races / classes / backgrounds across GM campaigns. Each entry carries an access gate: `private` (current behaviour), `public` (any authenticated table can clone), `paywall` (future Stripe gating with authored price). Extends the existing Canon Registry (V6.13) from whole-campaign publishing to per-entry homebrew sharing.
+- No implementation yet — logged in ROADMAP section below; needs a product spec (payment flow, licence attestation, royalty splits) before build.
+
+**Testing**
+- `tests/test_v6252_besm_templates.py` (3/3 new pass):
+  - BESM Half-Dragon race template: stat_adjustments.body=2 + 6 attribute components, total_cp=35 round-trip.
+  - BESM Werewolf Base Form class template: mixed attribute+defect components (4 defects), total_cp=5 round-trip.
+  - D&D Sunbound Wisp race with `effects.asi` + size + traits — schema preserves everything for future auto-apply wiring.
+- Cumulative 27/27 V6.22+V6.25+V6.25.1+V6.25.2 tests pass.
+- Frontend lint clean; smoke screenshot confirms `besm-template-composer`, `besm-template-stat-body`, `besm-template-total-cp` all render when kind=race is picked on a BESM campaign.
+
+**Explicitly deferred**
+- D&D/Anime 5E homebrew race auto-applying `effects.asi` to ability scores — today the picker surfaces the homebrew race and shows the description card; ASI math integration is a next-session target. The schema is ready.
+- BESM homebrew Size → sheet size-category override (schema accepts it; UI application is the next pass).
+- Marketplace build (see ROADMAP).
+
 ### V6.25.1 — Campaign description polish + homebrew race/class wiring + V6.22 test fixture parameterisation (2026-02-04)
 
 User chose three follow-ups to V6.25:

@@ -702,12 +702,25 @@ function CustomTab({ campId, customs, onRefresh, systemId }) {
 
   const [form, setForm] = useState({
     kind: KIND_OPTIONS[0].value, name: "", cost_per_level: 1, category: "",
-    page_ref: "Custom", description_note: "",
+    page_ref: "Custom", description_note: "", effects: {},
   });
+  // V6.25.2 — when authoring BESM Race/Class templates, expand a
+  // dedicated composer (stat adjustments + attributes + defects +
+  // skills + enhancements/limiters) that mirrors the BESM Extras
+  // template shape in the book. Non-BESM systems get the simpler flat
+  // form; their `effects` stays empty and narrative-only.
+  const isBesmSystem = !systemId || systemId === "besm-4e" || systemId === "anime-5e";
+  const isBesmTemplate = isBesmSystem && (form.kind === "race" || form.kind === "class");
   const save = async (e) => {
     e.preventDefault();
-    await api.post(`/campaigns/${campId}/custom`, { ...form, campaign_id: campId, cost_per_level: +form.cost_per_level });
-    setForm({ kind: KIND_OPTIONS[0].value, name: "", cost_per_level: 1, category: "", page_ref: "Custom", description_note: "" });
+    await api.post(`/campaigns/${campId}/custom`, {
+      ...form,
+      campaign_id: campId,
+      cost_per_level: +form.cost_per_level,
+      effects: form.effects || {},
+    });
+    setForm({ kind: KIND_OPTIONS[0].value, name: "", cost_per_level: 1,
+              category: "", page_ref: "Custom", description_note: "", effects: {} });
     onRefresh();
   };
   const del = async (cid) => { await api.delete(`/campaigns/${campId}/custom/${cid}`); onRefresh(); };
@@ -740,6 +753,12 @@ function CustomTab({ campId, customs, onRefresh, systemId }) {
         <textarea className="input md:col-span-2" placeholder="Your description / mechanics notes"
                   value={form.description_note} data-testid="rule-description"
                   onChange={(e) => setForm({ ...form, description_note: e.target.value })}/>
+        {isBesmTemplate && (
+          <div className="md:col-span-2">
+            <BesmTemplateComposer effects={form.effects || {}}
+                                    onChange={(eff) => setForm({ ...form, effects: eff })}/>
+          </div>
+        )}
         <div className="md:col-span-2 flex justify-end">
           <button className="btn btn-primary" type="submit" data-testid="rule-submit">Save</button>
         </div>
@@ -759,6 +778,7 @@ function CustomTab({ campId, customs, onRefresh, systemId }) {
               <div className="text-xs text-gold/70 font-ui mt-1">{c.cost_per_level} pts/level · {c.category || "—"}</div>
               <div className="text-[10px] text-mist uppercase tracking-widest mt-1">{c.page_ref}</div>
               {c.description_note && <div className="text-xs text-mist mt-2 whitespace-pre-wrap font-body">{c.description_note}</div>}
+              <BesmTemplateSummary effects={c.effects || {}} kind={c.kind}/>
             </div>
           ))}
         </div>
@@ -1011,3 +1031,165 @@ function CampaignDescription({ camp, isGm, onSaved }) {
     </div>
   );
 }
+
+/* V6.25.2 — BESM Race/Class template composer.
+ *
+ * BESM race/class templates (per the BESM Extras pattern — see
+ * Half-Dragon, Werewolf Base Form, Artificer, Martial Artist samples)
+ * combine stat adjustments + attributes + skills + defects with their
+ * limiters/enhancements. Total CP is computed live and deducted from
+ * the player's CP budget when the template is applied to a character.
+ */
+function _besmCompCost(c) {
+  if (c.kind === "defect") {
+    const r = Math.abs(+c.rank || 0);
+    const p = Math.abs(+c.points_per_rank || 1);
+    return -(r * p);
+  }
+  if (c.kind === "attribute" || c.kind === "skill") {
+    const lvl = +c.level || 0;
+    const per = +c.cost_per_level || 0;
+    return Math.max(0, lvl * per - (+c.refund || 0));
+  }
+  return 0; // enhancement/limiter are effective-level modifiers, no direct CP
+}
+
+function BesmTemplateComposer({ effects, onChange }) {
+  const stats = effects.stat_adjustments || { body: 0, mind: 0, soul: 0 };
+  const comps = effects.components || [];
+  const setStats = (patch) => onChange({
+    ...effects, stat_adjustments: { ...stats, ...patch },
+  });
+  const setComps = (next) => {
+    const total_cp = Object.values({ body: stats.body || 0, mind: stats.mind || 0, soul: stats.soul || 0 })
+      .reduce((a, b) => a + (+b || 0), 0)
+      + next.reduce((sum, c) => sum + _besmCompCost(c), 0);
+    onChange({ ...effects, components: next, total_cp });
+  };
+  const addComp = () => setComps([...comps, { kind: "attribute", name: "",
+    cost_per_level: 0, level: 1, points_per_rank: 0, rank: 0, refund: 0, note: "" }]);
+  const patchComp = (i, p) => setComps(comps.map((c, j) => j === i ? { ...c, ...p } : c));
+  const dropComp = (i) => setComps(comps.filter((_, j) => j !== i));
+
+  // Live total_cp recompute whenever stats change.
+  React.useEffect(() => {
+    const total_cp = (+stats.body || 0) + (+stats.mind || 0) + (+stats.soul || 0)
+      + comps.reduce((sum, c) => sum + _besmCompCost(c), 0);
+    if (total_cp !== effects.total_cp) onChange({ ...effects, total_cp });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stats.body, stats.mind, stats.soul]);
+
+  return (
+    <div className="border border-gold/20 rounded-sm p-3 bg-gold/5 space-y-3"
+         data-testid="besm-template-composer">
+      <div className="flex items-baseline justify-between flex-wrap gap-2">
+        <div className="label-ref">BESM Race / Class Template</div>
+        <div className="text-[10px] text-mist italic">
+          Stat adjustments + attributes + skills + defects (with limiters /
+          enhancements). Total CP is deducted from the player's budget on Apply.
+        </div>
+      </div>
+
+      {/* Stat adjustments — Body / Mind / Soul per BESM Extras cards. */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2"
+           data-testid="besm-template-stats">
+        {["body", "mind", "soul"].map((s) => (
+          <div key={s}>
+            <label className="label-ref">{s[0].toUpperCase() + s.slice(1)} adj.</label>
+            <input className="input" type="number" step="1"
+                   placeholder="0"
+                   value={stats[s] ?? 0}
+                   onChange={(e) => setStats({ [s]: Number(e.target.value) || 0 })}
+                   data-testid={`besm-template-stat-${s}`}/>
+          </div>
+        ))}
+      </div>
+
+      {/* Component rows — reuses the PowerBundle composer shape. */}
+      <div className="space-y-2">
+        {comps.length === 0 && (
+          <div className="text-[11px] text-mist italic">No components yet. Click + to add an attribute / skill / defect.</div>
+        )}
+        {comps.map((c, i) => (
+          <div key={i} className="grid grid-cols-1 sm:grid-cols-[110px_1fr_80px_80px_80px_24px] gap-2 items-center"
+               data-testid={`besm-template-comp-${i}`}>
+            <select className="select select-sm" value={c.kind}
+                    onChange={(e) => patchComp(i, { kind: e.target.value })}>
+              <option value="attribute">Attribute</option>
+              <option value="skill">Skill Group</option>
+              <option value="defect">Defect</option>
+              <option value="enhancement">Enhancement</option>
+              <option value="limiter">Limiter</option>
+            </select>
+            <input className="input" placeholder="Name (e.g. Weapon: Fire Breath)"
+                   value={c.name}
+                   onChange={(e) => patchComp(i, { name: e.target.value })}/>
+            {c.kind !== "defect" ? (
+              <input className="input" type="number" step="0.5" min={0}
+                     placeholder="Cost/Lvl"
+                     value={c.cost_per_level}
+                     onChange={(e) => patchComp(i, { cost_per_level: Number(e.target.value) || 0 })}/>
+            ) : (
+              <input className="input" type="number" min={0}
+                     placeholder="Pts/Rank"
+                     value={c.points_per_rank}
+                     onChange={(e) => patchComp(i, { points_per_rank: Number(e.target.value) || 0 })}/>
+            )}
+            <input className="input" type="number" min={0}
+                   placeholder={c.kind === "defect" ? "Rank" : "Level"}
+                   value={c.kind === "defect" ? c.rank : c.level}
+                   onChange={(e) => patchComp(i, c.kind === "defect"
+                     ? { rank: Number(e.target.value) || 0 }
+                     : { level: Number(e.target.value) || 0 })}/>
+            <input className="input" placeholder="Note"
+                   value={c.note || ""}
+                   onChange={(e) => patchComp(i, { note: e.target.value })}/>
+            <button type="button" onClick={() => dropComp(i)}
+                    className="text-ember/70 hover:text-ember p-1"
+                    aria-label="Remove component">
+              <X className="w-3 h-3"/>
+            </button>
+          </div>
+        ))}
+      </div>
+
+      <div className="flex items-center justify-between pt-2 border-t border-gold/15">
+        <button type="button" onClick={addComp} className="btn btn-ghost text-xs"
+                data-testid="besm-template-add-comp">
+          <Plus className="w-3 h-3"/> Add component
+        </button>
+        <div className="text-[11px] font-ui" data-testid="besm-template-total-cp">
+          <span className="text-mist">Template total: </span>
+          <span className={((effects.total_cp || 0) < 0) ? "text-arcane" : "text-gold-bright"}>
+            {effects.total_cp || 0} CP
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BesmTemplateSummary({ effects, kind }) {
+  if (!effects || Object.keys(effects).length === 0) return null;
+  if (kind !== "race" && kind !== "class") return null;
+  const stats = effects.stat_adjustments || {};
+  const comps = effects.components || [];
+  const total = effects.total_cp;
+  const statBits = ["body", "mind", "soul"]
+    .filter((s) => (stats[s] ?? 0) !== 0)
+    .map((s) => `${s[0].toUpperCase() + s.slice(1)} ${stats[s] > 0 ? "+" : ""}${stats[s]}`);
+  return (
+    <div className="mt-2 text-[11px] text-mist border-t border-gold/10 pt-2" data-testid="besm-template-summary">
+      {statBits.length > 0 && (
+        <div><span className="text-gold/60 uppercase tracking-widest text-[9px]">Stats</span> · {statBits.join(" / ")}</div>
+      )}
+      {comps.length > 0 && (
+        <div className="mt-1"><span className="text-gold/60 uppercase tracking-widest text-[9px]">Components</span> · {comps.length} entr{comps.length === 1 ? "y" : "ies"}</div>
+      )}
+      {typeof total === "number" && (
+        <div className="mt-1"><span className="text-gold/60 uppercase tracking-widest text-[9px]">Template CP</span> <span className={total < 0 ? "text-arcane" : "text-gold-bright"}>{total}</span></div>
+      )}
+    </div>
+  );
+}
+
