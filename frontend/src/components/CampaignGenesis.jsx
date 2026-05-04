@@ -95,9 +95,6 @@ export default function CampaignGenesis() {
 
   if (!g) return <div className="p-10 text-mist">Opening the atelier…</div>;
 
-  const Panel = ({ children }) => (
-    <div className="card-mystic sigil-ring p-7 space-y-5" data-testid="genesis-panel">{children}</div>
-  );
   const update = (patch) => setG({ ...g, ...patch });
   const updateArray = (key, idx, patch) => {
     const arr = [...(g[key] || [])]; arr[idx] = { ...arr[idx], ...patch };
@@ -153,7 +150,7 @@ export default function CampaignGenesis() {
       <p className="text-sm text-mist font-body mb-5 italic">{cur.blurb}</p>
 
       {phase === 0 && (
-        <Panel>
+        <div className="card-mystic sigil-ring p-7 space-y-5" data-testid="genesis-panel">
           <div className="text-xs text-mist font-body leading-relaxed">
             Complete one sentence. It is the keystone of everything that follows.
             <span className="block mt-2 text-gold/70 font-ui tracking-widest uppercase text-[10px]">
@@ -194,11 +191,11 @@ export default function CampaignGenesis() {
               </div>
             </div>
           )}
-        </Panel>
+        </div>
       )}
 
       {phase === 1 && (
-        <Panel>
+        <div className="card-mystic sigil-ring p-7 space-y-5" data-testid="genesis-panel">
           <Field label="Theme" placeholder="e.g. the cost of devotion; rebirth through loss"
                  tip="The deeper idea underneath the plot. Themes aren't stated aloud — they rise out of repeated choices, images, and stakes."
                  prompts={PROMPTS.theme}
@@ -216,11 +213,11 @@ export default function CampaignGenesis() {
               {(g.tone_words || []).map((t, i) => <span key={i} className="tag">{t}</span>)}
             </div>
           </div>
-        </Panel>
+        </div>
       )}
 
       {phase === 2 && (
-        <Panel>
+        <div className="card-mystic sigil-ring p-7 space-y-5" data-testid="genesis-panel">
           <div className="grid md:grid-cols-2 gap-4">
             <Field label="Nemesis Name" value={g.nemesis_name}
                    tip="Name them before you describe them — a name locks the imagination. 'Archon Velvyn' is easier to play with than 'the evil priest'."
@@ -253,11 +250,11 @@ export default function CampaignGenesis() {
                  tip="Not just an exploitable flaw — a narrative keyhole. Something the heroes can discover, earn, or sacrifice to reach."
                  prompts={PROMPTS.nemesis_weakness}
                  value={g.nemesis_weakness} onChange={(v) => update({ nemesis_weakness: v })} testid="nemesis-weakness" textarea/>
-        </Panel>
+        </div>
       )}
 
       {phase === 3 && (
-        <Panel>
+        <div className="card-mystic sigil-ring p-7 space-y-5" data-testid="genesis-panel">
           <div className="text-xs text-mist font-body">
             Break your Sentence into acts. Most campaigns sit comfortably in 3–5.
             <div className="mt-2 text-gold/60 italic">
@@ -281,11 +278,11 @@ export default function CampaignGenesis() {
                   onClick={() => addRow("master_acts", { title: "", beat: "" })}>
             <Plus className="w-3 h-3"/> Add Act
           </button>
-        </Panel>
+        </div>
       )}
 
       {phase === 4 && (
-        <Panel>
+        <div className="card-mystic sigil-ring p-7 space-y-5" data-testid="genesis-panel">
           <div className="text-xs text-mist font-body">
             Outline the sessions. Mark each as <b>Follow</b> (advances the master plot),
             <b className="ml-1">Make</b> (player-driven), or <b className="ml-1">Fly</b> (improvised).
@@ -320,11 +317,11 @@ export default function CampaignGenesis() {
                   onClick={() => addRow("adventures", { title: "", kind: "follow", hook: "", stakes: "", outcome: "" })}>
             <Plus className="w-3 h-3"/> Add Adventure
           </button>
-        </Panel>
+        </div>
       )}
 
       {phase === 5 && (
-        <Panel>
+        <div className="card-mystic sigil-ring p-7 space-y-5" data-testid="genesis-panel">
           <div className="text-xs text-mist font-body">
             Seed at least three NPCs — the table will find their own favourites.
             <div className="mt-2 text-gold/60 italic">
@@ -355,11 +352,11 @@ export default function CampaignGenesis() {
                   onClick={() => addRow("seed_npcs", { name: "", role: "plotter", note: "" })}>
             <Plus className="w-3 h-3"/> Add NPC
           </button>
-        </Panel>
+        </div>
       )}
 
       {phase === 6 && (
-        <Panel>
+        <div className="card-mystic sigil-ring p-7 space-y-5" data-testid="genesis-panel">
           <Field label="Beginning" placeholder="how does the first session open? Who is already bound to whom?"
                  tip="Open with relationship, not with a quest-giver. A first scene where two PCs already share history gives you a campaign instead of a video game."
                  prompts={PROMPTS.beginning}
@@ -378,7 +375,7 @@ export default function CampaignGenesis() {
               <Sparkles className="w-4 h-4"/> {seeding ? "Summoning…" : "Seed Knowledge Web"}
             </button>
           </div>
-        </Panel>
+        </div>
       )}
 
       {phase === 7 && (
