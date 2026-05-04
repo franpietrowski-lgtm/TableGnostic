@@ -642,12 +642,21 @@ function CustomTab({ campId, customs, onRefresh, systemId }) {
   // Cypher uses Descriptor / Focus / Ability / Cypher / Artifact / House Rule.
   // Anime 5E hybrid offers both Tri-Stat and 5E shapes.
   const KIND_OPTIONS = (() => {
+    // V6.25 — Universal homebrew baseline: Race / Class / Size / Stat
+    // are structural kinds every system can extend (BESM Extras style).
+    const HOMEBREW_BASE = [
+      { value: "race",  label: "Homebrew Race" },
+      { value: "class", label: "Homebrew Class" },
+      { value: "size",  label: "Homebrew Size" },
+      { value: "stat",  label: "Homebrew Stat" },
+    ];
     if (systemId === "dnd-5e") {
       return [
         { value: "feature",   label: "Class feature" },
         { value: "trait",     label: "Race trait" },
         { value: "feat",      label: "Feat" },
         { value: "house",     label: "House rule" },
+        ...HOMEBREW_BASE,
       ];
     }
     if (systemId === "cypher") {
@@ -658,6 +667,7 @@ function CustomTab({ campId, customs, onRefresh, systemId }) {
         { value: "cypher",     label: "Cypher (one-shot)" },
         { value: "artifact",   label: "Artifact" },
         { value: "house",      label: "House rule" },
+        ...HOMEBREW_BASE,
       ];
     }
     if (systemId === "anime-5e") {
@@ -668,6 +678,7 @@ function CustomTab({ campId, customs, onRefresh, systemId }) {
         { value: "feature",   label: "Class feature" },
         { value: "feat",      label: "Feat" },
         { value: "house",     label: "House rule" },
+        ...HOMEBREW_BASE,
       ];
     }
     // BESM 4E default
@@ -675,6 +686,7 @@ function CustomTab({ campId, customs, onRefresh, systemId }) {
       { value: "attribute", label: "Attribute" },
       { value: "defect",    label: "Defect" },
       { value: "skill",     label: "Skill" },
+      ...HOMEBREW_BASE,
     ];
   })();
   const isBesmShape = !systemId || systemId === "besm-4e";

@@ -63,21 +63,47 @@ export default function ReferencePicker({
   }, [systemId, kinds.join(",")]);
 
   // Load campaign-scoped custom reference entries (homebrew / GM additions).
+  // V6.25 — Universal Power Bundle Architecture: when the picker is
+  // surfacing spells, we ALSO include `power_bundle` and `power_pack`
+  // custom entries from the Reference Editor (they ARE spell-mimic
+  // mechanics with CP cost). Fixed URL `/references` → `/reference`
+  // (the backend endpoint is singular) which was silently 404ing.
   useEffect(() => {
     if (!campaignId) { setCustom([]); return; }
     let cancelled = false;
     (async () => {
       try {
-        const { data } = await api.get(`/campaigns/${campaignId}/references`);
+        const { data } = await api.get(`/campaigns/${campaignId}/reference`);
         const all = (data?.entries || data || []).filter((e) => {
           const k = (e.kind || "").toLowerCase();
           if (kinds.includes("weapons") && (k === "weapons" || k === "weapon")) return true;
           if (kinds.includes("armor") && k === "armor") return true;
           if (kinds.includes("items") && (k === "items" || k === "item")) return true;
-          if (kinds.includes("spells") && (k === "spells" || k === "spell")) return true;
+          if (kinds.includes("spells") && (
+            k === "spells" || k === "spell"
+            || k === "power_bundle" || k === "power_pack")) return true;
           return false;
         });
-        if (!cancelled) setCustom(all);
+        // Normalize power bundles into a spell-ish shape so the dropdown
+        // + chip displays pick up the invocation / cost / charges fields.
+        const normalised = all.map((e) => {
+          const k = (e.kind || "").toLowerCase();
+          if (k === "power_bundle" || k === "power_pack") {
+            const f = e.fields || {};
+            return {
+              ...e,
+              level: f.source_spell_level ?? e.level ?? null,
+              school: f.school || e.school || "Power Bundle",
+              cost: e.cost || (f.cost != null ? `${f.cost} CP` : ""),
+              effect: f.description || e.summary || "",
+              form: f.invocation || "",
+              damage: f.energy_cost ? `EP ${f.energy_cost}` : "",
+              range: f.charges_max ? `${f.charges_max}×` : "",
+            };
+          }
+          return e;
+        });
+        if (!cancelled) setCustom(normalised);
       } catch { /* optional */ }
     })();
     return () => { cancelled = true; };

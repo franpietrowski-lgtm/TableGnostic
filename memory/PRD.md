@@ -14,6 +14,44 @@
 
 ## 2. Implemented (cumulative, condensed)
 
+### V6.25 — Universal Power Bundle Architecture + Genesis split + Custom Rules cleanup (2026-02-04)
+
+User punch-list from the last in-progress item of V6.24: PowerBundles as universal mechanic currency, Genesis materializer splitting, Custom Rules tab dedupe. All three landed in one pass.
+
+**🔴 P0 — Universal Power Bundle Architecture** (`ReferenceEditor.jsx`, `PowerBundleEditor.jsx`, `ReferencePicker.jsx`)
+- `PowerBundleEditor` now mounts on **Custom Attributes & Skills** in addition to Power Packs / Power Bundles. Adds an "Attached Modifiers" header when in attribute/skill mode so the composer reads as "base mechanic + ranked limiters/defects/enhancements" rather than "multi-component bundle".
+- New optional `size_modifier` (numeric rank) + `size_note` fields surface for attribute / skill rows, so a GM can author "Large Aura Reach" or "Small Familiar" mechanics that propagate to the character sheet.
+- `ReferencePicker` URL bug fixed: was calling the non-existent `/campaigns/{cid}/references` (plural) → corrected to `/campaigns/{cid}/reference`. Previously 404'd silently and NO homebrew references ever loaded into player pickers.
+- Spell picker now also surfaces custom `power_bundle` / `power_pack` entries (normalised into spell-ish shape: `level`, `school`, `cost`, `effect`, `form`). Anime 5E custom spells authored as power bundles now appear in the DnD/Anime 5E builder's Spells Known picker.
+- Tests: `test_v625_universal_bundle.py` (4/4) — bundle-cost estimation with attribute+limiter and defect refund, custom attribute round-trip with size_modifier + components, custom power_bundle visible to spell picker contract.
+
+**🟧 P1 — Genesis materializer content parsing** (`campaigns.py`, `core/models.py`)
+- `POST /campaigns/{cid}/genesis/seed-nodes` no longer glues nemesis motive/resources/weakness into a monolithic `content` blob. Nemesis now seeds as **four distinct linked codex nodes**:
+  - `npc` node (name + type)
+  - `lore` node — "{nemesis} — Motive" (linked with `drives`)
+  - `faction` node — "{nemesis} — Resources" (linked with `commands`)
+  - `lore` node — "{nemesis} — Weakness" (linked with `vulnerable-to`)
+- GenesisIn model extended with optional `locations[]`, `biomes[]`, `factions[]`, `motives[]` buckets (shape `{name, summary, tags?}`). Seeding fans each entry out to its own node type (location / location+tag=biome / faction / lore). World Tree auto-classifier picks them up immediately.
+- Tests: `test_v625_genesis_split.py` — nemesis split (4 distinct nodes with correct type differentiation), locations/biomes/factions/motives fan-out (5 nodes with correct typing and tag).
+
+**🟧 P1 — Custom Rules tab cleanup + homebrew kinds** (`CampaignDetail.jsx`, `ReferenceEditor.jsx`, `core/models.py`)
+- `custom` kind **removed** from the Atelier Reference Editor (strips from `KIND_LABELS`, `SYSTEM_KIND_LABELS`, `KIND_GROUPS` items_rules, `SYSTEM_KIND_ORDER` across all 4 systems). Custom Rules now live exclusively on the Campaign page's dedicated tab — no more duplicate surfaces.
+- `CustomAttributeIn.kind` enum **expanded** from `attribute | defect | skill` (which silently 422'd every other frontend submission) to accept every kind the system-aware UI surfaces: `feature`, `trait`, `feat`, `house`, `descriptor`, `focus`, `ability`, `cypher`, `artifact`, plus the new BESM Extras-style homebrew structural kinds `race`, `class`, `size`, `stat`.
+- CampaignDetail `CustomTab` KIND_OPTIONS appends a Homebrew block (Race / Class / Size / Stat) across all 4 systems.
+- Tests: `test_v625_genesis_split.py::test_custom_rules_accepts_homebrew_kinds` — parametrized 6× over (race / class / size / stat / feature / house).
+
+**Testing**
+- 12/12 new V6.25 tests pass (4 universal-bundle + 8 genesis-split + homebrew kinds).
+- All 18 of the V6.23-V6.25 targeted regression suites pass (test_v625_universal_bundle, test_v625_genesis_split, test_v624_folio_patch_infusions, test_v623_pin_dp_gate, test_v6231_inventory_render = 32 pass total, plus V6.22 had 3 pre-existing fixture failures on a stale hardcoded Evereantha ID — unrelated to this work).
+- Lint clean: ReferenceEditor.jsx, PowerBundleEditor.jsx, ReferencePicker.jsx, CampaignDetail.jsx, routes/campaigns.py.
+
+**Deferred to next session**
+- Campaign description markdown rendering + collapsible toggle + edit-when-closed (P2, not blocking).
+- Cut B — XP/CP marketplace + chat hot-keys (`/cast`, `/use bundle`, `/spend xp`) + GM-toggle for cross-system XP→inventory marketplace (P1).
+- Mobile responsiveness sweep (P2).
+- Push-to-talk audio capture for session recaps (P3).
+- Wire custom_attributes (homebrew Race/Class/Size/Stat) into character-sheet validation & display (today they persist but don't yet gate sheet math).
+
 ### V6.24 — Sheet correctness pack (equip + spell-prep + infusions + Idol armor) (2026-05-03)
 
 User punch-list of four sheet-correctness bugs + one missing UX surface, all fixed:

@@ -10,6 +10,20 @@ function PowerBundleEditor({ row, onChange }) {
   const [estimate, setEstimate] = React.useState(null);
   const [err, setErr] = React.useState("");
 
+  // V6.25 — Universal Power Bundle Architecture: this editor also mounts
+  // on Custom Attributes / Skills so modifiers can be attached. Re-label
+  // the header in that context ("Attached Modifiers") since the list no
+  // longer represents a multi-component bundle — it's ONE base mechanic
+  // plus ranked enhancements / limiters / defects.
+  const isAttached = (row.kind === "attribute" || row.kind === "skill");
+  const headerLabel = isAttached ? "Attached Modifiers" : "Bundle Components";
+  const helperText = isAttached
+    ? "Attach limiters / defects / enhancements / size mods to this base "
+      + "mechanic. The CP math flows straight to the character sheet."
+    : "Each component contributes to the bundle's net CP cost — use this "
+      + "to keep \"Fireball-like\" bundles balanced against equivalent "
+      + "D&D spell slots.";
+
   React.useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -36,10 +50,9 @@ function PowerBundleEditor({ row, onChange }) {
     <div className="border border-gold/20 rounded-sm p-3 bg-gold/5 space-y-2"
          data-testid="reference-bundle-editor">
       <div className="flex items-baseline justify-between flex-wrap gap-2">
-        <div className="label-ref">Bundle Components</div>
+        <div className="label-ref">{headerLabel}</div>
         <div className="text-[10px] text-mist italic">
-          Each component contributes to the bundle's net CP cost — use this to keep
-          "Fireball-like" bundles balanced against equivalent D&D spell slots.
+          {helperText}
         </div>
       </div>
       {comps.length === 0 && (

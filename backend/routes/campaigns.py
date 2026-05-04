@@ -393,7 +393,16 @@ async def update_genesis(cid: str, body: GenesisIn,
 
 @router.post("/campaigns/{cid}/genesis/seed-nodes")
 async def seed_nodes_from_genesis(cid: str, user: dict = Depends(get_current_user)):
-    """Convert genesis seed_npcs / nemesis / adventures into gm_only knowledge nodes."""
+    """Convert genesis seed_npcs / nemesis / adventures / locations /
+    biomes / factions / motives into gm_only knowledge nodes.
+
+    V6.25 — Nemesis sub-fields (motive / resources / weakness) now seed
+    as distinct linked lore / faction / lore nodes instead of being glued
+    into a single monolithic content blob. Discrete seed buckets
+    (locations, biomes, factions, motives) each fan out to one codex
+    node per entry. The World Tree auto-classifier picks them up by
+    `type` on its next fetch.
+    """
     camp = await db.campaigns.find_one({"id": cid}, {"_id": 0})
     if not camp or camp["gm_id"] != user["id"]:
         raise HTTPException(403, "Only GM can seed")
@@ -401,44 +410,104 @@ async def seed_nodes_from_genesis(cid: str, user: dict = Depends(get_current_use
     if not g:
         raise HTTPException(404, "No genesis")
     created = 0
+    now = now_iso()
+    author = {"author_id": user["id"], "author_name": user["name"]}
+
+    async def _insert(node: dict) -> str:
+        node.setdefault("id", new_id())
+        node.setdefault("campaign_id", cid)
+        node.setdefault("visibility", "gm_only")
+        node.setdefault("revealed_to", [])
+        node.setdefault("links", [])
+        node.setdefault("tags", [])
+        node.setdefault("created_at", now)
+        node.update(author)
+        await db.nodes.insert_one(node)
+        return node["id"]
+
+    # Nemesis → one NPC node + discrete lore/faction sub-nodes for the
+    # motive / resources / weakness so the World Tree's Population &
+    # History pillars each get a distinct entry.
+    nem_id = None
     if g.get("nemesis_name"):
-        await db.nodes.insert_one({
-            "id": new_id(), "campaign_id": cid, "type": "npc",
+        nem_id = await _insert({
+            "type": "npc",
             "title": g["nemesis_name"],
-            "content": (f"Nemesis · {g.get('nemesis_type','')}\n"
-                        f"Motive: {g.get('nemesis_motive','')}\n"
-                        f"Resources: {g.get('nemesis_resources','')}\n"
-                        f"Weakness: {g.get('nemesis_weakness','')}"),
-            "tags": ["nemesis"], "visibility": "gm_only", "revealed_to": [],
-            "links": [], "author_id": user["id"], "author_name": user["name"],
-            "created_at": now_iso(),
+            "content": f"Nemesis · {g.get('nemesis_type','')}".strip(" ·"),
+            "tags": ["nemesis"],
         })
         created += 1
+        if g.get("nemesis_motive"):
+            await _insert({
+                "type": "lore",
+                "title": f"{g['nemesis_name']} — Motive",
+                "content": g["nemesis_motive"],
+                "tags": ["nemesis", "motive"],
+                "links": [{"target_id": nem_id, "relationship_type": "drives"}],
+            })
+            created += 1
+        if g.get("nemesis_resources"):
+            await _insert({
+                "type": "faction",
+                "title": f"{g['nemesis_name']} — Resources",
+                "content": g["nemesis_resources"],
+                "tags": ["nemesis", "resources"],
+                "links": [{"target_id": nem_id, "relationship_type": "commands"}],
+            })
+            created += 1
+        if g.get("nemesis_weakness"):
+            await _insert({
+                "type": "lore",
+                "title": f"{g['nemesis_name']} — Weakness",
+                "content": g["nemesis_weakness"],
+                "tags": ["nemesis", "weakness"],
+                "links": [{"target_id": nem_id, "relationship_type": "vulnerable-to"}],
+            })
+            created += 1
+
+    # Supporting cast — one npc node per seed entry.
     for npc in g.get("seed_npcs", []) or []:
         if not npc.get("name"):
             continue
-        await db.nodes.insert_one({
-            "id": new_id(), "campaign_id": cid, "type": "npc",
+        await _insert({
+            "type": "npc",
             "title": npc["name"],
-            "content": f"{npc.get('role','')}\n\n{npc.get('note','')}",
+            "content": f"{npc.get('role','')}\n\n{npc.get('note','')}".strip(),
             "tags": [npc.get("role", "").lower()] if npc.get("role") else [],
-            "visibility": "gm_only", "revealed_to": [], "links": [],
-            "author_id": user["id"], "author_name": user["name"],
-            "created_at": now_iso(),
         })
         created += 1
+
+    # Adventures — one quest node per entry.
     for adv in g.get("adventures", []) or []:
         if not adv.get("title"):
             continue
-        await db.nodes.insert_one({
-            "id": new_id(), "campaign_id": cid, "type": "quest",
+        await _insert({
+            "type": "quest",
             "title": adv["title"],
-            "content": (f"Hook: {adv.get('hook','')}\nStakes: {adv.get('stakes','')}\n"
-                        f"Outcome: {adv.get('outcome','')}"),
+            "content": (f"Hook: {adv.get('hook','')}\n"
+                         f"Stakes: {adv.get('stakes','')}\n"
+                         f"Outcome: {adv.get('outcome','')}"),
             "tags": [adv.get("kind", "").lower()] if adv.get("kind") else [],
-            "visibility": "gm_only", "revealed_to": [], "links": [],
-            "author_id": user["id"], "author_name": user["name"],
-            "created_at": now_iso(),
         })
         created += 1
+
+    # V6.25 — Discrete Genesis buckets → one codex node apiece.
+    for bucket, node_type, tag in (
+        ("locations", "location", "location"),
+        ("biomes", "location", "biome"),
+        ("factions", "faction", "faction"),
+        ("motives", "lore", "motive"),
+    ):
+        for entry in g.get(bucket, []) or []:
+            title = (entry.get("name") or entry.get("title") or "").strip()
+            if not title:
+                continue
+            await _insert({
+                "type": node_type,
+                "title": title,
+                "content": entry.get("summary") or entry.get("note") or "",
+                "tags": [tag] + [t for t in (entry.get("tags") or []) if t],
+            })
+            created += 1
+
     return {"ok": True, "nodes_created": created}

@@ -18,7 +18,7 @@ import ConvertReferenceButton from "./ConvertReferenceButton";
  */
 const KIND_LABELS = {
   weapon: "Weapons", armor: "Armor", item: "Items",
-  companion: "Companions", custom: "Custom Rules",
+  companion: "Companions",
   attribute: "Attributes", skill: "Skills", defect: "Defects",
   // V6.3 additions — expanded cross-system authorable kinds
   enhancement: "Enhancements",
@@ -37,6 +37,10 @@ const KIND_LABELS = {
   focus: "Foci",
   type: "Types",
 };
+// V6.25 — `custom` kind removed from the Atelier Reference Editor.
+// Custom / House Rules now live exclusively in the Campaign page's
+// Custom Rules tab (CampaignDetail.CustomTab) to avoid the surface
+// redundancy and deepen its homebrew Race/Class/Size/Stat wiring.
 // System-aware label & ordering overrides. The backend kind enum stays the
 // same (8 universal kinds), but we re-label them per active system so the
 // GM sees rule-set-native vocabulary instead of always-Tri-Stat headings.
@@ -52,7 +56,6 @@ const SYSTEM_KIND_LABELS = {
   "cypher": {
     weapon: "Weapons", armor: "Armor", item: "Items / Equipment",
     companion: "Foci",          // Cypher characters PICK a focus, not a companion
-    custom: "GM Intrusions / House Rules",
     attribute: "Types",          // The 6 Cypher Types (Warrior / Adept / …)
     skill: "Skills (Trained)",
     defect: "Cyphers",          // Single-use mechanic items
@@ -60,20 +63,18 @@ const SYSTEM_KIND_LABELS = {
   "dnd-5e": {
     weapon: "Weapons", armor: "Armor", item: "Adventuring Gear / Magic Items",
     companion: "Followers / Mounts",
-    custom: "House Rules",
     attribute: "Class Features", // Mechanical features players can select
     skill: "Skills", defect: "Drawbacks / Backgrounds",
   },
   "anime-5e": {
     weapon: "Weapons", armor: "Armor", item: "Items / Cards",
     companion: "Companions / Mounts",
-    custom: "House Rules",
     attribute: "Tri-Stat Attributes",
     skill: "Skills", defect: "Defects",
   },
   "besm-4e": {
     weapon: "Weapons", armor: "Armor", item: "Items",
-    companion: "Companions", custom: "Custom Rules",
+    companion: "Companions",
     attribute: "Attributes", skill: "Skills", defect: "Defects",
   },
 };
@@ -91,7 +92,7 @@ const KIND_GROUPS = [
   { key: "cypher",         label: "Cypher",          color: "#3FAA62",
     kinds: ["type", "descriptor", "focus", "cypher_ability", "cypher_item", "artifact"] },
   { key: "items_rules",    label: "Items & Rules",   color: "#3F8FAA",
-    kinds: ["weapon", "armor", "item", "companion", "custom"] },
+    kinds: ["weapon", "armor", "item", "companion"] },
 ];
 // Resolve a kind to its group (for category-header styling on the Row).
 const GROUP_OF_KIND = {};
@@ -102,15 +103,15 @@ for (const g of KIND_GROUPS) for (const k of g.kinds) GROUP_OF_KIND[k] = g;
 const SYSTEM_KIND_ORDER = {
   "besm-4e": ["attribute", "skill", "defect", "enhancement", "limiter",
               "power_pack", "power_bundle", "weapon", "armor", "item",
-              "companion", "custom"],
+              "companion"],
   "anime-5e": ["class_feature", "race_trait", "background", "spell", "feat",
                "skill", "attribute", "defect", "enhancement", "limiter",
                "power_pack", "power_bundle", "weapon", "armor", "item",
-               "companion", "custom"],
+               "companion"],
   "dnd-5e": ["class_feature", "race_trait", "background", "spell", "feat",
-             "skill", "weapon", "armor", "item", "companion", "custom"],
+             "skill", "weapon", "armor", "item", "companion"],
   "cypher": ["type", "descriptor", "focus", "cypher_ability", "cypher_item",
-             "artifact", "skill", "weapon", "armor", "item", "custom"],
+             "artifact", "skill", "weapon", "armor", "item"],
 };
 // Kinds that flow back into the Character Builder's pickers — they expose
 // extra structured inputs (cost_per_level / points_per_rank / category) so
@@ -429,9 +430,35 @@ function Row({ row, onChange, onSave, onCancel, busy, systemId, editing, onEdit,
                    data-testid="reference-input-description"/>
           </div>
         )}
-        {/* V6.3 — Power Pack / Power Bundle composer with live CP estimate. */}
-        {(row.kind === "power_pack" || row.kind === "power_bundle") && (
-          <PowerBundleEditor row={row} onChange={onChange}/>
+        {/* V6.3 — Power Pack / Power Bundle composer with live CP estimate.
+            V6.25 — Universal Power Bundle Architecture: Custom Attributes &
+            Skills ALSO expose the composer so a GM can attach limiters /
+            defects / enhancements / size modifications directly to the base
+            mechanic. The same CP math feeds the character sheet. */}
+        {(row.kind === "power_pack" || row.kind === "power_bundle"
+          || row.kind === "attribute" || row.kind === "skill") && (
+          <>
+            {(row.kind === "attribute" || row.kind === "skill") && (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 border border-gold/15 rounded-sm p-2 bg-void/40"
+                   data-testid="reference-size-mod-row">
+                <input className="input" type="number" step="1"
+                       placeholder="Size modifier (ranks, optional)"
+                       title="BESM Size rank modification (e.g. +2 Large, -1 Small). Character sheet displays this next to the attribute."
+                       value={row.fields?.size_modifier ?? ""}
+                       onChange={(e) => onChange({ ...row,
+                         fields: { ...(row.fields || {}),
+                                   size_modifier: e.target.value === "" ? null : Number(e.target.value) } })}
+                       data-testid="reference-input-size-modifier"/>
+                <input className="input sm:col-span-2"
+                       placeholder="Size note (e.g. 'Large aura reaches 10 ft')"
+                       value={row.fields?.size_note || ""}
+                       onChange={(e) => onChange({ ...row,
+                         fields: { ...(row.fields || {}), size_note: e.target.value } })}
+                       data-testid="reference-input-size-note"/>
+              </div>
+            )}
+            <PowerBundleEditor row={row} onChange={onChange}/>
+          </>
         )}
         {!isBesm && PLAYABLE_KINDS.has(row.kind) && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 border border-gold/15 rounded-sm p-2 bg-gold/5"

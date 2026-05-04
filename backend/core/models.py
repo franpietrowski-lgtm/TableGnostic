@@ -415,7 +415,19 @@ class FinalizeIn(BaseModel):
 
 class CustomAttributeIn(BaseModel):
     campaign_id: str
-    kind: Literal["attribute", "defect", "skill"]
+    # V6.25 — Universal homebrew kinds. The frontend CampaignDetail
+    # "Custom Rules" tab surfaces system-aware option sets; backend
+    # accepts any of them so submissions don't silently 422.
+    kind: Literal[
+        # BESM / Anime 5E core
+        "attribute", "defect", "skill",
+        # D&D 5E / Anime 5E
+        "feature", "trait", "feat", "house",
+        # Cypher
+        "descriptor", "focus", "ability", "cypher", "artifact",
+        # V6.25 — homebrew structural kinds (BESM Extras style)
+        "race", "class", "size", "stat",
+    ]
     name: str
     cost_per_level: float = 1
     category: Optional[str] = None
@@ -441,6 +453,13 @@ class GenesisIn(BaseModel):
     master_acts: List[Dict[str, str]] = []
     adventures: List[Dict[str, str]] = []
     seed_npcs: List[Dict[str, str]] = []
+    # V6.25 — optional discrete seed buckets so the Genesis materializer
+    # can split Locations / Biomes / Factions / Motives into separate
+    # codex nodes. Structure: {name, summary, tags?}.
+    locations: List[Dict[str, str]] = []
+    biomes: List[Dict[str, str]] = []
+    factions: List[Dict[str, str]] = []
+    motives: List[Dict[str, str]] = []
     beginning: str = ""
     ending: str = ""
     phase_completed: int = 0
