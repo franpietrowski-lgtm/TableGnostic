@@ -72,7 +72,7 @@ export default function CampaignDetail() {
         <div className="max-w-2xl">
           <div className="label-ref">{camp.system} · {camp.power_level}</div>
           <h1 className="font-display text-4xl tracking-wide text-parchment mt-1">{camp.name}</h1>
-          <p className="text-mist mt-3 font-body leading-relaxed">{camp.description || "No description yet."}</p>
+          <CampaignDescription camp={camp} isGm={!!camp.is_gm} onSaved={load}/>
           <div className="flex flex-wrap gap-1 mt-3">
             {(camp.tags || []).map((t, i) => <span key={i} className="tag">{t}</span>)}
           </div>
@@ -901,6 +901,113 @@ function CanonPublishCard({ camp, onRefresh }) {
         </button>
         {err && <span className="text-ember text-[11px]" data-testid="canon-publish-error">{err}</span>}
       </div>
+    </div>
+  );
+}
+
+
+/** V6.25 — Campaign description card with markdown-lite rendering
+ *  (paragraphs, **bold**, *italic*), a collapse toggle, and GM inline
+ *  edit (works even on closed / archived campaigns — the edit surface
+ *  stays live as long as the viewer is the GM). */
+function renderMarkdownLite(text) {
+  if (!text) return null;
+  const lines = String(text).split(/\r?\n/);
+  const renderInline = (s) => {
+    const parts = [];
+    let rest = s;
+    let key = 0;
+    const pat = /(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`)/;
+    while (rest) {
+      const m = rest.match(pat);
+      if (!m) { parts.push(<span key={key++}>{rest}</span>); break; }
+      const idx = m.index;
+      if (idx > 0) parts.push(<span key={key++}>{rest.slice(0, idx)}</span>);
+      const tok = m[0];
+      if (tok.startsWith("**")) parts.push(<strong key={key++} className="text-parchment">{tok.slice(2, -2)}</strong>);
+      else if (tok.startsWith("*")) parts.push(<em key={key++}>{tok.slice(1, -1)}</em>);
+      else parts.push(<code key={key++} className="text-gold-bright bg-void/60 px-1 rounded-sm">{tok.slice(1, -1)}</code>);
+      rest = rest.slice(idx + tok.length);
+    }
+    return parts;
+  };
+  return lines.map((ln, i) => (
+    ln.trim() === ""
+      ? <div key={i} className="h-2"/>
+      : <p key={i} className="text-mist font-body leading-relaxed">{renderInline(ln)}</p>
+  ));
+}
+
+function CampaignDescription({ camp, isGm, onSaved }) {
+  const [collapsed, setCollapsed] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(camp.description || "");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const hasContent = !!(camp.description && camp.description.trim());
+
+  const save = async () => {
+    setBusy(true); setErr("");
+    try {
+      await api.put(`/campaigns/${camp.id}`, { ...camp, description: draft });
+      setEditing(false);
+      if (onSaved) await onSaved();
+    } catch (e) {
+      setErr(formatApiErrorDetail(e.response?.data?.detail) || e.message);
+    } finally { setBusy(false); }
+  };
+
+  if (editing) {
+    return (
+      <div className="mt-3 card-mystic p-3" data-testid="campaign-description-edit">
+        <textarea className="input min-h-[140px] font-body leading-relaxed"
+                   value={draft}
+                   onChange={(e) => setDraft(e.target.value)}
+                   placeholder="Campaign description. Supports **bold**, *italic*, `code`, and paragraph breaks."
+                   data-testid="campaign-description-textarea"/>
+        <div className="flex items-center gap-2 justify-end mt-2 flex-wrap">
+          {err && <span className="text-ember text-[11px]">{err}</span>}
+          <button onClick={() => { setEditing(false); setDraft(camp.description || ""); }}
+                  className="btn btn-ghost text-xs" data-testid="campaign-description-cancel">
+            Cancel
+          </button>
+          <button onClick={save} disabled={busy}
+                  className="btn btn-primary text-xs" data-testid="campaign-description-save">
+            <Save className="w-3 h-3"/> {busy ? "Saving…" : "Save"}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-3" data-testid="campaign-description">
+      <div className="flex items-center gap-2 mb-1">
+        <button onClick={() => setCollapsed((c) => !c)}
+                className="text-mist/70 hover:text-gold-bright flex items-center gap-1 text-[10px] font-ui uppercase tracking-widest"
+                data-testid="campaign-description-toggle"
+                title={collapsed ? "Show description" : "Hide description"}>
+          {collapsed
+            ? <ChevronRight className="w-3 h-3"/>
+            : <ChevronDown className="w-3 h-3"/>}
+          {collapsed ? "Show description" : "Description"}
+        </button>
+        {isGm && (
+          <button onClick={() => { setDraft(camp.description || ""); setEditing(true); }}
+                  className="text-mist/50 hover:text-gold-bright text-[10px] font-ui uppercase tracking-widest"
+                  data-testid="campaign-description-edit-btn"
+                  title="Edit description (GMs can edit anytime, even after the campaign is closed)">
+            ✎ Edit
+          </button>
+        )}
+      </div>
+      {!collapsed && (
+        <div data-testid="campaign-description-body">
+          {hasContent
+            ? renderMarkdownLite(camp.description)
+            : <p className="text-mist/60 font-body italic">No description yet.</p>}
+        </div>
+      )}
     </div>
   );
 }

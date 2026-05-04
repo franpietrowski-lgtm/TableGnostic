@@ -39,6 +39,9 @@ export function Dnd5eBuilder({ campaign, ref_, charId, hybridSupplement }) {
   const [ch, setCh] = useState(empty5e(campaign?.id));
   const [err, setErr] = useState("");
   const [refRows, setRefRows] = useState([]);
+  // V6.25 — pull campaign custom_attributes so homebrew Race / Class /
+  // Size entries surface in their respective dropdowns.
+  const [customs, setCustoms] = useState([]);
 
   useEffect(() => {
     if (charId) {
@@ -76,7 +79,14 @@ export function Dnd5eBuilder({ campaign, ref_, charId, hybridSupplement }) {
     api.get(`/campaigns/${campaign.id}/reference?kind=defect`)
       .then((r) => setRefRows(Array.isArray(r.data) ? r.data : []))
       .catch(() => {});
+    // V6.25 — homebrew race / class / size / stat (BESM Extras-style).
+    api.get(`/campaigns/${campaign.id}/custom`)
+      .then((r) => setCustoms(Array.isArray(r.data) ? r.data : []))
+      .catch(() => setCustoms([]));
   }, [campaign?.id]);
+
+  const homebrewRaces = customs.filter((c) => c.kind === "race");
+  const homebrewClasses = customs.filter((c) => c.kind === "class");
 
   if (!ch || !ref_) return <div className="p-10 text-mist">Summoning the forge…</div>;
   const s = ch.folio.dnd_state;
@@ -170,7 +180,18 @@ export function Dnd5eBuilder({ campaign, ref_, charId, hybridSupplement }) {
           <label className="label-ref">Class</label>
           <select className="select" value={s.class} onChange={(e) => setS({ class: e.target.value })}
                   data-testid="dnd-class">
-            {ref_.classes.map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}
+            <optgroup label="SRD 5.1 (CC-BY)">
+              {ref_.classes.map((c) => <option key={c.name} value={c.name}>{c.name}</option>)}
+            </optgroup>
+            {homebrewClasses.length > 0 && (
+              <optgroup label="Campaign Homebrew">
+                {homebrewClasses.map((c) => (
+                  <option key={c.id} value={c.name} data-testid={`dnd-class-homebrew-${c.id}`}>
+                    {c.name}
+                  </option>
+                ))}
+              </optgroup>
+            )}
           </select>
         </div>
         <div>
@@ -183,7 +204,18 @@ export function Dnd5eBuilder({ campaign, ref_, charId, hybridSupplement }) {
           <label className="label-ref">Race</label>
           <select className="select" value={s.race} onChange={(e) => setS({ race: e.target.value })}
                   data-testid="dnd-race">
-            {ref_.races.map((r) => <option key={r.name} value={r.name}>{r.name}</option>)}
+            <optgroup label="SRD 5.1 (CC-BY)">
+              {ref_.races.map((r) => <option key={r.name} value={r.name}>{r.name}</option>)}
+            </optgroup>
+            {homebrewRaces.length > 0 && (
+              <optgroup label="Campaign Homebrew">
+                {homebrewRaces.map((r) => (
+                  <option key={r.id} value={r.name} data-testid={`dnd-race-homebrew-${r.id}`}>
+                    {r.name}
+                  </option>
+                ))}
+              </optgroup>
+            )}
           </select>
         </div>
         <div>
@@ -239,6 +271,32 @@ export function Dnd5eBuilder({ campaign, ref_, charId, hybridSupplement }) {
           {race.traits && ` · traits: ${race.traits.join(", ")}`}
         </div>
       )}
+      {!race && homebrewRaces.find((r) => r.name === s.race) && (() => {
+        const hb = homebrewRaces.find((r) => r.name === s.race);
+        return (
+          <div className="card-mystic p-4 mt-2 text-[12px] text-parchment/85 leading-snug"
+               data-testid="dnd-race-homebrew-card">
+            <div className="label-ref mb-1 flex items-center gap-1.5">
+              <span className="text-gold-bright">Homebrew Race</span>
+              <span className="text-mist/60 normal-case tracking-normal">· {hb.category || "custom"}</span>
+            </div>
+            {hb.description_note || <span className="italic text-mist">No description provided by GM.</span>}
+          </div>
+        );
+      })()}
+      {!cls && homebrewClasses.find((c) => c.name === s.class) && (() => {
+        const hb = homebrewClasses.find((c) => c.name === s.class);
+        return (
+          <div className="card-mystic p-4 mt-2 text-[12px] text-parchment/85 leading-snug"
+               data-testid="dnd-class-homebrew-card">
+            <div className="label-ref mb-1 flex items-center gap-1.5">
+              <span className="text-gold-bright">Homebrew Class</span>
+              <span className="text-mist/60 normal-case tracking-normal">· {hb.category || "custom"}</span>
+            </div>
+            {hb.description_note || <span className="italic text-mist">No description provided by GM.</span>}
+          </div>
+        );
+      })()}
 
       {/* Ability scores */}
       <div className="card-mystic p-5 mt-4">

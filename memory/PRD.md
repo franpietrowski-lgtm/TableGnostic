@@ -14,6 +14,41 @@
 
 ## 2. Implemented (cumulative, condensed)
 
+### V6.25.1 — Campaign description polish + homebrew race/class wiring + V6.22 test fixture parameterisation (2026-02-04)
+
+User chose three follow-ups to V6.25:
+
+**🟡 P2 — Campaign description: markdown-lite + collapsible + inline GM edit** (`CampaignDetail.jsx`)
+- New `<CampaignDescription/>` component mounted on the campaign detail header. Replaces the read-only `<p>` blurb with a richer card:
+  - **Markdown-lite renderer** — paragraph breaks (double-newlines), `**bold**`, `*italic*`, `` `code` `` inline styling. No external library — inline regex tokenizer in `renderMarkdownLite()`.
+  - **Collapse toggle** (`ChevronDown` / `ChevronRight`) — hides the body while keeping the toggle row visible, giving players / GMs back screen real estate on long blurbs.
+  - **GM inline edit** — a small `✎ Edit` button visible only when `camp.is_gm` flips the card to a textarea + Save/Cancel row. Calls `PUT /api/campaigns/{cid}` with the merged campaign body + new description. Works regardless of the campaign's status (the user's "edit-when-closed" ask — there's no status gate).
+- Test: `test_campaign_description_round_trip_with_markdown` verifies the PUT preserves `\n\n` paragraph breaks and `**bold**` markers verbatim.
+
+**🟧 P1 — Homebrew Race / Class wired into D&D + Anime 5E builders** (`builders/Dnd5e.jsx`)
+- Builder now fetches `/api/campaigns/{cid}/custom` alongside the existing reference rows and filters by `kind === "race"` / `"class"`.
+- **Race dropdown** now ships a two-optgroup UI: `SRD 5.1 (CC-BY)` + `Campaign Homebrew` listing the GM-authored races.
+- **Class dropdown** gets the same treatment.
+- When a player picks a homebrew race/class, new `dnd-race-homebrew-card` / `dnd-class-homebrew-card` panels render the GM's description_note inline so the mechanical implications stay visible on the builder (sheet-math fallback to `cls?.hit_die || 8` and empty save/skill profs — narrative homebrew with safe fallbacks).
+- Test: `test_homebrew_race_class_surface_via_custom_endpoint` verifies the endpoint returns the right shape and `description_note` round-trips.
+
+**🔵 Refactor — V6.22 test fixture parameterisation** (`tests/test_v622_world_creation.py`)
+- Replaced the hardcoded `EVEREANTHA_CID = "2d31c253…"` constant with a dynamic `evereantha_cid` pytest fixture that scans `/api/campaigns` for the GM-owned Anime 5E campaign (preferring one named "Evereantha", falling back to any Anime 5E GM campaign). Cleanly skips dependent tests when nothing matches.
+- Loosened per-section count assertions on `test_creation_tree_evereantha` — the tree **shape** (presence of Population.Factions / Geography.Locations / History.Of the People pillars when `node_count ≥ 20`) is now the contract; exact counts were fragile across DB seed variants.
+- 10/10 previously-flaky V6.22 tests now pass stably.
+
+**Testing**
+- 24/24 V6.25 + V6.22 + V6.25.1 tests pass (2 new desc/homebrew + 4 universal bundle + 8 genesis split + 10 V6.22 fixture-parameterised).
+- Lint clean across CampaignDetail.jsx, builders/Dnd5e.jsx, routes/campaigns.py.
+- Smoke screenshot verified `campaign-description-toggle`, `campaign-description-edit-btn`, `campaign-description-body` all render on a live campaign detail page.
+
+**Deferred**
+- Full sheet-math gating for homebrew Race/Class (today they render narratively; a custom race doesn't yet push ASI bonuses into the ability-score calculator, a custom class doesn't yet drive proficiency or spell-slot tables). Follow-up: add an `effects` object to `CustomAttributeIn` so GMs can declare numeric impacts.
+- BESM homebrew Size → character-sheet size-category override (today it's a catalog entry but the BESM size chooser doesn't pick it up yet).
+- Cut B — XP/CP marketplace + chat hot-keys (`/cast`, `/use bundle`, `/spend xp`) + per-campaign GM toggle.
+- Mobile responsiveness sweep (P2).
+- Push-to-talk audio capture for session recaps (P3).
+
 ### V6.25 — Universal Power Bundle Architecture + Genesis split + Custom Rules cleanup (2026-02-04)
 
 User punch-list from the last in-progress item of V6.24: PowerBundles as universal mechanic currency, Genesis materializer splitting, Custom Rules tab dedupe. All three landed in one pass.
