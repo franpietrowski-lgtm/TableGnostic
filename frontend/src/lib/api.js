@@ -1,5 +1,5 @@
 import axios from "axios";
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useState, useMemo, useCallback } from "react";
 
 const BACKEND = process.env.REACT_APP_BACKEND_URL;
 export const API = `${BACKEND}/api`;
@@ -48,30 +48,39 @@ export function AuthProvider({ children }) {
     })();
   }, []);
 
-  const login = async (email, password) => {
+  const login = useCallback(async (email, password) => {
     const { data } = await api.post("/auth/login", { email, password });
     if (data.access_token) localStorage.setItem("tg_token", data.access_token);
     setUser(data);
     return data;
-  };
-  const register = async (email, password, name, role = "player") => {
+  }, []);
+  const register = useCallback(async (email, password, name, role = "player") => {
     const { data } = await api.post("/auth/register", { email, password, name, role });
     if (data.access_token) localStorage.setItem("tg_token", data.access_token);
     setUser(data);
     return data;
-  };
-  const logout = async () => {
-    try { await api.post("/auth/logout"); } catch {}
+  }, []);
+  const logout = useCallback(async () => {
+    try { await api.post("/auth/logout"); } catch (_) { /* swallow */ }
     localStorage.removeItem("tg_token");
     setUser(false);
-  };
-  const updateProfile = async (patch) => {
+  }, []);
+  const updateProfile = useCallback(async (patch) => {
     const { data } = await api.patch("/auth/me", patch);
     setUser(data);
     return data;
-  };
+  }, []);
+  // V6.24 — memoize the context value. The previous inline object
+  // literal created a fresh identity on every AuthProvider render
+  // and rippled remounts through deeply-wrapped consumers (e.g.,
+  // dynamic form fields), contributing to input focus loss when any
+  // API call failed (deployment edge-case). Stable identity fixes it.
+  const ctxValue = useMemo(
+    () => ({ user, login, register, logout, loading, updateProfile }),
+    [user, loading, login, register, logout, updateProfile],
+  );
   return (
-    <AuthCtx.Provider value={{ user, login, register, logout, loading, updateProfile }}>
+    <AuthCtx.Provider value={ctxValue}>
       {children}
     </AuthCtx.Provider>
   );
