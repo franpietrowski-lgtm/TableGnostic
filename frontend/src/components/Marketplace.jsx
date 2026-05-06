@@ -16,7 +16,7 @@
  */
 import React, { useEffect, useState, useMemo } from "react";
 import { api } from "../lib/api";
-import { Search, Download, Sparkles, X, Filter, Globe, Lock, DollarSign } from "lucide-react";
+import { Search, Download, Sparkles, X, Filter, Globe, Lock, DollarSign, Bell, BellPlus } from "lucide-react";
 
 const SYSTEM_LABELS = {
   "besm-4e": "BESM 4E",
@@ -50,6 +50,11 @@ export default function Marketplace() {
   const [skip, setSkip] = useState(0);
   const [detail, setDetail] = useState(null);
   const [campaigns, setCampaigns] = useState([]);
+  // V6.25.6 — subscription digest. Polled lazily on mount; the bell
+  // shows total_new count and opens an inline drawer.
+  const [digest, setDigest] = useState({ buckets: [], total_new: 0 });
+  const [showDigest, setShowDigest] = useState(false);
+  const [subs, setSubs] = useState([]);
 
   const fetchRows = async () => {
     setBusy(true); setErr("");
@@ -74,6 +79,35 @@ export default function Marketplace() {
       (r.data || []).filter((c) => c.is_gm))).catch(() => setCampaigns([]));
   }, []);
 
+  // V6.25.6 — load subscriptions + digest on mount.
+  const refreshDigest = async () => {
+    try {
+      const [d, s] = await Promise.all([
+        api.get("/marketplace-digest"),
+        api.get("/marketplace-subscriptions"),
+      ]);
+      setDigest(d.data || { buckets: [], total_new: 0 });
+      setSubs(s.data || []);
+    } catch { /* optional */ }
+  };
+  useEffect(() => { refreshDigest(); }, []);
+
+  const subscribeFromFilter = async () => {
+    if (!filter.kind && !filter.system) return;
+    await api.post("/marketplace-subscriptions",
+      { kind: filter.kind || null, system: filter.system || null });
+    await refreshDigest();
+  };
+  const removeSub = async (sid) => {
+    await api.delete(`/marketplace-subscriptions/${sid}`);
+    await refreshDigest();
+  };
+  const markDigestSeen = async () => {
+    await api.get("/marketplace-digest?mark_seen=true").catch(() => {});
+    await refreshDigest();
+    setShowDigest(false);
+  };
+
   // Manual debounce on q so we don't hammer the search endpoint.
   useEffect(() => {
     const t = setTimeout(() => fetchRows(), 350);
@@ -97,8 +131,24 @@ export default function Marketplace() {
             never mutate your copy.
           </p>
         </div>
-        <div className="text-[11px] text-mist/70 font-ui uppercase tracking-widest">
-          {busy ? "Browsing…" : `${total} listing${total === 1 ? "" : "s"}`}
+        <div className="flex items-center gap-3">
+          <button onClick={() => setShowDigest(true)}
+                  className="relative text-mist hover:text-gold-bright p-2"
+                  title="What's new in your watch list"
+                  data-testid="marketplace-bell-btn"
+                  aria-label="Watch list digest">
+            <Bell className="w-5 h-5"/>
+            {digest.total_new > 0 && (
+              <span className="absolute -top-0.5 -right-0.5 bg-arcane text-parchment text-[9px]
+                                rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center font-ui"
+                    data-testid="marketplace-bell-badge">
+                {digest.total_new > 99 ? "99+" : digest.total_new}
+              </span>
+            )}
+          </button>
+          <div className="text-[11px] text-mist/70 font-ui uppercase tracking-widest">
+            {busy ? "Browsing…" : `${total} listing${total === 1 ? "" : "s"}`}
+          </div>
         </div>
       </div>
 
@@ -132,6 +182,19 @@ export default function Marketplace() {
           <option value="private">My private</option>
         </select>
       </div>
+
+      {/* Watch-this-filter quick action */}
+      {(filter.kind || filter.system) && (
+        <div className="mb-3 flex items-center justify-end">
+          <button onClick={subscribeFromFilter} className="btn btn-ghost text-xs"
+                  data-testid="marketplace-watch-btn"
+                  title="Subscribe so you get a digest when new listings match this filter.">
+            <BellPlus className="w-3 h-3"/> Watch
+            {filter.kind ? ` ${KIND_LABELS[filter.kind] || filter.kind}` : ""}
+            {filter.system ? ` · ${SYSTEM_LABELS[filter.system] || filter.system}` : ""}
+          </button>
+        </div>
+      )}
 
       {err && <div className="card-mystic p-3 mb-3 border-ember/40 text-ember text-sm" data-testid="marketplace-error">{err}</div>}
       {!busy && rows.length === 0 && (
@@ -167,6 +230,74 @@ export default function Marketplace() {
         <ListingDetailModal listing={detail} campaigns={campaigns}
                               onClose={() => setDetail(null)}
                               onAfter={fetchRows}/>
+      )}
+
+      {showDigest && (
+        <div className="fixed inset-0 z-50 bg-void/80 flex items-start justify-end p-3 sm:p-6"
+             onClick={() => setShowDigest(false)}
+             data-testid="marketplace-digest-drawer">
+          <div className="card-mystic p-5 w-full sm:w-96 max-h-[88vh] overflow-y-auto"
+               onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <div className="label-ref">Watch list</div>
+                <div className="font-display text-xl text-parchment mt-1">
+                  {digest.total_new > 0 ? `${digest.total_new} new` : "All caught up"}
+                </div>
+              </div>
+              <button onClick={() => setShowDigest(false)} className="text-mist hover:text-gold-bright p-1"
+                      aria-label="Close" data-testid="marketplace-digest-close">
+                <X className="w-4 h-4"/>
+              </button>
+            </div>
+            {subs.length === 0 && (
+              <div className="text-[11px] text-mist italic" data-testid="marketplace-digest-empty">
+                You aren't watching any filters yet. Pick a kind or system above
+                and tap <BellPlus className="w-3 h-3 inline"/> Watch.
+              </div>
+            )}
+            {digest.buckets.map((b) => (
+              <div key={b.subscription_id} className="border-t border-gold/10 pt-2 mt-2"
+                   data-testid={`marketplace-digest-bucket-${b.subscription_id}`}>
+                <div className="flex items-center justify-between">
+                  <div className="text-[11px] font-ui uppercase tracking-widest text-gold/60">
+                    {b.label || `${b.kind || "any"} · ${b.system || "any"}`}
+                  </div>
+                  <button onClick={() => removeSub(b.subscription_id)}
+                          className="text-mist/40 hover:text-ember p-0.5"
+                          title="Stop watching"
+                          data-testid={`marketplace-digest-unsub-${b.subscription_id}`}>
+                    <X className="w-3 h-3"/>
+                  </button>
+                </div>
+                {b.new_count === 0 ? (
+                  <div className="text-[10px] text-mist/60 italic mt-1">No new listings.</div>
+                ) : (
+                  <ul className="mt-1.5 space-y-1">
+                    {b.preview.map((row) => (
+                      <li key={row.id}>
+                        <button onClick={() => { setDetail(row); setShowDigest(false); }}
+                                className="text-left w-full py-1 px-1.5 rounded-sm hover:bg-gold/5 transition-colors"
+                                data-testid={`marketplace-digest-item-${row.id}`}>
+                          <div className="text-parchment text-sm leading-snug">{row.name}</div>
+                          <div className="text-[10px] text-mist/70 font-ui uppercase tracking-widest">
+                            {KIND_LABELS[row.kind] || row.kind} · {SYSTEM_LABELS[row.source_system_id] || row.source_system_id}
+                          </div>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ))}
+            <div className="mt-4 flex justify-end gap-2">
+              <button onClick={markDigestSeen} className="btn btn-primary text-xs"
+                      data-testid="marketplace-digest-mark-seen">
+                Mark all seen
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

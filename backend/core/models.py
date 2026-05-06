@@ -79,6 +79,11 @@ class CampaignIn(BaseModel):
     character_point_max: int = 0
     # Hard cap on the Level of any single Attribute (0 = no cap)
     max_per_attribute_rank: int = 0
+    # V6.25.6 — Cut B chat hot-key toggles. Defaults to ON so the
+    # /cast, /use bundle, /spend xp commands work out of the box.
+    # GM can flip this off if their table prefers a strict no-meta
+    # PBP feel.
+    xp_marketplace: bool = True
     # ---------- V3.5 — Campaign Benchmarks ----------
     genre: str = ""           # "High Fantasy", "Cyberpunk", etc.
     time_period: str = ""     # "Modern", "Medieval", etc.

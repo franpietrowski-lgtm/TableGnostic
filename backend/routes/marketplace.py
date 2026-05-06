@@ -116,7 +116,7 @@ async def publish_listing(body: MarketplacePublishIn,
             "effects": src.get("effects", {}) or {},
         }
     elif body.source_kind == "reference":
-        src = await db.references.find_one(
+        src = await db.campaign_reference.find_one(
             {"id": body.source_id, "campaign_id": body.source_campaign_id},
             {"_id": 0})
         if not src:
@@ -267,7 +267,7 @@ async def clone_listing(lid: str, body: MarketplaceCloneIn,
             "fields": snap.get("fields", {}) or {},
             "_marketplace_listing_id": lid,
         }
-        await db.references.insert_one(new_doc)
+        await db.campaign_reference.insert_one(new_doc)
     else:
         raise HTTPException(400, f"Unknown snapshot kind: {kind}")
 
@@ -290,3 +290,91 @@ async def unpublish_listing(lid: str, user: dict = Depends(get_current_user)):
         raise HTTPException(403, "Only the listing's author can unpublish.")
     await db.marketplace_listings.delete_one({"id": lid})
     return {"ok": True}
+
+
+# ─── Subscriptions / Watch List (V6.25.6) ─────────────────────────────
+#
+# Lightweight digest: a user subscribes to a (kind, system) filter and
+# can poll `GET /marketplace/digest` to fetch listings published since
+# their last_check timestamp matching any of their filters. Front-end
+# can surface a "N new" badge on the Market nav link.
+
+
+class SubscriptionIn(BaseModel):
+    kind: Optional[str] = None
+    system: Optional[str] = None
+    label: str = Field(default="", max_length=80)
+
+
+@router.get("/marketplace-subscriptions")
+async def list_subscriptions(user: dict = Depends(get_current_user)):
+    rows = await db.marketplace_subscriptions.find(
+        {"user_id": user["id"]}, {"_id": 0}).to_list(length=None)
+    return rows
+
+
+@router.post("/marketplace-subscriptions")
+async def create_subscription(body: SubscriptionIn,
+                                user: dict = Depends(get_current_user)):
+    if not body.kind and not body.system:
+        raise HTTPException(400,
+            "A subscription must filter by at least one of kind or system.")
+    doc = {
+        "id": new_id(),
+        "user_id": user["id"],
+        "kind": body.kind,
+        "system": body.system,
+        "label": body.label or f"{body.kind or 'any'} · {body.system or 'any'}",
+        "last_check": now_iso(),
+        "created_at": now_iso(),
+    }
+    await db.marketplace_subscriptions.insert_one(doc)
+    return {k: v for k, v in doc.items() if k != "_id"}
+
+
+@router.delete("/marketplace-subscriptions/{sid}")
+async def delete_subscription(sid: str,
+                                user: dict = Depends(get_current_user)):
+    res = await db.marketplace_subscriptions.delete_one(
+        {"id": sid, "user_id": user["id"]})
+    if not res.deleted_count:
+        raise HTTPException(404, "Subscription not found")
+    return {"ok": True}
+
+
+@router.get("/marketplace-digest")
+async def marketplace_digest(user: dict = Depends(get_current_user),
+                                mark_seen: bool = Query(False)):
+    """Returns a per-subscription list of new listings since the
+    subscription's `last_check`. Pass `mark_seen=true` to bump the
+    timestamp (typical UI: hit with mark_seen=false on bell-click,
+    mark_seen=true after the digest panel is dismissed)."""
+    subs = await db.marketplace_subscriptions.find(
+        {"user_id": user["id"]}, {"_id": 0}).to_list(length=None)
+    out: List[Dict[str, Any]] = []
+    for s in subs:
+        where: Dict[str, Any] = {
+            "access": {"$in": ["public", "paywall"]},
+            "created_at": {"$gt": s["last_check"]},
+        }
+        if s.get("kind"):
+            where["kind"] = s["kind"]
+        if s.get("system"):
+            where["source_system_id"] = s["system"]
+        rows = await db.marketplace_listings.find(where, {"_id": 0}) \
+            .sort("created_at", -1).limit(10).to_list(length=None)
+        out.append({
+            "subscription_id": s["id"],
+            "label": s.get("label"),
+            "kind": s.get("kind"),
+            "system": s.get("system"),
+            "since": s["last_check"],
+            "new_count": len(rows),
+            "preview": rows,
+        })
+    if mark_seen:
+        await db.marketplace_subscriptions.update_many(
+            {"user_id": user["id"]},
+            {"$set": {"last_check": now_iso()}})
+    total_new = sum(b["new_count"] for b in out)
+    return {"buckets": out, "total_new": total_new}

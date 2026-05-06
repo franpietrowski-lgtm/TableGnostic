@@ -329,6 +329,71 @@ export default function ChannelsPanel({ campaign, user }) {
         </div>
       );
     }
+    // V6.25.6 — Cut B chat hot-keys.
+    if (m.kind === "cast" || m.slash_meta?.kind === "cast") {
+      const r = m.slash_meta?.resolved || {};
+      return (
+        <div className="border-l-2 border-arcane/50 pl-2" data-testid={`channel-cast-${m.id}`}>
+          <div className="text-arcane-light font-display text-sm">
+            ✦ {m.author_name} casts <span className="text-gold-bright">{m.slash_meta?.name || r.name}</span>
+          </div>
+          {r.hit ? (
+            <div className="text-[11px] text-mist mt-0.5">
+              {r.level != null && `Lvl ${r.level}`}
+              {r.school && ` · ${r.school}`}
+              {r.cost && ` · ${r.cost}`}
+              {r.effect && <div className="text-parchment/85 mt-1 italic">{r.effect.slice(0, 200)}</div>}
+            </div>
+          ) : (
+            <div className="text-[11px] text-ember/70 italic mt-0.5">
+              ✗ Not in this campaign's spell pool. Cast as flavour only.
+            </div>
+          )}
+        </div>
+      );
+    }
+    if (m.kind === "use_bundle" || m.slash_meta?.kind === "use_bundle") {
+      const r = m.slash_meta?.resolved || {};
+      return (
+        <div className="border-l-2 border-gold/50 pl-2" data-testid={`channel-bundle-${m.id}`}>
+          <div className="text-gold-bright font-display text-sm">
+            ⚡ {m.author_name} invokes <span className="text-parchment">{m.slash_meta?.name || r.name}</span>
+          </div>
+          {r.hit ? (
+            <div className="text-[11px] text-mist mt-0.5">
+              {r.invocation && `${r.invocation}`}
+              {r.charges_max != null && ` · ${r.charges_max}× / scene`}
+              {r.energy_cost ? ` · EP ${r.energy_cost}` : ""}
+              {r.cooldown && ` · cooldown ${r.cooldown}`}
+              {r.description && <div className="text-parchment/85 mt-1 italic">{r.description.slice(0, 200)}</div>}
+            </div>
+          ) : (
+            <div className="text-[11px] text-ember/70 italic mt-0.5">
+              ✗ No bundle by that name. Invoked as flavour only.
+            </div>
+          )}
+        </div>
+      );
+    }
+    if (m.kind === "spend_xp" || m.slash_meta?.kind === "spend_xp") {
+      const p = m.slash_meta?.proposal || {};
+      return (
+        <div className="border-l-2 border-gold-bright/60 pl-2" data-testid={`channel-spend-${m.id}`}>
+          <div className="text-gold-bright font-display text-sm">
+            ↟ {m.author_name} proposes a {m.slash_meta?.amount} XP spend
+            {p.character_name && <span className="text-mist text-[11px] ml-1">on {p.character_name}</span>}
+          </div>
+          <div className="text-[11px] text-mist italic mt-0.5">"{m.slash_meta?.reason}"</div>
+          {p.error ? (
+            <div className="text-[11px] text-ember/70 mt-0.5">✗ {p.error}</div>
+          ) : (
+            <div className="text-[11px] text-arcane-light mt-0.5">
+              ✓ Queued — GM review pending in the XP Approval Queue.
+            </div>
+          )}
+        </div>
+      );
+    }
     return renderText(m.body);
   };
 
@@ -507,10 +572,13 @@ export default function ChannelsPanel({ campaign, user }) {
               <Send className="w-4 h-4"/>
             </button>
           </div>
-          <div className="text-[10px] font-ui text-mist/50 uppercase tracking-widest mt-1 flex items-center gap-2">
+          <div className="text-[10px] font-ui text-mist/50 uppercase tracking-widest mt-1 flex items-center gap-2 flex-wrap">
             <span>/roll <span className="text-gold/60">notation</span></span>
             <span>/me <span className="text-gold/60">action</span></span>
             <span>/w @<span className="text-gold/60">handle</span> message</span>
+            <span title="Cast a spell from the campaign reference / homebrew pool.">/cast <span className="text-gold/60">name</span></span>
+            <span title="Invoke a Power Bundle from the campaign pool.">/use bundle <span className="text-gold/60">name</span></span>
+            <span title="Propose an XP spend on your character — GM approves.">/spend xp <span className="text-gold/60">N for reason</span></span>
             <span className="ml-auto">{wsConnectedRef.current ? "● live" : "○ polling"}</span>
           </div>
         </div>

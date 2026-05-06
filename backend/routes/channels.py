@@ -109,6 +109,21 @@ _MENTION_RE = re.compile(r"@([A-Za-z0-9_-]{2,40})")
 _SLASH_ROLL_RE = re.compile(r"^/roll\s+(.+)$", re.IGNORECASE)
 _SLASH_ME_RE = re.compile(r"^/me\s+(.+)$", re.IGNORECASE)
 _SLASH_WHISPER_RE = re.compile(r"^/w(?:hisper)?\s+@([A-Za-z0-9_-]+)\s+(.+)$", re.IGNORECASE)
+# V6.25.6 — Cut B chat hot-keys.
+# /cast <spell name>            — narrative cast announcement; backend
+#                                  resolves the spell from the campaign's
+#                                  reference + custom_attributes pool.
+# /use bundle <bundle name>     — power bundle invocation; resolves to
+#                                  charges_max / energy_cost / cooldown.
+# /spend xp <amount> for <reason>
+#                                — proposes an XP spend on the SPEAKER's
+#                                  active character (raise_total_points
+#                                  patch) — GM still approves via the
+#                                  existing /xp-spend queue.
+_SLASH_CAST_RE = re.compile(r"^/cast\s+(.+)$", re.IGNORECASE)
+_SLASH_USE_BUNDLE_RE = re.compile(r"^/use\s+bundle\s+(.+)$", re.IGNORECASE)
+_SLASH_SPEND_XP_RE = re.compile(
+    r"^/spend\s+xp\s+(\d+(?:\.\d+)?)\s+(?:for\s+|on\s+)?(.+)$", re.IGNORECASE)
 
 
 async def _resolve_mentions(camp: dict, body: str) -> List[str]:
@@ -142,6 +157,17 @@ def _parse_slash(body: str) -> Dict[str, Any]:
     m = _SLASH_WHISPER_RE.match(body)
     if m:
         return {"kind": "whisper", "to_handle": m.group(1).lower(), "text": m.group(2).strip()}
+    m = _SLASH_CAST_RE.match(body)
+    if m:
+        return {"kind": "cast", "name": m.group(1).strip()}
+    m = _SLASH_USE_BUNDLE_RE.match(body)
+    if m:
+        return {"kind": "use_bundle", "name": m.group(1).strip()}
+    m = _SLASH_SPEND_XP_RE.match(body)
+    if m:
+        return {"kind": "spend_xp",
+                "amount": float(m.group(1)),
+                "reason": m.group(2).strip()}
     return {}
 
 
@@ -150,6 +176,97 @@ def _camp_room(cid: str) -> str:
     The session bus accepts arbitrary room keys; we re-use the existing
     Bus by namespacing under "campaign:{cid}" rather than session ids."""
     return f"campaign:{cid}"
+
+
+# V6.25.6 — Cut B resolvers.
+async def _resolve_spell_or_bundle(cid: str, name: str, mode: str) -> dict:
+    """Look up `name` in the campaign's reference + custom_attributes
+    pool. Returns a flat snapshot the client renders inline; on miss,
+    returns `{"miss": true}` so the chat line shows a "not found"
+    affordance without breaking the post."""
+    needle = (name or "").strip().lower()
+    if not needle:
+        return {"miss": True}
+    # references first (system spells / power_bundle / power_pack).
+    # Note: the Reference Editor stores into `campaign_reference`, not
+    # `references` — the former is the canonical collection (V6.3+).
+    ref = await db.campaign_reference.find_one(
+        {"campaign_id": cid,
+         "name": {"$regex": f"^{re.escape(name)}$", "$options": "i"}},
+        {"_id": 0})
+    if ref:
+        kind = (ref.get("kind") or "").lower()
+        # Spell-like → expose level/school/cost/effect; bundle-like →
+        # invocation / charges / EP cost.
+        f = ref.get("fields") or {}
+        if kind in ("spell", "spells") and mode == "spell":
+            return {"hit": True, "kind": "spell", "name": ref.get("name"),
+                    "level": ref.get("level") or f.get("level"),
+                    "school": ref.get("school") or f.get("school"),
+                    "cost": ref.get("cost") or f.get("cost"),
+                    "effect": ref.get("effect") or f.get("description") or ref.get("summary"),
+                    "source_id": ref.get("id")}
+        if kind in ("power_bundle", "power_pack"):
+            return {"hit": True, "kind": "power_bundle", "name": ref.get("name"),
+                    "invocation": f.get("invocation"),
+                    "charges_max": f.get("charges_max"),
+                    "energy_cost": f.get("energy_cost"),
+                    "cooldown": f.get("cooldown"),
+                    "description": f.get("description") or ref.get("summary"),
+                    "source_id": ref.get("id")}
+    # Custom Rules pool — homebrew spells / power bundles / abilities.
+    custom = await db.custom_attributes.find_one(
+        {"campaign_id": cid,
+         "name": {"$regex": f"^{re.escape(name)}$", "$options": "i"}},
+        {"_id": 0})
+    if custom:
+        return {"hit": True, "kind": (custom.get("kind") or "custom"),
+                "name": custom.get("name"),
+                "description": custom.get("description_note", ""),
+                "effects": custom.get("effects") or {},
+                "source_id": custom.get("id")}
+    return {"miss": True, "queried": name}
+
+
+async def _queue_speaker_xp_spend(camp_id: str, user: dict,
+                                    amount: float, reason: str) -> dict:
+    """Queue an XP-spend proposal on the speaker's active character.
+    Returns {character_id, character_name, status, error?}."""
+    # Find the speaker's character on this campaign (most-recently
+    # updated wins if they have multiple).
+    char = await db.characters.find_one(
+        {"campaign_id": camp_id, "owner_id": user["id"]},
+        {"_id": 0}, sort=[("updated_at", -1), ("created_at", -1)])
+    if not char:
+        return {"error": "No character on this campaign for the speaker."}
+    # Honour the toggleable per-campaign XP marketplace switch.
+    camp = await db.campaigns.find_one({"id": camp_id},
+                                          {"_id": 0, "xp_marketplace": 1, "gm_id": 1})
+    if not (camp or {}).get("xp_marketplace", True):
+        return {"character_id": char["id"], "character_name": char["name"],
+                "error": "XP marketplace disabled by GM for this campaign."}
+    unspent = float(char.get("xp_unspent", 0.0))
+    if amount > unspent + 0.001:
+        return {"character_id": char["id"], "character_name": char["name"],
+                "error": (f"Insufficient unspent XP "
+                           f"({unspent:.1f}). Asked for {amount:.1f}.")}
+    proposal = {
+        "id": new_id(),
+        "character_id": char["id"], "character_name": char["name"],
+        "campaign_id": camp_id,
+        "owner_id": char.get("owner_id"),
+        "owner_name": char.get("owner_name"),
+        "proposed_by_id": user["id"], "proposed_by_name": user["name"],
+        "cost": float(amount), "reason": reason,
+        "change": {"raise_total_points": int(round(amount))},
+        "summary": reason, "status": "pending",
+        "gm_decision": None, "decided_at": None,
+        "source": "chat-hotkey",
+        "created_at": now_iso(),
+    }
+    await db.xp_pending.insert_one(proposal)
+    return {"character_id": char["id"], "character_name": char["name"],
+            "status": "queued", "proposal_id": proposal["id"]}
 
 
 # ─────────────────────────── Channels ───────────────────────────
@@ -275,6 +392,30 @@ async def post_message(chid: str, body: MessageIn,
             doc["slash_meta"] = {**slash, "result": result}
         except HTTPException:
             doc["slash_meta"] = {**slash, "error": "Invalid dice notation"}
+
+    # V6.25.6 — Cut B server-side resolution.
+    elif slash.get("kind") == "cast":
+        # Look up the spell in references + custom_attributes (shared
+        # picker pool). Deterministic snapshot so refreshes show the
+        # resolved card consistently.
+        resolved = await _resolve_spell_or_bundle(camp["id"], slash["name"], "spell")
+        doc["kind"] = "cast"
+        doc["slash_meta"] = {**slash, "resolved": resolved}
+
+    elif slash.get("kind") == "use_bundle":
+        resolved = await _resolve_spell_or_bundle(camp["id"], slash["name"], "bundle")
+        doc["kind"] = "use_bundle"
+        doc["slash_meta"] = {**slash, "resolved": resolved}
+
+    elif slash.get("kind") == "spend_xp":
+        # Find the speaker's active character on this campaign and queue
+        # an XP-spend proposal (`raise_total_points` patch — easiest
+        # narrative fit). GM still approves via the normal queue.
+        proposal = await _queue_speaker_xp_spend(
+            camp_id=camp["id"], user=user,
+            amount=float(slash["amount"]), reason=slash["reason"])
+        doc["kind"] = "spend_xp"
+        doc["slash_meta"] = {**slash, "proposal": proposal}
 
     await db.channel_msgs.insert_one(doc)
     if body.thread_id:

@@ -14,6 +14,40 @@
 
 ## 2. Implemented (cumulative, condensed)
 
+### V6.25.6 — Cut B Chat Hot-Keys + Mobile V2 Sweep + Marketplace Watch List (2026-02-04)
+
+User greenlit Cut B + Mobile V2 + the suggested marketplace digest improvement. All three shipped.
+
+**🔴 Cut B — Chat Hot-Keys** (`backend/routes/channels.py`, `backend/core/models.py`, `frontend/src/components/ChannelsPanel.jsx`)
+- Three new slash commands parsed server-side so the resolved snapshot survives client refresh:
+  - **`/cast <name>`** — looks up the spell in `campaign_reference` + `custom_attributes`. Renders an arcane-coloured chat card with level / school / cost / effect blurb. Miss → "Cast as flavour only" affordance (post still goes through, no error spam).
+  - **`/use bundle <name>`** — resolves a `power_bundle` / `power_pack` reference. Surfaces invocation / charges_max / energy_cost / cooldown so the table sees the mechanic at a glance.
+  - **`/spend xp <amount> for <reason>`** — queues an XP-spend proposal on the speaker's most-recently-touched character on this campaign. Validates against `xp_unspent` (insufficient → error envelope inline, no queue row); honours the new per-campaign `CampaignIn.xp_marketplace` GM toggle.
+- Help-hint chip on the chat input now lists all 6 commands (`/roll`, `/me`, `/w`, `/cast`, `/use bundle`, `/spend xp`) with title-attribute tooltips.
+- Resolver helpers `_resolve_spell_or_bundle` and `_queue_speaker_xp_spend` are unit-testable in isolation.
+- Tests: 6/6 in `test_v6256_chat_hotkeys.py` — known/miss/bundle/spend-queue/marketplace-toggle/insufficient-balance.
+
+**🟢 Mobile V2 Sweep** (`frontend/src/components/CampaignDetail.jsx`, `XPLedgerPanel.jsx`, `Battlemap.jsx`)
+- **Sticky-header collapse on Campaign hub**: Tabs.List now `flex-nowrap overflow-x-auto sm:flex-wrap` + `sticky top-0 z-30 bg-void/95 backdrop-blur-sm` on mobile so users can side-scroll tabs without losing them when scrolling content. Title scales `text-2xl sm:text-4xl`.
+- **XP Ledger → mobile stacked-card mode**: at `< sm` width the 8-col table is replaced by a single-column card stack with prominent Δ amount, character + owner, base/bonus row, source + GM-author footer, ISO-trimmed timestamp. Original table preserved at `sm:` and up.
+- **Battlemap pinch-zoom + 2-finger pan**: `<canvas>` wrapper now handles `onTouchStart/Move/End` for two-finger pinch (uniform `scale` 0.4-4.0, anchored to gesture midpoint) + 2-finger pan + 1-finger pan ONLY when zoomed > 1.05 (so single-touch on a default view still drives the existing measure / move flow). `Ctrl+wheel` zoom for trackpad / desktop. `touchAction: none` claims the gesture from the OS. Inner content stack gets a CSS transform; transition disabled mid-pinch for snap response.
+- Approval Queue was already responsive (`grid-cols-1 sm:grid-cols-2`).
+- Lint clean across all touched files.
+
+**💎 Improvement — Marketplace Watch List + Digest** (`routes/marketplace.py`, `Marketplace.jsx`)
+- `marketplace_subscriptions` collection — `{user_id, kind, system, label, last_check}`.
+- 4 endpoints (path-deconflicted from `/marketplace/{lid}` to avoid FastAPI registration-order shadow):
+  - `GET /api/marketplace-subscriptions` — list mine
+  - `POST /api/marketplace-subscriptions` — create (requires `kind` OR `system`; bad-input 400)
+  - `DELETE /api/marketplace-subscriptions/{sid}` — unsubscribe
+  - `GET /api/marketplace-digest?mark_seen=` — per-bucket new-listing list since each subscription's `last_check`. `mark_seen=true` bumps the timestamp.
+- Frontend: Bell icon top-right of `/app/marketplace`. Total-new badge counter; click opens drawer with per-bucket previews (clicking a preview opens that listing's detail modal). "Mark all seen" button bumps timestamps. New `BellPlus Watch <kind> · <system>` button appears next to filters when a kind/system is selected — one-click subscribe to current view.
+- Tests: 3/3 in `test_v6256_subscriptions.py` — filter required, full sub→publish→digest→mark-seen round-trip, kind filter excludes mismatches.
+
+**Cumulative testing**
+- 14/14 V6.25.5 + V6.25.6 tests pass (5 marketplace + 5 marketplace + 6 chat hot-keys + 3 subscriptions). Earlier tests untouched.
+- Frontend lint clean.
+
 ### V6.25.5 — Marketplace v1 + Mobile Sweep (2026-02-04)
 
 User greenlit the Marketplace v1 build (per PRD spec) and a mobile sweep with multi-viewport Playwright + dropdown visibility check. Both shipped.

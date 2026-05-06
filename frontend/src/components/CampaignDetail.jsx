@@ -71,12 +71,14 @@ export default function CampaignDetail() {
       <div className="mt-4 flex items-start justify-between flex-wrap gap-4">
         <div className="max-w-2xl">
           <div className="label-ref">{camp.system} · {camp.power_level}</div>
-          <h1 className="font-display text-4xl tracking-wide text-parchment mt-1">{camp.name}</h1>
+          {/* V6.25.6 mobile sweep — title scales down + truncates on
+              mobile so the header doesn't dominate a phone screen. */}
+          <h1 className="font-display text-2xl sm:text-4xl tracking-wide text-parchment mt-1 leading-tight">{camp.name}</h1>
           <CampaignDescription camp={camp} isGm={!!camp.is_gm} onSaved={load}/>
           <div className="flex flex-wrap gap-1 mt-3">
             {(camp.tags || []).map((t, i) => <span key={i} className="tag">{t}</span>)}
           </div>
-          <div className="mt-4 text-xs font-ui uppercase tracking-widest text-gold/60">
+          <div className="mt-4 text-[11px] sm:text-xs font-ui uppercase tracking-widest text-gold/60">
             GM: {camp.gm_name} · {(camp.member_ids || []).length}/{camp.max_players} seated · {camp.schedule || "no schedule"}
           </div>
           <SystemBadge systemId={camp.system_id} systemName={camp.system}/>
@@ -116,7 +118,13 @@ export default function CampaignDetail() {
       <div className="divider-sigil my-8" />
 
       <Tabs.Root defaultValue="characters">
-        <Tabs.List className="flex gap-2 border-b border-gold/10 pb-3 flex-wrap">
+        {/* V6.25.6 mobile sweep — Tabs row scrolls horizontally on
+            mobile (no wrap) and sticks to the top under 480px so the
+            user can switch tabs without scrolling back up. */}
+        <Tabs.List className="flex gap-2 border-b border-gold/10 pb-3 flex-nowrap overflow-x-auto sm:flex-wrap
+                              sticky top-0 z-30 bg-void/95 backdrop-blur-sm
+                              -mx-3 px-3 sm:static sm:mx-0 sm:px-0 sm:bg-transparent sm:backdrop-blur-none"
+                    style={{ scrollbarWidth: "thin" }}>
           {[
             ["characters", "Characters"],
             ["channels", "Channels"],
@@ -127,7 +135,8 @@ export default function CampaignDetail() {
             ...(camp.is_gm ? [["atelier", "Atelier"], ["delta", "Delta Drop"], ["custom", "Custom Rules"], ["invite", "Invite & Share"]] : []),
           ].map(([v, l]) => (
             <Tabs.Trigger key={v} value={v}
-              className="px-4 py-2 text-xs font-ui tracking-widest uppercase text-mist hover:text-parchment
+              className="px-3 sm:px-4 py-2 text-xs font-ui tracking-widest uppercase text-mist hover:text-parchment
+                         flex-shrink-0 whitespace-nowrap
                          data-[state=active]:text-gold-bright data-[state=active]:border-b data-[state=active]:border-gold"
               data-testid={`tab-${v}`}>
               {l}

@@ -89,6 +89,91 @@ export default function Battlemap({
   const stillUnrolling = useMinDelay(!state, 5000);
   const canvasRef = useRef(null);
 
+  // V6.25.6 mobile sweep — pinch-zoom + 2-finger pan state. `zoom` is
+  // a uniform scale; `pan` is a translate in canvas-local pixels.
+  // `pinching` is true mid-gesture so we can short-circuit transition.
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [pinching, setPinching] = useState(false);
+  const gestureRef = useRef({ startDist: 0, startZoom: 1,
+                                 startCenter: { x: 0, y: 0 },
+                                 startPan: { x: 0, y: 0 },
+                                 panStart: null });
+
+  const clampZoom = (z) => Math.min(4, Math.max(0.4, z));
+
+  const onMapWheel = (e) => {
+    // Only ctrl-wheel zooms — preserves natural scroll otherwise.
+    if (!e.ctrlKey && !e.metaKey) return;
+    e.preventDefault();
+    const delta = -Math.sign(e.deltaY) * 0.12;
+    setZoom((z) => clampZoom(z + delta));
+  };
+
+  const _touchDist = (a, b) => {
+    const dx = a.clientX - b.clientX, dy = a.clientY - b.clientY;
+    return Math.sqrt(dx * dx + dy * dy);
+  };
+  const _touchCenter = (a, b) => ({
+    x: (a.clientX + b.clientX) / 2,
+    y: (a.clientY + b.clientY) / 2,
+  });
+
+  const onMapTouchStart = (e) => {
+    if (e.touches.length === 2) {
+      e.preventDefault();
+      setPinching(true);
+      const [a, b] = e.touches;
+      gestureRef.current = {
+        startDist: _touchDist(a, b),
+        startZoom: zoom,
+        startCenter: _touchCenter(a, b),
+        startPan: { ...pan },
+        panStart: null,
+      };
+    } else if (e.touches.length === 1) {
+      gestureRef.current.panStart = {
+        x: e.touches[0].clientX,
+        y: e.touches[0].clientY,
+        startPan: { ...pan },
+      };
+    }
+  };
+
+  const onMapTouchMove = (e) => {
+    if (e.touches.length === 2 && pinching) {
+      e.preventDefault();
+      const [a, b] = e.touches;
+      const dist = _touchDist(a, b);
+      const center = _touchCenter(a, b);
+      const g = gestureRef.current;
+      if (g.startDist > 0) {
+        const newZoom = clampZoom(g.startZoom * (dist / g.startDist));
+        // Pan to follow the pinch midpoint so zoom feels anchored.
+        setZoom(newZoom);
+        setPan({
+          x: g.startPan.x + (center.x - g.startCenter.x),
+          y: g.startPan.y + (center.y - g.startCenter.y),
+        });
+      }
+    }
+    // Single-finger pan only when zoomed in (otherwise touches drive
+    // the existing measure / move flow).
+    else if (e.touches.length === 1 && zoom > 1.05 && gestureRef.current.panStart) {
+      e.preventDefault();
+      const ps = gestureRef.current.panStart;
+      setPan({
+        x: ps.startPan.x + (e.touches[0].clientX - ps.x),
+        y: ps.startPan.y + (e.touches[0].clientY - ps.y),
+      });
+    }
+  };
+
+  const onMapTouchEnd = (e) => {
+    if (e.touches.length < 2) setPinching(false);
+    if (e.touches.length === 0) gestureRef.current.panStart = null;
+  };
+
   // ─── load map + effects ───
   useEffect(() => {
     if (!sessionId) return;
@@ -592,7 +677,13 @@ export default function Battlemap({
         </div>
       )}
 
-      {/* Canvas */}
+      {/* Canvas
+          V6.25.6 mobile sweep — pinch-zoom + 2-finger pan support via
+          a CSS transform on the inner content stack. Wheel zoom on
+          desktop too (Ctrl+wheel) so the same gesture works for
+          trackpad users. State stays local (no save) — the map's grid
+          + walls / tokens are still authored at native scale; this
+          transform is a player-side viewport pan/zoom only. */}
       <div
         ref={canvasRef}
         className="relative w-full overflow-hidden border border-gold/30 bg-black/80 select-none cursor-crosshair"
@@ -604,13 +695,29 @@ export default function Battlemap({
                    : isMobile ? "calc(100vh - 220px)"
                    : "75vh",
           margin: "0 auto",
+          // Disable browser-native pinch-zoom (we own the gesture) +
+          // disallow text selection on touch.
+          touchAction: "none",
         }}
         onMouseDown={onMouseDown}
         onMouseMove={onMouseMove}
         onMouseUp={onMouseUp}
         onMouseLeave={onMouseUp}
+        onWheel={onMapWheel}
+        onTouchStart={onMapTouchStart}
+        onTouchMove={onMapTouchMove}
+        onTouchEnd={onMapTouchEnd}
         data-testid="battlemap-canvas"
       >
+        {/* Pan / zoom transform stack — only applies to children. */}
+        <div
+          className="absolute inset-0"
+          style={{
+            transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+            transformOrigin: "0 0",
+            transition: pinching ? "none" : "transform 60ms linear",
+          }}
+        >
         {/* Background image */}
         {state.image?.url && (
           <img
@@ -773,6 +880,8 @@ export default function Battlemap({
             </button>
           );
         })}
+        </div>
+        {/* /transform stack */}
       </div>
 
       <div className="text-[10px] font-ui uppercase tracking-widest text-mist/60 mt-2">

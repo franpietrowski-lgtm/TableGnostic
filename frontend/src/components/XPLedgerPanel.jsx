@@ -92,13 +92,50 @@ export default function XPLedgerPanel({ campaignId, onClose }) {
               ))}
             </div>
 
-            {/* Audit feed */}
+            {/* Audit feed
+                V6.25.6 mobile sweep — full table at sm+ widths;
+                stacked-card mode below 640px so the 8-col layout
+                doesn't horizontal-scroll on phones. */}
             {entries.length === 0 ? (
               <div className="text-mist italic text-xs">
                 No XP has been awarded in this campaign yet.
               </div>
             ) : (
-              <table className="w-full text-sm" data-testid="xp-ledger-table">
+              <>
+                {/* Stacked-card mode (mobile only) */}
+                <div className="sm:hidden space-y-2" data-testid="xp-ledger-cards">
+                  {entries.map((e) => {
+                    const delta = e.amount || 0;
+                    return (
+                      <div key={e.id}
+                           className="border border-gold/15 rounded-sm p-3 bg-void/30"
+                           data-testid={`xp-ledger-card-${e.id}`}>
+                        <div className="flex items-baseline justify-between gap-2 mb-1">
+                          <div className="font-display text-parchment leading-tight">
+                            {e.character_name}
+                            {e.owner_name && (
+                              <span className="text-mist/60 text-[10px] ml-1 font-body">({e.owner_name})</span>
+                            )}
+                          </div>
+                          <div className={`text-right font-display tabular-nums text-lg ${delta < 0 ? "text-ember" : "text-gold"}`}>
+                            {delta >= 0 ? "+" : ""}{delta.toFixed(2)}
+                          </div>
+                        </div>
+                        <div className="text-[11px] text-parchment/85 leading-snug">{e.reason}</div>
+                        <div className="text-[10px] text-mist mt-1 flex justify-between">
+                          <span>Base {e.base != null ? e.base.toFixed(2) : "—"} · Bonus {e.bonus != null ? e.bonus.toFixed(2) : "—"}</span>
+                          <span>{(e.awarded_at || "").replace("T", " ").slice(0, 16)}</span>
+                        </div>
+                        <div className="text-[9px] text-mist/60 uppercase tracking-widest mt-0.5 font-ui">
+                          {SOURCE_LABEL[e.source] || e.source}{e.by_gm_name ? ` · by ${e.by_gm_name}` : ""}
+                          {e.converted_to_points != null && <span className="text-arcane-light ml-1">→{e.converted_to_points} CP</span>}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                {/* Full table (sm and up) */}
+                <table className="w-full text-sm hidden sm:table" data-testid="xp-ledger-table">
                 <thead className="text-[10px] font-ui uppercase tracking-widest text-gold/60">
                   <tr className="border-b border-gold/15">
                     <th className="text-left py-2">When</th>
@@ -153,6 +190,7 @@ export default function XPLedgerPanel({ campaignId, onClose }) {
                   })}
                 </tbody>
               </table>
+              </>
             )}
 
             <div className="mt-3 text-[10px] text-mist/60 italic flex items-center gap-1">
