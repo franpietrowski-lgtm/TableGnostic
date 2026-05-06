@@ -158,6 +158,10 @@ class CharacterDefect(BaseModel):
     # points_per_rank × rank; a non-zero `value` overrides and stamps the
     # explicit CP refund.
     value: int = 0
+    # V6.25.3 — when a row originates from an applied BESM race / class
+    # template, this carries the template's custom_attribute id so the
+    # sheet can group / revert cleanly.
+    from_template_id: Optional[str] = None
 
 
 class ModifierRow(BaseModel):
@@ -202,6 +206,8 @@ class CharacterAttribute(BaseModel):
     # left at 0/None the validator computes them on the fly.
     effective_level: Optional[int] = None
     cost_modifier: Optional[int] = None
+    # V6.25.3 — applied BESM race / class template provenance.
+    from_template_id: Optional[str] = None
 
 
 class CharacterSkillComponent(BaseModel):
@@ -218,6 +224,8 @@ class CharacterSkill(BaseModel):
     note: str = ""
     display_name: Optional[str] = ""
     components: List[CharacterSkillComponent] = []
+    # V6.25.3 — applied BESM race / class template provenance.
+    from_template_id: Optional[str] = None
 
 
 class CharacterPowerPack(BaseModel):

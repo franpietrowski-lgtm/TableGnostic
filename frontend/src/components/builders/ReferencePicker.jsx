@@ -68,13 +68,45 @@ export default function ReferencePicker({
   // custom entries from the Reference Editor (they ARE spell-mimic
   // mechanics with CP cost). Fixed URL `/references` → `/reference`
   // (the backend endpoint is singular) which was silently 404ing.
+  // V6.25.3 — also pull `/campaigns/{cid}/custom` (Custom Rules tab
+  // entries) so character-sheet pickers can offer the GM-authored
+  // homebrew of every kind by system: feats, traits, features, foci,
+  // descriptors, cyphers, artifacts, race / class templates, etc.
   useEffect(() => {
     if (!campaignId) { setCustom([]); return; }
     let cancelled = false;
+    const wantsFeat   = kinds.some((k) => /feat/i.test(k));
+    const wantsTrait  = kinds.some((k) => /trait/i.test(k));
+    const wantsFeat2  = kinds.includes("feature") || kinds.includes("class_features");
+    const wantsRace   = kinds.includes("race") || kinds.includes("races");
+    const wantsClass  = kinds.includes("class") || kinds.includes("classes");
+    const wantsFocus  = kinds.includes("focus") || kinds.includes("foci");
+    const wantsDescr  = kinds.includes("descriptor") || kinds.includes("descriptors");
+    const wantsType   = kinds.includes("type") || kinds.includes("types") || kinds.includes("ability");
+    const wantsCypher = kinds.includes("cypher") || kinds.includes("cyphers");
+    const wantsArti   = kinds.includes("artifact") || kinds.includes("artifacts");
+    const wantsHouse  = kinds.includes("house") || kinds.includes("houseRules");
+    const customKindNeeded = (k) => {
+      switch (k) {
+        case "feat":       return wantsFeat;
+        case "trait":      return wantsTrait;
+        case "feature":    return wantsFeat2;
+        case "race":       return wantsRace;
+        case "class":      return wantsClass;
+        case "focus":      return wantsFocus;
+        case "descriptor": return wantsDescr;
+        case "ability":    return wantsType;
+        case "cypher":     return wantsCypher;
+        case "artifact":   return wantsArti;
+        case "house":      return wantsHouse;
+        default:           return false;
+      }
+    };
     (async () => {
       try {
-        const { data } = await api.get(`/campaigns/${campaignId}/reference`);
-        const all = (data?.entries || data || []).filter((e) => {
+        // 1) Reference Editor entries (weapons / armor / items / spells / power-bundles).
+        const { data: refData } = await api.get(`/campaigns/${campaignId}/reference`);
+        const refMatches = (refData?.entries || refData || []).filter((e) => {
           const k = (e.kind || "").toLowerCase();
           if (kinds.includes("weapons") && (k === "weapons" || k === "weapon")) return true;
           if (kinds.includes("armor") && k === "armor") return true;
@@ -84,8 +116,15 @@ export default function ReferencePicker({
             || k === "power_bundle" || k === "power_pack")) return true;
           return false;
         });
-        // Normalize power bundles into a spell-ish shape so the dropdown
-        // + chip displays pick up the invocation / cost / charges fields.
+        // 2) Custom Rules tab entries (per-system homebrew).
+        let customRules = [];
+        try {
+          const { data: cust } = await api.get(`/campaigns/${campaignId}/custom`);
+          customRules = (cust || []).filter((e) => customKindNeeded((e.kind || "").toLowerCase()));
+        } catch { /* ignore — endpoint may 404 on legacy campaigns */ }
+
+        const all = [...refMatches, ...customRules];
+        // Normalise to the picker's shape.
         const normalised = all.map((e) => {
           const k = (e.kind || "").toLowerCase();
           if (k === "power_bundle" || k === "power_pack") {
@@ -99,6 +138,18 @@ export default function ReferencePicker({
               form: f.invocation || "",
               damage: f.energy_cost ? `EP ${f.energy_cost}` : "",
               range: f.charges_max ? `${f.charges_max}×` : "",
+            };
+          }
+          // Custom Rules shape → picker shape.
+          if (["feat","trait","feature","race","class","focus","descriptor",
+                "ability","cypher","artifact","house"].includes(k)) {
+            const eff = e.effects || {};
+            return {
+              ...e,
+              __custom_rule: true,
+              effect: e.description_note || "",
+              cost: typeof eff.total_cp === "number" ? `${eff.total_cp} CP` : "",
+              level: e.cost_per_level != null ? `${e.cost_per_level}/lvl` : "",
             };
           }
           return e;

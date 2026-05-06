@@ -583,9 +583,11 @@ def cumulative_features(class_name: str, level: int) -> Dict[str, Any]:
             "tool_profs": [], "skill_choices": "",
             "spell_progression": "unknown",
             "advice": (
-                f"Class '{base}' has no canonical progression in the V6.19 "
-                f"library — add a homebrew custom class entry via the "
-                f"Atelier · References tab (kind: 'custom_class')."
+                f"Class '{base}' has no canonical progression in the "
+                f"V6.19 library — author it as a Homebrew Class on the "
+                f"campaign's Custom Rules tab (kind = Homebrew Class). "
+                f"BESM templates can also seed attributes / skills / "
+                f"defects directly into the character."
             ),
         }
     timeline: List[Dict[str, Any]] = []

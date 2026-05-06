@@ -1094,20 +1094,23 @@ function BesmTemplatePicker({ customs, ch, setCh }) {
       && c.effects && (c.effects.components || c.effects.stat_adjustments));
   if (templates.length === 0) return null;
   const chosen = templates.find((t) => t.id === sel);
+  // V6.25.3 — applied templates persist via `folio.applied_templates`
+  // (folio is the free-form Dict[str,Any] field on CharacterIn so the
+  // backend never strips it). Per-row provenance lives on each
+  // attribute / skill / defect's `from_template_id` field.
+  const folio = ch.folio || {};
+  const applied = folio.applied_templates || [];
 
   const apply = () => {
     if (!chosen) return;
     const eff = chosen.effects || {};
     const sa = eff.stat_adjustments || {};
     const comps = eff.components || [];
-    // Apply stat adjustments.
     const nextStats = {
       body: (ch.stats.body || 0) + (+sa.body || 0),
       mind: (ch.stats.mind || 0) + (+sa.mind || 0),
       soul: (ch.stats.soul || 0) + (+sa.soul || 0),
     };
-    // Build attribute / skill / defect additions from components.
-    // Tag with _from_template so downstream removal is possible.
     const addedAttrs = []; const addedSkills = []; const addedDefects = [];
     for (const c of comps) {
       if (c.kind === "attribute") {
@@ -1117,28 +1120,27 @@ function BesmTemplatePicker({ customs, ch, setCh }) {
           cost_per_level: +c.cost_per_level || 0,
           enhancements: [], limiters: [],
           note: c.note || `From ${chosen.name}`,
-          _from_template: chosen.id,
+          from_template_id: chosen.id,
         });
       } else if (c.kind === "skill") {
         addedSkills.push({
-          name: c.name || "Unnamed",
+          group: c.name || "Unnamed",
           level: +c.level || 1,
           cost_per_level: +c.cost_per_level || 0,
-          _from_template: chosen.id,
+          components: [],
+          note: c.note || `From ${chosen.name}`,
+          from_template_id: chosen.id,
         });
       } else if (c.kind === "defect") {
         addedDefects.push({
           name: c.name || "Unnamed",
           rank: +c.rank || 1,
-          points_per_rank: -Math.abs(+c.points_per_rank || 1),
+          points_per_rank: Math.abs(+c.points_per_rank || 1),
           category: "Template",
           note: c.note || `From ${chosen.name}`,
-          _from_template: chosen.id,
+          from_template_id: chosen.id,
         });
       }
-      // enhancement / limiter rows are attached to their parent
-      // attribute at template-author time; BESM applies them via the
-      // existing component-composer flow on the sheet.
     }
     setCh({
       ...ch,
@@ -1146,22 +1148,24 @@ function BesmTemplatePicker({ customs, ch, setCh }) {
       attributes: [...(ch.attributes || []), ...addedAttrs],
       skills: [...(ch.skills || []), ...addedSkills],
       defects: [...(ch.defects || []), ...addedDefects],
-      _applied_templates: [
-        ...((ch._applied_templates) || []),
-        { id: chosen.id, name: chosen.name, kind: chosen.kind,
-          total_cp: eff.total_cp ?? 0 },
-      ],
+      folio: {
+        ...folio,
+        applied_templates: [
+          ...applied,
+          { id: chosen.id, name: chosen.name, kind: chosen.kind,
+            total_cp: eff.total_cp ?? 0,
+            stat_adjustments: { ...sa },
+            description: chosen.description_note || "" },
+        ],
+      },
     });
     setSel("");
   };
 
   const removeTemplate = (tid) => {
-    const applied = (ch._applied_templates || []).find((t) => t.id === tid);
-    if (!applied) return;
-    // Reverse stat adjustments from the template's effects (look up on
-    // the source custom entry).
-    const src = (customs || []).find((c) => c.id === tid);
-    const sa = (src && src.effects && src.effects.stat_adjustments) || {};
+    const entry = applied.find((t) => t.id === tid);
+    if (!entry) return;
+    const sa = entry.stat_adjustments || {};
     setCh({
       ...ch,
       stats: {
@@ -1169,10 +1173,13 @@ function BesmTemplatePicker({ customs, ch, setCh }) {
         mind: (ch.stats.mind || 0) - (+sa.mind || 0),
         soul: (ch.stats.soul || 0) - (+sa.soul || 0),
       },
-      attributes: (ch.attributes || []).filter((a) => a._from_template !== tid),
-      skills: (ch.skills || []).filter((s) => s._from_template !== tid),
-      defects: (ch.defects || []).filter((d) => d._from_template !== tid),
-      _applied_templates: (ch._applied_templates || []).filter((t) => t.id !== tid),
+      attributes: (ch.attributes || []).filter((a) => a.from_template_id !== tid),
+      skills: (ch.skills || []).filter((s) => s.from_template_id !== tid),
+      defects: (ch.defects || []).filter((d) => d.from_template_id !== tid),
+      folio: {
+        ...folio,
+        applied_templates: applied.filter((t) => t.id !== tid),
+      },
     });
   };
 
@@ -1214,11 +1221,11 @@ function BesmTemplatePicker({ customs, ch, setCh }) {
           {chosen.description_note || "No GM description."}
         </div>
       )}
-      {(ch._applied_templates || []).length > 0 && (
+      {(applied || []).length > 0 && (
         <div className="mt-3" data-testid="besm-template-applied-list">
           <div className="label-ref block mb-1 text-[9px]">Applied templates</div>
           <div className="flex flex-wrap gap-1.5">
-            {(ch._applied_templates || []).map((t) => (
+            {applied.map((t) => (
               <span key={t.id} className="tag group inline-flex items-center gap-1"
                     data-testid={`besm-template-applied-${t.id}`}>
                 {t.name} · {t.kind} · {t.total_cp} CP

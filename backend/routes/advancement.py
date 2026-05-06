@@ -200,7 +200,44 @@ async def class_progression_for_character(
     dnd = (ch.get("folio") or {}).get("dnd_state") or {}
     cls = dnd.get("class") or ""
     lvl = int(dnd.get("level") or 1)
-    return cumulative_features(cls, lvl)
+    out = cumulative_features(cls, lvl)
+    # V6.25.3 — homebrew class fallback. If the canonical library
+    # doesn't recognise the class, look for a GM-authored homebrew
+    # entry of kind=class on this campaign and surface it as a known
+    # homebrew class with its description + total CP. Mirrors the
+    # "Custom Rules" path so the user message stays accurate and the
+    # sheet always shows SOMETHING when a class name is set.
+    if not out.get("known") and cls:
+        custom = await db.custom_attributes.find_one(
+            {"campaign_id": ch["campaign_id"], "kind": "class",
+             "name": {"$regex": f"^{re.escape(cls)}$", "$options": "i"}},
+            {"_id": 0},
+        )
+        if custom:
+            eff = custom.get("effects") or {}
+            comps = eff.get("components") or []
+            out.update({
+                "known": True,
+                "homebrew": True,
+                "hit_die": eff.get("hit_die", "—"),
+                "save_profs": eff.get("save_profs") or [],
+                "armor_profs": eff.get("armor_profs") or [],
+                "weapon_profs": eff.get("weapon_profs") or [],
+                "tool_profs": eff.get("tool_profs") or [],
+                "skill_choices": eff.get("skill_choices", ""),
+                "spell_progression": eff.get("spell_progression", "unknown"),
+                "timeline": [{
+                    "level": 1,
+                    "features": ([custom.get("description_note")]
+                                  if custom.get("description_note") else [])
+                                 + [f"{c.get('name')} ({c.get('kind')})"
+                                    for c in comps if c.get("name")],
+                }],
+                "advice": (f"Homebrew class · {custom.get('name')}"
+                            + (f" · {eff.get('total_cp')} CP"
+                                if eff.get("total_cp") else "")),
+            })
+    return out
 
 
 # ─── Helpers ────────────────────────────────────────────────────────────

@@ -14,6 +14,39 @@
 
 ## 2. Implemented (cumulative, condensed)
 
+### V6.25.3 — BESM template persistence + Class header redirect + Universal Custom Rules picker (2026-02-04)
+
+User reported applying a custom BESM class to character "nyaulis" — it didn't display on the sheet, didn't factor into the point budget, and the sheet's `CLASS — ? (LEVEL 1)` block still pointed to the removed Atelier `kind: 'custom_class'` destination. Also asked for character-sheet pickers to surface reference + custom entries of every type by system.
+
+**🔴 P1 — BESM template persistence** (`models.py`, `CharacterBuilder.jsx`, `AppliedTemplatesPanel.jsx`)
+- **Root cause**: Pydantic stripped `_applied_templates` (not declared on CharacterIn) and `_from_template` per-row tags (not declared on CharacterAttribute / CharacterSkill / CharacterDefect). After save, the rows persisted but template provenance was lost — and the sheet had no surface to show templates.
+- **Fix**:
+  - Added `from_template_id: Optional[str] = None` to `CharacterAttribute`, `CharacterSkill`, `CharacterDefect`.
+  - Builder now writes applied templates to `folio.applied_templates` (folio is `Dict[str, Any]` so the backend persists it untouched).
+  - New `<AppliedTemplatesPanel/>` mounted on the Mechanics tab — reads `folio.applied_templates` + per-row `from_template_id` and renders one card per applied template with stat deltas + the contributed attributes/skills/defects + total CP. No-ops cleanly when no templates are applied.
+- Tests: `test_character_round_trip_persists_template_provenance` confirms attributes / skills / defects keep `from_template_id` and `folio.applied_templates` survives a CharacterIn round-trip.
+
+**🟧 P1 — `Class — ? (Level 1)` header now resolves homebrew classes** (`advancement.py`, `class_progression.py`, `CharacterSheet.jsx`)
+- `/characters/{cid}/class-progression` now falls back to `db.custom_attributes` (case-insensitive name match, kind=class) when the canonical V6.19 progression library doesn't recognise the class. Returns `known: True, homebrew: True` with description + total_cp + level-1 timeline derived from `effects.components`.
+- `cumulative_features` advice text updated: removed the stale "Atelier · References tab (kind: 'custom_class')" pointer, replaced with "campaign's Custom Rules tab (kind = Homebrew Class)".
+- `CharacterSheet.jsx` suppresses `<ClassProgressionPanel/>` for BESM 4E campaigns (no D&D-style progression there) — the AppliedTemplatesPanel is the BESM equivalent.
+- Tests: `test_class_progression_falls_back_to_homebrew_class` (homebrew lookup works), `test_class_progression_unknown_advice_no_atelier_reference` (regression — advice no longer points to Atelier).
+
+**🟦 P1 — Universal Custom Rules picker** (`builders/ReferencePicker.jsx`)
+- ReferencePicker now ALSO fetches `/campaigns/{cid}/custom` (the Custom Rules tab entries) alongside the existing `/reference` call. Filters by kind (system-aware): `feat`, `trait`, `feature`, `race`, `class`, `focus`, `descriptor`, `ability`, `cypher`, `artifact`, `house` — every kind the V6.25 CampaignDetail Custom Rules form can author.
+- Custom Rule entries are normalised to the picker shape (effect = description_note, cost = total_cp, level = cost_per_level) so the dropdown chips render coherently next to SRD entries.
+- Tests: parametrized over all 11 kinds — `test_custom_rule_kinds_round_trip_for_picker[feat|trait|feature|race|class|focus|descriptor|ability|cypher|artifact|house]` all pass.
+
+**Testing**
+- 14/14 new V6.25.3 tests pass.
+- 55/55 cumulative tests across V6.22 + V6.23 + V6.24 + V6.25 + V6.25.1 + V6.25.2 + V6.25.3.
+- Frontend lint clean across CharacterBuilder, CharacterSheet, AppliedTemplatesPanel, ReferencePicker.
+
+**Deferred**
+- Auto-applying D&D/Anime 5E homebrew race `effects.asi` to ability scores (still narrative).
+- BESM homebrew Size → sheet size-category override.
+- Marketplace build (private / public / paywall gates) — full spec needed.
+
 ### V6.25.2 — BESM Race/Class Templates with numeric effects + homebrew effects schema + Marketplace roadmap (2026-02-04)
 
 User's ask: BESM race/class should work like normal BESM — combinations of attributes + skills + defects + limiters/enhancements with CP costs — and the UI must distinguish this from the D&D/Anime 5E race/class shape. Reference samples (Half-Dragon, Werewolf Base Form, Werewolf Wolf Form, Artificer, Martial Artist) provided.
