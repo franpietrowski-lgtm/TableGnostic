@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import { api, formatApiErrorDetail } from "../lib/api";
 import * as Tabs from "@radix-ui/react-tabs";
-import { Users, Plus, UserPlus2, ArrowRight, Trash2, Sparkles, Eye, EyeOff, Link as LinkIcon, Wand2, Shield, Copy, RefreshCw, Check, Save, Network, ListTree, Lightbulb, X, BookOpen, ChevronDown, ChevronRight, ScrollText } from "lucide-react";
+import { Users, Plus, UserPlus2, ArrowRight, Trash2, Sparkles, Eye, EyeOff, Link as LinkIcon, Wand2, Shield, Copy, RefreshCw, Check, Save, Network, ListTree, Lightbulb, X, BookOpen, ChevronDown, ChevronRight, ScrollText, Upload, Globe, Lock, DollarSign } from "lucide-react";
 import KnowledgeGraph from "./KnowledgeGraph";
 import CodexChartView from "./CodexChartView";
 import KnowledgeTab from "./campaignDetail/KnowledgeTab";
@@ -772,7 +772,14 @@ function CustomTab({ campId, customs, onRefresh, systemId }) {
             <div key={c.id} className="card-mystic p-4" data-testid={`custom-${c.id}`}>
               <div className="flex items-center justify-between">
                 <span className="tag">{c.kind}</span>
-                <button onClick={() => del(c.id)} className="text-ember/70 hover:text-ember"><Trash2 className="w-3 h-3"/></button>
+                <div className="flex items-center gap-1.5">
+                  <PublishToMarketplace custom={c} campaignId={campId}/>
+                  <button onClick={() => del(c.id)} className="text-ember/70 hover:text-ember p-1"
+                          aria-label="Delete custom rule"
+                          data-testid={`custom-delete-${c.id}`}>
+                    <Trash2 className="w-3 h-3"/>
+                  </button>
+                </div>
               </div>
               <div className="font-display text-base text-parchment mt-2">{c.name}</div>
               <div className="text-xs text-gold/70 font-ui mt-1">{c.cost_per_level} pts/level · {c.category || "—"}</div>
@@ -1189,6 +1196,144 @@ function BesmTemplateSummary({ effects, kind }) {
       {typeof total === "number" && (
         <div className="mt-1"><span className="text-gold/60 uppercase tracking-widest text-[9px]">Template CP</span> <span className={total < 0 ? "text-arcane" : "text-gold-bright"}>{total}</span></div>
       )}
+    </div>
+  );
+}
+
+
+/* V6.25.5 — Publish a Custom Rules entry into the cross-table
+ * Marketplace. GM-only (the parent CustomTab already gates rendering
+ * to GM). Three access tiers: private / public / paywall (V2). Public
+ * + paywall require a one-line license attestation per the marketplace
+ * v1 spec.
+ */
+function PublishToMarketplace({ custom, campaignId }) {
+  const [open, setOpen] = useState(false);
+  const [access, setAccess] = useState("public");
+  const [summary, setSummary] = useState("");
+  const [licenseText, setLicenseText] = useState("");
+  const [attest, setAttest] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const [done, setDone] = useState(false);
+
+  const submit = async () => {
+    setBusy(true); setErr("");
+    try {
+      await api.post("/marketplace/publish", {
+        source_campaign_id: campaignId,
+        source_kind: "custom",
+        source_id: custom.id,
+        access,
+        price_cents: 0,
+        license_text: licenseText,
+        summary,
+        license_attestation: attest,
+      });
+      setDone(true);
+      setTimeout(() => { setOpen(false); setDone(false); }, 1500);
+    } catch (e) {
+      setErr(formatApiErrorDetail(e.response?.data?.detail) || e.message);
+    } finally { setBusy(false); }
+  };
+
+  if (!open) {
+    return (
+      <button onClick={() => { setOpen(true); setSummary(custom.description_note?.slice(0, 240) || ""); }}
+              className="text-mist/60 hover:text-arcane-light p-1"
+              title="Publish to the cross-table Marketplace so other GMs can clone this entry."
+              data-testid={`custom-publish-${custom.id}`}
+              aria-label="Publish to Marketplace">
+        <Upload className="w-3 h-3"/>
+      </button>
+    );
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 bg-void/80 flex items-center justify-center p-4"
+         onClick={() => setOpen(false)}
+         data-testid="publish-modal">
+      <div className="card-mystic p-5 max-w-lg w-full" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-start justify-between mb-3">
+          <div>
+            <div className="label-ref">Publish to Marketplace</div>
+            <h3 className="font-display text-xl text-parchment mt-1">{custom.name}</h3>
+            <div className="text-[11px] text-mist/70 uppercase tracking-widest font-ui mt-0.5">
+              {custom.kind}
+            </div>
+          </div>
+          <button onClick={() => setOpen(false)} className="text-mist hover:text-gold-bright p-1"
+                  aria-label="Close" data-testid="publish-close">
+            <X className="w-4 h-4"/>
+          </button>
+        </div>
+        {done ? (
+          <div className="text-arcane-light text-center py-6 font-display"
+               data-testid="publish-success">
+            ✓ Published to Marketplace
+          </div>
+        ) : (
+          <>
+            <label className="label-ref block mt-2 mb-1">Access tier</label>
+            <div className="grid grid-cols-3 gap-2 mb-3" role="radiogroup">
+              {[
+                ["public", Globe, "Public", "Any GM can clone."],
+                ["paywall", DollarSign, "Paywall (V2)", "Pricing lands with Stripe in V2."],
+                ["private", Lock, "Private", "Only you can see this listing."],
+              ].map(([k, Icon, label, hint]) => (
+                <button key={k} type="button" role="radio" aria-checked={access === k}
+                        onClick={() => setAccess(k)}
+                        className={`border rounded-sm p-2 text-left ${access === k ? "border-gold-bright bg-gold/10" : "border-gold/15 hover:border-gold/40"}`}
+                        data-testid={`publish-access-${k}`}>
+                  <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-widest font-ui">
+                    <Icon className="w-3 h-3"/> {label}
+                  </div>
+                  <div className="text-[10px] text-mist mt-0.5">{hint}</div>
+                </button>
+              ))}
+            </div>
+
+            <label className="label-ref block mb-1">Summary (≤240 chars)</label>
+            <textarea className="input min-h-[60px]" value={summary}
+                      onChange={(e) => setSummary(e.target.value.slice(0, 240))}
+                      placeholder="One-paragraph hook. Markdown-lite supported on the listing card."
+                      data-testid="publish-summary"/>
+
+            <label className="label-ref block mt-3 mb-1">License (optional)</label>
+            <input className="input" value={licenseText}
+                   onChange={(e) => setLicenseText(e.target.value)}
+                   placeholder="e.g. CC-BY-SA 4.0 — credit Foo as original author"
+                   data-testid="publish-license"/>
+
+            {(access === "public" || access === "paywall") && (
+              <label className="flex items-start gap-2 mt-3 text-[12px] text-parchment/85 cursor-pointer"
+                     data-testid="publish-attest-row">
+                <input type="checkbox" className="mt-0.5" checked={attest}
+                       onChange={(e) => setAttest(e.target.checked)}
+                       data-testid="publish-attest-checkbox"/>
+                <span>
+                  I authored this content or have rights to redistribute it
+                  under the chosen license. <span className="text-mist/60 italic">
+                  Required for public / paywall listings.</span>
+                </span>
+              </label>
+            )}
+
+            {err && <div className="text-ember text-[11px] mt-3" data-testid="publish-error">{err}</div>}
+
+            <div className="flex justify-end gap-2 mt-4">
+              <button onClick={() => setOpen(false)} className="btn btn-ghost text-xs"
+                      data-testid="publish-cancel">Cancel</button>
+              <button onClick={submit} disabled={busy
+                       || ((access === "public" || access === "paywall") && !attest)}
+                      className="btn btn-primary text-xs"
+                      data-testid="publish-submit">
+                {busy ? "Publishing…" : "Publish"}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }

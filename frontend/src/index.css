@@ -68,6 +68,13 @@
     @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-sm text-sm font-ui font-medium transition-all duration-300;
     @apply border border-gold/30 text-parchment bg-ink/40 hover:bg-gold/10 hover:border-gold hover:text-gold-bright;
     letter-spacing: 0.08em;
+    /* V6.25.5 mobile sweep — guarantee 44 px touch target on coarse pointers. */
+    min-height: 38px;
+  }
+  @media (hover: none) and (pointer: coarse) {
+    .btn { min-height: 44px; padding-top: 0.625rem; padding-bottom: 0.625rem; }
+    .input, .select { min-height: 44px; }
+    .tag { min-height: 24px; padding-top: 0.25rem; padding-bottom: 0.25rem; }
   }
   .btn-primary {
     @apply bg-gold/90 text-void border-gold hover:bg-gold-bright hover:text-void;
@@ -83,7 +90,24 @@
     @apply focus:outline-none focus:border-gold focus:shadow-[0_0_0_1px_rgba(212,175,55,0.35)] transition;
   }
   textarea.input { @apply leading-relaxed; min-height: 90px; }
-  .select { @apply input; }
+  /* V6.25.5 — make native <select> chevrons readable on dark backgrounds.
+     Without this the OS-native chevron is invisible on void/60 fills,
+     so users on mobile especially can't tell select dropdowns apart
+     from inputs. */
+  .select {
+    @apply input pr-8 appearance-none cursor-pointer;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23c8a34a' d='M3 4.5L6 7.5L9 4.5z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.5rem center;
+    background-size: 12px 12px;
+  }
+  .select-sm { @apply px-2 py-1 text-xs; min-height: 32px; }
+  /* V6.25.5 — radix-select / generic dropdown panels need a high z-index
+     so they paint above sticky headers and modal scrims that don't open
+     a stacking context of their own. */
+  [role="listbox"], [role="menu"], [data-radix-popper-content-wrapper] {
+    z-index: 60;
+  }
   .tag {
     @apply inline-flex items-center gap-1 px-2 py-0.5 text-[10px] uppercase tracking-widest rounded-sm;
     @apply border border-gold/25 text-gold/80 bg-void/40;

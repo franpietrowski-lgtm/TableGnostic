@@ -23,6 +23,7 @@ const Account         = lazy(() => import("./components/Account"));
 const DirectorConsole = lazy(() => import("./components/DirectorConsole"));
 const HowToGuide      = lazy(() => import("./components/HowToGuide"));
 const CanonRegistry   = lazy(() => import("./components/CanonRegistry"));
+const Marketplace     = lazy(() => import("./components/Marketplace"));
 
 function Protected({ children }) {
   const { user, loading } = useAuth();
@@ -85,6 +86,7 @@ export default function App() {
             <Route path="/app/campaigns/:id/director" element={<Suspense fallback={<RouteFallback/>}><DirectorConsole /></Suspense>} />
             <Route path="/app/help" element={<Suspense fallback={<RouteFallback/>}><HowToGuide /></Suspense>} />
             <Route path="/app/canon" element={<Suspense fallback={<RouteFallback/>}><CanonRegistry /></Suspense>} />
+            <Route path="/app/marketplace" element={<Suspense fallback={<RouteFallback/>}><Marketplace /></Suspense>} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

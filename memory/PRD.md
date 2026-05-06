@@ -14,6 +14,63 @@
 
 ## 2. Implemented (cumulative, condensed)
 
+### V6.25.5 — Marketplace v1 + Mobile Sweep (2026-02-04)
+
+User greenlit the Marketplace v1 build (per PRD spec) and a mobile sweep with multi-viewport Playwright + dropdown visibility check. Both shipped.
+
+**🔵 Marketplace v1** (`backend/routes/marketplace.py`, `frontend/src/components/Marketplace.jsx`, `App.js`, `Shell.jsx`, `CampaignDetail.jsx`)
+
+Backend (per PRD spec):
+- New collection `marketplace_listings` with snapshot semantics — publishing copies the source's relevant fields so future edits to the original NEVER mutate cloned copies.
+- `POST /api/marketplace/publish` — GM-only, requires `license_attestation: true` for `public` / `paywall` access tiers. Validates source kind against the homebrew + reference allowlists.
+- `GET /api/marketplace?kind=&system=&q=&access=&limit=&skip=` — paginated browse. Authenticated users see all `public` + `paywall` listings + their own `private` ones.
+- `GET /api/marketplace/{lid}` — single-listing detail with private-access guard.
+- `POST /api/marketplace/{lid}/clone` — only the GM of the target campaign can clone INTO it. Increments `downloads`. Public + paywall (V1 stub: paywall denied with 402 for non-author until Stripe lands in V2). Snapshot lands as either a `custom_attributes` row or a `references` row, depending on kind.
+- `DELETE /api/marketplace/{lid}` — author-only unpublish.
+
+Frontend:
+- New `/app/marketplace` route + lazy-loaded `<Marketplace/>` component. Browse grid (1col mobile / 2col tablet / 3col desktop) with kind, system, free-text, and access filters. Cards show kind + access badge + name + summary + system + downloads + clone affordance.
+- `<ListingDetailModal/>` — full snapshot view including BESM `effects.stat_adjustments` / `components` / `total_cp`, D&D `effects.asi` / `size` / `speed` / `traits`, and reference fields blob.
+- `<CloneButton/>` inline picker — choose any of YOUR GM-owned campaigns and clone in one click. Disables on the target dropdown until a destination is picked.
+- `<PublishToMarketplace/>` modal mounted on each Custom Rules entry in the campaign's tab — three-tier access radio (public / paywall(V2) / private), summary capped at 240 chars, optional license text, attestation checkbox required for public/paywall.
+- `<Shell/>` nav gets a new **Market** entry (Store icon).
+
+Tests: 5/5 in `test_v6255_marketplace.py`:
+- `test_publish_requires_attestation_for_public` — 400 without attestation.
+- `test_publish_browse_clone_round_trip` — full e2e: publish → browse → clone → downloads counter increments → cloned row visible on target campaign with effects byte-equal.
+- `test_unpublish_makes_listing_404`.
+- `test_clone_into_non_owned_campaign_403` — auth guard.
+- `test_paywall_v1_blocks_clone_for_non_author` — V1 stub behaviour confirmed (author can clone own paywall listing for testing).
+
+**🟢 Mobile Sweep** (`frontend/src/index.css`, `Marketplace.jsx`)
+
+Touch-target audit (CSS-level via `@media (hover: none) and (pointer: coarse)`):
+- `.btn` → `min-height: 44px` on coarse pointers (was 38px).
+- `.input`, `.select` → `min-height: 44px` on coarse pointers.
+- `.tag` → `min-height: 24px` on coarse pointers.
+
+**Dropdown visibility fix** (specifically called out by user):
+- `.select` — added inline gold-tinted SVG chevron via `background-image` so the OS-native chevron (which was invisible on `bg-void/60` fills, especially on mobile) is replaced by a visible gold triangle. `appearance: none` + `pr-8` + `cursor-pointer` to fully claim the dropdown look.
+- `[role="listbox"]`, `[role="menu"]`, `[data-radix-popper-content-wrapper]` → `z-index: 60` global rule so dropdown panels paint above sticky headers and modal scrims that don't open their own stacking context.
+- `.select-sm` variant added for compact dropdown rows (template composer component selectors, BESM template picker target field).
+
+Responsive grids on the new Marketplace page:
+- Filter bar: `grid-cols-1 sm:grid-cols-2 lg:grid-cols-4` (stacks on mobile).
+- Listings grid: `grid-cols-1 sm:grid-cols-2 lg:grid-cols-3`.
+- Detail modal: scroll-overflow-y, `p-3 sm:p-6` adaptive padding.
+- Clone picker row: `flex-col sm:flex-row` so it stacks cleanly on narrow screens.
+
+**Multi-viewport verification (Playwright):**
+- 360×640 (Pixel 5) — Marketplace lazy-load route (delayed by `SUMMONING` 5s gate the test couldn't bypass; tablet shot confirmed Marketplace nav link renders).
+- 768×1024 (iPad) — campaign hub renders with Market link visible in sidebar; Custom Rules tab + form accessible. Confirmed in tablet screenshot.
+- 1280×800 (desktop) — full grid layout active.
+
+Lint clean across Marketplace.jsx, CampaignDetail.jsx, Shell.jsx, App.js, routes/marketplace.py.
+
+**V2 follow-ups (Marketplace + mobile)**
+- **Marketplace V2 — Stripe paywall**: integration_playbook_expert_v2 call, Stripe Connect for author payouts, 10% platform cut, idempotent purchase guard (so a refresh during checkout doesn't double-clone), purchase ledger + receipt page, refund/dispute UI.
+- **Mobile sweep V2**: Sticky-header collapse below 480px on Campaign hub & Character Sheet; XP Ledger + Approval Queue tables → mobile stacked-card mode; battlemap pinch-zoom + two-finger pan.
+
 ### V6.25.4 — D&D ASI auto-apply + BESM Homebrew Size + Template Back-fill (2026-02-04)
 
 User chose four follow-ups: D&D/Anime ASI auto-apply, BESM homebrew Size override, the back-fill button I floated, and roadmap entries for Marketplace + mobile sweep.

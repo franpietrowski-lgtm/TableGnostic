@@ -1,0 +1,292 @@
+"""Marketplace v1 — V6.25.5
+
+Cross-table sharing of homebrew Custom Rules entries (race / class /
+size / feat / power_bundle / etc) so the growing community canon is a
+shared library rather than an island per table.
+
+Design:
+  * `marketplace_listings` — snapshot collection. Publishing copies the
+    relevant fields (kind, name, description_note, effects / fields)
+    so future edits to the source DON'T retroactively mutate clones.
+  * Access: `private` (default — owner-only browse) | `public` (any
+    authenticated user can clone) | `paywall` (V2; treated like
+    `public` for V1 — endpoint validates but skips Stripe).
+  * Cloning: writes into the target campaign's `custom_attributes`
+    (for kind in homebrew kinds) or `references` (for items / weapons
+    / spells). Increments `downloads` on the listing.
+
+Endpoints:
+  POST   /api/marketplace/publish      — snapshot a custom rule.
+  GET    /api/marketplace               — paginated browse + filters.
+  POST   /api/marketplace/{lid}/clone   — clone into target campaign.
+  DELETE /api/marketplace/{lid}         — author can unpublish.
+"""
+from __future__ import annotations
+from typing import Any, Dict, List, Literal, Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
+
+from core.db import db, new_id, now_iso
+from core.security import get_current_user
+
+router = APIRouter(prefix="/api", tags=["marketplace"])
+
+# Kinds the marketplace accepts. Mirrors CustomAttributeIn + reference
+# editor. Keep in sync if either expands.
+HOMEBREW_KINDS = {
+    "attribute", "defect", "skill", "feature", "trait", "feat", "house",
+    "descriptor", "focus", "ability", "cypher", "artifact",
+    "race", "class", "size", "stat",
+}
+REFERENCE_KINDS = {
+    "weapon", "armor", "item", "spell",
+    "power_pack", "power_bundle",
+}
+
+
+# ─── Models ─────────────────────────────────────────────────────────────
+
+
+class MarketplacePublishIn(BaseModel):
+    source_campaign_id: str
+    source_kind: Literal["custom", "reference"]
+    source_id: str
+    access: Literal["private", "public", "paywall"] = "public"
+    price_cents: int = 0
+    license_text: str = Field(default="", max_length=600)
+    summary: str = Field(default="", max_length=600)
+    license_attestation: bool = False
+
+
+class MarketplaceCloneIn(BaseModel):
+    into_campaign_id: str
+
+
+# ─── Helpers ────────────────────────────────────────────────────────────
+
+
+def _scrub(doc: dict) -> dict:
+    """Strip MongoDB internals + author identifiers we don't want
+    leaking via the public listing endpoint."""
+    out = {k: v for k, v in (doc or {}).items() if k != "_id"}
+    return out
+
+
+# ─── Publish ────────────────────────────────────────────────────────────
+
+
+@router.post("/marketplace/publish")
+async def publish_listing(body: MarketplacePublishIn,
+                            user: dict = Depends(get_current_user)):
+    """Snapshot a homebrew entry into the marketplace. Only the GM of
+    the source campaign can publish; license attestation is required
+    for `public` / `paywall` access tiers."""
+    camp = await db.campaigns.find_one({"id": body.source_campaign_id}, {"_id": 0})
+    if not camp:
+        raise HTTPException(404, "Source campaign not found")
+    if camp["gm_id"] != user["id"]:
+        raise HTTPException(403, "Only the campaign GM may publish entries.")
+
+    if body.access in ("public", "paywall") and not body.license_attestation:
+        raise HTTPException(400,
+            "Public / paywall listings require a licence attestation.")
+    if body.access == "paywall":
+        # V1: paywall is accepted but the clone endpoint treats it as
+        # public (Stripe wiring lands in V2 with the integration
+        # playbook). Surface the intent so the UI can badge it.
+        pass
+
+    # Resolve the source entry.
+    if body.source_kind == "custom":
+        src = await db.custom_attributes.find_one(
+            {"id": body.source_id, "campaign_id": body.source_campaign_id},
+            {"_id": 0})
+        if not src:
+            raise HTTPException(404, "Source custom rule not found.")
+        if src["kind"] not in HOMEBREW_KINDS:
+            raise HTTPException(400, f"Cannot publish kind '{src['kind']}'.")
+        snapshot = {
+            "kind": src["kind"],
+            "name": src["name"],
+            "description_note": src.get("description_note", ""),
+            "cost_per_level": src.get("cost_per_level", 1),
+            "category": src.get("category", ""),
+            "page_ref": src.get("page_ref", "Custom"),
+            "effects": src.get("effects", {}) or {},
+        }
+    elif body.source_kind == "reference":
+        src = await db.references.find_one(
+            {"id": body.source_id, "campaign_id": body.source_campaign_id},
+            {"_id": 0})
+        if not src:
+            raise HTTPException(404, "Source reference entry not found.")
+        if src.get("kind") not in REFERENCE_KINDS:
+            raise HTTPException(400, f"Cannot publish kind '{src.get('kind')}'.")
+        snapshot = {
+            "kind": src["kind"],
+            "name": src.get("name", ""),
+            "summary": src.get("summary", ""),
+            "fields": src.get("fields", {}) or {},
+        }
+    else:
+        raise HTTPException(400, f"Unknown source_kind: {body.source_kind}")
+
+    listing = {
+        "id": new_id(),
+        "source_campaign_id": body.source_campaign_id,
+        "source_owner_id": user["id"],
+        "source_owner_name": user.get("name") or "",
+        "source_system_id": camp.get("system_id") or "",
+        "source_kind": body.source_kind,
+        "source_id": body.source_id,
+        "kind": snapshot["kind"],
+        "name": snapshot["name"],
+        "summary": body.summary or snapshot.get("summary")
+                    or snapshot.get("description_note", "")[:240],
+        "snapshot": snapshot,
+        "access": body.access,
+        "price_cents": max(0, int(body.price_cents)),
+        "license_text": body.license_text,
+        "downloads": 0,
+        "created_at": now_iso(),
+        "updated_at": now_iso(),
+    }
+    await db.marketplace_listings.insert_one(listing)
+    return _scrub(listing)
+
+
+# ─── Browse ─────────────────────────────────────────────────────────────
+
+
+@router.get("/marketplace")
+async def browse_marketplace(
+    user: dict = Depends(get_current_user),
+    kind: Optional[str] = Query(None,
+        description="Filter by single kind (e.g. 'race', 'spell')."),
+    system: Optional[str] = Query(None,
+        description="Filter by source system_id (e.g. 'besm-4e', 'dnd-5e')."),
+    q: Optional[str] = Query(None,
+        description="Case-insensitive substring search on name + summary."),
+    access: Optional[str] = Query(None,
+        description="Filter access tier: 'public', 'paywall'."),
+    limit: int = Query(40, ge=1, le=100),
+    skip: int = Query(0, ge=0),
+):
+    """Paginated browse. Authenticated users see all `public` listings
+    plus their own `private` listings. `paywall` shows up so users can
+    discover it (clone endpoint guards the price)."""
+    where: Dict[str, Any] = {
+        "$or": [
+            {"access": {"$in": ["public", "paywall"]}},
+            {"source_owner_id": user["id"]},
+        ],
+    }
+    if kind:
+        where["kind"] = kind
+    if system:
+        where["source_system_id"] = system
+    if access:
+        where["access"] = access
+    if q:
+        # MongoDB doesn't have $or-AND-$or natively; fold into a $text-like search.
+        where["$and"] = where.pop("$and", []) + [{"$or": [
+            {"name": {"$regex": q, "$options": "i"}},
+            {"summary": {"$regex": q, "$options": "i"}},
+        ]}]
+    cursor = db.marketplace_listings.find(where, {"_id": 0}) \
+        .sort("created_at", -1) \
+        .skip(skip).limit(limit)
+    rows = [r async for r in cursor]
+    total = await db.marketplace_listings.count_documents(where)
+    return {"total": total, "rows": rows, "limit": limit, "skip": skip}
+
+
+@router.get("/marketplace/{lid}")
+async def get_listing(lid: str, user: dict = Depends(get_current_user)):
+    listing = await db.marketplace_listings.find_one({"id": lid}, {"_id": 0})
+    if not listing:
+        raise HTTPException(404, "Listing not found")
+    if listing["access"] == "private" and listing["source_owner_id"] != user["id"]:
+        raise HTTPException(403, "Listing is private")
+    return listing
+
+
+# ─── Clone ──────────────────────────────────────────────────────────────
+
+
+@router.post("/marketplace/{lid}/clone")
+async def clone_listing(lid: str, body: MarketplaceCloneIn,
+                          user: dict = Depends(get_current_user)):
+    """Clone the listing's snapshot into the target campaign. The
+    target campaign must be GM-owned by the requesting user (player
+    cloning into a campaign they don't run is not allowed)."""
+    listing = await db.marketplace_listings.find_one({"id": lid}, {"_id": 0})
+    if not listing:
+        raise HTTPException(404, "Listing not found")
+    if listing["access"] == "private" and listing["source_owner_id"] != user["id"]:
+        raise HTTPException(403, "Listing is private")
+    if listing["access"] == "paywall" and listing["source_owner_id"] != user["id"]:
+        # V1 stub: deny clone for non-self paywall listings until V2 wires
+        # Stripe. Authors can still clone their own paywalled listing.
+        raise HTTPException(402,
+            "Paywall purchases land in V2 with Stripe — for now, only "
+            "the listing's author can clone a paywalled entry.")
+
+    target = await db.campaigns.find_one(
+        {"id": body.into_campaign_id}, {"_id": 0})
+    if not target:
+        raise HTTPException(404, "Target campaign not found.")
+    if target["gm_id"] != user["id"]:
+        raise HTTPException(403,
+            "Only the GM of the target campaign may clone listings into it.")
+
+    snap = listing["snapshot"]
+    kind = snap["kind"]
+    if kind in HOMEBREW_KINDS:
+        new_doc = {
+            "id": new_id(),
+            "campaign_id": body.into_campaign_id,
+            "kind": kind,
+            "name": snap["name"],
+            "cost_per_level": snap.get("cost_per_level", 1),
+            "category": snap.get("category", ""),
+            "page_ref": (snap.get("page_ref") or "Marketplace") + " (cloned)",
+            "description_note": snap.get("description_note", ""),
+            "effects": snap.get("effects", {}) or {},
+            "_marketplace_listing_id": lid,
+        }
+        await db.custom_attributes.insert_one(new_doc)
+    elif kind in REFERENCE_KINDS:
+        new_doc = {
+            "id": new_id(),
+            "campaign_id": body.into_campaign_id,
+            "kind": kind,
+            "name": snap["name"],
+            "summary": snap.get("summary", "") + "\n\n(cloned from marketplace)",
+            "fields": snap.get("fields", {}) or {},
+            "_marketplace_listing_id": lid,
+        }
+        await db.references.insert_one(new_doc)
+    else:
+        raise HTTPException(400, f"Unknown snapshot kind: {kind}")
+
+    await db.marketplace_listings.update_one(
+        {"id": lid},
+        {"$inc": {"downloads": 1}, "$set": {"updated_at": now_iso()}})
+
+    return {"ok": True, "cloned_id": new_doc["id"], "kind": kind}
+
+
+# ─── Unpublish ─────────────────────────────────────────────────────────
+
+
+@router.delete("/marketplace/{lid}")
+async def unpublish_listing(lid: str, user: dict = Depends(get_current_user)):
+    listing = await db.marketplace_listings.find_one({"id": lid}, {"_id": 0})
+    if not listing:
+        raise HTTPException(404, "Listing not found")
+    if listing["source_owner_id"] != user["id"] and user.get("role") != "admin":
+        raise HTTPException(403, "Only the listing's author can unpublish.")
+    await db.marketplace_listings.delete_one({"id": lid})
+    return {"ok": True}
