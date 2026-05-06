@@ -363,6 +363,7 @@ export default function CharacterSheet() {
           BESM 4E (and Anime 5E by default) keep the original tri-stat layout. */}
       {dndState && <DndSheetView state={dndState} folio={ch.folio} roll={roll}
                                     characterId={ch.id} isOwnerOrGm={canEditMech}
+                                    campaignId={ch.campaign_id}
                                     systemId={campaign?.system_id || "dnd-5e"}/>}
       {cypherState && <CypherSheetView state={cypherState} roll={roll}/>}
       {!dndState && !cypherState && (

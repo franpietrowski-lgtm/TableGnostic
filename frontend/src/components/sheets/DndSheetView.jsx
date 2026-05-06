@@ -1,18 +1,45 @@
 // DndSheetView — extracted in V6.10 refactor.
 // Renders the D&D 5E (and Anime 5E hybrid d20-chassis) read-only character
 // sheet. Spell slots + chassis + abilities + class features. ~390 lines.
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Stat, SimpleListCard, DiceCard, Anime5eSupplementView } from "./sheetCommon";
 import DndDerivedAndEquipment from "./DndDerivedAndEquipment";
+import { api } from "../../lib/api";
 
-export default function DndSheetView({ state, folio, roll, characterId, isOwnerOrGm, systemId = "dnd-5e" }) {
+export default function DndSheetView({ state, folio, roll, characterId, isOwnerOrGm,
+                                        systemId = "dnd-5e", campaignId = null }) {
   const sc = state.ability_scores || {};
   const lvl = Math.max(1, +(state.level || 1));
   const profBonus = Math.max(2, 2 + Math.floor((lvl - 1) / 4));
+
+  // V6.25.4 — fetch the campaign's custom rules so a homebrew race
+  // matched on `state.race` can auto-apply its `effects.asi` bonuses
+  // to ability modifiers + saves + initiative on the sheet itself.
+  const [hbAsi, setHbAsi] = useState({});
+  useEffect(() => {
+    if (!campaignId || !state.race) { setHbAsi({}); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await api.get(`/campaigns/${campaignId}/custom`);
+        const hb = (data || []).find(
+          (r) => r.kind === "race"
+            && (r.name || "").toLowerCase() === (state.race || "").toLowerCase()
+            && r.effects && r.effects.asi);
+        if (!cancelled) setHbAsi((hb && hb.effects && hb.effects.asi) || {});
+      } catch { if (!cancelled) setHbAsi({}); }
+    })();
+    return () => { cancelled = true; };
+  }, [campaignId, state.race]);
+
   // V6.20 — default ability scores to 10 (not 0) when unset, so the
   // sheet shows the canonical baseline instead of -5 modifiers across
   // the board for converter-imported characters that omitted scores.
-  const mod = (s) => Math.floor((((sc[s] != null && sc[s] > 0) ? sc[s] : 10) - 10) / 2);
+  // V6.25.4 — homebrew race ASI bonus is added to the effective score
+  // before computing modifiers.
+  const baseScore = (s) => (sc[s] != null && sc[s] > 0) ? sc[s] : 10;
+  const eff = (s) => baseScore(s) + (+hbAsi[s] || 0);
+  const mod = (s) => Math.floor((eff(s) - 10) / 2);
   const fmt = (n) => (n >= 0 ? `+${n}` : `${n}`);
   const six = ["Strength", "Dexterity", "Constitution",
                 "Intelligence", "Wisdom", "Charisma"];
@@ -145,20 +172,37 @@ export default function DndSheetView({ state, folio, roll, characterId, isOwnerO
             const m = mod(s);
             // V6.20 — show 10 baseline when score is unset (matches the
             // mod() default), so converter sheets read as canonical.
-            const display = (sc[s] != null && sc[s] > 0) ? sc[s] : 10;
+            const base = (sc[s] != null && sc[s] > 0) ? sc[s] : 10;
+            const bonus = +hbAsi[s] || 0;
+            const display = base + bonus;
             return (
               <button key={s}
                       onClick={() => roll(`1d20${fmt(m)}`, `${state.class || ""} · ${abbr[s]} check`)}
                       className="border border-gold/15 rounded-sm py-2 hover:border-gold/40 hover:bg-gold/5 transition-colors group"
                       data-testid={`dnd-sheet-roll-${abbr[s]}`}
-                      title={`Roll d20 ${fmt(m)}`}>
+                      title={bonus
+                        ? `Roll d20 ${fmt(m)} (base ${base} + homebrew race ${bonus > 0 ? "+" : ""}${bonus})`
+                        : `Roll d20 ${fmt(m)}`}>
                 <div className="label-ref">{abbr[s]}</div>
-                <div className="font-display text-2xl text-gold">{display}</div>
+                <div className="font-display text-2xl text-gold">
+                  {display}
+                  {bonus !== 0 && (
+                    <span className="text-arcane-light text-[10px] align-top ml-0.5"
+                          data-testid={`dnd-sheet-asi-${abbr[s]}`}>
+                      {bonus > 0 ? "+" : ""}{bonus}
+                    </span>
+                  )}
+                </div>
                 <div className="text-[10px] font-ui text-gold-bright group-hover:text-gold">{fmt(m)}</div>
               </button>
             );
           })}
         </div>
+        {Object.keys(hbAsi).length > 0 && (
+          <div className="text-[10px] text-mist mt-2 italic" data-testid="dnd-sheet-asi-footnote">
+            ✦ Homebrew race ASI auto-applied to modifiers + saves.
+          </div>
+        )}
       </div>
 
       {(state.saving_throw_profs?.length || state.skill_profs?.length) > 0 && (

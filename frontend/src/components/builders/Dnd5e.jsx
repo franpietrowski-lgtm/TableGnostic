@@ -104,9 +104,15 @@ export function Dnd5eBuilder({ campaign, ref_, charId, hybridSupplement }) {
 
   const cls = ref_.classes.find((c) => c.name === s.class);
   const race = ref_.races.find((r) => r.name === s.race);
-  const hp = (cls?.hit_die || 8) + modOf(s.ability_scores.Constitution) +
+  // V6.25.4 — ASI auto-application. When the picked race is a homebrew
+  // entry with `effects.asi`, derived stats (HP/AC/Initiative) use the
+  // bonus-adjusted ability scores so the sheet reflects the chosen
+  // race honestly.
+  const asiHb = (homebrewRaces.find((r) => r.name === s.race)?.effects?.asi) || {};
+  const effScore = (a) => (s.ability_scores[a] || 0) + (+asiHb[a] || 0);
+  const hp = (cls?.hit_die || 8) + modOf(effScore("Constitution")) +
              ((cls?.hit_die || 8) / 2 + 1) * (s.level - 1);
-  const ac = 10 + modOf(s.ability_scores.Dexterity);
+  const ac = 10 + modOf(effScore("Dexterity"));
   const prof = profByLevel(s.level);
 
   const save = async () => {
@@ -273,6 +279,8 @@ export function Dnd5eBuilder({ campaign, ref_, charId, hybridSupplement }) {
       )}
       {!race && homebrewRaces.find((r) => r.name === s.race) && (() => {
         const hb = homebrewRaces.find((r) => r.name === s.race);
+        const eff = hb.effects || {};
+        const asi = eff.asi || {};
         return (
           <div className="card-mystic p-4 mt-2 text-[12px] text-parchment/85 leading-snug"
                data-testid="dnd-race-homebrew-card">
@@ -281,6 +289,32 @@ export function Dnd5eBuilder({ campaign, ref_, charId, hybridSupplement }) {
               <span className="text-mist/60 normal-case tracking-normal">· {hb.category || "custom"}</span>
             </div>
             {hb.description_note || <span className="italic text-mist">No description provided by GM.</span>}
+            {(Object.keys(asi).length > 0 || eff.size || eff.speed
+              || (eff.traits && eff.traits.length > 0)) && (
+              <div className="mt-2 pt-2 border-t border-gold/10 grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
+                {Object.keys(asi).length > 0 && (
+                  <div className="col-span-2">
+                    <span className="text-gold/60 uppercase tracking-widest text-[9px]">ASI</span>
+                    {" · "}
+                    {Object.entries(asi).map(([k, v]) =>
+                      `${k} ${v > 0 ? "+" : ""}${v}`).join(" / ")}
+                    <span className="text-mist/60 italic ml-2">(auto-applied below)</span>
+                  </div>
+                )}
+                {eff.size && (
+                  <div><span className="text-gold/60 uppercase tracking-widest text-[9px]">Size</span> · {eff.size}</div>
+                )}
+                {eff.speed != null && (
+                  <div><span className="text-gold/60 uppercase tracking-widest text-[9px]">Speed</span> · {eff.speed} ft</div>
+                )}
+                {eff.traits && eff.traits.length > 0 && (
+                  <div className="col-span-2">
+                    <span className="text-gold/60 uppercase tracking-widest text-[9px]">Traits</span>
+                    {" · "}{eff.traits.join(", ")}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         );
       })()}
@@ -298,21 +332,44 @@ export function Dnd5eBuilder({ campaign, ref_, charId, hybridSupplement }) {
         );
       })()}
 
-      {/* Ability scores */}
+      {/* Ability scores
+          V6.25.4 — When a homebrew race carries `effects.asi`, we surface
+          each bonus inline next to the relevant ability and use the
+          ASI-effective score for the modifier calc, the save preview,
+          HP, AC, and the live total below. The base value the player
+          types stays untouched so they can still see / edit it. */}
+      {(() => {
+        const hbRaceForAsi = homebrewRaces.find((r) => r.name === s.race);
+        const asi = (hbRaceForAsi && hbRaceForAsi.effects && hbRaceForAsi.effects.asi) || {};
+        const effOf = (a) => (s.ability_scores[a] || 0) + (+asi[a] || 0);
+        return (
       <div className="card-mystic p-5 mt-4">
         <h3 className="h-arcane text-sm mb-3">Ability Scores</h3>
         <div className="grid sm:grid-cols-3 gap-3">
           {ABILITIES_5E.map((a) => {
             const score = s.ability_scores[a];
-            const m = modOf(score);
+            const bonus = +asi[a] || 0;
+            const effective = score + bonus;
+            const m = modOf(effective);
             return (
-              <div key={a} className="border border-gold/15 rounded-sm p-3">
+              <div key={a} className="border border-gold/15 rounded-sm p-3"
+                   data-testid={`dnd-score-cell-${ABBR_5E[a]}`}>
                 <label className="label-ref">{a} ({ABBR_5E[a]})</label>
                 <div className="flex items-center gap-2">
                   <input className="input w-20 text-center" type="number" min={1} max={30}
                          value={score} onChange={(e) => setScore(a, e.target.value)}
                          data-testid={`dnd-score-${ABBR_5E[a]}`}/>
-                  <span className="text-gold font-display">mod {m >= 0 ? "+" : ""}{m}</span>
+                  {bonus !== 0 && (
+                    <span className="text-arcane-light font-ui text-[11px]"
+                          data-testid={`dnd-asi-${ABBR_5E[a]}`}
+                          title={`Homebrew race ASI: ${bonus > 0 ? "+" : ""}${bonus}`}>
+                      {bonus > 0 ? "+" : ""}{bonus}
+                    </span>
+                  )}
+                  <span className="text-gold font-display">
+                    {bonus !== 0 && <span className="text-mist/70 text-[11px] mr-1">→ {effective}</span>}
+                    mod {m >= 0 ? "+" : ""}{m}
+                  </span>
                 </div>
                 <div className="text-[10px] text-mist mt-1 font-ui uppercase tracking-widest">
                   Save: {ABBR_5E[a]} {m >= 0 ? "+" : ""}{m}{savingProfs.includes(a) ? ` +${prof} prof` : ""}
@@ -321,7 +378,14 @@ export function Dnd5eBuilder({ campaign, ref_, charId, hybridSupplement }) {
             );
           })}
         </div>
+        {Object.keys(asi).length > 0 && (
+          <div className="text-[10px] text-mist mt-3 italic" data-testid="dnd-asi-footnote">
+            ✦ Homebrew race ASI auto-applied. Saved scores stay at the value you typed; modifiers + saves use the bonus-adjusted total.
+          </div>
+        )}
       </div>
+        );
+      })()}
 
       {/* Save proficiencies */}
       <div className="card-mystic p-5 mt-4">
@@ -356,7 +420,7 @@ export function Dnd5eBuilder({ campaign, ref_, charId, hybridSupplement }) {
         <Stat label="HP (base)" v={Math.floor(hp)}/>
         <Stat label="AC (base)" v={ac}/>
         <Stat label="Proficiency" v={`+${prof}`}/>
-        <Stat label="Initiative" v={modOf(s.ability_scores.Dexterity) >= 0 ? `+${modOf(s.ability_scores.Dexterity)}` : modOf(s.ability_scores.Dexterity)}/>
+        <Stat label="Initiative" v={modOf(effScore("Dexterity")) >= 0 ? `+${modOf(effScore("Dexterity"))}` : modOf(effScore("Dexterity"))}/>
       </div>
 
       {/* V6.21 — Reference-backed dropdown selectors replace free-text

@@ -14,6 +14,55 @@
 
 ## 2. Implemented (cumulative, condensed)
 
+### V6.25.4 — D&D ASI auto-apply + BESM Homebrew Size + Template Back-fill (2026-02-04)
+
+User chose four follow-ups: D&D/Anime ASI auto-apply, BESM homebrew Size override, the back-fill button I floated, and roadmap entries for Marketplace + mobile sweep.
+
+**🔴 P0 — D&D / Anime 5E homebrew race ASI auto-applied** (`builders/Dnd5e.jsx`, `sheets/DndSheetView.jsx`, `CharacterSheet.jsx`)
+- **Builder**: When the player picks a homebrew race carrying `effects.asi`, the Ability Scores grid now shows each affected ability with an inline arcane-coloured `+N` bonus chip + an effective-score arrow (e.g. `STR 13 → 15 mod +2`). Modifiers, saves, HP, AC, and Initiative all use the bonus-adjusted score. The player's typed base score stays untouched (so they can still see / edit it). Tooltip explains: *"Homebrew race ASI: +N"*; footnote: *"Saved scores stay at the value you typed; modifiers + saves use the bonus-adjusted total."*
+- **Sheet**: `DndSheetView` now accepts a `campaignId` prop, fetches `/campaigns/{cid}/custom`, finds the homebrew race matching `state.race`, and surfaces ASI bonuses via the same effective-score path — modifiers, saves, initiative, atk-with-prof tags all reflect the bonus. Each ability score cell shows the base value with a small arcane superscript bonus (e.g. `13⁺²`); a footnote reads *"Homebrew race ASI auto-applied to modifiers + saves."*
+- Tooltips and `data-testid="dnd-asi-{ABBR}"` / `data-testid="dnd-sheet-asi-{ABBR}"` make the auto-apply discoverable + testable.
+
+**🟧 P1 — BESM homebrew Size → Size dropdown override** (`CharacterBuilder.jsx`)
+- Size Template dropdown now ships a two-optgroup UI: `BESM 4E (canonical)` + `Campaign Homebrew`. Homebrew sizes from Custom Rules → kind=size surface as selectable options like *"V6254 Giant (Size 4) · 9 ft tall · +2 reach · -2 stealth"*.
+- When a homebrew size is picked, a small italic note renders below the dropdown showing the GM's description.
+- Character sheet already surfaces `ch.size` in the header strip, so the homebrew size name flows through automatically.
+- Test: `test_character_with_size_string_round_trips` confirms the free-form size string saves cleanly even when off-canon.
+
+**💎 Improvement — Template Back-fill** (`CharacterBuilder.jsx`)
+- New `⤺ Back-fill` button next to **Apply** on the BESM Template Picker. Scans the character's existing attributes / skills / defects, matches them by name (case-insensitive) against the chosen template's `effects.components`, tags matches with `from_template_id`, and appends the template to `folio.applied_templates` with `backfilled: true, tagged_rows: N`.
+- Critically, back-fill **does NOT** add new rows or alter stats — that's the `Apply` path. Back-fill is for characters built BEFORE V6.25.3 who already have the components but no provenance tag. After back-fill + Save, the AppliedTemplatesPanel on the sheet will correctly attribute existing rows to their parent template.
+- Test: `test_backfilled_template_marker_persists` confirms the `backfilled` flag + `tagged_rows` count survive a CharacterIn round-trip.
+
+**Testing**
+- 4/4 new V6.25.4 tests pass.
+- 59/59 cumulative across V6.22 + V6.23 + V6.24 + V6.25 + V6.25.1-4.
+- Frontend lint clean across CharacterBuilder, CharacterSheet, builders/Dnd5e, sheets/DndSheetView.
+
+**Marketplace + Mobile Sweep — roadmapped (no build yet)**
+
+### Marketplace v1 spec (P1, scoped, ready for build)
+- New collection `marketplace_listings` with fields:
+  `{id, source_campaign_id, source_owner_id, kind, name, summary, fields,
+    effects, access: 'private' | 'public' | 'paywall', price_cents,
+    license_text, downloads, created_at, updated_at}`.
+- Endpoints:
+  - `POST /api/marketplace/publish` — takes a custom_attribute or reference id, snapshots into `marketplace_listings` with the GM's chosen access + price.
+  - `GET /api/marketplace?kind=&system=&q=&access=` — paginated browse with system + kind filters.
+  - `POST /api/marketplace/{listing_id}/clone?into_campaign={cid}` — clones the snapshot into the target campaign's custom_attributes (or reference, by kind). Increments `downloads`.
+- UI: New `/app/marketplace` route with cards grid, system + kind filters, and a "Publish to Marketplace" button on each Custom Rules entry (GM-only).
+- Paywall integration: Stripe playbook (test-mode key already in pod env) gating the clone endpoint with a one-time charge or subscription. Listing creator becomes the connected Stripe account; platform takes a 10% cut (config flag).
+- License attestation: Each `public` / `paywall` listing includes a checkbox attestation: *"I authored this content or have rights to redistribute it under the campaign's chosen license."* Stored in `license_text`.
+
+### Mobile responsiveness sweep (P2, scoped)
+**Priority pages** (player-facing during play): `/app/characters/{id}` (sheet), `/app/campaigns/{cid}` (campaign hub), `/app/sessions/{sid}` (session view).
+**Concrete sweep tasks**:
+- Replace fixed `grid-cols-{N}` with responsive `grid-cols-1 sm:grid-cols-2 lg:grid-cols-{N}` across `card-mystic` blocks.
+- Sticky header collapse on `<480px` — campaign name + tabs collapse into a hamburger row.
+- `<table>` → mobile-stacked-card mode for XP Ledger, Approval Queue, Inventory tables.
+- Touch-target audit: all interactive elements ≥ 44×44px on mobile (currently ~28px in places).
+- Testing: Playwright at 360×640 (Pixel 5) + 414×896 (iPhone 12 Pro) + 768×1024 (iPad).
+
 ### V6.25.3 — BESM template persistence + Class header redirect + Universal Custom Rules picker (2026-02-04)
 
 User reported applying a custom BESM class to character "nyaulis" — it didn't display on the sheet, didn't factor into the point budget, and the sheet's `CLASS — ? (LEVEL 1)` block still pointed to the removed Atelier `kind: 'custom_class'` destination. Also asked for character-sheet pickers to surface reference + custom entries of every type by system.

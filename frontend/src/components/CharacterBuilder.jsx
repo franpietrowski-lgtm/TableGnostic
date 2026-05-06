@@ -368,12 +368,37 @@ export default function CharacterBuilder() {
               <select className="select" value={ch.size || "Medium"}
                       onChange={(e) => setCh({ ...ch, size: e.target.value })}
                       data-testid="char-size">
-                {(ref.size_templates || []).map((s) => (
-                  <option key={s.name} value={s.name}>
-                    {s.name}{s.alias && s.alias !== s.name ? ` · ${s.alias}` : ""} · {s.blurb.split(".")[0]}
-                  </option>
-                ))}
+                <optgroup label="BESM 4E (canonical)">
+                  {(ref.size_templates || []).map((s) => (
+                    <option key={s.name} value={s.name}>
+                      {s.name}{s.alias && s.alias !== s.name ? ` · ${s.alias}` : ""} · {s.blurb.split(".")[0]}
+                    </option>
+                  ))}
+                </optgroup>
+                {/* V6.25.4 — Homebrew sizes authored on Custom Rules → Size kind
+                    surface here so a player can select a GM-defined size like
+                    "Giant (Size 4)" alongside the canonical templates. */}
+                {customs.filter((c) => c.kind === "size").length > 0 && (
+                  <optgroup label="Campaign Homebrew">
+                    {customs.filter((c) => c.kind === "size").map((c) => (
+                      <option key={c.id} value={c.name}
+                              data-testid={`char-size-homebrew-${c.id}`}>
+                        {c.name}{c.description_note ? ` · ${c.description_note.slice(0, 60)}` : ""}
+                      </option>
+                    ))}
+                  </optgroup>
+                )}
               </select>
+              {(() => {
+                const hbSize = customs.find((c) => c.kind === "size" && c.name === ch.size);
+                if (!hbSize) return null;
+                return (
+                  <div className="text-[11px] text-mist italic mt-1"
+                       data-testid="char-size-homebrew-note">
+                    ✦ Homebrew size · {hbSize.description_note || "GM-defined size category."}
+                  </div>
+                );
+              })()}
             </div>
             <div>
               <label className="label-ref block mb-1">Token Colour <span className="text-mist/60">· AV tile pulse + map token</span></label>
@@ -1183,6 +1208,71 @@ function BesmTemplatePicker({ customs, ch, setCh }) {
     });
   };
 
+  // V6.25.4 — back-fill provenance for characters that pre-date the
+  // template-tagging fix. Scans the existing attributes / skills /
+  // defects, matches their NAME (case-insensitive) against components
+  // in the chosen template, tags matching rows with `from_template_id`,
+  // and appends the template to `folio.applied_templates`. Does NOT
+  // add new rows (the player already has them) and does NOT alter
+  // stats — we don't double-apply ASI bonuses we can't be sure were
+  // ever applied historically.
+  const backfill = () => {
+    if (!chosen) return;
+    const eff = chosen.effects || {};
+    const attrNames = new Set((eff.components || [])
+      .filter((c) => c.kind === "attribute")
+      .map((c) => (c.name || "").toLowerCase()));
+    const skillNames = new Set((eff.components || [])
+      .filter((c) => c.kind === "skill")
+      .map((c) => (c.name || "").toLowerCase()));
+    const defectNames = new Set((eff.components || [])
+      .filter((c) => c.kind === "defect")
+      .map((c) => (c.name || "").toLowerCase()));
+    let tagged = 0;
+    const taggedAttrs = (ch.attributes || []).map((a) => {
+      const n = (a.name || "").toLowerCase();
+      if (!a.from_template_id && attrNames.has(n)) {
+        tagged += 1;
+        return { ...a, from_template_id: chosen.id };
+      }
+      return a;
+    });
+    const taggedSkills = (ch.skills || []).map((s) => {
+      const n = (s.group || "").toLowerCase();
+      if (!s.from_template_id && skillNames.has(n)) {
+        tagged += 1;
+        return { ...s, from_template_id: chosen.id };
+      }
+      return s;
+    });
+    const taggedDefects = (ch.defects || []).map((d) => {
+      const n = (d.name || "").toLowerCase();
+      if (!d.from_template_id && defectNames.has(n)) {
+        tagged += 1;
+        return { ...d, from_template_id: chosen.id };
+      }
+      return d;
+    });
+    setCh({
+      ...ch,
+      attributes: taggedAttrs,
+      skills: taggedSkills,
+      defects: taggedDefects,
+      folio: {
+        ...folio,
+        applied_templates: [
+          ...applied.filter((t) => t.id !== chosen.id),
+          { id: chosen.id, name: chosen.name, kind: chosen.kind,
+            total_cp: eff.total_cp ?? 0,
+            stat_adjustments: { ...(eff.stat_adjustments || {}) },
+            description: chosen.description_note || "",
+            backfilled: true, tagged_rows: tagged },
+        ],
+      },
+    });
+    setSel("");
+  };
+
   return (
     <div className="mt-3 border border-gold/20 rounded-sm p-3 bg-void/30"
          data-testid="besm-template-picker">
@@ -1214,6 +1304,14 @@ function BesmTemplatePicker({ customs, ch, setCh }) {
                 data-testid="besm-template-apply-btn"
                 title={chosen ? `Apply '${chosen.name}' — adds its stat adjustments + components to this character.` : "Pick a template first."}>
           <Plus className="w-3 h-3"/> Apply
+        </button>
+        <button type="button" onClick={backfill} disabled={!chosen}
+                className="btn btn-ghost text-xs"
+                data-testid="besm-template-backfill-btn"
+                title={chosen
+                  ? `Back-fill — tag this character's existing rows that match '${chosen.name}' components without adding duplicates. Use this on characters built BEFORE V6.25.3 to recover template provenance.`
+                  : "Pick a template first."}>
+          ⤺ Back-fill
         </button>
       </div>
       {chosen && (
