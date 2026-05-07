@@ -30,6 +30,13 @@ Both seeded on backend startup.
 ### V6.25.10 backend tests (3/3 pass)
 - `tests/test_v62510_apocophea_bag.py` — exposes pools, builds bag, fires macro on Eli, seeds 4 codex materials.
 
+## V6.25.11 — Public landing page + lead capture (2026-05-07)
+- New endpoint: `POST /api/leads` (public, dedupes on email+role within 24h), `GET /api/leads` and `GET /api/leads/count` (admin only).
+- Lead role enum: `gm` / `player` / `worldbuilder` / `homebrew_creator` / `publisher`.
+- 10/10 pytest pass on `/api/leads` happy + edge paths.
+- Admin (`franpietrowski@gmail.com / PieGod08!!`) verified for `GET /api/leads` access.
+- Pydantic_core dependency was misaligned in the preview pod (`pydantic_core==2.46.3` vs `pydantic==2.6.4`); pinned to `pydantic_core==2.16.3` to restore compatibility.
+
 ## Existing endpoints (regression — all 26 pytest pass)
 - BESM enhancement / limiter ranks (V6.25.8)
 - Character-aware macro grammar (V6.25.9)

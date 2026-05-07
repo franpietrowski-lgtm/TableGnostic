@@ -5,6 +5,46 @@
 
 > **Note:** This PRD is the cumulative spine. Detailed iteration changelogs prior to V5.1 live in `git log` and the `/app/test_reports/iteration_*.json` artefacts.
 
+## V6.25.11 — Public landing page + lead capture (2026-05-07)
+
+**Single-page TableGnostics marketing landing — replaces minimal /-route Landing.jsx with a full 12-section scrolling experience per Francis's strategic blueprint.** Built directly into the existing app (route `/`); CTAs route to existing `/auth?mode=register` and `/auth?mode=login` until a custom domain is purchased.
+
+**🟢 Sections (in order)**
+1. Hero — animated sigil device with 4 system glyphs + 5 orbiting interface chips (`/cast`, codex node, macro, marketplace, PDF export); "NOT THE SYSTEM. THE TABLE." headline; primary CTA "Take a Seat", secondary "Watch the Table Tour", tertiary "Open the app →" for returning users.
+2. System Trust Strip — 4 first-class system glyphs (BESM 4E, Anime 5E, Cypher, D&D 5E) + 10 scaffolded chips + "books-not-replaced" trust note.
+3. What TableGnostics Does — 3 scene cards (World-First / Character-Smart / Table-Aware) with stylized SVG mock visuals (codex graph, BESM stat sheet, chat slash commands).
+4. Role-Based Tour — accordion of 4 roles (GM / Player / Worldbuilder / Homebrew Creator); active panel shows title, copy, feature list, and creator quote.
+5. Live Product Proof — V6.25.10 milestone, 26/26 pytest count, shipping strip (V6.25.5–.10), tech stack chips (React, Tailwind, FastAPI, MongoDB, WebSockets, WebRTC, Resend).
+6. Feature Highlights — 12-card responsive grid (Genesis, Codex Graph, World Tree, Character-Aware Macros, Per-Row Sprinkles, BESM Modifier Ranks, Item/Weapon Mods, PBP Commands, Marketplace V1, Genesis Archive, Exports, Mobile Sweep).
+7. Wizards/Helper Flows — V2 teaser cards (4 helpers: System Fit / Spreadsheet Import / Publish Homebrew / Build Campaign Space) with "Coming" labels; per user instruction the wizards themselves are deferred.
+8. Marketplace + Homebrew — explainer copy + bullet list + mock listing grid (4 entries) + clone-counter badge.
+9. Roadmap — 3 columns (Current/demoable, Next 90 days, 12–24 month horizon).
+10. About the Creator — sigil-mark founder block + Francis T. Pietrowski quote + Send Feedback CTA.
+11. Contact / Waitlist — full form (name, email, phone, location, role, primary system, message, consent); on success shows "Seat reserved." card with Take-a-seat-now CTA. POSTs to `/api/leads`.
+12. Footer — matches in-app footer: centered Sigil + TABLEGNOSTICS wordmark + tagline + Francis T. Pietrowski credit + 3-paragraph legal block (platform IP, third-party trademark notice, as-is liability) + © year line.
+
+**🔴 Backend — `routes/leads.py` (new)**
+- `POST /api/leads` (public). Body: `{name, email, phone?, location?, role, primary_system?, message?, consent}`. Dedupes on `(email, role)` within 24h via upsert. Returns `{ok, id, deduped}`.
+- `GET /api/leads?limit=100&skip=0` (admin only). Returns `{items, total, limit, skip}`, sorted newest first, `_id` excluded via projection.
+- `GET /api/leads/count` (admin only). Returns `{total, last_7_days}` for dashboard KPIs.
+- Role validator normalizes case + spaces/dashes to underscores. Enum: `gm` / `player` / `worldbuilder` / `homebrew_creator` / `publisher`.
+- Captures `user_agent` (300ch) and `x-forwarded-for` IP for marketing analytics, per user instruction.
+
+**🟢 Frontend — `components/landing/`**
+- 12 focused sub-components composed by `Landing.jsx`.
+- Reuses existing tailwind tokens (`gold`, `parchment`, `ember`, `arcane`, `mist`, `void`, `ink`) and font families (Cinzel display + Fraunces body + Manrope UI + JetBrains Mono).
+- Smooth-scroll on hash anchor clicks; sticky nav with backdrop blur on scroll.
+- Sets document title + meta description + keywords on mount for SEO.
+- Lives at route `/` in `App.js` (replaces prior 153-line Landing.jsx).
+- Mobile responsive: stacked hero, scrollable role tab rail, ≥44px touch targets on all CTAs.
+
+**🟡 Environment fix**
+- Pinned `pydantic_core==2.16.3` to match `pydantic==2.6.4`; backend was crash-looping on import before the fix. Not landing-page-specific but blocked validation.
+
+**🟢 Tests** — 10/10 pytest pass on `/api/leads` (happy, dedupe, role normalization, no-consent 400, bad-role 422, bad-email 422, GET-no-auth 401, GET-non-admin 403, GET-admin-list 200, GET-admin-count 200). Frontend playwright e2e: all 12 sections render, role tabs switch, contact form happy + error paths both work, mobile 375x812 functional.
+
+---
+
 ## 1. Architecture
 
 - **Backend:** FastAPI + MongoDB (motor) + JWT + token-authed WebSockets + Resend email + Claude Sonnet 4.5 via emergentintegrations + WebRTC mesh signaling + Permissions-Policy
