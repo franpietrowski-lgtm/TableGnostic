@@ -41,22 +41,21 @@ async def besm_reference():
         "defects": [enrich_def(d) for d in with_source(DEFECTS)],
         "enhancements": [{**e, "blurb": enhancement_blurb(e["name"])} for e in with_source(ENHANCEMENTS)],
         "limiters": [{**lim, "blurb": limiter_blurb(lim["name"])} for lim in with_source(LIMITERS)],
-        # V6.25.10 — item / weapon-specific Enhancement & Limiter pools
-        # from BESM Extras Ch.3. Gated client-side: a Force Field
-        # Attribute can't pull from these; only Item / Weapon-class
-        # Attributes (Item, Weapon, Gear, Vehicle, Companion) surface
-        # them in their Customise picker.
+        # V6.25.11 — Weapon Enhancements / Limiters are CORE (p.135 / p.142),
+        # not Extras. Item mods remain a TableGnostic companion pool
+        # (labelled via `source_book=BOOK` + the Item cost-halving rule
+        # enforced in the validator regardless of which item mods are picked).
         "weapon_enhancements": [
-            {**e, "blurb": e.get("note") or "Weapon-specific Enhancement (BESM Extras)."}
-            for e in with_source(WEAPON_ENHANCEMENTS, source_book=BOOK_EXTRAS)],
+            {**e, "blurb": e.get("note") or "Weapon-specific Enhancement (BESM 4E p.135)."}
+            for e in with_source(WEAPON_ENHANCEMENTS)],
         "weapon_limiters": [
-            {**lim, "blurb": lim.get("note") or "Weapon-specific Limiter (BESM Extras)."}
-            for lim in with_source(WEAPON_LIMITERS, source_book=BOOK_EXTRAS)],
+            {**lim, "blurb": lim.get("note") or "Weapon-specific Limiter (BESM 4E p.142)."}
+            for lim in with_source(WEAPON_LIMITERS)],
         "item_enhancements": [
-            {**e, "blurb": e.get("note") or "Item-specific Enhancement (BESM Extras)."}
+            {**e, "blurb": e.get("note") or "Item-specific Enhancement (TableGnostic flavour pool)."}
             for e in with_source(ITEM_ENHANCEMENTS, source_book=BOOK_EXTRAS)],
         "item_limiters": [
-            {**lim, "blurb": lim.get("note") or "Item-specific Limiter (BESM Extras)."}
+            {**lim, "blurb": lim.get("note") or "Item-specific Limiter (TableGnostic flavour pool)."}
             for lim in with_source(ITEM_LIMITERS, source_book=BOOK_EXTRAS)],
         "skill_groups": with_source(SKILL_GROUPS),
         "power_levels": [enrich_pl(p) for p in with_source(POWER_LEVELS)],

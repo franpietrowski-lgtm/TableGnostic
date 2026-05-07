@@ -14,6 +14,68 @@
 
 ## 2. Implemented (cumulative, condensed)
 
+### V6.25.11 — Canonical BESM 4E weapon mods + Item half-cost rule + Refinery + Materials kinds (2026-02-09)
+
+User-flagged corrections + new features: (1) replace fabricated weapon mod data with canonical BESM 4E p.135 / p.142 lists, (2) fix Item half-cost rule (Item Attributes pay `ceil(raw_total / 2)` per BESM 4E p.135 / Assault Mecha p.219), (3) Materials/Byproduct/Craftable Output codex node kinds for the artisan content pipeline, (4) MacroBuilder "Refinery" — type free-form `attribute / skill / defect / stat[:N] / derived`, click Refinery, get character-sheet-aware dropdowns to resolve each unresolved bare token, (5) Player permissions clarified — players cannot add to codex/genesis/epic; they author journals + summaries + characters (which auto-generate NPC cards). Anime 5E full L1-L20 class library deferred (multi-cycle catalog effort) — plumbing in place.
+
+**🔴 Canonical BESM 4E Weapon Enhancements (Core p.135)**
+- Replaced V6.25.10 fabricated 10-entry list with the **canonical 35-entry roster** verbatim from the user-supplied page-135 reference: Accurate (1-2), Aura (1), Autofire (3), Blight (1-3), Contact (1-2), Contagious (1-3), Continuing (1+), Drain (1-3), Enervation (1+), Flare (1-3), Flexible (1-3), Helper (1), Homing (1-2), Incapacitating (2 or 4), Inconspicuous (3), Incurable (1-3), Indirect (1), Insidious (3), Irritant (1-3), Linked (1), Multidimensional (1), Muscle (1), Penetrating (1+), Piercing (1+), Psychic (4), Quake (1-4), Reach (1), Selective (1), Spreading (1+), Stun (1), Tangle (1+), Targetted (1-3), Trap (1), Unique (1+), Vampiric (2 or 4).
+- Each entry carries a `rank_range` field expressing the canonical bounds: `[1, 2]`, `[1, None]` (open-ended), or `"2 or 4"` (discrete pick). The custom-builder UI reads this to constrain rank inputs.
+- TableGnostic descriptive blurbs (NOT rulebook prose) on every entry.
+- Source book: **BESM 4E** core (page 135).
+
+**🔴 Canonical BESM 4E Weapon Limiters (Core p.142)**
+- 13-entry roster: Alt-Munition (special), Ammo (1-4), Backblast (1-2), Exclusive (1-3), Fieldless (1), Hands (1), Inaccurate (1-2), Ingest (1), Non-Penetrating (1+), Stoppable (1-4), Toxic (1-2), Unique (1+), Unreliable (1-3).
+- Source book: **BESM 4E** core (page 142).
+
+**💎 Item half-cost rule** (`character_validation.py`, `models.py`)
+- Per BESM 4E p.135 / Assault Mecha p.219 — Item Attributes pay `ceil(raw_total / 2)` of all internal cost (self + nested `item_contents`).
+- New optional `item_contents: List[Any]` on `CharacterAttribute` lets a single-level child list of nested attributes feed the raw-total before halving (Mecha pattern).
+- Validator emits `is_item_container: bool`, `item_raw_cost: int`, and the line's `note` now spells out the math (`raw 12 → ceil(12/2) = 6 pts (p.135)`).
+- Eli's Apocophea bag now correctly reads as **2 pts** on the audit (raw 4 → ceil(4/2)=2), not 4.
+- Tests: `test_item_attribute_pays_half_cost` (4 → 2), `test_item_with_contents_uses_assault_mecha_pattern` (4 self + 8 child = 12 raw → 6 pts).
+
+**🌀 MacroBuilder Refinery** (`MacroBuilder.jsx`)
+- New "⚗ Refinery" button parses the free-form formula and surfaces a dropdown for each unresolved bare token. Recognised words (case-insensitive, ignored inside already-typed `{kind:Name}` regions): `attribute / attr`, `skill`, `defect / def`, `stat[:N]`, `derived`.
+- `stat:15` syntax records a Target Number alongside the slot (rendered "vs TN 15" in arcane purple) — the GM sees the TN at fire-time for table-side adjudication; the dice engine ignores it.
+- Each dropdown is **character-sheet-aware**: pulls the character's actual Attribute / Skill / Defect names (not SRD). Picking from the dropdown rewrites the bare word in place (e.g. `attribute` → `{attr:Item}`).
+- Live-preview line continues to mirror the backend's `_expand_macro_tokens` resolver byte-for-byte.
+- Verified live: free-form `2d6+attribute+skill+stat:15-defect` → 4 dropdowns surface → pick "Item" → formula becomes `2d6+{attr:Item}+skill+stat:15-defect` with live preview `2d6+5+skill+stat:15-defect`. Remaining slots stay queued.
+
+**🧪 Materials / Byproduct / Craftable Output codex kinds** (`besm_data.py NODE_TYPES`)
+- Three new `node_kind` values: `material`, `byproduct`, `craft_output`. `POST /api/campaigns/{cid}/codex-nodes` accepts them via the existing free-form `node_kind` field — no schema change, just an enum extension.
+- These flow into the existing codex node pipeline (sow / place / link / journal-conversion) so GMs can seed materials directly in the codex / world tree, OR convert player-journalled material sightings into codex entries.
+- Roll-table generation deferred until enough material data is seeded — no auto-loot until the GM has at least a common-tier baseline catalogued.
+- Test: `test_material_byproduct_craft_output_codex_kinds` confirms all three kinds round-trip.
+
+**🛡 Player permission clarification** (PRD-only — code already enforces)
+- Players: **cannot** add to codex, genesis, or epic. Can author **journals**, **summaries**, **characters** (the character creation flow auto-generates an NPC/Character codex card if the GM accepts the submission via the existing approval queue).
+- GMs: full read/write on codex / genesis / epic / world tree. Can co-author NPC cards with players during session 0.
+- Backend already gates `POST /api/campaigns/{cid}/codex-nodes` (GM/admin only) and `POST /api/campaigns/{cid}/genesis/...` (GM/admin only) — no code change required, just confirmed.
+
+**🎯 Macro fire equivalence** (verified, no code change)
+- Both **chat slash** (`/strike`) AND **bound-slot click** route through `POST /api/channels/{chid}/messages`. Both pass the explicit `character_id` so the player's CURRENT character resolves the tokens correctly. Slash works in main channels AND threads.
+
+**🟦 Reference Editor Items/Weapons-first scaffold** (PRD note — partial UI)
+- The new BESM Extras pools (`weapon_enhancements` etc.) are exposed via `/api/besm/reference`. The reference-editor form for composing items/weapons FIRST then assigning to power packs / sheets is queued. Backend: ready. Frontend: needs a `kind: weapon | item` picker + filtered mod chooser. Marketplace V1 already stores arbitrary custom rules so the publishing path is ready.
+
+**📈 Anime 5E advancement plumbing** (existing, confirmed)
+- `cumulative_features(class_name, level)` in `system_data/class_progression.py` already computes per-level grant timeline.
+- `GET /api/characters/{cid}/advancement` returns `pending_count` for the AdvancementBadge ("# pending" pill).
+- Anime 5E classes: still need full L1-L20 catalog seeding per Evereantha core. **Deferred to next cycle as P2** — too large a content lift for this batch (12+ classes × 20 levels × 5-10 grants each + CP-cost mappings).
+
+**Testing** — 31/31 cumulative pytest pass:
+- 5 new V6.25.11 + 3 V6.25.10 + 5 V6.25.9 + 5 V6.25.8 + 9 V6.25.7 + 6 V6.25.6 = 33; 2 V6.25.7 collisions = 31 unique cumulative.
+- Lint clean. Live screenshots in `/tmp/v62511_*.png` demonstrate the Refinery flow.
+
+**Roadmap (deferred / explicit follow-ups)**
+- 🟡 **P2 — Anime 5E core class library L1-L20** (next priority cycle): all classes in core book seeded with per-level grants (skills, profs, ASIs, boons, feats, ability improvements). Plus CP-cost mapping for attribute/power-bundle costs in Anime 5E (similar-but-distinct from BESM Item rule — the user noted this needs verification against the Anime 5E core).
+- 🟡 **P2 — D&D → Anime 5E auto-conversion** (after Anime 5E library): class / race / background / feat / skill / proficiency conversion tables.
+- 🟦 **Reference Editor weapon|item composer UI**: form to compose Item / Weapon FIRST with the new BESM Extras pools, then assign to power pack / character sheet.
+- 🟦 **Materials intake panel** in player journal: click-to-author material/byproduct/craft entries that surface to GM approval queue → upon approval seed codex.
+- 🟦 **Director's Console roll-table designer**: once enough materials / byproducts / craft entries are seeded, GM can build random-loot-by-tier tables backed by actual codex entries (no fabricated content).
+- 🟦 **Strict Permission Gating UI**: explicit player-side approval-queue submission flow for character cards / NPC suggestions (backend ready; UI hooks pending).
+
 ### V6.25.10 — Per-row macro sprinkles + BESM Extras item/weapon mods + Mobile Sweep V3 + Apocophea demo (2026-02-08)
 
 User-flagged: (1) per-row "Add to macro" sprinkles, (2) Mobile Sweep V3 (sticky header + touch targets), (3) BESM Extras weapon/item-specific Enhancements + Limiters from core + Extras books, (4) end-to-end demo with Eli's Apocophea AutoMakers Bag, (5) helpful tooltip hints from screenshots, (6) confirm slash-command vs slot-fire equivalence (CONFIRMED — both paths fire identical resolver: slot uses inline `body=/<macro>+mod`; chat uses raw `/<macro> +mod`).

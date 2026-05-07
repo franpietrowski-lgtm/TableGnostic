@@ -1,0 +1,76 @@
+{
+  "summary": "V6.25.11 review GREEN. Backend 33/33 cumulative pytest pass (5 NEW V6.25.11 + 28 regression V6.25.6→V6.25.10). /api/besm/reference now exposes 35 canonical p.135 weapon enhancements + 13 canonical p.142 weapon limiters, all carrying rank_range field, all sourced to source.book='BESM 4E'. Required entries verified live: Incapacitating rank_range='2 or 4', Penetrating rank_range=[1, null], Alt-Munition rank_range='special'. Item half-cost rule live on Eli's persisted sheet — /api/characters/07a6f.../validate returns Apocophea Bag with points=2, item_raw_cost=4, is_item_container=true, note='Item (half-cost): raw 4 → ceil(4/2) = 2 pts (p.135)'. total_points=120. Codex node_kind extension verified: GM POSTs of 'material'/'byproduct'/'craft_output' → 200; Player POST → 403 'GM/admin only'; Player GET genesis archives → 403 'Only GM'. Frontend Refinery: opening MacroBuilder on Eli, typing '2d6+attribute+skill+stat:15-defect', clicking ⚗ Refinery → macro-refinery-panel renders 4 char-aware dropdowns (pick-attr-4, pick-skill-14, pick-stat-20, pick-def-28). 'vs TN 15' badge visible. attr dropdown options pulled from Eli's sheet (Item, Weapon — NOT from SRD reference). Picking 'Item' rewrites formula to EXACTLY '2d6+{attr:Item}+skill+stat:15-defect' (matches spec verbatim) and live preview line updates to '2d6+5+skill+stat:15-defect' (+5 = bag eff-level 5). All P0 acceptance GREEN.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "MacroBuilder Refinery", "issue": "Multi-pick stale-index bug: after the FIRST refinery pick rewrites the formula (changes length), subsequent picks still splice using the ORIGINAL slot.idx and corrupt the formula. Repro: type '2d6+attribute+skill+stat:15-defect', click Refinery, pick Item from attr (works → '2d6+{attr:Item}+skill+stat:15-defect' OK), then pick Artisan from skill — formula becomes '2d6+{attr:Item{skill:Artisan}ll+stat:15-defect' (skill token inserted INSIDE the attr token braces). Workaround: click Refinery a second time after each pick to re-parse. RCA: MacroBuilder.jsx L113-127 resolveRefineryPick removes the resolved slot but does NOT re-parse the now-mutated formula or shift remaining slots' .idx by the length delta of the inserted typed token. Fix: after each pick, call setRefinery(_parseUnresolved(newFormula)) instead of filtering. Spec test (single Item pick) was PASS; this bug only surfaces when chaining 2+ picks in one Refinery session.", "selector": "[data-testid='macro-refinery-pick-skill-*']", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "verified_via_pytest": {
+    "test_v62511_canonical_weapons_item_halfcost.py::test_canonical_weapon_enhancements_p135": "PASS — 35 entries, all rank_range present, source.book='BESM 4E'",
+    "test_v62511_canonical_weapons_item_halfcost.py::test_canonical_weapon_limiters_p142": "PASS — 13 entries, all rank_range present",
+    "test_v62511_canonical_weapons_item_halfcost.py::test_item_attribute_pays_half_cost": "PASS — Item lvl=4 cost_per_level=1 → points=2, item_raw_cost=4, is_item_container=true",
+    "test_v62511_canonical_weapons_item_halfcost.py::test_item_with_contents_uses_assault_mecha_pattern": "PASS — Item with armour content → item_raw_cost=12, points=6 (ceil(12/2)), sub-line kind='attribute_contents'",
+    "test_v62511_canonical_weapons_item_halfcost.py::test_material_byproduct_craft_output_codex_kinds": "PASS — 3 new node_kinds accepted",
+    "regression_v62510_apocophea_bag (3/3)": "ALL PASS",
+    "regression_v6259_macro_grammar (5/5)": "ALL PASS",
+    "regression_v6258_genesis_403 (2/2)": "ALL PASS",
+    "regression_v6258_mod_rank (3/3)": "ALL PASS",
+    "regression_v6257_macros_hk2 (9/9)": "ALL PASS",
+    "regression_v6256_chat_hotkeys (6/6)": "ALL PASS",
+    "cumulative_total": "33/33 PASS (5 V6.25.11 + 3 V6.25.10 + 5 V6.25.9 + 5 V6.25.8 + 9 V6.25.7 + 6 V6.25.6). Spec said 31; actual file count is 33."
+  },
+  "verified_via_curl": {
+    "GET /api/besm/reference (no auth)": "200 — weapon_enhancements:35, weapon_limiters:13, all rank_range present, all source.book='BESM 4E'. Incapacitating='2 or 4', Penetrating=[1,null], Alt-Munition='special'.",
+    "GET /api/characters/07a6f.../validate (GM auth)": "200 — Apocophea Bag line: points=2, item_raw_cost=4, is_item_container=true, note cites p.135 half-cost. total_points=120.",
+    "POST /api/campaigns/{cid}/codex-nodes node_kind=material (Player auth)": "403 'GM/admin only.'",
+    "POST /api/campaigns/{cid}/codex-nodes node_kind=material (GM auth)": "200 — node persisted with type='material'",
+    "POST /api/campaigns/{cid}/codex-nodes node_kind=byproduct (GM auth)": "200",
+    "POST /api/campaigns/{cid}/codex-nodes node_kind=craft_output (GM auth)": "200",
+    "GET /api/campaigns/{cid}/genesis/archives (Player auth)": "403 'Only GM can browse Genesis archives'"
+  },
+  "verified_via_playwright": {
+    "login_flow": "OK — auth-email-input + auth-password-input + auth-submit-btn (note: testid is 'auth-submit-btn' not 'auth-submit')",
+    "eli_sheet_load": "OK — wait_for_selector('sheet-tabs') after navigation, 14 sprinkle wands present",
+    "macro_builder_open_via_sprinkle": "OK — first sprinkle click portals MacroBuilder to <body>",
+    "refinery_button": "OK — data-testid='macro-builder-refine' present and clickable",
+    "refinery_panel": "OK — data-testid='macro-refinery-panel' renders with 4 dropdown rows",
+    "refinery_dropdown_testids": "OK — macro-refinery-pick-attr-4, -skill-14, -stat-20, -def-28 all present (idx = char offset of bare token in formula)",
+    "refinery_tn_badge": "OK — 'vs TN 15' badge rendered next to stat:15 row (data-testid macro-refinery-slot-stat-20)",
+    "refinery_character_aware": "OK — attr dropdown opts=['', 'Item', 'Weapon'] (pulled from Eli's character.attributes — NOT from SRD reference). skill opts=Artisan,Athletics. stat opts=body,mind,soul. def opts=Phobia.",
+    "refinery_attr_pick_rewrites_formula": "OK — selecting 'Item' rewrites formula EXACTLY to '2d6+{attr:Item}+skill+stat:15-defect' (matches spec verbatim)",
+    "refinery_live_preview_substitution": "OK — preview line shows 'live → 2d6+5+skill+stat:15-defect' (Item eff-level 5 substituted)",
+    "MULTI_PICK_BUG_FOUND": "Picking a SECOND refinery slot in the same session after the formula has been rewritten corrupts it. See frontend_issues.ui_bugs[0]."
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_v62511_canonical_weapons_item_halfcost.py",
+    "/app/test_reports/pytest/iter61_v62511.xml",
+    "/app/test_reports/pytest/iter61_cumulative.xml"
+  ],
+  "action_items": [
+    "INFO — All V6.25.11 P0 acceptance criteria PASS. Backend canonical p.135/p.142 data, Item half-cost rule, codex node_kind extension, Refinery first-pick flow all working. No blocking issues.",
+    "MEDIUM — MacroBuilder.jsx L113-127 resolveRefineryPick has a stale-index bug on chained multi-picks. Replace `setRefinery((r) => r.filter((x) => x.idx !== slot.idx))` with `setRefinery(_parseUnresolved(newFormula))` — i.e., re-parse after each pick using the just-mutated formula. Use a functional setState pattern: setFormula((f) => { const newF = ...; setRefinery(_parseUnresolved(newF)); return newF; }). Single-pick flow (the spec test) is unaffected.",
+    "MINOR — `(TN N)` suffix from resolveRefineryPick (line 119,123) is appended directly into the formula string. Currently only triggers when slot.tn is set (stat:N case). For example picking 'body' for `stat:15` would write `{stat:body} (TN 15)` into the formula — the parenthesised text would then be interpreted as a malformed grouping by the dice engine. Recommend storing the TN in a side-channel (label/comment), not the formula. Non-blocking — spec's single-pick test only used the attr slot, never realised this code path."
+  ],
+  "critical_code_review_comments": [
+    "MacroBuilder.jsx grew to 633 lines — still under the 700-line guideline but trending up. Consider extracting Refinery panel + _parseUnresolved + _expandClientSide + helpers into a separate macroRefinery.js module in next refactor cycle.",
+    "_parseUnresolved (L597-631) correctly masks already-typed `{kind:name}` regions before scanning bare words — robust against the user pre-typing typed tokens.",
+    "Stale-index bug (see action item #2) is a textbook React pitfall: state derived from a string offset becomes invalid as soon as the underlying string mutates. The fix (re-parse after every mutation) is 1-line.",
+    "besm_data.py source.book='BESM 4E' for both p.135 weapon enhancements AND p.142 weapon limiters is correct per request — earlier 'BESM Extras' only applied to V6.25.10's Apocophea-specific subset. Consistent.",
+    "/api/characters/{id}/validate response now contains rich note strings citing the rulebook page (e.g. 'Item (half-cost): raw 4 → ceil(4/2) = 2 pts (p.135)') — excellent for audit transparency.",
+    "Codex node POST endpoint (world_creation.py L371) correctly enforces GM/admin gate before any DB write. 422 Unprocessable Entity returns BEFORE the gate check (Pydantic body validation), but a player with a VALID body still hits the 403, so security is intact."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "100% (33/33 pytest pass; all 8 curl smoke checks pass)",
+    "frontend": "95% — all V6.25.11 P0 acceptance criteria validated live (Refinery panel, char-aware dropdowns, single Item-pick formula rewrite + preview substitution). 5% deduction for the multi-pick stale-index bug which is outside spec test scope but is a real defect."
+  },
+  "test_credentials": "GM Fran franpietrowski@gmail.com / PieGod08!! (verified UI login). Player Aurora albanaszak@ymail.com / AuroraTest123! (verified curl 403 gate). auth-submit testid is 'auth-submit-btn' (NOT 'auth-submit' as the spec hint implied).",
+  "seed_data_creation": "Created 3 transient codex nodes (TEST_v62511_material, TEST_v62511_byp, TEST_v62511_craft) on campaign bedd53ad… to verify the new node_kind enum extension. Cleaned up via direct mongo delete after curl verification (delete_count=3).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "V6.25.11 acceptance is GREEN. Gotchas: (1) auth submit testid is 'auth-submit-btn' (NOT 'auth-submit' as some specs imply). Spec mentioned 31 cumulative tests; actual file count is 33 (5+3+5+5+9+6=33) — main agent's own arithmetic was off by 2. (2) Refinery slot.idx is the char offset of the bare token in the ORIGINAL formula AT REFINERY-CLICK TIME — when chaining picks, the underlying formula mutates but the indices don't shift, causing later picks to splice into the wrong location. The first pick always works; the bug surfaces from pick #2 onward. (3) Codex POST schema requires fields {name, summary, node_kind} (NOT {title, description}). Pydantic returns 422 on wrong shape BEFORE the GM gate runs — this is by design. (4) Eli's Apocophea bag now persistently shows points=2 (down from 4 in V6.25.10) due to the new half-cost rule. Validate endpoint total_points=120. (5) Anime 5E catalog L1-L20 is EXPLICITLY DEFERRED — do not test for it. (6) MacroBuilder is portaled to <body>; selectors should use [data-testid] not relative-to-sheet-container.",
+  "rca of the issue": "Single multi-pick UI bug found and root-caused: MacroBuilder.jsx L113-127 resolveRefineryPick uses `slot.idx` as a static char offset into `formula`, but does not recompute the queue after each rewrite. The typed-token replacement (e.g. 'attribute' → '{attr:Item}') changes the formula length, so any remaining queued slots have stale offsets. Reproduction: open MacroBuilder on Eli, formula='2d6+attribute+skill+stat:15-defect', click Refinery, pick Item (formula → '2d6+{attr:Item}+skill+stat:15-defect' OK), pick Artisan (formula → '2d6+{attr:Item{skill:Artisan}ll+stat:15-defect' BROKEN — skill token spliced inside attr braces). Mitigation: in resolveRefineryPick, after computing the new formula, call setRefinery(_parseUnresolved(newFormula)) to re-tokenize. 1-line fix. Spec's single-Item-pick acceptance test was unaffected and PASSED."
+}

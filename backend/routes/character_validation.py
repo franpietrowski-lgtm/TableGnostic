@@ -145,7 +145,38 @@ def _besm_points_breakdown(ch: Dict[str, Any]) -> Dict[str, Any]:
             for d in (a.get("defects") or [])
         )
         paid = max(0, int(round(gross)) - int(round(refund)))
-        attr_total += paid
+
+        # V6.25.11 — BESM 4E Item half-cost rule (Core p.135).
+        # Item Attributes are CONTAINERS. The raw point total of the
+        # Attribute (self cost + all nested `item_contents` costs) is
+        # halved and rounded UP to the nearest integer (see Assault
+        # Mecha example, p.219 — 130 pt raw → 65 pt Item).
+        is_item = (a.get("name") == "Item")
+        contents_cost = 0
+        contents_lines = []
+        for child in (a.get("item_contents") or []):
+            c_lvl = int(child.get("level") or 1)
+            c_cpl = float(child.get("cost_per_level") or 0)
+            c_ref = sum(float(d.get("points_per_rank") or 0) * int(d.get("rank") or 0)
+                         for d in (child.get("defects") or []))
+            c_paid = max(0, int(round(c_cpl * c_lvl)) - int(round(c_ref)))
+            contents_cost += c_paid
+            contents_lines.append({
+                "kind": "attribute_contents",
+                "name": child.get("display_name") or child.get("name"),
+                "level": c_lvl, "cost_per_level": c_cpl, "points": c_paid,
+            })
+        pre_half = paid + contents_cost
+        if is_item:
+            from math import ceil
+            half_paid = int(ceil(pre_half / 2))
+            item_note = (
+                f"Item (half-cost): raw {pre_half} → ceil({pre_half}/2) = {half_paid} pts (p.135)"
+            )
+        else:
+            half_paid = paid + contents_cost
+            item_note = None
+        attr_total += half_paid
         lines.append({
             "kind": "attribute",
             "name": a.get("display_name") or a.get("name"),
@@ -154,13 +185,17 @@ def _besm_points_breakdown(ch: Dict[str, Any]) -> Dict[str, Any]:
             "enhancement_delta": enh_delta,
             "limiter_delta": lim_delta,
             "gross": int(round(gross)), "item_defect_refund": int(round(refund)),
-            "points": paid,
+            "points": half_paid,
+            "item_raw_cost": pre_half if is_item else None,
+            "is_item_container": is_item,
             "note": (
                 f"{cpl}×{lvl}"
                 + (f" ±{net_delta} mods" if net_delta else "")
                 + (f" − {int(round(refund))} item-defect refund" if refund else "")
+                + (f"  · {item_note}" if item_note else "")
             ),
         })
+        lines.extend(contents_lines)
 
     # ── Skill Groups (cost_per_level × level).
     skill_total = 0
