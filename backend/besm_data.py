@@ -778,7 +778,7 @@ DEFAULT_SIZE = "Medium"
 # These are advisory, surfaced as warnings in the Customise picker — not hard
 # blocks (the GM Primer can override anything via custom rules).
 ALL_ENHANCEMENTS = [e["name"] for e in ENHANCEMENTS]
-ALL_LIMITERS = [l["name"] for l in LIMITERS]
+ALL_LIMITERS = [lim["name"] for lim in LIMITERS]
 
 ATTRIBUTE_MOD_WHITELIST = {
     # Wealth, Connected, Gear, Item, Companion, Minions are "narrative-shape"

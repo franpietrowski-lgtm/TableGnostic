@@ -14,6 +14,19 @@
 
 ## 2. Implemented (cumulative, condensed)
 
+### V6.25.20 — Classifier wired into the legacy /api/nodes editor + code-health pass (2026-02-09)
+
+- `POST /api/nodes` and `PUT /api/nodes/{nid}` now both route through a new shared `_enrich_with_classifier(doc, existing=None)` helper in `routes/nodes.py`. The legacy `NodeIn` shape (`type + title + content + tags + fields`) is transparently lifted into the V6.25.19 unified shape (`name + title + type + node_kind + creation_tree.section + summary`) on every mutation — so the legacy editor's saves now feed the World Tree without any frontend work.
+- **Renames re-classify**: typing "The Brotherhood of Iron" → faction; renaming the same row to "Republic of the Iron Coast" → country (verified by `test_put_nodes_reclassifies_when_title_changes`).
+- **Manual pins are sacrosanct**: `PATCH /campaigns/{cid}/codex-nodes/{nid}/place` now sets `creation_tree.auto_classified = false` so future PUTs respect the GM's hand-pinned section (verified by `test_put_nodes_respects_manual_pin`).
+- **Caller hint wins over name regex** (verified by `test_post_nodes_caller_hint_wins_over_regex`): when the legacy editor sends `type: "lore"`, the row stays lore even if the title also matches a faction regex — the editor's explicit choice is never silently overridden.
+
+**Code-health pass (V6.25.20)**:
+- Production lint clean across `backend/routes/`, `backend/core/`, `backend/system_data/`, `backend/besm_data.py`, and `frontend/src/components/`.
+- Long-standing V6.21-era warning fixed: `besm_data.py:781 E741` (ambiguous `l` in list-comp) → renamed `l` to `lim`.
+- 140/140 V6.25.x cumulative pytest pass + 22/22 V6.22-V6.25 prior-cycle pass; no regressions.
+- Supervisor: backend / frontend / mongodb all RUNNING; public preview URL returns 200 on all key endpoints (`/`, `/api/anime5e/classes`, `/api/anime5e/dnd-conversion`, `/api/systems/anime-5e/reference`).
+
 ### V6.25.19 — Codex auto-classifier + Genesis/Epic/World-Tree codexification (2026-02-09)
 
 The user's three world-seeding pipelines (**Genesis**, **Epic**, **World Tree**) used to write codex nodes with subtly different field shapes — Genesis wrote `type` only, Epic wrote `title` only, World Tree wrote both `name + node_kind + creation_tree.section`. As a result, Genesis/Epic seeds piled up in the unplaced tray and their authors had to hand-pin every entry. This cycle ships:

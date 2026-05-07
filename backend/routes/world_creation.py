@@ -628,6 +628,9 @@ async def place_codex_node(
         raise HTTPException(403, "GM/admin only.")
     upd = {
         "creation_tree.section": body.section,
+        # V6.25.20 — manual pin must clear auto_classified so a later
+        # PUT to /nodes/{nid} doesn't accidentally re-classify it.
+        "creation_tree.auto_classified": False,
         "updated_at": now_iso(),
     }
     if body.color is not None:

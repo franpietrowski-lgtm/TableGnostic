@@ -2,14 +2,65 @@
 
 `visible_to(...)` is the access-control check that drives the entire
 World Codex view — gm_only / shared / revealed-to-specific-players.
+
+V6.25.20 — every node mutation (create / update) routes through the
+canonical concept classifier so the row stays codex-ready: name +
+title + type + node_kind + creation_tree.section all populated, with
+NodeIn's legacy `type + title + content` shape transparently lifted
+into the V6.25.19 unified shape.
 """
 from fastapi import APIRouter, Depends, HTTPException
 
+from core.codex_classifier import codexify_node
 from core.db import db, new_id, now_iso, sanitize
 from core.models import EdgeIn, NodeIn, NodeRevealIn
 from core.security import get_current_user
 
 router = APIRouter(prefix="/api", tags=["knowledge-web"])
+
+
+def _enrich_with_classifier(doc: dict, *, existing: dict | None = None) -> dict:
+    """Run the canonical classifier over a node doc and merge its
+    output back in. Existing manual placements are NEVER overwritten.
+
+    `doc` must already carry the request's `title / type / content /
+    tags / fields`. We compute `name + node_kind + creation_tree`
+    (when missing) and surface them on the returned dict.
+    """
+    title = (doc.get("title") or doc.get("name") or "").strip()
+    # An explicit creation_tree.section on the input wins; otherwise
+    # honour any prior pin (existing.creation_tree.section) the GM
+    # already authored on this row.
+    explicit_section = None
+    incoming_ct = doc.get("creation_tree") or {}
+    if isinstance(incoming_ct, dict) and incoming_ct.get("section"):
+        explicit_section = incoming_ct["section"]
+    elif existing:
+        prior_ct = existing.get("creation_tree") or {}
+        if prior_ct.get("section") and not prior_ct.get("auto_classified"):
+            # GM pinned it manually → don't re-classify.
+            explicit_section = prior_ct["section"]
+    body = codexify_node(
+        name=title,
+        content=doc.get("content", ""),
+        summary=(doc.get("summary") or doc.get("content", ""))[:1000],
+        tags=doc.get("tags") or [],
+        hint=doc.get("type") or doc.get("node_kind"),
+        explicit_section=explicit_section,
+        explicit_color=incoming_ct.get("color") if isinstance(incoming_ct, dict) else None,
+        extra_fields=doc.get("fields") or {},
+    )
+    # Merge — caller's explicit fields stick; classifier fills the gaps.
+    out = dict(doc)
+    out["name"] = body["name"]
+    out["title"] = body["title"]
+    out.setdefault("type", body["type"])
+    out["node_kind"] = body["node_kind"]
+    out["summary"] = body["summary"]
+    out["tags"] = body["tags"]
+    if "creation_tree" in body:
+        out["creation_tree"] = body["creation_tree"]
+    return out
 
 
 def visible_to(node: dict, user_id: str, camp: dict) -> bool:
@@ -31,10 +82,14 @@ async def create_node(body: NodeIn, user: dict = Depends(get_current_user)):
     if camp["gm_id"] != user["id"] and user["id"] not in camp.get("member_ids", []):
         raise HTTPException(403, "Not permitted")
     doc = body.model_dump()
+    # V6.25.20 — enrich BEFORE id/author/timestamp stamping so the
+    # classifier sees the request shape verbatim.
+    doc = _enrich_with_classifier(doc)
     doc["id"] = new_id()
     doc["author_id"] = user["id"]
     doc["author_name"] = user["name"]
     doc["created_at"] = now_iso()
+    doc["updated_at"] = now_iso()
     # Players can only create shared nodes by default.
     if camp["gm_id"] != user["id"]:
         doc["visibility"] = "shared"
@@ -60,6 +115,10 @@ async def update_node(nid: str, body: NodeIn, user: dict = Depends(get_current_u
     if user["id"] != n["author_id"] and user["id"] != camp["gm_id"]:
         raise HTTPException(403, "Not permitted")
     upd = body.model_dump()
+    # V6.25.20 — re-classify on update unless the GM has manually
+    # pinned the existing row's section. Picks up rename signal
+    # (e.g. concept → "Empire of the Eternal Sun" → Geography.Countries).
+    upd = _enrich_with_classifier(upd, existing=n)
     upd["id"] = nid
     upd["author_id"] = n["author_id"]
     upd["author_name"] = n["author_name"]
