@@ -18,7 +18,7 @@ pytestmark = pytest.mark.skipif(
     reason="V3.8 Cyma-based journal tests superseded by iter_12 (Eli/Laryk/Roney seed)",
 )
 
-BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://rules-forge.preview.emergentagent.com").rstrip("/")
+BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://campaign-hub-288.preview.emergentagent.com").rstrip("/")
 API = f"{BASE_URL}/api"
 
 GM_EMAIL = "gm@tablegnostic.com"

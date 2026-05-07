@@ -18,7 +18,7 @@ import os
 import pytest
 import requests
 
-API = os.environ.get("API_URL") or "https://rules-forge.preview.emergentagent.com"
+API = os.environ.get("API_URL") or "https://campaign-hub-288.preview.emergentagent.com"
 GM_EMAIL = "franpietrowski@gmail.com"
 GM_PASS = "PieGod08!!"
 

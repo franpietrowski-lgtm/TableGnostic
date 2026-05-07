@@ -22,7 +22,7 @@ import pytest
 import requests
 
 BASE_URL = (os.environ.get("REACT_APP_BACKEND_URL")
-            or "https://rules-forge.preview.emergentagent.com").rstrip("/")
+            or "https://campaign-hub-288.preview.emergentagent.com").rstrip("/")
 
 GM_CREDS = {"email": "franpietrowski@gmail.com", "password": "PieGod08!!"}
 PLAYER_CREDS = {"email": "albanaszak@ymail.com", "password": "AuroraTest123!"}

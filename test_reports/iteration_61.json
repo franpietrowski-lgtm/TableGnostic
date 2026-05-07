@@ -1,0 +1,65 @@
+{
+  "summary": "TableGnostics V1 single-page landing + lead capture — full e2e validation. Backend 10/10 pytest pass on /api/leads (POST happy/dedupe/role-normalization/no-consent-400/bad-role-422/bad-email-422 + GET 401-unauth/403-non-admin/200-admin-list/200-admin-count). Frontend: all 12 sections render with required data-testids, role tabs switch correctly, contact form happy + error paths both work (POST returns 200, success card shown; no-consent shows inline error 'Please consent to be contacted.'), mobile 375x812 hero CTA = 50px height (>=44px touch target), nav and form usable. No console errors, no page errors. NO blocking bugs.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "verified_via_pytest": {
+    "test_iter61_leads.py::test_post_lead_full_payload_returns_ok": "PASS — 200 {ok:true, id, deduped:false}",
+    "test_iter61_leads.py::test_post_lead_consent_false_returns_400": "PASS",
+    "test_iter61_leads.py::test_post_lead_invalid_role_returns_422": "PASS — role='wizard' rejected by Pydantic field_validator",
+    "test_iter61_leads.py::test_post_lead_bad_email_returns_422": "PASS — EmailStr validation",
+    "test_iter61_leads.py::test_post_lead_dedupe_within_24h": "PASS — same email+role within 24h returns deduped:true with same id",
+    "test_iter61_leads.py::test_post_lead_role_normalization_homebrew_creator": "PASS — 'Homebrew-Creator' normalizes to 'homebrew_creator'",
+    "test_iter61_leads.py::test_get_leads_no_auth_returns_401": "PASS",
+    "test_iter61_leads.py::test_get_leads_non_admin_returns_403": "PASS — registered fresh user, role='gm', forbidden as expected",
+    "test_iter61_leads.py::test_get_leads_admin_returns_list": "PASS — admin login franpietrowski@gmail.com works; returns {items, total, limit, skip}",
+    "test_iter61_leads.py::test_get_leads_count_admin": "PASS — {total, last_7_days} both ints, last_7 <= total",
+    "cumulative": "10/10 pass in 2.16s"
+  },
+  "verified_via_playwright": {
+    "hero": "OK — 'NOT THE SYSTEM. THE TABLE.' headline + hero-cta-take-a-seat + hero-cta-watch-tour all visible",
+    "landing-nav": "OK — sticky nav present, nav-take-a-seat-btn visible",
+    "system-trust-strip": "OK — visible at #what region",
+    "scene_cards": "OK — scene-card-world-first, scene-card-character-smart, scene-card-table-aware all visible",
+    "section_anchors": "OK — all 9 ids present: what, roles, proof, features, wizards, marketplace, roadmap, about, contact",
+    "role_tour_tabs": "OK — 4 role tabs found (gm/player/worldbuilder/homebrew); clicked Player tab and panel switched to 'PLAYER WORKFLOW' with player-specific feature list",
+    "footer": "OK — landing-footer + 'Francis T. Pietrowski' creator credit visible",
+    "contact_no_consent_path": "OK — submitting without consent shows contact-error with 'Please consent to be contacted.'",
+    "contact_full_submit": "OK — POST https://campaign-hub-288.preview.emergentagent.com/api/leads returned 200, contact-success state rendered ('Seat reserved.' card with Take a seat now CTA)",
+    "mobile_375x812": "OK — hero CTA height=50px width=169px (>=44px touch target), nav visible, contact form visible, submit button height=46px",
+    "console_errors": "NONE",
+    "page_errors": "NONE"
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter61_leads.py",
+    "/app/test_reports/pytest/iter61_leads.xml"
+  ],
+  "action_items": [
+    "INFO — All V1 acceptance criteria PASS. No blocking issues. Main agent can ship.",
+    "OPTIONAL/NICE-TO-HAVE — /api/leads POST stores raw user_agent (300 char) and x-forwarded-for IP. Confirm this is intended for CCPA/GDPR; if not desired, gate behind a config flag.",
+    "OPTIONAL — Consent checkbox uses native browser checkbox styling on mobile (white square). Could be styled with the gold/ember palette for visual consistency with the rest of the form. Non-blocking."
+  ],
+  "critical_code_review_comments": [
+    "leads.py is clean: 105 lines, async/await correct, _id excluded from list response via projection {'_id':0} + sanitize, Pydantic validation on role + EmailStr, 24h dedupe is idempotent and uses indexed (email, role, created_at) read.",
+    "ContactWaitlist.jsx correctly reads error.response.data.detail for FastAPI HTTPException shape (the 'Consent is required.' string surfaces correctly via this path). Good defensive default fallback message.",
+    "Field component is local helper (not exported). Fine for single-file use; if other forms reuse this pattern, extract to shared/.",
+    "ContactWaitlist.jsx uses axios while rest of app may use fetch — minor inconsistency, non-blocking.",
+    "leads.py role validator could accept 'Game Master' string from the dropdown if user typed 'gm' upper but does NOT accept the human-readable label 'Game Master' (would 422). Frontend sends value='gm' so this is fine — but if a partner integration sends 'Game Master', it will 422. Consider documenting allowed values in OpenAPI description."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter61_leads.py (NEW)"
+  ],
+  "success_rate": {
+    "backend": "100% (10/10 pytest pass)",
+    "frontend": "100% (all data-testids resolved, all sections render, contact form happy + error paths both work, mobile viewport functional)"
+  },
+  "test_credentials": "GMFran admin franpietrowski@gmail.com / PieGod08!! verified working (login + admin GET /api/leads returned 200).",
+  "seed_data_creation": "Pytest created throwaway TEST_*@tablegnostic-test.com leads (full payload, dedupe pair, bad-role, bad-email, no-consent, homebrew_creator) + one TEST_nonadmin_* user. UI test created one additional lead via real browser submission. All TEST_-prefixed; safe to ignore or sweep.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "V1 landing page is GREEN. Endpoint POST /api/leads is dedupe-on-(email, role, 24h) — repeat submissions return deduped:true with same id. Admin auth is JWT bearer; admin login returns access_token. Role enum: gm/player/worldbuilder/homebrew_creator/publisher (case-insensitive, dashes/spaces become underscores). Frontend testids that exist: hero-cta-take-a-seat, hero-cta-watch-tour, landing-nav, nav-take-a-seat-btn, system-trust-strip, scene-card-world-first|character-smart|table-aware, role-tab-* (4), contact-form, contact-input-{name,email,phone,location,role,system,message,consent}, contact-submit, contact-error, contact-success, contact-success-cta, contact-success-reset, landing-footer. No regression-test of unrelated app features (BESM/marketplace/sessions) was performed per main agent's note.",
+  "rca of the issue": "No bugs found. test_iter61_leads.py initially failed to load conftest.py because pytest_asyncio module was missing — installed via pip and reran successfully. This was a one-time test-host setup, not an app bug."
+}

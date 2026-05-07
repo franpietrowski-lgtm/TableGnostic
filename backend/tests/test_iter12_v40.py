@@ -21,7 +21,7 @@ from dotenv import load_dotenv
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL",
-                          "https://rules-forge.preview.emergentagent.com").rstrip("/")
+                          "https://campaign-hub-288.preview.emergentagent.com").rstrip("/")
 API = f"{BASE_URL}/api"
 
 ADMIN = ("franpietrowski@gmail.com", "PieGod08!!")  # GMFran — the only seeded account in V4.3

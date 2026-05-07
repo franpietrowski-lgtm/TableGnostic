@@ -1077,7 +1077,7 @@ class TestGenesis:
 
 class TestCORS:
     def test_preflight_preview_origin_ok(self):
-        origin = "https://test-preview.preview.emergentagent.com"
+        origin = "https://campaign-hub-288.preview.emergentagent.com"
         r = requests.options(
             f"{API}/campaigns",
             headers={
