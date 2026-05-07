@@ -9,6 +9,7 @@ import ReferenceEditor from "./ReferenceEditor";
 import TimelinePanel from "./TimelinePanel";
 import AtelierWorkshop from "./AtelierWorkshop";
 import WorldCreationTree from "./WorldCreationTree";
+import GenesisArchivePanel from "./GenesisArchivePanel";
 
 /**
  * AtelierTab — V4.4 dynamic-scaling tiers.
@@ -186,6 +187,8 @@ export default function AtelierTab({ campId, camp }) {
               Open Genesis (7 phases) →
             </Link>
           </div>
+          {/* V6.25.8 — Archive of past Genesis snapshots, GM-only. */}
+          <GenesisArchivePanel campId={campId} isGm={!!camp?.is_gm}/>
         </div>
       )}
 

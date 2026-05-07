@@ -822,6 +822,24 @@ function TokenColorPicker({ value, onChange }) {
   );
 }
 
+// V6.25.8 — Mod helpers. Enhancements / Limiters can be either legacy
+// strings ("Range") OR rank-aware dict rows ({name, rank, value}). The
+// builder always writes the dict shape going forward; we tolerate the
+// string shape on read for back-compat with V6.25.7 saves.
+const modName = (m) => (typeof m === "string" ? m : (m?.name || ""));
+const modRank = (m) => {
+  if (typeof m === "string") return 1;
+  // Prefer explicit `rank`. Fall back to abs(value) for the V6.4 dict
+  // shape that only carried `value`. Default 1.
+  if (m && typeof m.rank === "number") return Math.max(1, m.rank);
+  if (m && typeof m.value === "number") return Math.max(1, Math.abs(m.value));
+  return 1;
+};
+const findModIdx = (arr, name) =>
+  (arr || []).findIndex((m) => modName(m).toLowerCase() === name.toLowerCase());
+const sumRanks = (arr) =>
+  (arr || []).reduce((s, m) => s + modRank(m), 0);
+
 function AttributeRow({ idx, a, reference, onUpdate, onRemove, maxRank = 0 }) {
   const ref = reference;
   const [openCust, setOpenCust] = useState(false);
@@ -844,16 +862,38 @@ function AttributeRow({ idx, a, reference, onUpdate, onRemove, maxRank = 0 }) {
     arr.splice(j, 1);
     onUpdate({ ...a, defects: arr });
   };
+  // V6.25.8 — toggle: add at rank=1 if not present, remove if present.
   const toggle = (kind, name) => {
-    const list = a[kind].includes(name) ? a[kind].filter((x) => x !== name) : [...a[kind], name];
-    onUpdate({ ...a, [kind]: list });
+    const arr = a[kind] || [];
+    const j = findModIdx(arr, name);
+    const sign = kind === "enhancements" ? -1 : 1;
+    if (j >= 0) {
+      onUpdate({ ...a, [kind]: arr.filter((_, k) => k !== j) });
+    } else {
+      onUpdate({ ...a, [kind]: [...arr, { name, rank: 1, value: sign }] });
+    }
+  };
+  // V6.25.8 — set rank on an existing mod (1-12). Keeps `value` synced so
+  // the backend's character_validation `_mods_sum` (which sums `value`)
+  // continues to compute the right effective-level delta.
+  const setModRank = (kind, name, newRank) => {
+    const r = Math.max(1, Math.min(12, +newRank || 1));
+    const sign = kind === "enhancements" ? -1 : 1;
+    const next = (a[kind] || []).map((m) =>
+      modName(m).toLowerCase() === name.toLowerCase()
+        ? { ...(typeof m === "string" ? { name: m } : m), name, rank: r, value: sign * r }
+        : m);
+    onUpdate({ ...a, [kind]: next });
   };
   // V4.1 BESM 4E: cost is base × level (Enh/Lim do NOT change cost).
-  // Effective Level shown separately = level + #Limiters − #Enhancements (floored at 1).
+  // V6.25.8 — Effective Level now sums rank-weighted limiters & enhancements:
+  // effLvl = level + Σlimiter ranks − Σenhancement ranks (floored at 1).
   const subtotal = (a.cost_per_level || 0) * a.level;
   const itemDefectRefund = (a.defects || []).reduce((s, d) => s + (d.points_per_rank || 0) * (d.rank || 0), 0);
   const cost = Math.max(0, subtotal - itemDefectRefund);
-  const effLevel = Math.max(1, (a.level || 1) + (a.limiters?.length || 0) - (a.enhancements?.length || 0));
+  const limRanks = sumRanks(a.limiters);
+  const enhRanks = sumRanks(a.enhancements);
+  const effLevel = Math.max(1, (a.level || 1) + limRanks - enhRanks);
   const effDelta = effLevel - (a.level || 1);
   const cap = maxRank > 0 ? maxRank : 10;
   const overCap = maxRank > 0 && a.level > maxRank;
@@ -899,7 +939,8 @@ function AttributeRow({ idx, a, reference, onUpdate, onRemove, maxRank = 0 }) {
       <div className="mt-2 flex gap-2 text-[10px]">
         <button className="btn btn-ghost text-[10px] py-1" onClick={() => setOpenCust(!openCust)}
                 data-testid={`attr-cust-${idx}`}>
-          {openCust ? "Hide" : "Customise"} ({a.enhancements.length} enh ↓ / {a.limiters.length} lim ↑)
+          {openCust ? "Hide" : "Customise"} ({(a.enhancements || []).length} enh / {sumRanks(a.enhancements)}r ↓
+          · {(a.limiters || []).length} lim / {sumRanks(a.limiters)}r ↑)
         </button>
       </div>
       {openCust && (
@@ -921,50 +962,24 @@ function AttributeRow({ idx, a, reference, onUpdate, onRemove, maxRank = 0 }) {
             </div>
           </div>
           <div className="grid md:grid-cols-2 gap-3">
-            <div>
-              <div className="label-ref mb-1">Enhancements (eff. lvl −1 each, no cost change) · p.145</div>
-              <div className="flex flex-wrap gap-1">
-                {ref.enhancements.map((e) => {
-                  // Whitelist comes from the Attribute reference, NOT from `e` itself.
-                  // `attrRef` is the matching reference entry for THIS Attribute.
-                  const attrRef = ref.attributes.find((x) => x.name === a.name);
-                  const allowed = attrRef && !attrRef.open_mods
-                    ? (attrRef.allowed_enhancements || []).includes(e.name)
-                    : true;
-                  const selected = a.enhancements.includes(e.name);
-                  return (
-                    <button key={e.name} type="button"
-                            onClick={() => toggle("enhancements", e.name)}
-                            disabled={!allowed && !selected}
-                            title={!allowed ? `Not typically allowed on ${a.name} (rule advisory)` : e.name}
-                            className={`tag ${selected ? "border-gold text-gold-bright bg-gold/15" : ""} ${!allowed && !selected ? "opacity-30 cursor-not-allowed" : ""}`}>
-                      {e.name}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-            <div>
-              <div className="label-ref mb-1">Limiters (eff. lvl +1 each, no cost change) · p.148</div>
-              <div className="flex flex-wrap gap-1">
-                {ref.limiters.map((lim) => {
-                  const attrRef = ref.attributes.find((x) => x.name === a.name);
-                  const allowed = attrRef && !attrRef.open_mods
-                    ? (attrRef.allowed_limiters || []).includes(lim.name)
-                    : true;
-                  const selected = a.limiters.includes(lim.name);
-                  return (
-                    <button key={lim.name} type="button"
-                            onClick={() => toggle("limiters", lim.name)}
-                            disabled={!allowed && !selected}
-                            title={!allowed ? `Not typically allowed on ${a.name} (rule advisory)` : lim.name}
-                            className={`tag ${selected ? "border-ember text-ember bg-ember/15" : ""} ${!allowed && !selected ? "opacity-30 cursor-not-allowed" : ""}`}>
-                      {lim.name}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+            <ModSection
+              kind="enhancements" idx={idx} a={a}
+              ref_={ref}
+              label={`Enhancements · ${sumRanks(a.enhancements)} rank${sumRanks(a.enhancements)===1?"":"s"} ↓ eff.lvl · p.145`}
+              hint="Select. Then set how many ranks of this Enhancement you're applying — each rank lowers effective Level by 1."
+              colorClass="border-gold text-gold-bright bg-gold/15"
+              onToggle={(name) => toggle("enhancements", name)}
+              onRankChange={(name, r) => setModRank("enhancements", name, r)}
+            />
+            <ModSection
+              kind="limiters" idx={idx} a={a}
+              ref_={ref}
+              label={`Limiters · ${sumRanks(a.limiters)} rank${sumRanks(a.limiters)===1?"":"s"} ↑ eff.lvl · p.148`}
+              hint="Select. Then set how many ranks of this Limiter you're applying — each rank raises effective Level by 1."
+              colorClass="border-ember text-ember bg-ember/15"
+              onToggle={(name) => toggle("limiters", name)}
+              onRankChange={(name, r) => setModRank("limiters", name, r)}
+            />
           </div>
 
           {/* Defects on Items / Weapons / objectifiable Attributes */}
@@ -1008,6 +1023,81 @@ function AttributeRow({ idx, a, reference, onUpdate, onRemove, maxRank = 0 }) {
     </div>
   );
 }
+
+/**
+ * V6.25.8 — ModSection
+ *
+ * Selection list + per-mod rank input for Enhancements / Limiters.
+ *
+ * Each catalog entry shows as a toggle. Selecting it adds a {name, rank: 1, value: ±1}
+ * row to the underlying array. Selected mods then surface in a dedicated
+ * "Applied" stack with a numeric rank input (1-12) so the player can dial
+ * exactly how many ranks of each modifier they're applying.
+ *
+ * Rule context: BESM 4E V4.1 — modifier rank changes EFFECTIVE level, not
+ * point cost. 4 ranks of "Range" = 4 effective levels' worth of range.
+ */
+function ModSection({ kind, idx, a, ref_, label, hint, colorClass, onToggle, onRankChange }) {
+  const catalog = kind === "enhancements" ? ref_.enhancements : ref_.limiters;
+  const allowedKey = kind === "enhancements" ? "allowed_enhancements" : "allowed_limiters";
+  const arr = a[kind] || [];
+  return (
+    <div data-testid={`attr-${kind}-section-${idx}`}>
+      <div className="label-ref mb-1">{label}</div>
+      <div className="flex flex-wrap gap-1">
+        {catalog.map((e) => {
+          const attrRef = ref_.attributes.find((x) => x.name === a.name);
+          const allowed = attrRef && !attrRef.open_mods
+            ? (attrRef[allowedKey] || []).includes(e.name)
+            : true;
+          const selectedIdx = findModIdx(arr, e.name);
+          const selected = selectedIdx >= 0;
+          return (
+            <button key={e.name} type="button"
+                    onClick={() => onToggle(e.name)}
+                    disabled={!allowed && !selected}
+                    title={!allowed ? `Not typically allowed on ${a.name} (rule advisory)` : e.name}
+                    data-testid={`attr-${kind === "enhancements" ? "enh" : "lim"}-toggle-${idx}-${e.name.replace(/\s+/g,"-")}`}
+                    className={`tag ${selected ? colorClass : ""} ${!allowed && !selected ? "opacity-30 cursor-not-allowed" : ""}`}>
+              {e.name}
+              {selected && (
+                <span className="text-[10px] ml-1 opacity-80">
+                  × {modRank(arr[selectedIdx])}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+      {arr.length > 0 && (
+        <div className="mt-2 space-y-1">
+          <div className="text-[10px] font-ui text-mist/70 italic">{hint}</div>
+          {arr.map((m, j) => {
+            const name = modName(m);
+            const r = modRank(m);
+            return (
+              <div key={`${name}-${j}`} className="flex items-center gap-2 text-xs flex-wrap"
+                   data-testid={`attr-${kind === "enhancements" ? "enh" : "lim"}-row-${idx}-${j}`}>
+                <span className={`tag ${colorClass}`}>{name}</span>
+                <label className="text-[10px] text-mist uppercase tracking-widest">×rank</label>
+                <input type="number" min={1} max={12}
+                       value={r}
+                       onChange={(e) => onRankChange(name, +e.target.value)}
+                       className="input w-16 text-center select-sm"
+                       data-testid={`attr-${kind === "enhancements" ? "enh" : "lim"}-rank-${idx}-${j}`}/>
+                <span className="text-[10px] text-mist/70">
+                  ({kind === "enhancements" ? "−" : "+"}{r} eff.lvl)
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+
 
 function DefectRow({ idx, d, onUpdate, onRemove }) {
   const pts = d.points_per_rank * d.rank;

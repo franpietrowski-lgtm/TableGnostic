@@ -150,6 +150,7 @@ export default function ReferencePicker({
               effect: e.description_note || "",
               cost: typeof eff.total_cp === "number" ? `${eff.total_cp} CP` : "",
               level: e.cost_per_level != null ? `${e.cost_per_level}/lvl` : "",
+              color: e.color || "",  // V6.25.8 — surface GM-set color tag.
             };
           }
           return e;
@@ -256,6 +257,8 @@ export default function ReferencePicker({
         {(values || []).map((v, i) => {
           const isObj = typeof v === "object" && v !== null;
           const name = isObj ? (v.name || "—") : String(v);
+          // V6.25.8 — GM-set color tag bleeds through onto the chip border.
+          const tagColor = isObj ? (v.color || v.fields?.color || "") : "";
           const hint = isObj
             ? [v.damage, v.ac, v.level != null ? `L${v.level}` : null,
                 v.school, v.cost, v.kind, v.category,
@@ -264,7 +267,14 @@ export default function ReferencePicker({
             : "";
           return (
             <span key={i} className="tag group inline-flex items-center gap-1"
+                  style={tagColor ? { borderLeft: `3px solid ${tagColor}`, paddingLeft: "0.4rem" } : undefined}
                   data-testid={`${testidPrefix}-chip-${i}`}>
+              {tagColor && (
+                <span className="inline-block w-2 h-2 rounded-full"
+                      style={{ background: tagColor }}
+                      title="GM-set color tag"
+                      data-testid={`${testidPrefix}-chip-color-${i}`}/>
+              )}
               <button onClick={() => openReference(v)}
                       className="hover:text-gold-bright cursor-pointer"
                       title={`Open reference for ${name}`}
@@ -313,14 +323,21 @@ export default function ReferencePicker({
                  backgroundImage: "linear-gradient(180deg, rgba(60,45,20,0.12), rgba(0,0,0,0.9))",
                }}
                data-testid={`${testidPrefix}-dropdown`}>
-            {suggestions.map((e, i) => (
+            {suggestions.map((e, i) => {
+              const tagColor = e.color || e.fields?.color || "";
+              return (
               <button key={`${e.name}-${i}`}
                       onClick={() => addEntry(e)}
                       className={`w-full text-left px-3 py-2 border-b border-gold/10 hover:bg-gold/10
                                   ${activeIdx === i ? "bg-gold/15" : ""}`}
+                      style={tagColor ? { borderLeft: `3px solid ${tagColor}` } : undefined}
                       data-testid={`${testidPrefix}-suggest-${i}`}>
                 <div className="flex items-baseline justify-between gap-2">
                   <span className="font-display text-parchment">
+                    {tagColor && (
+                      <span className="inline-block w-2 h-2 rounded-full mr-1.5 align-middle"
+                            style={{ background: tagColor }}/>
+                    )}
                     {e.__custom && <Sparkles className="w-3 h-3 inline mr-1 text-gold-bright"/>}
                     {e.name}
                   </span>
@@ -335,7 +352,7 @@ export default function ReferencePicker({
                     .filter(Boolean).join(" · ")}
                 </div>
               </button>
-            ))}
+            );})}
           </div>
         )}
       </div>

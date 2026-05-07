@@ -14,6 +14,52 @@
 
 ## 2. Implemented (cumulative, condensed)
 
+### V6.25.8 — Mod ranks + Color-coded chips + Mobile burger + Genesis Archive UI + Footer rebuild (2026-02-07)
+
+User flagged a critical functional gap: BESM attribute customization let you toggle enhancements / limiters but had no per-mod rank input. "1 application of Range is different in function and narration from 4 levels of Range by a lot." Plus mobile-view footer crunch and a request to centre the TableGnostic original logo + a refreshed legal posture crediting Francis T. Pietrowski as sole owner.
+
+**🔴 P0 — BESM enhancement / limiter ranks** (`CharacterBuilder.jsx`, `CharacterSheet.jsx`, `pdf_export.py`)
+- New `ModSection` component renders the catalog as toggle chips. Selecting an enhancement / limiter adds a rank-1 dict row `{name, rank, value}`; the row then surfaces below the toggle list with a numeric `× rank` input clamped 1-12.
+- BESM 4E V4.1 rule preserved: rank changes EFFECTIVE level only, never point cost. Cost = `level × cost_per_level − item-defect refunds`. EffLvl = `level + Σlimiter ranks − Σenhancement ranks` (floored at 1).
+- Sheet-side rendering shows `+Range×4` / `−Backlash×2` chips with rank-aware tooltips. PDF export updated to format `Range×4; Backlash×2` instead of bare `Range; Backlash`.
+- Back-compat: legacy string entries (`["Range", "Range"]`) still load — helpers normalise to `rank=1` per entry. Backend `CharacterAttribute.enhancements/limiters: List[Any]` already supported the dict shape; `character_validation._mods_sum` already summed `value` deltas, so server-side eff-level math just works.
+- Tests: `tests/test_v6258_mod_rank.py` (3/3) — rank dict round-trips, legacy strings still load, Genesis archive endpoint responds.
+
+**💎 Color-coded reference chips** (`builders/ReferencePicker.jsx`)
+- Custom-rule color (set on the Custom Rules tab) now bleeds through to ReferencePicker:
+  - dropdown row gets a left-side color stripe + dot,
+  - chip after picking gets `border-left: 3px solid <color>` + a small color-dot,
+- Falls back to default `tag` styling when no color is set. Closes the user's "GM-defined color-coding wired into the ReferencePicker" carryover from V6.25.7.
+
+**📱 Floating mobile burger + footer rebuild** (`Shell.jsx`)
+- Mobile topbar: removed inline burger, leaving only the wordmark + sigil so page titles stop colliding with the menu icon.
+- New floating action button: 56×56 sigil-glow circle pinned `right-4 bottom-4 z-40`. Tap opens the existing drawer (drawer z-index lifted to 50). Drawer adds `overflow-y-auto` so long nav lists scroll on small phones.
+- Bottom-tab nav DELETED — its presence was the source of the title-crunch + footer overlap problem. Burger replaces it.
+- Footer reclaimed for the **TableGnostic original logo + legal statement**:
+  - Centered 72px sigil + uppercase "TABLE-GNOSTIC" wordmark + "not the system. the table." tagline (clickable → `/app`).
+  - Creator credit: **Francis T. Pietrowski** (sole owner) in display caps.
+  - Three-paragraph legal block: (1) original-platform copyright + mark, (2) third-party game-system trademark notice with explicit "no rulebook prose / lore / art reproduced" claim, (3) as-is liability disclaimer + user-published-content responsibility clause. © {year} Francis T. Pietrowski footer line.
+  - Mobile padding: footer adds `mb-20` so the floating burger doesn't cover the © line on phones.
+
+**🟧 P1 — Genesis Archive UI** (`GenesisArchivePanel.jsx`, `AtelierTab.jsx`)
+- New GM-only `<GenesisArchivePanel/>` mounts under the Atelier ▸ Genesis subtab. Renders the list returned by the existing `GET /api/campaigns/{cid}/genesis/archives` (newest first).
+- Each archive row collapses by default; click expands a JSON dump (max-height scrollable) + two action buttons:
+  - **Restore as live** → `POST /campaigns/{cid}/genesis/archives/{aid}/restore` (current live is auto-archived first so nothing is lost).
+  - **Delete** → `DELETE /campaigns/{cid}/genesis/archives/{aid}` (with confirm prompt).
+- Empty state nudges the GM to "edit the live Genesis once, then come back" — explains why the panel is empty for fresh campaigns.
+
+**Testing**
+- 3/3 new V6.25.8 backend tests pass (mod-rank round-trip, legacy strings, archive endpoint).
+- All touched files lint clean (Shell, CharacterBuilder, CharacterSheet, ReferencePicker, GenesisArchivePanel, AtelierTab, pdf_export).
+- Smoke screenshot: desktop + mobile both render without console errors.
+
+**Roadmap (deferred)**
+- Mobile Sweep V3 — touch-target audit on Character Sheet roll cells + sticky header collapse on the sheet.
+- Strict Permission Gating — players submit codex/genesis items to GM approval queue.
+- Anime 5E / D&D class library extension to level 20 + cross-system auto-conversion.
+- Marketplace V2 — Stripe-Connect paywall + author payouts.
+- Per-archive marketplace share (current archive panel keeps share-via-fork as the path).
+
 ### V6.25.6 — Cut B Chat Hot-Keys + Mobile V2 Sweep + Marketplace Watch List (2026-02-04)
 
 User greenlit Cut B + Mobile V2 + the suggested marketplace digest improvement. All three shipped.

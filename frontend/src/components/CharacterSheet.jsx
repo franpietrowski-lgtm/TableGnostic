@@ -426,17 +426,26 @@ export default function CharacterSheet() {
             {ch.attributes.length === 0 && <div className="text-mist italic text-xs">—</div>}
             <div className="space-y-2">
               {ch.attributes.map((a, i) => {
-                // BESM 4E V4.1: each toggled Enhancement / Limiter row is exactly
-                // ONE application. Multiple applications of the same name require
-                // re-listing it (the array preserves duplicates). Effective Level
-                // = assigned Level + #Limiters − #Enhancements (floored at 1).
+                // BESM 4E V4.1: V6.25.8 — Enhancements / Limiters now carry
+                // an explicit `rank` (legacy strings tolerate as rank=1).
+                // Effective Level = assigned Level + Σlimiter ranks − Σenhancement ranks.
+                const _modRank = (m) => {
+                  if (typeof m === "string") return 1;
+                  if (m && typeof m.rank === "number") return Math.max(1, m.rank);
+                  if (m && typeof m.value === "number") return Math.max(1, Math.abs(m.value));
+                  return 1;
+                };
+                const _modName = (m) => (typeof m === "string" ? m : (m?.name || ""));
+                const _sumRanks = (arr) => (arr || []).reduce((s, m) => s + _modRank(m), 0);
                 const enhCount = (a.enhancements || []).length;
                 const limCount = (a.limiters || []).length;
+                const enhRanks = _sumRanks(a.enhancements);
+                const limRanks = _sumRanks(a.limiters);
                 const itemDefRefund = (a.defects || []).reduce(
                   (s, d) => s + (d.points_per_rank || 0) * (d.rank || 0), 0);
                 const effLvl = typeof a.effective_level === "number"
                   ? a.effective_level
-                  : Math.max(1, (a.level || 1) + limCount - enhCount);
+                  : Math.max(1, (a.level || 1) + limRanks - enhRanks);
                 const effDelta = effLvl - (a.level || 1);
                 return (
                 <div key={i} className="border border-gold/10 rounded-sm p-3 flex items-start justify-between flex-wrap gap-2">
@@ -485,17 +494,29 @@ export default function CharacterSheet() {
                       <div className="mt-1.5">
                         <div className="text-[9px] font-ui uppercase tracking-widest text-mist/60 mb-1"
                              data-testid={`attr-applications-${i}`}>
-                          {enhCount + limCount} application{enhCount + limCount === 1 ? "" : "s"} ·
-                          {" "}{enhCount} enhancement{enhCount === 1 ? "" : "s"} ↓eff
-                          {" "}· {limCount} limiter{limCount === 1 ? "" : "s"} ↑eff
+                          {enhCount + limCount} mod{enhCount + limCount === 1 ? "" : "s"} · {enhRanks + limRanks} rank{enhRanks + limRanks === 1 ? "" : "s"}
+                          {" "}· {enhRanks} enh ↓eff
+                          {" "}· {limRanks} lim ↑eff
                         </div>
                         <div className="flex flex-wrap gap-1">
-                          {a.enhancements.map((e, j) => <span key={`e${j}`}
-                            className="tag border-gold/40 text-gold-bright cursor-help"
-                            title={`Enhancement: ${e}. Lowers the Attribute's effective Level by 1 — the power is more potent per CP paid. Stacks if listed multiple times.`}>+{e}</span>)}
-                          {a.limiters.map((l, j) => <span key={`l${j}`}
-                            className="tag border-ember/40 text-ember cursor-help"
-                            title={`Limiter: ${l}. Raises the Attribute's effective Level by 1 — the power is narrower, so each CP buys more functional range. Stacks if listed multiple times.`}>−{l}</span>)}
+                          {(a.enhancements || []).map((e, j) => {
+                            const nm = _modName(e); const rk = _modRank(e);
+                            return (<span key={`e${j}`}
+                              className="tag border-gold/40 text-gold-bright cursor-help"
+                              title={`Enhancement: ${nm} × ${rk} rank${rk===1?"":"s"}. Each rank lowers the Attribute's effective Level by 1 — the power is more potent per CP paid.`}
+                              data-testid={`sheet-enh-${i}-${j}`}>
+                              +{nm}{rk > 1 && <span className="text-[10px] ml-0.5 opacity-80">×{rk}</span>}
+                            </span>);
+                          })}
+                          {(a.limiters || []).map((l, j) => {
+                            const nm = _modName(l); const rk = _modRank(l);
+                            return (<span key={`l${j}`}
+                              className="tag border-ember/40 text-ember cursor-help"
+                              title={`Limiter: ${nm} × ${rk} rank${rk===1?"":"s"}. Each rank raises the Attribute's effective Level by 1 — narrower scope, more functional power.`}
+                              data-testid={`sheet-lim-${i}-${j}`}>
+                              −{nm}{rk > 1 && <span className="text-[10px] ml-0.5 opacity-80">×{rk}</span>}
+                            </span>);
+                          })}
                         </div>
                       </div>
                     )}

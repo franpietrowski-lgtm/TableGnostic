@@ -1255,17 +1255,36 @@ def _render_besm_pc_sheet(flow, ch, p, body_first, session_title):
         f"{ch.get('xp_unspent',0)} unspent",
         body_first))
     # Attributes
+    def _mod_name(m):
+        return m if isinstance(m, str) else (m.get("name") or "")
+
+    def _mod_rank(m):
+        if isinstance(m, str):
+            return 1
+        if isinstance(m, dict):
+            if isinstance(m.get("rank"), (int, float)):
+                return max(1, int(m["rank"]))
+            if isinstance(m.get("value"), (int, float)):
+                return max(1, abs(int(m["value"])))
+        return 1
+
+    def _fmt_mod(m):
+        nm = _mod_name(m)
+        rk = _mod_rank(m)
+        return f"{nm}×{rk}" if rk > 1 else nm
     for a in (ch.get("attributes") or []):
         enh = a.get("enhancements") or []
         lim = a.get("limiters") or []
-        eff = max(1, int(a.get("level", 1)) + len(lim) - len(enh))
+        enh_ranks = sum(_mod_rank(m) for m in enh)
+        lim_ranks = sum(_mod_rank(m) for m in lim)
+        eff = max(1, int(a.get("level", 1)) + lim_ranks - enh_ranks)
         line = (f"<b>{_html_escape(a.get('name','?'))}</b> ×{a.get('level',1)} "
                 f"<font color='{p['muted']}'>(eff. ×{eff} · "
                 f"{a.get('cost_per_level',0)} pt/lvl)</font>")
         if enh:
-            line += f" &nbsp; <i>+ {_html_escape('; '.join(enh))}</i>"
+            line += f" &nbsp; <i>+ {_html_escape('; '.join(_fmt_mod(m) for m in enh))}</i>"
         if lim:
-            line += f" &nbsp; <i>− {_html_escape('; '.join(lim))}</i>"
+            line += f" &nbsp; <i>− {_html_escape('; '.join(_fmt_mod(m) for m in lim))}</i>"
         if a.get("page"):
             line += f" &nbsp; <font color='{p['muted']}' size='8'>p.{a['page']}</font>"
         flow.append(Paragraph(line, body_first))

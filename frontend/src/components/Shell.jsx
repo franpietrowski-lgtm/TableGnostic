@@ -1,14 +1,25 @@
 import React, { useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../lib/api";
-import { Scroll, LayoutGrid, BookOpen, LogOut, UserCircle2, Compass, Menu, X, User, HelpCircle, Sparkles, Store } from "lucide-react";
+import {
+  Scroll, LayoutGrid, BookOpen, LogOut, UserCircle2, Compass, Menu, X,
+  User, HelpCircle, Sparkles, Store,
+} from "lucide-react";
 import CmdKPalette from "./CmdKPalette";
 import ReferenceAutoLink from "./ReferenceAutoLink";
 import { TourProvider } from "./TourProvider";
 
+/**
+ * Sigil — TableGnostic platform mark.
+ *
+ * Star-of-eyes + ringed circle. Used everywhere we need brand presence
+ * (sidebar, mobile topbar, app footer). Keeps a fixed aspect ratio so
+ * the SVG scales clean from 28px to 96px without losing weight.
+ */
 const Sigil = ({ size = 32 }) => (
   <svg viewBox="0 0 120 120" style={{ width: size, height: size }}
-       className="logo-mark shrink-0" xmlns="http://www.w3.org/2000/svg">
+       className="logo-mark shrink-0" xmlns="http://www.w3.org/2000/svg"
+       data-testid="tablegnostic-sigil">
     <defs>
       <linearGradient id="sh" x1="0" x2="1">
         <stop offset="0" stopColor="#e5c370" />
@@ -41,9 +52,6 @@ export default function Shell() {
   const sideLink = ({ isActive }) =>
     `flex items-center gap-3 px-4 py-2.5 rounded-sm font-ui text-sm tracking-wide transition
      ${isActive ? "bg-gold/10 text-gold-bright border-l-2 border-gold" : "text-mist hover:text-parchment hover:bg-gold/5 border-l-2 border-transparent"}`;
-  const tabLink = ({ isActive }) =>
-    `flex flex-col items-center justify-center gap-0.5 flex-1 py-2.5 transition
-     ${isActive ? "text-gold-bright" : "text-mist/70 hover:text-parchment"}`;
 
   return (
     <TourProvider>
@@ -81,27 +89,55 @@ export default function Shell() {
         </div>
       </aside>
 
-      {/* MOBILE TOPBAR */}
-      <header className="md:hidden flex items-center justify-between px-4 py-3 border-b border-gold/10 bg-void/80 backdrop-blur sticky top-0 z-30">
-        <NavLink to="/app" className="flex items-center gap-2">
-          <Sigil size={28}/>
+      {/* MOBILE COMPACT TOPBAR
+          V6.25.8 — Page titles previously crunched against the inline
+          burger button on narrow viewports. Topbar is now ONLY the
+          wordmark + sigil; navigation lives in the floating action
+          burger pinned to the lower-right edge of the screen, so the
+          header stays unblocked while the burger floats with scroll. */}
+      <header className="md:hidden flex items-center justify-center px-4 py-3 border-b border-gold/10 bg-void/80 backdrop-blur sticky top-0 z-30">
+        <NavLink to="/app" className="flex items-center gap-2"
+                 data-testid="mobile-home-link">
+          <Sigil size={26}/>
           <span className="font-display tracking-[0.25em] text-xs text-parchment">TABLE-GNOSTIC</span>
         </NavLink>
-        <button onClick={() => setDrawer(true)} className="p-2 text-gold/80" data-testid="mobile-menu-btn">
-          <Menu className="w-5 h-5"/>
-        </button>
       </header>
+
+      {/* FLOATING MOBILE BURGER (V6.25.8)
+          Fixed to the lower-right with a sigil-coloured backdrop glow.
+          Sits above content via z-40 and stays in reach while the user
+          scrolls long sheets / chat logs. The previous bottom tab bar
+          is removed so the footer (logo + legal + creator credit) gets
+          breathing room on small screens. */}
+      <button
+        className="md:hidden fixed right-4 bottom-4 z-40 w-14 h-14 rounded-full
+                    bg-void/95 border border-gold/40 shadow-2xl
+                    flex items-center justify-center text-gold-bright
+                    hover:bg-gold/20 hover:border-gold-bright transition-colors"
+        style={{ boxShadow: "0 6px 20px rgba(229,195,112,0.25), 0 0 0 1px rgba(229,195,112,0.15)" }}
+        onClick={() => setDrawer(true)}
+        aria-label="Open navigation"
+        data-testid="mobile-fab-menu">
+        <Menu className="w-6 h-6"/>
+      </button>
 
       {/* MOBILE DRAWER */}
       {drawer && (
-        <div className="md:hidden fixed inset-0 z-40 bg-void/85 backdrop-blur-sm" onClick={() => setDrawer(false)}>
+        <div className="md:hidden fixed inset-0 z-50 bg-void/85 backdrop-blur-sm"
+             onClick={() => setDrawer(false)}
+             data-testid="mobile-drawer">
           <div className="absolute right-0 top-0 bottom-0 w-72 bg-ink border-l border-gold/20 p-5 flex flex-col"
                onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-6">
-              <span className="font-display tracking-[0.25em] text-xs text-parchment">MENU</span>
-              <button onClick={() => setDrawer(false)} className="text-mist"><X className="w-5 h-5"/></button>
+              <div className="flex items-center gap-2">
+                <Sigil size={26}/>
+                <span className="font-display tracking-[0.25em] text-xs text-parchment">MENU</span>
+              </div>
+              <button onClick={() => setDrawer(false)} className="text-mist"
+                      data-testid="mobile-drawer-close"
+                      aria-label="Close navigation"><X className="w-5 h-5"/></button>
             </div>
-            <nav className="flex-1 space-y-1">
+            <nav className="flex-1 space-y-1 overflow-y-auto">
               {NAV.map(({ to, end, icon: Icon, label, testid }) => (
                 <NavLink key={to} to={to} end={end} className={sideLink}
                          onClick={() => setDrawer(false)} data-testid={`drawer-${testid}`}>
@@ -113,7 +149,8 @@ export default function Shell() {
               <div className="flex items-center gap-2 mb-3 text-sm text-parchment font-ui">
                 <UserCircle2 className="w-5 h-5 text-gold/70"/> {user?.name}
               </div>
-              <button onClick={() => { setDrawer(false); onLogout(); }} className="btn btn-ghost w-full text-xs">
+              <button onClick={() => { setDrawer(false); onLogout(); }} className="btn btn-ghost w-full text-xs"
+                      data-testid="mobile-drawer-logout">
                 <LogOut className="w-4 h-4"/> Leave Table
               </button>
             </div>
@@ -122,7 +159,8 @@ export default function Shell() {
       )}
 
       {/* CONTENT */}
-      <main className="min-h-screen page overflow-x-hidden pb-20 md:pb-0 flex flex-col">
+      <main className="min-h-screen page overflow-x-hidden flex flex-col"
+            data-testid="shell-main">
         <div className="flex-1">
           <Outlet />
         </div>
@@ -136,16 +174,6 @@ export default function Shell() {
           `tg:open-reference` events fired by inventory chips, spell
           chips, class-feature timeline items, etc. */}
       <ReferenceAutoLink/>
-
-      {/* MOBILE BOTTOM NAV */}
-      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-30 flex border-t border-gold/15 bg-void/90 backdrop-blur">
-        {NAV.map(({ to, end, icon: Icon, label, testid }) => (
-          <NavLink key={to} to={to} end={end} className={tabLink} data-testid={`bottom-${testid}`}>
-            <Icon className="w-4 h-4"/>
-            <span className="text-[9px] uppercase tracking-widest font-ui">{label}</span>
-          </NavLink>
-        ))}
-      </nav>
     </div>
     </TourProvider>
   );
@@ -154,40 +182,78 @@ export default function Shell() {
 /**
  * App-level footer.
  *
- * Carries the **TableGnostic** legal posture (platform-wide). Per-system
- * marks (Tri-Stat Emporium · Dyskami · Cypher System Creator · etc.) live
- * inside each campaign's surfaces — they're applied conditionally by
- * `[data-system]` so the right rights-holder gets credit on the right page.
+ * V6.25.8 — Rebuilt.
+ *
+ * The previous mobile bottom-tab nav crowded the footer to the point
+ * where the page titles + nav glyphs overlapped on narrow viewports.
+ * Now mobile uses a floating burger; the footer is reclaimed for the
+ * **TableGnostic original logo + legal posture**.
+ *
+ * Creator: Francis T Pietrowski (sole owner). Per-system trademark
+ * notices remain inside each campaign's surfaces — they're applied
+ * conditionally by `[data-system]` so the right rights-holder gets
+ * credit on the right page.
  */
 function AppFooter() {
   return (
-    <footer className="border-t border-gold/10 bg-void/60 px-6 md:px-12 py-6 mt-10"
+    <footer className="border-t border-gold/15 bg-gradient-to-b from-void/40 to-void/80
+                          px-6 md:px-12 py-10 mt-10 mb-20 md:mb-0"
             data-testid="app-footer">
-      <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <Sigil size={28}/>
+      <div className="max-w-5xl mx-auto flex flex-col items-center text-center gap-5">
+        {/* Centered original logo. */}
+        <NavLink to="/app" className="inline-flex flex-col items-center gap-2 group"
+                 data-testid="footer-logo">
+          <Sigil size={72}/>
           <div>
-            <div className="font-display tracking-[0.25em] text-xs text-parchment">TABLE-GNOSTIC</div>
-            <div className="text-[10px] text-mist/70 italic">Not the system. The table.</div>
+            <div className="font-display tracking-[0.3em] text-base text-parchment group-hover:text-gold-bright transition-colors">
+              TABLE-GNOSTIC
+            </div>
+            <div className="text-[10px] font-ui tracking-widest uppercase text-gold/60 mt-0.5">
+              not the system. the table.
+            </div>
           </div>
+        </NavLink>
+
+        {/* Creator credit. */}
+        <div className="text-[11px] text-parchment/85 font-ui tracking-wide"
+             data-testid="footer-creator">
+          Created &amp; solely owned by{" "}
+          <span className="text-gold-bright font-display tracking-widest">FRANCIS&nbsp;T.&nbsp;PIETROWSKI</span>
         </div>
-        <div className="text-[10px] text-mist/70 leading-relaxed font-ui max-w-2xl"
+
+        {/* Legal posture. Concise, plain-English liability + IP statement. */}
+        <div className="text-[10px] md:text-[11px] text-mist/80 leading-relaxed font-ui max-w-3xl"
              data-testid="app-footer-legal">
           <p>
-            Table-Gnostic is an unofficial, system-aware tabletop platform.
-            Trademarks and copyrighted material referenced inside campaigns
-            (BESM, Anime 5E, Cypher System, Numenera, D&amp;D, Pathfinder, Fate, Mothership,
-            Blades in the Dark, Call of Cthulhu, Savage Worlds, Cyberpunk RED,
-            Vampire: the Masquerade, Shadowrun) belong to their respective
-            rights-holders. We display only mechanic names, page references,
-            and numerics — never reproduced rulebook prose, lore, or art.
-            Per-system attribution &amp; required licence text appear on each
-            campaign and exported PDF.
+            Table-Gnostic is an independent, system-aware tabletop platform.
+            All <strong>original platform code, UI, branding, mark, and
+            creator-authored content</strong> are © {new Date().getFullYear()} Francis T. Pietrowski,
+            all rights reserved. The Table-Gnostic mark and the &ldquo;Not the
+            system. The table.&rdquo; tagline are proprietary.
           </p>
-          <p className="mt-1">
-            © {new Date().getFullYear()} Table-Gnostic · All original platform
-            content licensed under its respective creator's terms.
+          <p className="mt-2">
+            Game systems referenced inside campaigns &mdash; including BESM 4E,
+            Anime 5E, the Cypher System, Numenera, Dungeons &amp; Dragons,
+            Pathfinder, Fate, Mothership, Blades in the Dark, Call of Cthulhu,
+            Savage Worlds, Cyberpunk RED, Vampire: the Masquerade, and
+            Shadowrun &mdash; are the property of their respective rights-holders.
+            The platform displays only mechanical names, page references, and
+            numerics. <strong>No rulebook prose, lore, art, or proprietary
+            setting material is reproduced</strong>; per-system attribution and
+            required licence text appear on each campaign page and exported PDF.
           </p>
+          <p className="mt-2">
+            Use of Table-Gnostic is provided <strong>&ldquo;as-is&rdquo;</strong> without warranty
+            of any kind. The creator and platform are not liable for any
+            game-table outcomes, lost data, or damages arising from use. Users
+            are solely responsible for the homebrew content they author and
+            for ensuring they have the rights to share or sell any material
+            published through the marketplace.
+          </p>
+        </div>
+
+        <div className="text-[10px] text-mist/60 font-ui tracking-wide pt-2 border-t border-gold/10 w-full max-w-3xl">
+          © {new Date().getFullYear()} Francis T. Pietrowski · Table-Gnostic Platform · All rights reserved.
         </div>
       </div>
     </footer>

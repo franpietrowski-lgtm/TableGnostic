@@ -1,25 +1,34 @@
-# V6.21 test credentials
-# (unchanged from V6.20)
+# Test credentials — V6.25.8 (current)
 
 **GMFran (admin/GM)**: franpietrowski@gmail.com / PieGod08!!
 **Aurora (player)**: albanaszak@ymail.com / AuroraTest123!
 
 Both seeded on backend startup.
 
-## V6.21 specific notes for testing
+## V6.25.8 verification targets
 
-**Anime 5E character for budget audit testing:**
-- Campaign: Evereantha Anime 5E
-- Eli Anime 5E character (look up via `GET /api/campaigns?system_id=anime-5e` → first campaign → first character)
-- Budget breakdown now shows: ability_score_cost, race_cost, point_buy_total, total_spent
-- RAW formula: 80 + (level − 1). Level 5 Eli = 84 DP.
+### BESM Enhancement / Limiter ranks (P0 — user-flagged)
+- Builder: `/app/characters/new?campaignId=<besm-cid>` → Attributes → "Customise" → toggle an enhancement → confirm a `× rank` numeric input appears below with rank 1-12 selector.
+- Save → reload sheet → confirm the chip shows e.g. `+Range×4` and effective level reflects the rank-summed delta.
+- Backend test: `tests/test_v6258_mod_rank.py` covers POST/GET round-trip for both new dict shape AND legacy strings.
 
-**New endpoints to verify (V6.21):**
-- `GET /api/anime5e/races` — returns 29 races (14 native + 14 PHB + Raceless). Has `rules_note` with "80".
-- `GET /api/characters/{cid}/anime5e/budget-breakdown` — adds `ability_score_breakdown`, `ability_score_cost`, `total_spent`, `canonical_raw_dp`, `formula_note`.
-- `POST /api/campaigns/{cid}/anime5e-recompute-budget` — default formula is "raw".
-- `GET/POST/DELETE /api/campaigns/{cid}/consent` — player consent record.
-- `GET /api/campaigns/{cid}/consent-roll` — GM view of every member's consent status.
-- `GET/POST /api/campaigns/{cid}/seat-applications` — player applies, GM lists.
-- `POST /api/campaigns/{cid}/seat-applications/{aid}/approve|reject` — GM decision.
-- `POST /api/campaigns/{cid}/leave` — player leaves a seat.
+### Color-coded reference chips
+- GM: `/app/campaigns/<cid>` → Custom Rules tab → create a feat/feature with a non-default color (e.g. `#ff5577`).
+- Player: open a character on that campaign → ReferencePicker with `kinds=["feat","feature"]` should now show:
+  - the dropdown row with a left color stripe + dot,
+  - the chip (after picking) with a colored left-border + dot.
+
+### Floating mobile burger + footer
+- Resize viewport to < 768px (or load on mobile). The previous bottom-tab nav is replaced by a single floating circular burger pinned to bottom-right.
+- Tap → drawer opens with the full nav.
+- Footer now centers the TableGnostic sigil + "FRANCIS T. PIETROWSKI" creator credit + 3-paragraph legal block.
+
+### Genesis Archive UI
+- GM: `/app/campaigns/<cid>` → Atelier tab → Genesis subtab → scroll past the "Open Genesis (7 phases) →" card.
+- Should see "Genesis Archive" panel listing past saves (newest first) with expand → JSON dump → Restore / Delete buttons.
+
+## Existing endpoints (regression)
+- `GET /api/anime5e/races` — 29 races.
+- `GET /api/characters/{cid}/anime5e/budget-breakdown` — RAW DP math.
+- `POST /api/campaigns/{cid}/macros` — V6.25.7 macro CRUD.
+- `POST /api/channels/{chid}/messages` — `/cast`, `/use`, `/spend xp`, `/macro`, `/undo` resolvers.
