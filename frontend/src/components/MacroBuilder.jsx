@@ -112,18 +112,21 @@ export default function MacroBuilder({
   const refine = () => setRefinery(_parseUnresolved(formula));
   const resolveRefineryPick = (slot, name) => {
     // Replace the bare token at `slot.idx` with `{kind:Name}` (or
-    // `{stat:Name}:tn` when the slot carried a target-number suffix).
-    setFormula((f) => {
+    // `{stat:Name}` + a TN-suffix recorded for the GM's table-side
+    // adjudication; the dice engine ignores the TN comment).
+    const newFormula = (() => {
+      const f = formula;
       const before = f.slice(0, slot.idx);
       const after = f.slice(slot.idx + slot.raw.length);
       const tnSuffix = slot.tn ? ` (TN ${slot.tn})` : "";
-      // The TN-suffix lives in the comment / label, not the formula —
-      // the dice engine doesn't need it; the GM sees it in the live
-      // preview line for table-side adjudication.
       return before + `{${slot.kind}:${name}}${tnSuffix}` + after;
-    });
-    // Drop the resolved slot from the queue.
-    setRefinery((r) => r.filter((x) => x.idx !== slot.idx));
+    })();
+    setFormula(newFormula);
+    // V6.25.12 — Re-parse from the MUTATED formula so the remaining
+    // slots' character offsets are correct. The previous `filter`
+    // approach kept stale `.idx` values that pointed into the OLD
+    // string, corrupting subsequent picks (see iteration_61 RCA).
+    setRefinery(_parseUnresolved(newFormula));
   };
 
   return createPortal(
