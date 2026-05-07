@@ -12,8 +12,9 @@
  */
 import React, { useEffect, useMemo, useState, useCallback } from "react";
 import { api, formatApiErrorDetail } from "../lib/api";
-import { Plus, Trash2, X, Sparkles, GitBranch, Link2, List, Network } from "lucide-react";
+import { Plus, Trash2, X, Sparkles, GitBranch, Link2, List, Network, Layers } from "lucide-react";
 import WorldTreeGraph from "./WorldTreeGraph";
+import WorldTreeLattice from "./WorldTreeLattice";
 
 const PILLAR_COLORS = {
   Population: "#9CC4FF",
@@ -25,7 +26,7 @@ export default function WorldCreationTree({ campId, isGm }) {
   const [data, setData] = useState(null);
   const [myths, setMyths] = useState([]);
   const [codexLinks, setCodexLinks] = useState([]);
-  const [viewMode, setViewMode] = useState("pillars"); // "pillars" | "graph"
+  const [viewMode, setViewMode] = useState("lattice"); // "lattice" | "pillars" | "graph"
   const [err, setErr] = useState("");
   const [linkModal, setLinkModal] = useState(null); // { source, target } or full edge
 
@@ -87,8 +88,13 @@ export default function WorldCreationTree({ campId, isGm }) {
             {data.schema.root.blurb} {data.schema.logic_notes.join(" ")}
           </p>
         </div>
-        {/* V6.21 Cut D V2 — view-mode toggle. */}
-        <div className="flex gap-1" data-testid="wct-view-mode">
+        {/* V6.21 Cut D V2 + V6.25.14 — view-mode toggle (lattice default). */}
+        <div className="flex gap-1 flex-wrap" data-testid="wct-view-mode">
+          <button onClick={() => setViewMode("lattice")}
+                  className={`btn text-xs ${viewMode === "lattice" ? "btn-primary" : "btn-ghost"}`}
+                  data-testid="wct-view-lattice">
+            <Layers className="w-3 h-3"/> Lattice
+          </button>
           <button onClick={() => setViewMode("pillars")}
                   className={`btn text-xs ${viewMode === "pillars" ? "btn-primary" : "btn-ghost"}`}
                   data-testid="wct-view-pillars">
@@ -121,6 +127,22 @@ export default function WorldCreationTree({ campId, isGm }) {
                              detail: { node_id: n.id, campaign_id: campId },
                            }));
                          }}/>
+      ) : viewMode === "lattice" ? (
+        /* V6.25.14 — staggered lattice with clickable cross-pillar bridges. */
+        <>
+          {(data.unplaced?.length || 0) > 0 && (
+            <UnplacedTray campId={campId} unplaced={data.unplaced}
+                           schema={data.schema}
+                           isGm={isGm} onChanged={refresh}/>
+          )}
+          <WorldTreeLattice
+            campId={campId}
+            schema={data.schema}
+            populated={data.populated || {}}
+            bridgePrompts={data.bridge_prompts || {}}
+            isGm={isGm}
+            onChanged={refresh}/>
+        </>
       ) : (
         <>
         {/* V6.22 — Unplaced codex tray. Shows auto-classified legacy

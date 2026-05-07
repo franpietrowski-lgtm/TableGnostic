@@ -142,6 +142,42 @@ async def anime5e_class_library(response: Response):
     }
 
 
+@router.get("/anime5e/dnd-conversion")
+async def anime5e_dnd_conversion(response: Response, dnd_class: str | None = None):
+    """V6.25.16 — D&D 5E → Anime 5E legacy class deconstruction.
+
+    Source: Anime 5E core rulebook pp.82-88. Each D&D class maps to an
+    Anime 5E core class id + a curated list of canonical Anime 5E
+    attributes (with starter ranks) and suggested defects. The wizard
+    surfaces this as "Convert from D&D" — the player can accept or
+    override every recommendation.
+
+    `?dnd_class=Fighter` → returns the single record for Fighter.
+    No parameter → returns the full mapping.
+    """
+    from system_data.dnd_to_anime5e_conversion import (
+        DND_TO_ANIME5E_CLASS_MAP, convert,
+    )
+    response.headers["Cache-Control"] = "public, max-age=300"
+    if dnd_class:
+        rec = convert(dnd_class)
+        if not rec:
+            return {
+                "dnd_class": dnd_class,
+                "error": "Unknown D&D class",
+                "available": sorted(DND_TO_ANIME5E_CLASS_MAP.keys()),
+            }
+        return rec
+    return {
+        "source_pages": "Anime 5E core rulebook pp.82-88",
+        "mapping": [
+            {"dnd_class": k, **v}
+            for k, v in DND_TO_ANIME5E_CLASS_MAP.items()
+        ],
+    }
+
+
+
 @router.get("/systems/{system_id}/reference")
 async def system_reference(system_id: str, response: Response):
     """System-aware reference data — D&D 5E, Anime 5E, Cypher, etc.

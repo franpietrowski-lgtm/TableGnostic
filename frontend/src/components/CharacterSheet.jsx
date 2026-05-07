@@ -37,7 +37,7 @@ function AddToMacroButton({ token, label, onOpen, hide }) {
   if (hide) return null;
   return (
     <button onClick={() => onOpen(token, label)}
-            className="text-mist/50 hover:text-gold-bright p-0.5 rounded-sm
+            className="touch-target text-mist/50 hover:text-gold-bright p-0.5 rounded-sm
                           hover:bg-gold/10 transition-colors"
             title={`Add ${label} to a macro slot`}
             data-testid={`add-to-macro-${token.replace(/[{}:]/g,"-")}`}>

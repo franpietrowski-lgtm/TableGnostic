@@ -7,6 +7,7 @@ import Auth from "./components/Auth";
 import Shell from "./components/Shell";
 import Dashboard from "./components/Dashboard";
 import Invite from "./components/Invite";
+import ShareLink from "./components/ShareLink";
 import Reset from "./components/Reset";
 
 // Lazy-load the heavy route components so initial bundle stays lean and
@@ -70,6 +71,7 @@ export default function App() {
           <Route path="/" element={<Landing />} />
           <Route path="/auth" element={<Auth />} />
           <Route path="/invite/:token" element={<Invite />} />
+          <Route path="/share/:token" element={<ShareLink />} />
           <Route path="/reset" element={<Reset />} />
           <Route element={<Protected><Shell /></Protected>}>
             <Route path="/app" element={<Dashboard />} />

@@ -14,6 +14,7 @@ import CardDeckPanel from "./CardDeckPanel";
 import XPLedgerPanel from "./XPLedgerPanel";
 import DeltaDropPanel from "./DeltaDropPanel";
 import { SeatApplicationsPanel, ConsentRollPanel } from "./ConsentPanel";
+import PrivateAccessPanel from "./PrivateAccessPanel";
 import { useAuth } from "../lib/api";
 import { NODE_TYPES, NODE_TEMPLATES, colorForType, labelForType } from "../lib/nodeTemplates";
 
@@ -881,6 +882,8 @@ function InviteTab({ camp, onRefresh }) {
         </div>
       </div>
       <CanonPublishCard camp={camp} onRefresh={onRefresh}/>
+      {/* V6.25.17 — campaign-level password + named share-links. */}
+      <PrivateAccessPanel camp={camp} onRefresh={onRefresh}/>
       {/* V6.21 — GM/Player consent flow: seat applications queue +
           consent-required toggle + consent roll summary. */}
       <ConsentRequiredToggle camp={camp} onRefresh={onRefresh}/>

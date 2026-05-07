@@ -3,6 +3,7 @@ import secrets
 from typing import Any, Dict
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel as _BaseModel, Field as _Field
 
 from core.cost_engine import resolve_system_id
 from core.db import db, new_id, now_iso, sanitize
@@ -187,6 +188,205 @@ async def regenerate_invite(cid: str, user: dict = Depends(get_current_user)):
     return {"invite_token": new_token}
 
 
+# ─── V6.25.17 — Private campaign access (passwords + share links) ──────
+
+class AccessPasswordIn(_BaseModel):
+    """Set or clear the campaign's join password.
+
+    `password = ""` clears the password (campaign becomes openly joinable
+    with the invite token); a non-empty value bcrypts and stores the
+    hash. The plaintext is never persisted or echoed."""
+    password: str = ""
+
+
+class ShareLinkIn(_BaseModel):
+    label: str = _Field(min_length=1, max_length=80)
+    password: str = ""
+    expires_at: str | None = None  # ISO-8601; None = never expires
+    max_uses: int | None = None    # None = unlimited
+
+
+@router.post("/campaigns/{cid}/access-password")
+async def set_access_password(
+    cid: str, body: AccessPasswordIn,
+    user: dict = Depends(get_current_user),
+):
+    """GM sets / clears the campaign-wide join password."""
+    camp = await db.campaigns.find_one({"id": cid}, {"_id": 0})
+    if not camp:
+        raise HTTPException(404, "Campaign not found")
+    if camp["gm_id"] != user["id"] and user.get("role") != "admin":
+        raise HTTPException(403, "GM/admin only.")
+    upd: Dict[str, Any] = {"updated_at": now_iso()}
+    if body.password:
+        from core.security import hash_password
+        upd["access_password_hash"] = hash_password(body.password)
+        upd["access_password_set"] = True
+    else:
+        upd["access_password_hash"] = None
+        upd["access_password_set"] = False
+    await db.campaigns.update_one({"id": cid}, {"$set": upd})
+    return {"ok": True, "password_set": bool(body.password)}
+
+
+@router.get("/campaigns/{cid}/share-links")
+async def list_share_links(cid: str,
+                            user: dict = Depends(get_current_user)):
+    """GM-only — list the campaign's named share links."""
+    camp = await db.campaigns.find_one({"id": cid}, {"_id": 0})
+    if not camp:
+        raise HTTPException(404, "Campaign not found")
+    if camp["gm_id"] != user["id"] and user.get("role") != "admin":
+        raise HTTPException(403, "GM/admin only.")
+    links = await db.campaign_share_links.find(
+        {"campaign_id": cid}, {"_id": 0, "password_hash": 0},
+    ).sort("created_at", -1).to_list(length=200)
+    return links
+
+
+@router.post("/campaigns/{cid}/share-links")
+async def create_share_link(
+    cid: str, body: ShareLinkIn,
+    user: dict = Depends(get_current_user),
+):
+    """GM-only — create a named share link with optional password,
+    expiry, and max-use cap."""
+    camp = await db.campaigns.find_one({"id": cid}, {"_id": 0})
+    if not camp:
+        raise HTTPException(404, "Campaign not found")
+    if camp["gm_id"] != user["id"] and user.get("role") != "admin":
+        raise HTTPException(403, "GM/admin only.")
+    doc = {
+        "id": new_id(),
+        "campaign_id": cid,
+        "label": body.label.strip(),
+        "token": secrets.token_urlsafe(20),
+        "expires_at": body.expires_at,
+        "max_uses": body.max_uses,
+        "use_count": 0,
+        "created_by": user["id"],
+        "created_at": now_iso(),
+        "password_set": bool(body.password),
+        "password_hash": None,
+    }
+    if body.password:
+        from core.security import hash_password
+        doc["password_hash"] = hash_password(body.password)
+    await db.campaign_share_links.insert_one(dict(doc))
+    doc.pop("_id", None)
+    doc.pop("password_hash", None)
+    return {"ok": True, "share_link": doc}
+
+
+@router.delete("/campaigns/{cid}/share-links/{lid}")
+async def delete_share_link(
+    cid: str, lid: str,
+    user: dict = Depends(get_current_user),
+):
+    camp = await db.campaigns.find_one({"id": cid}, {"_id": 0})
+    if not camp:
+        raise HTTPException(404, "Campaign not found")
+    if camp["gm_id"] != user["id"] and user.get("role") != "admin":
+        raise HTTPException(403, "GM/admin only.")
+    res = await db.campaign_share_links.delete_one(
+        {"id": lid, "campaign_id": cid})
+    return {"ok": True, "deleted": res.deleted_count}
+
+
+@router.get("/share-links/{token}")
+async def get_share_link_public(token: str):
+    """Public read — minimal info for the join page.
+
+    Surfaces label + system + GM + whether a password is required
+    + whether the link is still valid (expiry / max-uses)."""
+    sl = await db.campaign_share_links.find_one({"token": token}, {"_id": 0})
+    if not sl:
+        raise HTTPException(404, "Share link not found or revoked")
+    camp = await db.campaigns.find_one({"id": sl["campaign_id"]}, {"_id": 0})
+    if not camp:
+        raise HTTPException(404, "Campaign not found")
+    expired = False
+    if sl.get("expires_at"):
+        from datetime import datetime, timezone
+        try:
+            expired = datetime.fromisoformat(
+                sl["expires_at"].replace("Z", "+00:00"),
+            ) < datetime.now(timezone.utc)
+        except Exception:
+            expired = False
+    capped = (sl.get("max_uses") is not None
+              and sl.get("use_count", 0) >= sl["max_uses"])
+    return {
+        "campaign_id": camp["id"], "name": camp["name"],
+        "system": camp.get("system_id") or camp.get("system", "BESM 4E"),
+        "gm_name": camp.get("gm_name", ""),
+        "label": sl["label"],
+        "password_required": bool(sl.get("password_set")),
+        "expired": expired, "capped": capped,
+        "valid": not (expired or capped),
+        "seated": len(camp.get("member_ids", [])),
+        "max_players": camp.get("max_players", 6),
+    }
+
+
+class ShareLinkRedeem(_BaseModel):
+    password: str = ""
+
+
+@router.post("/share-links/{token}/redeem")
+async def redeem_share_link(
+    token: str, body: ShareLinkRedeem,
+    user: dict = Depends(get_current_user),
+):
+    """Authenticated player redeems a share link → joins the campaign.
+
+    Validates the password (if set), expiry, and max-use cap before
+    adding the user to `member_ids` and incrementing `use_count`.
+    """
+    sl = await db.campaign_share_links.find_one({"token": token}, {"_id": 0})
+    if not sl:
+        raise HTTPException(404, "Share link not found or revoked")
+    if sl.get("expires_at"):
+        from datetime import datetime, timezone
+        try:
+            if datetime.fromisoformat(
+                sl["expires_at"].replace("Z", "+00:00"),
+            ) < datetime.now(timezone.utc):
+                raise HTTPException(410, "Share link has expired")
+        except HTTPException:
+            raise
+        except Exception:
+            pass
+    if (sl.get("max_uses") is not None
+            and sl.get("use_count", 0) >= sl["max_uses"]):
+        raise HTTPException(410, "Share link is fully redeemed")
+
+    if sl.get("password_set"):
+        from core.security import verify_password
+        if not body.password or not verify_password(
+                body.password, sl.get("password_hash") or ""):
+            raise HTTPException(403, "Incorrect password")
+
+    cid = sl["campaign_id"]
+    camp = await db.campaigns.find_one({"id": cid}, {"_id": 0})
+    if not camp:
+        raise HTTPException(404, "Campaign not found")
+    if user["id"] == camp["gm_id"]:
+        return {"ok": True, "campaign_id": cid, "already": "gm"}
+    if user["id"] in (camp.get("member_ids") or []):
+        return {"ok": True, "campaign_id": cid, "already": True}
+    if len(camp.get("member_ids", [])) >= camp.get("max_players", 6):
+        raise HTTPException(400, "Table full")
+    await db.campaigns.update_one(
+        {"id": cid}, {"$addToSet": {"member_ids": user["id"]}})
+    await db.campaign_share_links.update_one(
+        {"id": sl["id"]},
+        {"$inc": {"use_count": 1},
+         "$set": {"last_used_at": now_iso(),
+                  "last_used_by": user["id"]}})
+    return {"ok": True, "campaign_id": cid}
+
+
 @router.get("/campaigns/{cid}/members")
 async def list_campaign_members(cid: str, user: dict = Depends(get_current_user)):
     """Member list for the @mention autocomplete picker. Returns id, name, and
@@ -238,17 +438,35 @@ async def get_invite(token: str):
         "seated": len(camp.get("member_ids", [])),
         "max_players": camp.get("max_players", 6),
         "full": len(camp.get("member_ids", [])) >= camp.get("max_players", 6),
+        # V6.25.17 — surface campaign-level password gate.
+        "password_required": bool(camp.get("access_password_set")),
     }
 
 
+class AcceptInviteIn(_BaseModel):
+    """V6.25.17 — optional password for password-gated campaigns."""
+    password: str = ""
+
+
 @router.post("/invites/{token}/accept")
-async def accept_invite(token: str, user: dict = Depends(get_current_user)):
+async def accept_invite(
+    token: str,
+    body: AcceptInviteIn | None = None,
+    user: dict = Depends(get_current_user),
+):
     camp = await db.campaigns.find_one({"invite_token": token}, {"_id": 0})
     if not camp:
         raise HTTPException(404, "Invite not found or revoked")
     cid = camp["id"]
     if user["id"] == camp["gm_id"]:
         return {"ok": True, "campaign_id": cid, "already": "gm"}
+    # V6.25.17 — enforce campaign-level password if one is set.
+    if camp.get("access_password_set"):
+        from core.security import verify_password
+        pwd = (body.password if body else "") or ""
+        if not pwd or not verify_password(
+                pwd, camp.get("access_password_hash") or ""):
+            raise HTTPException(403, "Incorrect campaign password")
     if user["id"] in camp.get("member_ids", []):
         return {"ok": True, "campaign_id": cid, "already": True}
     if len(camp.get("member_ids", [])) >= camp.get("max_players", 6):
