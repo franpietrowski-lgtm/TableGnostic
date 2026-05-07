@@ -14,6 +14,16 @@
 
 ## 2. Implemented (cumulative, condensed)
 
+### V6.25.21 — Classifier Confidence audit panel (2026-02-09)
+
+GMs now have a one-glance dashboard of every codex node the V6.25.19 classifier auto-placed, sorted by ascending confidence so the riskiest placements bubble to the top. Two new endpoints + a mounted React panel:
+
+- `GET /api/campaigns/{cid}/codex/classifier-audit` — returns `{totals: {auto_placed, manual_placed, unplaced, total}, rows: [...]}` where each row carries `id + name + section + node_kind + confidence + reasoning + source + summary + updated_at`. Rows are sorted ascending by confidence (low-confidence first) so the GM scans the riskiest placements before the high-confidence ones.
+- `POST /api/campaigns/{cid}/codex/classifier-audit/{nid}/confirm` — locks an auto-placed node by stamping `creation_tree.auto_classified = false`. Future PUTs to `/api/nodes/{nid}` then respect the placement (verified by the same V6.25.20 manual-pin pathway).
+- `ClassifierConfidencePanel.jsx` — collapsible foldout under the World Tree showing a 3-segment **convergence meter** (manual gold / auto arcane / unplaced mist) plus the ascending-confidence row list. Each row exposes Confirm + Re-pin (dropdown of all `Pillar.Branch` sections) + Open. Confidence pill colour-bands at 90/65/40 thresholds.
+- The panel is GM-only (renders nothing for players); audit endpoint also enforces 403 for non-GMs.
+- 4/4 V6.25.21 tests pass + 144/144 V6.25.x cumulative regression — no breakage.
+
 ### V6.25.20 — Classifier wired into the legacy /api/nodes editor + code-health pass (2026-02-09)
 
 - `POST /api/nodes` and `PUT /api/nodes/{nid}` now both route through a new shared `_enrich_with_classifier(doc, existing=None)` helper in `routes/nodes.py`. The legacy `NodeIn` shape (`type + title + content + tags + fields`) is transparently lifted into the V6.25.19 unified shape (`name + title + type + node_kind + creation_tree.section + summary`) on every mutation — so the legacy editor's saves now feed the World Tree without any frontend work.

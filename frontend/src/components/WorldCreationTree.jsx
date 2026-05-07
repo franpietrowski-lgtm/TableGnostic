@@ -15,6 +15,7 @@ import { api, formatApiErrorDetail } from "../lib/api";
 import { Plus, Trash2, X, Sparkles, GitBranch, Link2, List, Network, Layers } from "lucide-react";
 import WorldTreeGraph from "./WorldTreeGraph";
 import WorldTreeLattice from "./WorldTreeLattice";
+import ClassifierConfidencePanel from "./ClassifierConfidencePanel";
 
 const PILLAR_COLORS = {
   Population: "#9CC4FF",
@@ -140,6 +141,12 @@ export default function WorldCreationTree({ campId, isGm }) {
             schema={data.schema}
             populated={data.populated || {}}
             bridgePrompts={data.bridge_prompts || {}}
+            isGm={isGm}
+            onChanged={refresh}/>
+          {/* V6.25.21 — Classifier Confidence audit. GM-only. */}
+          <ClassifierConfidencePanel
+            campId={campId}
+            schema={data.schema}
             isGm={isGm}
             onChanged={refresh}/>
         </>

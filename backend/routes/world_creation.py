@@ -607,6 +607,109 @@ async def auto_classify_codex(
     }
 
 
+@router.get("/campaigns/{cid}/codex/classifier-audit")
+async def codex_classifier_audit(
+    cid: str, user: dict = Depends(get_current_user),
+):
+    """V6.25.21 — Classifier Confidence audit.
+
+    Returns every auto-placed codex node in the campaign, sorted by
+    ASCENDING confidence so the GM can scan the riskiest placements
+    first. Each row carries:
+      * id / name / section / kind
+      * confidence (0.0-1.0) + reasoning string
+      * fields.source provenance (genesis / epic_campaign / etc.)
+
+    Also bundles totals (auto vs manual vs unplaced) so the frontend
+    panel can render a one-glance "world is converging" meter.
+    """
+    camp = await db.campaigns.find_one({"id": cid}, {"_id": 0})
+    if not camp:
+        raise HTTPException(404, "Campaign not found")
+    if camp["gm_id"] != user["id"] and user.get("role") != "admin":
+        raise HTTPException(403, "GM/admin only.")
+
+    rows = await db.nodes.find(
+        {"campaign_id": cid},
+        {"_id": 0, "id": 1, "name": 1, "title": 1, "node_kind": 1,
+         "type": 1, "summary": 1, "content": 1, "creation_tree": 1,
+         "fields": 1, "updated_at": 1},
+    ).to_list(length=5000)
+
+    auto_placed: List[Dict[str, Any]] = []
+    manual_placed = 0
+    unplaced = 0
+
+    for r in rows:
+        ct = r.get("creation_tree") or {}
+        sec = ct.get("section")
+        if not sec:
+            unplaced += 1
+            continue
+        if not ct.get("auto_classified"):
+            manual_placed += 1
+            continue
+        # Auto-placed — surface it.
+        display = (r.get("name") or r.get("title") or "(unnamed)")
+        auto_placed.append({
+            "id": r.get("id"),
+            "name": display,
+            "section": sec,
+            "node_kind": r.get("node_kind") or r.get("type"),
+            "confidence": ct.get("classifier_confidence") or 0.0,
+            "reasoning": ct.get("classifier_reasoning") or "",
+            "source": (r.get("fields") or {}).get("source"),
+            "summary": (r.get("summary") or r.get("content") or "")[:200],
+            "updated_at": r.get("updated_at"),
+        })
+
+    # Lowest-confidence first — that's the audit's whole purpose.
+    auto_placed.sort(key=lambda p: (p["confidence"], p["name"].lower()))
+
+    return {
+        "campaign_id": cid,
+        "totals": {
+            "auto_placed": len(auto_placed),
+            "manual_placed": manual_placed,
+            "unplaced": unplaced,
+            "total": len(rows),
+        },
+        "rows": auto_placed,
+    }
+
+
+@router.post("/campaigns/{cid}/codex/classifier-audit/{nid}/confirm")
+async def codex_classifier_confirm(
+    cid: str, nid: str, user: dict = Depends(get_current_user),
+):
+    """V6.25.21 — GM confirms an auto-placed node's section is correct.
+
+    Stamps `creation_tree.auto_classified = false` so future PUTs
+    (e.g. content edits) don't re-route the row. The placement itself
+    is preserved.
+    """
+    camp = await db.campaigns.find_one({"id": cid}, {"_id": 0})
+    if not camp:
+        raise HTTPException(404, "Campaign not found")
+    if camp["gm_id"] != user["id"] and user.get("role") != "admin":
+        raise HTTPException(403, "GM/admin only.")
+    n = await db.nodes.find_one(
+        {"id": nid, "campaign_id": cid}, {"_id": 0})
+    if not n:
+        raise HTTPException(404, "Node not found")
+    ct = n.get("creation_tree") or {}
+    if not ct.get("section"):
+        raise HTTPException(400, "Node has no section to confirm")
+    res = await db.nodes.update_one(
+        {"id": nid},
+        {"$set": {
+            "creation_tree.auto_classified": False,
+            "updated_at": now_iso(),
+        }},
+    )
+    return {"ok": True, "modified": res.modified_count}
+
+
 class CodexNodePlacement(BaseModel):
     section: str = Field(min_length=1, max_length=80)
     color: Optional[str] = None
