@@ -237,6 +237,9 @@ function UnplacedTray({ campId, unplaced, schema, isGm, onChanged }) {
   const [pinning, setPinning] = useState({});  // { nodeId: section }
   const [busy, setBusy] = useState({});
   const [err, setErr] = useState("");
+  // V6.25.19 — bulk auto-classify state.
+  const [autoBusy, setAutoBusy] = useState(false);
+  const [autoResult, setAutoResult] = useState(null);
 
   // Build the pillar.branch option list from the schema so GMs can
   // dock into ANY canonical section (not just the classifier guesses).
@@ -267,16 +270,64 @@ function UnplacedTray({ campId, unplaced, schema, isGm, onChanged }) {
     }
   };
 
+  // V6.25.19 — bulk-classify every unplaced node by name / content /
+  // tag heuristics. Idempotent backend; safe to run repeatedly.
+  const autoClassify = async () => {
+    setAutoBusy(true); setErr(""); setAutoResult(null);
+    try {
+      const { data } = await api.post(
+        `/campaigns/${campId}/codex/auto-classify`);
+      setAutoResult(data);
+      onChanged && onChanged();
+    } catch (e) {
+      setErr(formatApiErrorDetail(e.response?.data?.detail) || e.message);
+    } finally {
+      setAutoBusy(false);
+    }
+  };
+
   if (unplaced.length === 0) return null;
 
   return (
     <div className="card-mystic p-3" data-testid="wct-unplaced-tray">
-      <div className="flex items-baseline justify-between">
+      <div className="flex items-baseline justify-between flex-wrap gap-2">
         <div className="label-ref">Unclassified codex entries</div>
-        <span className="text-[10px] text-mist italic">
-          {unplaced.length} unplaced — type didn't match a pillar.
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] text-mist italic">
+            {unplaced.length} unplaced — type didn't match a pillar.
+          </span>
+          {isGm && (
+            <button onClick={autoClassify}
+                    disabled={autoBusy}
+                    className="btn btn-primary text-[10px]"
+                    data-testid="wct-auto-classify-btn"
+                    title="Run the canonical concept classifier on every
+unplaced node — name / content / tag heuristics route them to a
+Pillar.Branch when there's a strong signal.">
+              {autoBusy
+                ? <Sparkles className="w-3 h-3 animate-pulse"/>
+                : <Sparkles className="w-3 h-3"/>}
+              Auto-classify
+            </button>
+          )}
+        </div>
       </div>
+      {autoResult && (
+        <div className="text-[10px] mt-1 italic"
+             data-testid="wct-auto-classify-result">
+          {autoResult.classified > 0 ? (
+            <span className="text-gold-bright">
+              Classified {autoResult.classified} node{autoResult.classified === 1 ? "" : "s"};
+            </span>
+          ) : (
+            <span className="text-mist">No new placements;</span>
+          )}
+          {" "}
+          <span className="text-mist">
+            {autoResult.still_unplaced} still need a manual pin.
+          </span>
+        </div>
+      )}
       <div className="text-[10px] text-mist/80 italic mt-0.5 mb-2">
         Pick a pillar.branch and pin so the World Tree reflects your
         canon. Already-classified entries appear with a subtle "auto"

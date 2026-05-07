@@ -474,22 +474,51 @@ async def sow_codex_node(
     user: dict = Depends(get_current_user),
 ):
     """Create a creation-tree-tagged codex node. Used by the world
-    tree's sow() flow to seed new entries directly into a pillar."""
+    tree's sow() flow to seed new entries directly into a pillar.
+
+    V6.25.19 — when the caller doesn't ship a `creation_tree.section`
+    AND the supplied `node_kind == "concept"`, run the canonical
+    classifier (`core.codex_classifier.codexify_node`) so the node
+    auto-routes to the right Pillar.Branch instead of piling up in
+    the unplaced tray.
+    """
     camp = await db.campaigns.find_one({"id": cid}, {"_id": 0})
     if not camp:
         raise HTTPException(404, "Campaign not found")
     if camp["gm_id"] != user["id"] and user.get("role") != "admin":
         raise HTTPException(403, "GM/admin only.")
+
+    ct = dict(body.creation_tree or {})
+    explicit_sec = ct.get("section")
+    name = body.name.strip()
+    summary = body.summary.strip()
+
+    # If the caller already pinned a section, honour it. Otherwise run
+    # the classifier (using the caller's node_kind as a hint).
+    if explicit_sec:
+        node_kind = body.node_kind
+        ct.setdefault("color", None)
+        ct.setdefault("auto_classified", False)
+    else:
+        from core.codex_classifier import codexify_node
+        cls_payload = codexify_node(
+            name=name, content=summary, summary=summary,
+            tags=[], hint=body.node_kind,
+        )
+        node_kind = cls_payload["node_kind"]
+        if "creation_tree" in cls_payload:
+            ct = cls_payload["creation_tree"]
+
     doc = {
         "id": new_id(),
         "campaign_id": cid,
-        "name": body.name.strip(),
-        "title": body.name.strip(),
-        "node_kind": body.node_kind,
-        "type": body.node_kind,
-        "summary": body.summary.strip(),
-        "content": body.summary.strip(),
-        "creation_tree": dict(body.creation_tree or {}),
+        "name": name,
+        "title": name,
+        "node_kind": node_kind,
+        "type": node_kind,
+        "summary": summary,
+        "content": summary,
+        "creation_tree": ct,
         "tags": [],
         "fields": {},
         "visibility": "gm",
@@ -501,6 +530,81 @@ async def sow_codex_node(
     }
     await db.nodes.insert_one(dict(doc))
     return {"ok": True, "node": doc}
+
+
+@router.post("/campaigns/{cid}/codex/auto-classify")
+async def auto_classify_codex(
+    cid: str, user: dict = Depends(get_current_user),
+):
+    """V6.25.19 — backfill: re-run the canonical classifier on every
+    codex node that doesn't yet carry a `creation_tree.section`.
+
+    Idempotent: nodes that already have an explicit section are NEVER
+    overwritten. Returns the number of nodes that landed somewhere
+    they weren't before, plus the count that stayed unplaced (no
+    signal in name / content / tags).
+    """
+    camp = await db.campaigns.find_one({"id": cid}, {"_id": 0})
+    if not camp:
+        raise HTTPException(404, "Campaign not found")
+    if camp["gm_id"] != user["id"] and user.get("role") != "admin":
+        raise HTTPException(403, "GM/admin only.")
+
+    from core.codex_classifier import classify_concept
+
+    rows = await db.nodes.find(
+        {"campaign_id": cid}, {"_id": 0},
+    ).to_list(length=5000)
+
+    classified = 0
+    still_unplaced = 0
+    skipped = 0
+    placements: List[Dict[str, Any]] = []
+
+    for r in rows:
+        ct = r.get("creation_tree") or {}
+        if ct.get("section"):
+            skipped += 1
+            continue
+        # Run classifier on (name|title) + content + tags, with the
+        # legacy `type` value as a hint when present.
+        name = r.get("name") or r.get("title") or ""
+        cls = classify_concept(
+            name=name,
+            content=r.get("content") or r.get("summary") or "",
+            tags=r.get("tags") or [],
+            hint=(r.get("node_kind") or r.get("type")),
+        )
+        sec = cls["creation_tree_section"]
+        if not sec:
+            still_unplaced += 1
+            continue
+        upd = {
+            "creation_tree": {
+                "section": sec,
+                "color": ct.get("color"),
+                "auto_classified": True,
+                "classifier_confidence": cls["confidence"],
+                "classifier_reasoning": cls["reasoning"],
+            },
+            "node_kind": cls["node_kind"],
+            "type": cls["type"],
+            "updated_at": now_iso(),
+        }
+        await db.nodes.update_one({"id": r["id"]}, {"$set": upd})
+        classified += 1
+        placements.append({
+            "id": r["id"], "name": name, "section": sec,
+            "confidence": cls["confidence"], "reasoning": cls["reasoning"],
+        })
+
+    return {
+        "ok": True,
+        "classified": classified,
+        "still_unplaced": still_unplaced,
+        "already_placed": skipped,
+        "placements": placements[:50],  # cap echo so the response stays small
+    }
 
 
 class CodexNodePlacement(BaseModel):
@@ -661,25 +765,14 @@ class BridgeSowIn(BaseModel):
 
 
 def _section_to_kind(section: str) -> str:
-    """Coarse 'Pillar.Branch' → node_kind mapping for the seeded node."""
-    branch = (section.split(".", 1)[1] if "." in section else section).lower()
-    table = {
-        "races": "race", "nations": "nation", "languages": "language",
-        "factions": "faction", "prominent people": "pc",
-        "technology": "technology", "religions": "religion",
-        "beliefs": "belief", "laws": "law", "wars": "war",
-        "conflicts": "conflict",
-        "biomes": "biome", "locations": "location",
-        "man-made borders": "location", "countries": "country",
-        "continents": "continent", "natural divides": "landmark",
-        "natural laws": "lore", "magic": "magic", "gods": "god",
-        "dimensions": "dimension", "connected worlds": "dimension",
-        "uniqueness": "lore",
-        "natural history": "era", "of the people": "lore",
-        "written": "chronicle", "oral": "myth",
-        "truth": "lore", "lies": "lore",
-    }
-    return table.get(branch, "concept")
+    """Coarse 'Pillar.Branch' → node_kind mapping for the seeded node.
+
+    V6.25.19 — delegates to the canonical
+    `core.codex_classifier._kind_from_section` so the lattice and
+    classifier never drift out of sync.
+    """
+    from core.codex_classifier import _kind_from_section
+    return _kind_from_section(section)
 
 
 @router.post("/campaigns/{cid}/world-tree/bridge-sow")

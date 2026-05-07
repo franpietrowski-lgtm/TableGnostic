@@ -14,6 +14,34 @@
 
 ## 2. Implemented (cumulative, condensed)
 
+### V6.25.19 — Codex auto-classifier + Genesis/Epic/World-Tree codexification (2026-02-09)
+
+The user's three world-seeding pipelines (**Genesis**, **Epic**, **World Tree**) used to write codex nodes with subtly different field shapes — Genesis wrote `type` only, Epic wrote `title` only, World Tree wrote both `name + node_kind + creation_tree.section`. As a result, Genesis/Epic seeds piled up in the unplaced tray and their authors had to hand-pin every entry. This cycle ships:
+
+**🧠 Canonical concept classifier** (`core/codex_classifier.py`, NEW)
+- New `classify_concept(name, content, tags, hint, explicit_section)` returns `{node_kind, type, creation_tree_section, confidence, reasoning}`. Layered heuristics: explicit section > caller hint > tag matchers > regex on name > regex on content > fallback `concept`.
+- Companion `codexify_node(...)` builds the canonical V6.25.19 codex shape (`name + title + type + node_kind + creation_tree + tags + summary + content`) so callers don't drift.
+- Single source of truth `KIND_TO_SECTION` (29 canonical kinds → Pillar.Branch) replaces the duplicated tables that used to live in three different routes.
+- Fix landed mid-cycle: `hint == "concept"` no longer short-circuits the regex matchers — concept is the catch-all; signals on the name now win.
+
+**📦 Genesis pipeline → codex-ready** (`routes/campaigns.py::seed_nodes_from_genesis`)
+- Every Genesis seed (nemesis + sub-fields, supporting cast, adventures, locations, biomes, factions, motives) is now built via `codexify_node`. Nodes carry full World Tree provenance from creation; legacy fall-through classifier is no longer required for fresh Genesis runs.
+- `db.nodes` rows now consistently expose `name + title + type + node_kind + creation_tree.section` regardless of which Genesis bucket they came from. The `fields.source = "genesis"` provenance flag stays so the bridge-density meter can attribute placement.
+
+**🦹 Epic pipeline → codex-ready** (`routes/epic_campaign.py::seed_to_codex`)
+- `upsert_node` rewritten to route through `codexify_node` for both inserts AND refreshes. Epic Nemesis / Villains / Seeds now show up under their proper Pillar.Branch on the World Tree on the next `/creation-tree` fetch — no manual reclassification.
+- Refresh path also re-classifies stale nodes that predated V6.25.19, so re-running `/epic/{cid}/seed-codex` is now a one-step migration for legacy campaigns.
+
+**🌳 World Tree → unified classifier** (`routes/world_creation.py`)
+- `_section_to_kind` collapsed to a single delegate to `core.codex_classifier._kind_from_section`. Lattice's `bridge-sow` and the unified classifier never drift apart again.
+- `POST /campaigns/{cid}/codex-nodes` now invokes the classifier on the way in when no explicit section was supplied — **typing "Sir Aldous of Vermilion" as a concept now lands in `Population.Prominent People` automatically**.
+- New endpoint `POST /campaigns/{cid}/codex/auto-classify` backfills legacy nodes that already exist in the database (idempotent — never overwrites an explicit `creation_tree.section`). Returns `{classified, still_unplaced, already_placed, placements: [...]}`.
+
+**🎨 Frontend — Auto-classify button** (`WorldCreationTree.jsx::UnplacedTray`)
+- New "Auto-classify" CTA in the unplaced tray header — GM-only, calls the backfill endpoint, surfaces a friendly summary (`Classified N nodes; M still need a manual pin.`). The unclassified-tray now shrinks naturally as the classifier learns.
+
+**Testing** — 10/10 new V6.25.19 tests + 54/54 cumulative V6.25.x suite pass. Tests cover: classifier unit semantics (explicit-section, hint, tag, name-pattern, content fall-through, fallback-to-concept), `codexify_node` shape, e2e backfill on legacy nodes, e2e Genesis-seeds-route-correctly, e2e Epic-seeds-route-correctly, GM-only gating on the backfill endpoint.
+
 ### V6.25.14-V6.25.18 — World Tree lattice + Anime 5E attributes seed + D&D legacy conversion + Private campaign access + Mobile Sweep V3 (2026-02-09)
 
 User-driven five-item cycle in priority order: (1) **World Tree UI/UX revamp** into a staggered three-column lattice with SVG dotted cross-pillar bridges as first-class clickable narrative seeds; (2) **Anime 5E canonical Attributes seed** from PDF p.91+ replacing the placeholder roster; (3) **D&D 5E → Anime 5E legacy class conversion** mapping (PDF pp.82-88, all 12 classes); (4) **Private campaign access** via campaign-level join-passwords + named share-links with optional password / expiry / max-uses; (5) **Mobile Sweep V3** finalisation with a `.touch-target` CSS utility for tight icon-only buttons.

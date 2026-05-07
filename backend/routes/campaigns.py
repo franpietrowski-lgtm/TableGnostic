@@ -707,13 +707,18 @@ async def seed_nodes_from_genesis(cid: str, user: dict = Depends(get_current_use
     """Convert genesis seed_npcs / nemesis / adventures / locations /
     biomes / factions / motives into gm_only knowledge nodes.
 
-    V6.25 — Nemesis sub-fields (motive / resources / weakness) now seed
-    as distinct linked lore / faction / lore nodes instead of being glued
-    into a single monolithic content blob. Discrete seed buckets
-    (locations, biomes, factions, motives) each fan out to one codex
-    node per entry. The World Tree auto-classifier picks them up by
-    `type` on its next fetch.
+    V6.25.19 — every seeded node is normalised through
+    `core.codex_classifier.codexify_node`, so the row carries `name`,
+    `title`, `type`, `node_kind`, `creation_tree.section`, `tags`, and
+    `summary` consistently. The World Tree picks them up immediately
+    without needing the read-side fallback classifier.
+
+    V6.25 — Nemesis sub-fields (motive / resources / weakness) seed
+    as distinct linked lore / faction / lore nodes instead of being
+    glued into a single monolithic content blob.
     """
+    from core.codex_classifier import codexify_node
+
     camp = await db.campaigns.find_one({"id": cid}, {"_id": 0})
     if not camp or camp["gm_id"] != user["id"]:
         raise HTTPException(403, "Only GM can seed")
@@ -724,88 +729,97 @@ async def seed_nodes_from_genesis(cid: str, user: dict = Depends(get_current_use
     now = now_iso()
     author = {"author_id": user["id"], "author_name": user["name"]}
 
-    async def _insert(node: dict) -> str:
-        node.setdefault("id", new_id())
-        node.setdefault("campaign_id", cid)
-        node.setdefault("visibility", "gm_only")
-        node.setdefault("revealed_to", [])
-        node.setdefault("links", [])
-        node.setdefault("tags", [])
-        node.setdefault("created_at", now)
-        node.update(author)
-        await db.nodes.insert_one(node)
-        return node["id"]
+    async def _insert(*, name: str, hint: str, content: str = "",
+                       summary: str = "", tags: list[str] | None = None,
+                       links: list | None = None,
+                       explicit_section: str | None = None) -> str | None:
+        if not (name or "").strip():
+            return None
+        body = codexify_node(
+            name=name, content=content, summary=summary,
+            tags=tags or [], hint=hint,
+            explicit_section=explicit_section,
+        )
+        body.update({
+            "id": new_id(),
+            "campaign_id": cid,
+            "visibility": "gm_only",
+            "revealed_to": [],
+            "links": links or [],
+            "created_at": now,
+            "updated_at": now,
+            **author,
+        })
+        # Provenance — World Tree's bridge-density meter watches this.
+        body.setdefault("fields", {}).setdefault("source", "genesis")
+        await db.nodes.insert_one(dict(body))
+        return body["id"]
 
     # Nemesis → one NPC node + discrete lore/faction sub-nodes for the
     # motive / resources / weakness so the World Tree's Population &
     # History pillars each get a distinct entry.
     nem_id = None
     if g.get("nemesis_name"):
-        nem_id = await _insert({
-            "type": "npc",
-            "title": g["nemesis_name"],
-            "content": f"Nemesis · {g.get('nemesis_type','')}".strip(" ·"),
-            "tags": ["nemesis"],
-        })
+        nem_id = await _insert(
+            name=g["nemesis_name"],
+            hint="npc",
+            summary=f"Nemesis · {g.get('nemesis_type','')}".strip(" ·"),
+            tags=["nemesis"],
+        )
         created += 1
         if g.get("nemesis_motive"):
-            await _insert({
-                "type": "lore",
-                "title": f"{g['nemesis_name']} — Motive",
-                "content": g["nemesis_motive"],
-                "tags": ["nemesis", "motive"],
-                "links": [{"target_id": nem_id, "relationship_type": "drives"}],
-            })
+            await _insert(
+                name=f"{g['nemesis_name']} — Motive",
+                hint="lore", content=g["nemesis_motive"],
+                tags=["nemesis", "motive"],
+                links=[{"target_id": nem_id, "relationship_type": "drives"}],
+            )
             created += 1
         if g.get("nemesis_resources"):
-            await _insert({
-                "type": "faction",
-                "title": f"{g['nemesis_name']} — Resources",
-                "content": g["nemesis_resources"],
-                "tags": ["nemesis", "resources"],
-                "links": [{"target_id": nem_id, "relationship_type": "commands"}],
-            })
+            await _insert(
+                name=f"{g['nemesis_name']} — Resources",
+                hint="faction", content=g["nemesis_resources"],
+                tags=["nemesis", "resources"],
+                links=[{"target_id": nem_id, "relationship_type": "commands"}],
+            )
             created += 1
         if g.get("nemesis_weakness"):
-            await _insert({
-                "type": "lore",
-                "title": f"{g['nemesis_name']} — Weakness",
-                "content": g["nemesis_weakness"],
-                "tags": ["nemesis", "weakness"],
-                "links": [{"target_id": nem_id, "relationship_type": "vulnerable-to"}],
-            })
+            await _insert(
+                name=f"{g['nemesis_name']} — Weakness",
+                hint="lore", content=g["nemesis_weakness"],
+                tags=["nemesis", "weakness"],
+                links=[{"target_id": nem_id, "relationship_type": "vulnerable-to"}],
+            )
             created += 1
 
     # Supporting cast — one npc node per seed entry.
     for npc in g.get("seed_npcs", []) or []:
         if not npc.get("name"):
             continue
-        await _insert({
-            "type": "npc",
-            "title": npc["name"],
-            "content": f"{npc.get('role','')}\n\n{npc.get('note','')}".strip(),
-            "tags": [npc.get("role", "").lower()] if npc.get("role") else [],
-        })
+        await _insert(
+            name=npc["name"], hint="npc",
+            content=f"{npc.get('role','')}\n\n{npc.get('note','')}".strip(),
+            tags=[npc.get("role", "").lower()] if npc.get("role") else [],
+        )
         created += 1
 
     # Adventures — one quest node per entry.
     for adv in g.get("adventures", []) or []:
         if not adv.get("title"):
             continue
-        await _insert({
-            "type": "quest",
-            "title": adv["title"],
-            "content": (f"Hook: {adv.get('hook','')}\n"
-                         f"Stakes: {adv.get('stakes','')}\n"
-                         f"Outcome: {adv.get('outcome','')}"),
-            "tags": [adv.get("kind", "").lower()] if adv.get("kind") else [],
-        })
+        await _insert(
+            name=adv["title"], hint="quest",
+            content=(f"Hook: {adv.get('hook','')}\n"
+                      f"Stakes: {adv.get('stakes','')}\n"
+                      f"Outcome: {adv.get('outcome','')}"),
+            tags=[adv.get("kind", "").lower()] if adv.get("kind") else [],
+        )
         created += 1
 
     # V6.25 — Discrete Genesis buckets → one codex node apiece.
-    for bucket, node_type, tag in (
+    for bucket, kind, tag in (
         ("locations", "location", "location"),
-        ("biomes", "location", "biome"),
+        ("biomes", "biome", "biome"),
         ("factions", "faction", "faction"),
         ("motives", "lore", "motive"),
     ):
@@ -813,12 +827,11 @@ async def seed_nodes_from_genesis(cid: str, user: dict = Depends(get_current_use
             title = (entry.get("name") or entry.get("title") or "").strip()
             if not title:
                 continue
-            await _insert({
-                "type": node_type,
-                "title": title,
-                "content": entry.get("summary") or entry.get("note") or "",
-                "tags": [tag] + [t for t in (entry.get("tags") or []) if t],
-            })
+            await _insert(
+                name=title, hint=kind,
+                content=entry.get("summary") or entry.get("note") or "",
+                tags=[tag] + [t for t in (entry.get("tags") or []) if t],
+            )
             created += 1
 
     return {"ok": True, "nodes_created": created}
