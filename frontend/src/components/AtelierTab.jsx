@@ -4,6 +4,7 @@ import { api, formatApiErrorDetail } from "../lib/api";
 import { Plus, X, AlertTriangle, CheckCircle2, Save, Layers, ListTree, ScrollText, FileDown } from "lucide-react";
 import IngestPanel from "./IngestPanel";
 import XPApprovalQueue from "./XPApprovalQueue";
+import MaterialsApprovalQueue from "./MaterialsApprovalQueue";
 import EpicCampaignPanel from "./EpicCampaignPanel";
 import ReferenceEditor from "./ReferenceEditor";
 import TimelinePanel from "./TimelinePanel";
@@ -229,6 +230,9 @@ export default function AtelierTab({ campId, camp }) {
 
       {/* ---------- XP Approval Queue (GM-side) ---------- */}
       <XPApprovalQueue campaignId={campId} isGm/>
+
+      {/* ---------- Materials / Byproduct / Craft Output Approval (GM-side) ---------- */}
+      <MaterialsApprovalQueue campaignId={campId} isGm={!!camp?.is_gm}/>
 
       <div className="text-[11px] text-mist/60 italic px-1" data-testid="atelier-ref-moved-note">
         Looking for the campaign Reference tables and the GM Quickstart instructions?

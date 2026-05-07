@@ -763,6 +763,7 @@ function BesmWeaponItemComposer({ row, onChange }) {
   const alsoItem = isItemKind || !!f.also_an_item;
   const enhArr = f.enhancements || [];
   const limArr = f.limiters || [];
+  const contents = Array.isArray(f.item_contents) ? f.item_contents : [];
 
   const setField = (k, v) => onChange({ ...row, fields: { ...f, [k]: v } });
   const findIdx = (arr, name) =>
@@ -783,9 +784,25 @@ function BesmWeaponItemComposer({ row, onChange }) {
         ? { ...m, name, rank: r, value: sign * r } : m);
     setField(which, arr);
   };
+  // Nested item_contents helpers (BESM 4E Mecha pattern, p.219).
+  const addContent = () => setField("item_contents", [
+    ...contents, { name: "", level: 1, cost_per_level: 1, note: "" },
+  ]);
+  const updateContent = (idx, patch) => setField(
+    "item_contents",
+    contents.map((c, i) => (i === idx ? { ...c, ...patch } : c)),
+  );
+  const removeContent = (idx) =>
+    setField("item_contents", contents.filter((_, i) => i !== idx));
 
-  // Live cost preview: gross = lvl × cpl. Item half-cost = ceil(gross / 2).
-  const gross = lvl * cpl;
+  // Live cost preview: gross = lvl × cpl + Σ (child.level × child.cost_per_level).
+  // Item half-cost rule (p.135 / p.219) applies to the COMBINED raw total.
+  const selfGross = lvl * cpl;
+  const childGross = contents.reduce(
+    (s, c) => s + Math.max(1, Number(c.level || 1)) * Math.max(0, Number(c.cost_per_level || 0)),
+    0,
+  );
+  const gross = selfGross + childGross;
   const finalCost = alsoItem ? Math.ceil(gross / 2) : gross;
   const sumRanks = (a) => a.reduce((s, m) => s + (m.rank || 1), 0);
   const enhRanks = sumRanks(enhArr);
@@ -861,8 +878,18 @@ function BesmWeaponItemComposer({ row, onChange }) {
       {/* Cost preview row. */}
       <div className="text-[11px] text-mist border-t border-gold/10 pt-2"
            data-testid="besm-composer-cost-preview">
-        Gross: <span className="text-parchment font-display">{gross}</span> pts
+        Self: <span className="text-parchment font-display">{selfGross}</span> pts
         ({lvl} × {cpl})
+        {childGross > 0 && (
+          <>
+            {" "}+ Contents: <span className="text-parchment font-display">{childGross}</span> pts
+          </>
+        )}
+        {(childGross > 0 || alsoItem) && (
+          <>
+            {" "}= Gross: <span className="text-parchment font-display">{gross}</span> pts
+          </>
+        )}
         {alsoItem && (
           <>
             {" "}· <span className="text-arcane">Item half-cost (p.135):</span>{" "}
@@ -876,6 +903,87 @@ function BesmWeaponItemComposer({ row, onChange }) {
           </>
         )}
       </div>
+
+      {/* Nested Item Contents (Mecha pattern, BESM 4E p.219).
+          Surfaces ONLY when the row is an item OR a weapon-also-item. */}
+      {alsoItem && (
+        <div className="border-t border-gold/10 pt-2"
+             data-testid="besm-composer-item-contents">
+          <div className="flex items-center justify-between mb-1">
+            <div>
+              <div className="label-ref">Item Contents · Mecha pattern (p.219)</div>
+              <div className="text-[10px] text-mist/70 italic">
+                Nested attributes carried INSIDE this item (e.g. a Mecha&apos;s
+                weapon mounts, a bag&apos;s inner attribute pool). Their raw
+                cost feeds the Item half-cost rule above.
+              </div>
+            </div>
+            <button type="button" onClick={addContent}
+                    className="btn btn-ghost text-[11px]"
+                    data-testid="besm-composer-item-content-add">
+              + Add nested attribute
+            </button>
+          </div>
+          {contents.length === 0 && (
+            <div className="text-mist italic text-[11px]">
+              No nested contents. Most items don&apos;t need them — use this
+              for the Mecha pattern (BESM 4E p.219) when the item itself
+              carries other Attributes that pay the half-cost together.
+            </div>
+          )}
+          <div className="space-y-2">
+            {contents.map((c, i) => {
+              const cl = Math.max(1, Number(c.level || 1));
+              const cc = Math.max(0, Number(c.cost_per_level || 0));
+              const cgross = cl * cc;
+              return (
+                <div key={i}
+                     className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center
+                                border border-gold/10 rounded-sm p-2 bg-void/30"
+                     data-testid={`besm-composer-item-content-row-${i}`}>
+                  <input className="input sm:col-span-5"
+                         placeholder="Nested attribute name (e.g. Weapon, Armour, Sensors)"
+                         value={c.name || ""}
+                         onChange={(e) => updateContent(i, { name: e.target.value })}
+                         data-testid={`besm-composer-item-content-name-${i}`}/>
+                  <input className="input sm:col-span-2 text-center"
+                         type="number" min={1} max={20}
+                         placeholder="Lvl"
+                         value={c.level ?? ""}
+                         onChange={(e) => updateContent(i, {
+                           level: e.target.value === "" ? "" : Number(e.target.value),
+                         })}
+                         data-testid={`besm-composer-item-content-level-${i}`}/>
+                  <input className="input sm:col-span-2 text-center"
+                         type="number" min={0} step="0.5"
+                         placeholder="Cost/Lvl"
+                         value={c.cost_per_level ?? ""}
+                         onChange={(e) => updateContent(i, {
+                           cost_per_level: e.target.value === "" ? "" : Number(e.target.value),
+                         })}
+                         data-testid={`besm-composer-item-content-cpl-${i}`}/>
+                  <span className="sm:col-span-2 text-[11px] text-mist/80 text-center">
+                    raw <span className="text-parchment font-display">{cgross}</span> pts
+                  </span>
+                  <button type="button"
+                          onClick={() => removeContent(i)}
+                          className="btn btn-ghost text-[11px] sm:col-span-1"
+                          data-testid={`besm-composer-item-content-remove-${i}`}>
+                    ×
+                  </button>
+                  {(c.note || c.note === "") && (
+                    <input className="input sm:col-span-12"
+                           placeholder="Optional note (e.g. mount slot, charges)"
+                           value={c.note || ""}
+                           onChange={(e) => updateContent(i, { note: e.target.value })}
+                           data-testid={`besm-composer-item-content-note-${i}`}/>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {pools ? (
         <>

@@ -95,49 +95,50 @@ async def list_game_systems(response: Response):
 
 @router.get("/anime5e/classes")
 async def anime5e_class_library(response: Response):
-    """V6.25.12 — Anime 5E core class library scaffold.
+    """V6.25.13 — Anime 5E core class library (CANONICAL).
 
-    Returns the full L1-L20 progression grid (proficiency bonus, ASI
-    levels, milestone levels) plus the canonical Anime 5E core class
-    roster with starting proficiencies / save profs / skill pools /
-    hit dice. Per-level FEATURE NAMES are scaffold-only until the GM
-    seeds them via Custom Rules / Reference Editor — `features_pending`
-    flags which classes are awaiting authoritative seeding.
+    Returns the canonical 14-class roster with full L1-L20 progression
+    extracted from the Anime 5E core rulebook (dys_anime5e_rpg_v1.3.6).
+    Each class entry surfaces:
+      • starting proficiencies (saves / skills / weapons / armour / tools)
+      • hit die + primary ability
+      • per-level features (verbatim mechanic NAMES + Point grants)
+      • parsed `asi_or_feat` flag + total `points_granted` per level
+
+    Per-class feature tables are now authoritative — the V6.25.12
+    `features_pending` scaffold flag is retired.
     """
     from system_data.anime5e_class_library import (
-        ASI_LEVELS, CORE_CLASSES, MILESTONE_LEVELS, PROFICIENCY_BONUS,
-        grants_for,
+        CORE_CLASSES, CORE_RULES_NOTES, PROFICIENCY_BONUS, grants_for,
     )
     response.headers["Cache-Control"] = "public, max-age=120"
     # Build the per-level grant matrix once on read.
     classes = []
     for cls in CORE_CLASSES:
         grants = {lvl: grants_for(cls["id"], lvl) for lvl in range(1, 21)}
+        # Class-specific ASI levels parsed from the per-level grants.
+        asi_levels = sorted(
+            lvl for lvl, g in grants.items() if g.get("asi_or_feat")
+        )
         classes.append({
-            "id": cls["id"], "name": cls["name"], "page": cls.get("page"),
-            "primary_stat": cls.get("primary_stat"),
+            "id": cls["id"],
+            "name": cls["name"],
+            "page": cls.get("page"),
+            "primary_ability": cls.get("primary_ability"),
             "hit_die": cls.get("hit_die"),
             "save_proficiencies": cls.get("save_proficiencies", []),
             "skill_picks": cls.get("skill_picks", 0),
-            "skill_pool": cls.get("skill_pool", []),
             "weapon_proficiencies": cls.get("weapon_proficiencies", []),
             "armour_proficiencies": cls.get("armour_proficiencies", []),
-            "crafting_traditions": cls.get("crafting_traditions"),
-            "features_pending": bool(cls.get("_features_pending")),
+            "tool_proficiencies": cls.get("tool_proficiencies", []),
+            "asi_levels": asi_levels,
             "grants_by_level": grants,
         })
     return {
         "system": "anime-5e",
         "proficiency_bonus_by_level": PROFICIENCY_BONUS,
-        "asi_levels": sorted(ASI_LEVELS),
-        "milestone_levels": sorted(MILESTONE_LEVELS),
         "classes": classes,
-        "scaffold_note": (
-            "Per-level feature NAMES are scaffold placeholders until "
-            "authoritative content is seeded from the Anime 5E core book. "
-            "GMs can author class features via Custom Rules / Reference "
-            "Editor TODAY — those entries take priority over this fallback."
-        ),
+        "rules_notes": CORE_RULES_NOTES,
     }
 
 

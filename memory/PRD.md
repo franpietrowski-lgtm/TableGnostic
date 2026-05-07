@@ -14,6 +14,45 @@
 
 ## 2. Implemented (cumulative, condensed)
 
+### V6.25.13 — Canonical Anime 5E 14-class library + GM Materials Approval Queue + Item-Container UI (2026-02-09)
+
+Three follow-up items shipped this cycle: (1) replaced the V6.25.12 16-class scaffold with the **canonical 14-class roster** extracted verbatim from the user-supplied Anime 5E core PDF (`dys_anime5e_rpg_v1.3.6.pdf`) — full L1-L20 features per class, (2) GM-facing **Materials Approval Queue UI** mounted on the Atelier Workshop subtab so the V6.25.12 player intake pipeline is now end-to-end usable, (3) **Item-Container composer UI** in the Reference Editor (Mecha pattern, BESM 4E p.219) so GMs can author items that carry nested Attributes paying the half-cost rule together.
+
+**📚 Anime 5E canonical class library** (`system_data/anime5e_class_library.py`, `routes/besm.py::anime5e_class_library`)
+- 14 canonical core classes with full L1-L20 feature tables: Adventurer, Bender, Broker, Dynamic Spellbinder, Hunter, Isekai Student, Magical Girl/Guy, Ninja, Pet Monster Trainer, Psionicist, Samurai, Shadow Warrior, Techknight, Warder.
+- Each class entry carries: id, name, page-ref, primary ability, hit die, save proficiencies, skill picks, weapon / armour / tool proficiencies, and per-level features as raw mechanic-name + Point-grant tokens (e.g. `"+2 Combat Technique (Two Weapons) [2]"`, `"Ability Score Improvement [2]"`).
+- `grants_for(class_id, level)` parses per-level tokens to surface `{features, asi_or_feat, points_granted}` — the AdvancementBadge consumes this directly.
+- ASI levels are now **per-class** (parsed from each class's table) — the V6.25.12 universal `{4,8,12,16,19}` default is retired since it didn't match the canonical book.
+- Endpoint contract: `GET /api/anime5e/classes` returns `{system, proficiency_bonus_by_level, classes[], rules_notes[]}`. The deprecated `asi_levels` and `milestone_levels` top-level arrays are removed (each class now carries its own `asi_levels` array).
+- 6/6 tests in `test_v62513_anime5e_canonical.py` — full roster, L1-L20 grid integrity, Samurai L5 verbatim, Techknight zero-cost grant edge case, Bender per-class ASI levels {4,8,12,16,19}, starting kit round-trip.
+
+**🛡 Materials Approval Queue UI** (`MaterialsApprovalQueue.jsx`, mounted in `AtelierTab.jsx`)
+- New GM-only `<MaterialsApprovalQueue/>` component mirrors the existing `XPApprovalQueue` pattern.
+- Mounted on Atelier ▸ Workshop subtab next to the XP queue so GMs see all pending player tickets in one place.
+- Each row surfaces: name + kind icon (FlaskConical / Recycle / Hammer for material / byproduct / craft_output) + summary + tags + rarity badge + submitter name + ISO timestamp.
+- Two action buttons per row: **Approve & seed codex** (calls existing `POST .../approve` → seeds a `db.nodes` row with the matching `node_kind` + provenance) and **Reject**.
+- Empty state nudges the GM with "When players submit materials from their character journals, they'll surface here for review."
+- Component is a no-op for non-GMs (returns null) so the same Workshop pane works for everyone.
+- Test: `test_v62513_item_container_and_queue.py::test_gm_can_reject_pending_material_ticket` exercises the reject path end-to-end (404 on re-rejection).
+
+**🟦 Reference Editor Item-Container UI** (`ReferenceEditor.jsx::BesmWeaponItemComposer`)
+- New "Item Contents · Mecha pattern (p.219)" subsection appears INSIDE the composer when the row is `kind: "item"` OR a weapon ticked "Also an Item".
+- Per-row inputs: name (e.g. Weapon, Sensors, Armour), level, cost-per-level, optional note. Each row shows its raw cost inline.
+- Live cost preview now spells out the math: `Self: N pts (level × cpl) + Contents: M pts = Gross: N+M pts · Item half-cost (p.135): ceil(gross/2) = X pts`.
+- The nested `item_contents` array round-trips through the existing `fields: Dict[str, Any]` reference column — no schema change needed.
+- Test: `test_reference_item_round_trips_with_item_contents` confirms a "Pocket Workshop" item with two nested attributes (Weapon ×2, Sensors ×1) survives a `POST /campaigns/{cid}/reference` → list round-trip with full fidelity.
+
+**Testing** — 29/29 cumulative pytest pass (8 V6.25.13 + 3 V6.25.12 + 5 V6.25.11 + 3 V6.25.10 + 5 V6.25.9 + 5 V6.25.8 = 29; old V6.25.12 anime5e scaffold tests retired).
+- Lint clean across `MaterialsApprovalQueue.jsx`, `ReferenceEditor.jsx`, `AtelierTab.jsx`.
+- Backend started cleanly, frontend loads without console errors.
+
+**Roadmap (deferred / explicit follow-ups)**
+- 🟦 **Mobile Sweep V3** — touch-target audit on Character Sheet roll cells + sticky-header collapse on the sheet (deferred from V6.25.10).
+- 🟦 **Director's Console roll-table designer** — gated to seeded materials (no fabricated content). Once a campaign has ≥ N approved materials per rarity tier, GM authors tier-weighted random-loot tables.
+- 🟦 **Strict Permission Gating UI** — explicit player-side approval-queue submission flow for character / NPC suggestions (backend ready; UI hooks pending).
+- 🟦 **D&D 5E Class Library to L20 + cross-system D&D → Anime 5E auto-conversion**.
+- 🟦 **Private campaign access via pre-authored passwords / shared links**.
+
 ### V6.25.12 — Reference Editor weapon/item composer + Materials approval queue + Anime 5E class library scaffold (2026-02-09)
 
 Three substantial backlog items shipped this cycle: (1) BESM Reference Editor surface for composing weapons and items FIRST with the canonical p.135 / p.142 mod pools and the Item half-cost preview, (2) full materials intake → GM approval pipeline (player journal entry → backend ticket → GM approves → codex node seeded with the right `node_kind`), (3) Anime 5E core class library scaffold exposing the L1-L20 progression grid for 16 canonical classes via `GET /api/anime5e/classes`.

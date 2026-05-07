@@ -1,5 +1,10 @@
-"""V6.25.12 — Reference Editor BESM weapon|item composer + Materials
-queue + Anime 5E class library scaffold."""
+"""V6.25.12 — Materials queue.
+
+NOTE: The Anime 5E class library scaffold tests originally lived here
+have been retired in V6.25.13 — the canonical 14-class roster
+(extracted verbatim from the Anime 5E core PDF) now lives in
+test_v62513_anime5e_canonical.py.
+"""
 from __future__ import annotations
 import os
 import requests
@@ -44,52 +49,6 @@ def shared_camp(gm_token, player_token):
                        headers=H(player_token))
     yield cid
     requests.delete(f"{BASE_URL}/api/campaigns/{cid}", headers=H(gm_token))
-
-
-# ── Anime 5E class library ──────────────────────────────────────────
-
-def test_anime5e_class_library_exposes_full_l1_l20_grid(gm_token):
-    """The new /api/anime5e/classes endpoint must return ≥10 core classes
-    with a full L1-L20 grants_by_level grid each."""
-    r = requests.get(f"{BASE_URL}/api/anime5e/classes")
-    assert r.status_code == 200, r.text
-    body = r.json()
-    assert body["system"] == "anime-5e"
-    assert sorted(body["asi_levels"]) == [4, 8, 12, 16, 19]
-    assert sorted(body["milestone_levels"]) == [3, 7, 13, 17, 20]
-    classes = body["classes"]
-    assert len(classes) >= 10, f"expected ≥10 core classes, got {len(classes)}"
-    # Required canonical names — not exhaustive, but representative.
-    names = {c["id"] for c in classes}
-    for required in {"magical-girl", "samurai", "wandering-monk",
-                       "concentrated-mage", "tech-genius", "artisan",
-                       "champion", "adventurer"}:
-        assert required in names, f"missing canonical class {required}"
-    # Every class has L1-L20 grants.
-    for c in classes:
-        grid = c["grants_by_level"]
-        assert len(grid) == 20, f"{c['id']} grid size {len(grid)}"
-        for L in range(1, 21):
-            row = grid[str(L)] if str(L) in grid else grid.get(L)
-            assert row is not None, f"{c['id']} missing L{L}"
-            assert "proficiency_bonus" in row
-        # ASI rows flagged.
-        asi_4 = grid.get("4") or grid.get(4)
-        assert asi_4.get("asi_or_feat") is True
-    # Scaffold flag present so frontends know what's authoritative.
-    mg = next(c for c in classes if c["id"] == "magical-girl")
-    assert mg["features_pending"] is True
-
-
-def test_artisan_class_has_crafting_traditions(gm_token):
-    """Artisan class entry surfaces crafting traditions for the
-    materials pipeline tie-in."""
-    r = requests.get(f"{BASE_URL}/api/anime5e/classes")
-    body = r.json()
-    art = next(c for c in body["classes"] if c["id"] == "artisan")
-    trads = art.get("crafting_traditions") or []
-    assert "alchemy" in trads
-    assert "smithing" in trads
 
 
 # ── Materials intake queue ─────────────────────────────────────────
