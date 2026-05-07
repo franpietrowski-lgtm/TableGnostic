@@ -382,6 +382,26 @@ async def update_genesis(cid: str, body: GenesisIn,
     if existing:
         data["id"] = existing["id"]
         data["created_at"] = existing.get("created_at", now_iso())
+        # V6.25.7 — archive the previous version before overwriting so
+        # the GM can restore / share / clone older drafts. Keep the
+        # last 50 archives to bound storage.
+        await db.genesis_archives.insert_one({**existing,
+            "_id_dropped": True,
+            "archive_id": new_id(),
+            "campaign_id": cid,
+            "archived_at": now_iso(),
+            "archived_by": user["id"],
+            "archived_from": existing["id"],
+            "kind": "genesis"})
+        await db.genesis_archives.delete_many({
+            "campaign_id": cid,
+            "archive_id": {"$nin": [a["archive_id"] async for a in
+                db.genesis_archives.find(
+                    {"campaign_id": cid, "kind": "genesis"},
+                    {"archive_id": 1, "_id": 0}).sort("archived_at", -1).limit(50)
+            ]},
+            "kind": "genesis",
+        })
         await db.genesis.replace_one({"campaign_id": cid}, data)
     else:
         data["id"] = new_id()
@@ -389,6 +409,79 @@ async def update_genesis(cid: str, body: GenesisIn,
         await db.genesis.insert_one(dict(data))
     data.pop("_id", None)
     return data
+
+
+# V6.25.7 — Genesis / Epic archive list + restore + delete.
+@router.get("/campaigns/{cid}/genesis/archives")
+async def list_genesis_archives(cid: str,
+                                  user: dict = Depends(get_current_user)):
+    """List archived Genesis sheets for this campaign, newest first.
+    Each entry can be expanded, restored, deleted, or marketplace-shared
+    via the same homebrew share path."""
+    camp = await db.campaigns.find_one({"id": cid}, {"_id": 0})
+    if not camp:
+        raise HTTPException(404, "Campaign not found")
+    if camp["gm_id"] != user["id"]:
+        raise HTTPException(403, "Only GM can browse Genesis archives")
+    rows = await db.genesis_archives.find(
+        {"campaign_id": cid, "kind": "genesis"},
+        {"_id": 0, "_id_dropped": 0}).sort("archived_at", -1).to_list(length=None)
+    return rows
+
+
+@router.delete("/campaigns/{cid}/genesis/archives/{aid}")
+async def delete_genesis_archive(cid: str, aid: str,
+                                    user: dict = Depends(get_current_user)):
+    camp = await db.campaigns.find_one({"id": cid}, {"_id": 0})
+    if not camp:
+        raise HTTPException(404, "Campaign not found")
+    if camp["gm_id"] != user["id"]:
+        raise HTTPException(403, "Only GM can delete Genesis archives")
+    res = await db.genesis_archives.delete_one(
+        {"campaign_id": cid, "archive_id": aid})
+    if not res.deleted_count:
+        raise HTTPException(404, "Archive not found")
+    return {"ok": True}
+
+
+@router.post("/campaigns/{cid}/genesis/archives/{aid}/restore")
+async def restore_genesis_archive(cid: str, aid: str,
+                                     user: dict = Depends(get_current_user)):
+    """Restore an archived Genesis sheet to be the live Genesis. The
+    current live sheet is itself archived first so nothing is lost."""
+    camp = await db.campaigns.find_one({"id": cid}, {"_id": 0})
+    if not camp:
+        raise HTTPException(404, "Campaign not found")
+    if camp["gm_id"] != user["id"]:
+        raise HTTPException(403, "Only GM can restore Genesis archives")
+    archive = await db.genesis_archives.find_one(
+        {"campaign_id": cid, "archive_id": aid, "kind": "genesis"},
+        {"_id": 0})
+    if not archive:
+        raise HTTPException(404, "Archive not found")
+    # Snapshot live → archives, then write archive → live.
+    live = await db.genesis.find_one({"campaign_id": cid}, {"_id": 0})
+    if live:
+        await db.genesis_archives.insert_one({**live,
+            "archive_id": new_id(),
+            "campaign_id": cid,
+            "archived_at": now_iso(),
+            "archived_by": user["id"],
+            "archived_from": live["id"],
+            "kind": "genesis"})
+    restored = {k: v for k, v in archive.items()
+                if k not in ("archive_id", "archived_at", "archived_by",
+                              "archived_from", "kind")}
+    restored["updated_at"] = now_iso()
+    if live:
+        restored["id"] = live["id"]
+        await db.genesis.replace_one({"campaign_id": cid}, restored)
+    else:
+        restored["id"] = new_id()
+        restored["created_at"] = now_iso()
+        await db.genesis.insert_one(dict(restored))
+    restored.pop("_id", None)
+    return restored
 
 
 @router.post("/campaigns/{cid}/genesis/seed-nodes")

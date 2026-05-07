@@ -19,6 +19,7 @@ import PendingAdvancementPanel from "./PendingAdvancementPanel";
 import { ConsentCheckbox } from "./ConsentPanel";
 import ClassProgressionPanel from "./ClassProgressionPanel";
 import AppliedTemplatesPanel from "./AppliedTemplatesPanel";
+import QuickRollBar from "./QuickRollBar";
 import Anime5eBudgetAudit from "./Anime5eBudgetAudit";
 
 export default function CharacterSheet() {
@@ -355,6 +356,10 @@ export default function CharacterSheet() {
       )}
       {/* V6.25.3 — Applied BESM race / class templates (no-op when none applied). */}
       <AppliedTemplatesPanel character={ch}/>
+      {/* V6.25.7 — Quick-Roll Bar for play-by-post macros. */}
+      <QuickRollBar character={ch} campaignId={ch.campaign_id}
+                     channelId={pbpChannelId}
+                     onRolled={() => { /* future: scroll-to-channel */ }}/>
       {/* V6.19 — Anime 5E DP/CP audit (only renders for anime-5e campaigns). */}
       {(campaign?.system_id === "anime-5e") && (
         <Anime5eBudgetAudit characterId={ch.id} isOwnerOrGm={canEditMech}/>

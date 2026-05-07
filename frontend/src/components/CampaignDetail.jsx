@@ -711,7 +711,7 @@ function CustomTab({ campId, customs, onRefresh, systemId }) {
 
   const [form, setForm] = useState({
     kind: KIND_OPTIONS[0].value, name: "", cost_per_level: 1, category: "",
-    page_ref: "Custom", description_note: "", effects: {},
+    page_ref: "Custom", description_note: "", effects: {}, color: "",
   });
   // V6.25.2 — when authoring BESM Race/Class templates, expand a
   // dedicated composer (stat adjustments + attributes + defects +
@@ -727,9 +727,11 @@ function CustomTab({ campId, customs, onRefresh, systemId }) {
       campaign_id: campId,
       cost_per_level: +form.cost_per_level,
       effects: form.effects || {},
+      color: form.color || "",
     });
     setForm({ kind: KIND_OPTIONS[0].value, name: "", cost_per_level: 1,
-              category: "", page_ref: "Custom", description_note: "", effects: {} });
+              category: "", page_ref: "Custom", description_note: "",
+              effects: {}, color: "" });
     onRefresh();
   };
   const del = async (cid) => { await api.delete(`/campaigns/${campId}/custom/${cid}`); onRefresh(); };
@@ -759,6 +761,28 @@ function CustomTab({ campId, customs, onRefresh, systemId }) {
         <input className="input md:col-span-2" placeholder="Page reference (e.g. Custom · Homebrew 1.2)"
                value={form.page_ref} data-testid="rule-pageref"
                onChange={(e) => setForm({ ...form, page_ref: e.target.value })}/>
+        {/* V6.25.7 — Color tag. Surfaces in the picker dropdowns so
+            homebrew vs canonical is glanceable. */}
+        <div className="md:col-span-2 flex items-center gap-2 flex-wrap">
+          <label className="label-ref">Color tag</label>
+          <input type="color" className="w-8 h-8 rounded-sm border border-gold/20 bg-transparent cursor-pointer"
+                 value={form.color || "#c8a34a"}
+                 onChange={(e) => setForm({ ...form, color: e.target.value })}
+                 data-testid="rule-color"
+                 title="Color shown next to this entry in player pickers"/>
+          {form.color && (
+            <button type="button" onClick={() => setForm({ ...form, color: "" })}
+                    className="btn btn-ghost text-xs"
+                    data-testid="rule-color-clear"
+                    title="Use the default color">
+              Clear
+            </button>
+          )}
+          <span className="text-[10px] text-mist italic">
+            Tip: pick a hue your table uses for this campaign's homebrew
+            so players spot it in dropdowns at a glance.
+          </span>
+        </div>
         <textarea className="input md:col-span-2" placeholder="Your description / mechanics notes"
                   value={form.description_note} data-testid="rule-description"
                   onChange={(e) => setForm({ ...form, description_note: e.target.value })}/>
@@ -778,9 +802,18 @@ function CustomTab({ campId, customs, onRefresh, systemId }) {
       ) : (
         <div className="grid md:grid-cols-2 gap-3">
           {customs.map((c) => (
-            <div key={c.id} className="card-mystic p-4" data-testid={`custom-${c.id}`}>
+            <div key={c.id} className="card-mystic p-4" data-testid={`custom-${c.id}`}
+                 style={c.color ? { borderLeft: `3px solid ${c.color}` } : undefined}>
               <div className="flex items-center justify-between">
-                <span className="tag">{c.kind}</span>
+                <div className="flex items-center gap-1.5">
+                  {c.color && (
+                    <span className="w-2.5 h-2.5 rounded-full inline-block"
+                          style={{ background: c.color }}
+                          data-testid={`custom-color-${c.id}`}
+                          title="GM-set color tag"/>
+                  )}
+                  <span className="tag">{c.kind}</span>
+                </div>
                 <div className="flex items-center gap-1.5">
                   <PublishToMarketplace custom={c} campaignId={campId}/>
                   <button onClick={() => del(c.id)} className="text-ember/70 hover:text-ember p-1"

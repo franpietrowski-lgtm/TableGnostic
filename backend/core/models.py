@@ -446,6 +446,11 @@ class CustomAttributeIn(BaseModel):
     category: Optional[str] = None
     page_ref: Optional[str] = None
     description_note: str = ""
+    # V6.25.7 — GM-set color tag for the custom rule. Surfaces in
+    # reference + Custom Rules dropdowns so homebrew vs canonical is
+    # glanceable. Free-form hex string ("#c8a34a") or palette key
+    # ("amber", "arcane", "ember"). Empty = inherit default styling.
+    color: str = Field(default="", max_length=24)
     # V6.25.2 — numeric impacts the GM declares so homebrew Race /
     # Class entries can influence sheet math. Shape is system-aware
     # and free-form on the backend (frontend owns the schema):

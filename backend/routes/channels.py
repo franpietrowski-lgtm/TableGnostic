@@ -124,6 +124,10 @@ _SLASH_CAST_RE = re.compile(r"^/cast\s+(.+)$", re.IGNORECASE)
 _SLASH_USE_BUNDLE_RE = re.compile(r"^/use\s+bundle\s+(.+)$", re.IGNORECASE)
 _SLASH_SPEND_XP_RE = re.compile(
     r"^/spend\s+xp\s+(\d+(?:\.\d+)?)\s+(?:for\s+|on\s+)?(.+)$", re.IGNORECASE)
+# V6.25.7 — user-defined macro invocation. Matches `/<macroname>` with
+# an optional trailing modifier injection (`+2`, `-1`, `+1d4`).
+_SLASH_MACRO_RE = re.compile(
+    r"^/([a-zA-Z][a-zA-Z0-9_-]{0,30})\s*([+-][0-9d+\- ]+)?\s*$")
 
 
 async def _resolve_mentions(camp: dict, body: str) -> List[str]:
@@ -168,6 +172,16 @@ def _parse_slash(body: str) -> Dict[str, Any]:
         return {"kind": "spend_xp",
                 "amount": float(m.group(1)),
                 "reason": m.group(2).strip()}
+    # V6.25.7 — generic macro invocation. Reserved system slash names
+    # are excluded so e.g. /roll / /me / /w / /cast / /use bundle / /spend
+    # never collide. Macro look-up happens in the post handler — we
+    # only flag the intent here.
+    m = _SLASH_MACRO_RE.match(body)
+    if m and m.group(1).lower() not in {
+        "roll", "me", "w", "whisper", "cast", "use", "spend"
+    }:
+        return {"kind": "macro", "name": m.group(1),
+                "modifier": (m.group(2) or "").strip()}
     return {}
 
 
@@ -394,18 +408,26 @@ async def post_message(chid: str, body: MessageIn,
             doc["slash_meta"] = {**slash, "error": "Invalid dice notation"}
 
     # V6.25.6 — Cut B server-side resolution.
+    # V6.25.7 — Hot-keys V2: /cast and /use bundle now also DEDUCT
+    # charges / EP / spell-slots from the speaker's active character
+    # folio when the resolver finds a hit. Each post stamps an
+    # `undoable_until` timestamp (30s); the /undo endpoint reverses
+    # the deduction within that window.
     elif slash.get("kind") == "cast":
-        # Look up the spell in references + custom_attributes (shared
-        # picker pool). Deterministic snapshot so refreshes show the
-        # resolved card consistently.
         resolved = await _resolve_spell_or_bundle(camp["id"], slash["name"], "spell")
+        deduct = await _deduct_for_post(camp["id"], user, "cast", resolved)
         doc["kind"] = "cast"
-        doc["slash_meta"] = {**slash, "resolved": resolved}
+        doc["slash_meta"] = {**slash, "resolved": resolved, "deduct": deduct}
+        if deduct.get("applied"):
+            doc["undoable_until"] = _undo_window()
 
     elif slash.get("kind") == "use_bundle":
         resolved = await _resolve_spell_or_bundle(camp["id"], slash["name"], "bundle")
+        deduct = await _deduct_for_post(camp["id"], user, "use_bundle", resolved)
         doc["kind"] = "use_bundle"
-        doc["slash_meta"] = {**slash, "resolved": resolved}
+        doc["slash_meta"] = {**slash, "resolved": resolved, "deduct": deduct}
+        if deduct.get("applied"):
+            doc["undoable_until"] = _undo_window()
 
     elif slash.get("kind") == "spend_xp":
         # Find the speaker's active character on this campaign and queue
@@ -416,6 +438,52 @@ async def post_message(chid: str, body: MessageIn,
             amount=float(slash["amount"]), reason=slash["reason"])
         doc["kind"] = "spend_xp"
         doc["slash_meta"] = {**slash, "proposal": proposal}
+
+    # V6.25.7 — user-defined macro invocation. Resolves a `/<name>`
+    # against the macros collection (user-scope + campaign-scope on
+    # this campaign), expands its formula via the same dice engine as
+    # /roll, and supports a trailing modifier injection (`+2`) for
+    # advantage / edges / Effort / obstacles.
+    elif slash.get("kind") == "macro":
+        from routes.sessions import roll_dice
+        m = await db.macros.find_one({
+            "campaign_id": camp["id"],
+            "name": {"$regex": f"^{re.escape(slash['name'])}$", "$options": "i"},
+            "$or": [
+                {"scope": "campaign"},
+                {"scope": "user", "owner_id": user["id"]},
+            ],
+        }, {"_id": 0})
+        if not m:
+            doc["kind"] = "macro"
+            doc["slash_meta"] = {**slash, "miss": True}
+        else:
+            # Substitute STR/DEX/CON/INT/WIS/CHA + Body/Mind/Soul + prof
+            # tokens from the speaker's most-recently-touched character.
+            char = await db.characters.find_one(
+                {"campaign_id": camp["id"], "owner_id": user["id"]},
+                {"_id": 0}, sort=[("updated_at", -1), ("created_at", -1)])
+            formula = _expand_macro_tokens(m["formula"], char)
+            if slash.get("modifier"):
+                formula = f"{formula}{slash['modifier']}"
+            try:
+                result = roll_dice(formula)
+                doc["kind"] = "macro"
+                doc["slash_meta"] = {**slash, "macro": {
+                    "id": m["id"], "label": m.get("label") or m["name"],
+                    "formula_raw": m["formula"],
+                    "formula_expanded": formula,
+                }, "result": result}
+                # Bump usage so the Quick-Roll Bar can show "most used".
+                await db.macros.update_one(
+                    {"id": m["id"]},
+                    {"$inc": {"use_count": 1},
+                     "$set": {"last_used_at": now_iso()}})
+            except HTTPException:
+                doc["slash_meta"] = {**slash, "macro": {
+                    "id": m["id"], "label": m.get("label") or m["name"],
+                    "formula_raw": m["formula"], "formula_expanded": formula},
+                    "error": "Invalid expanded formula"}
 
     await db.channel_msgs.insert_one(doc)
     if body.thread_id:
@@ -502,3 +570,199 @@ async def toggle_pin(mid: str, user: dict = Depends(get_current_user)):
     await broadcast(_camp_room(msg["campaign_id"]),
                     {"type": "channel:pin", "data": {"msg_id": mid, "pinned": new_state}})
     return {"id": mid, "pinned": new_state}
+
+
+# ─── V6.25.7 helpers — Hot-Keys V2 deduct + macro expansion ──────────
+
+from datetime import datetime, timedelta, timezone
+
+UNDO_WINDOW_SECONDS = 30
+
+
+def _undo_window() -> str:
+    return (datetime.now(timezone.utc)
+            + timedelta(seconds=UNDO_WINDOW_SECONDS)).isoformat()
+
+
+async def _deduct_for_post(camp_id: str, user: dict, mode: str,
+                              resolved: dict) -> dict:
+    """Deduct the resource consumed by /cast (spell slot) or /use bundle
+    (charges + EP). Writes to the speaker's most-recently-touched
+    character's folio."""
+    if not resolved or not resolved.get("hit"):
+        return {"applied": False, "reason": "no resolved entry"}
+    char = await db.characters.find_one(
+        {"campaign_id": camp_id, "owner_id": user["id"]},
+        {"_id": 0}, sort=[("updated_at", -1), ("created_at", -1)])
+    if not char:
+        return {"applied": False, "reason": "no character"}
+    folio = dict(char.get("folio") or {})
+
+    if mode == "cast":
+        lvl = resolved.get("level")
+        try:
+            lvl_n = int(lvl) if lvl is not None else 0
+        except (TypeError, ValueError):
+            lvl_n = 0
+        if lvl_n <= 0:
+            return {"applied": False, "reason": "cantrip / unleveled"}
+        dnd_state = dict(folio.get("dnd_state") or {})
+        slots = dict(dnd_state.get("spell_slots") or {})
+        cur = int(slots.get(str(lvl_n), 0) or 0)
+        if cur <= 0:
+            return {"applied": False, "reason": f"no L{lvl_n} slots remaining",
+                    "character_id": char["id"], "character_name": char["name"]}
+        slots[str(lvl_n)] = cur - 1
+        dnd_state["spell_slots"] = slots
+        folio["dnd_state"] = dnd_state
+        await db.characters.update_one({"id": char["id"]},
+            {"$set": {"folio": folio, "updated_at": now_iso()}})
+        return {"applied": True, "character_id": char["id"],
+                "character_name": char["name"], "mode": "spell_slot",
+                "payload": {"level": lvl_n, "before": cur, "after": cur - 1}}
+
+    if mode == "use_bundle":
+        src = resolved.get("source_id") or resolved.get("name")
+        max_charges = resolved.get("charges_max")
+        ep_cost = int(resolved.get("energy_cost") or 0)
+        bundle_charges = dict(folio.get("bundle_charges") or {})
+        used = int(bundle_charges.get(src, 0) or 0)
+        applied_payload = {}
+        if max_charges is not None and int(max_charges) > 0:
+            if used >= int(max_charges):
+                return {"applied": False, "reason": "no charges remaining",
+                        "character_id": char["id"],
+                        "character_name": char["name"]}
+            bundle_charges[src] = used + 1
+            applied_payload["charges"] = {"max": int(max_charges),
+                                            "used_before": used,
+                                            "used_after": used + 1}
+        ep_before = int(folio.get("energy_points", 0) or 0)
+        if ep_cost:
+            if ep_before < ep_cost:
+                return {"applied": False,
+                        "reason": f"insufficient EP ({ep_before}/{ep_cost})",
+                        "character_id": char["id"],
+                        "character_name": char["name"]}
+            folio["energy_points"] = ep_before - ep_cost
+            applied_payload["ep"] = {"cost": ep_cost,
+                                       "before": ep_before,
+                                       "after": ep_before - ep_cost}
+        if not applied_payload:
+            return {"applied": False,
+                    "reason": "bundle has no consumable resource",
+                    "character_id": char["id"],
+                    "character_name": char["name"]}
+        folio["bundle_charges"] = bundle_charges
+        await db.characters.update_one({"id": char["id"]},
+            {"$set": {"folio": folio, "updated_at": now_iso()}})
+        return {"applied": True, "character_id": char["id"],
+                "character_name": char["name"], "mode": "bundle",
+                "payload": {"source_id": src, **applied_payload}}
+
+    return {"applied": False, "reason": f"unknown mode {mode}"}
+
+
+async def _undo_deduct(msg: dict, user: dict) -> dict:
+    """Reverse a deduct stamped on a /cast or /use bundle message
+    within the 30s window."""
+    deduct = (msg.get("slash_meta") or {}).get("deduct") or {}
+    if not deduct.get("applied"):
+        raise HTTPException(400, "Nothing to undo on this message.")
+    if msg.get("author_id") != user["id"]:
+        raise HTTPException(403, "Only the speaker can undo their own action.")
+    until = msg.get("undoable_until")
+    if not until:
+        raise HTTPException(400, "Undo window already closed.")
+    try:
+        if datetime.fromisoformat(until) < datetime.now(timezone.utc):
+            raise HTTPException(400, "Undo window expired.")
+    except ValueError:
+        raise HTTPException(400, "Undo window malformed.")
+    char = await db.characters.find_one({"id": deduct["character_id"]},
+                                            {"_id": 0})
+    if not char:
+        raise HTTPException(404, "Character vanished")
+    folio = dict(char.get("folio") or {})
+    pl = deduct.get("payload") or {}
+
+    if deduct.get("mode") == "spell_slot":
+        dnd_state = dict(folio.get("dnd_state") or {})
+        slots = dict(dnd_state.get("spell_slots") or {})
+        slots[str(pl["level"])] = pl["before"]
+        dnd_state["spell_slots"] = slots
+        folio["dnd_state"] = dnd_state
+    elif deduct.get("mode") == "bundle":
+        if "charges" in pl:
+            charges = dict(folio.get("bundle_charges") or {})
+            charges[pl["source_id"]] = pl["charges"]["used_before"]
+            folio["bundle_charges"] = charges
+        if "ep" in pl:
+            folio["energy_points"] = pl["ep"]["before"]
+
+    await db.characters.update_one({"id": char["id"]},
+        {"$set": {"folio": folio, "updated_at": now_iso()}})
+    new_meta = {**(msg.get("slash_meta") or {}),
+                "deduct": {**deduct, "undone": True,
+                           "undone_at": now_iso()}}
+    await db.channel_msgs.update_one({"id": msg["id"]},
+        {"$set": {"slash_meta": new_meta, "undoable_until": None}})
+    return {"ok": True}
+
+
+@router.post("/messages/{mid}/undo")
+async def undo_message_deduct(mid: str,
+                                 user: dict = Depends(get_current_user)):
+    """30-second undo for /cast and /use bundle deductions."""
+    msg = await db.channel_msgs.find_one({"id": mid}, {"_id": 0})
+    if not msg:
+        raise HTTPException(404, "Message not found")
+    return await _undo_deduct(msg, user)
+
+
+def _expand_macro_tokens(formula: str, char) -> str:
+    """Substitute STR/DEX/CON/INT/WIS/CHA + Body/Mind/Soul + PROF + LVL
+    tokens from the speaker's character into the macro formula."""
+    if not char or not formula:
+        return formula
+    folio = (char.get("folio") or {})
+    dnd_state = (folio.get("dnd_state") or {})
+    abilities = (dnd_state.get("ability_scores") or {})
+    stats = (char.get("stats") or {})
+    lvl = int(dnd_state.get("level") or char.get("level") or 1)
+    prof = max(2, 2 + (lvl - 1) // 4)
+
+    def mod_of(score):
+        try:
+            return (int(score) - 10) // 2
+        except (TypeError, ValueError):
+            return 0
+
+    tokens = {
+        "STR": mod_of(abilities.get("Strength")),
+        "DEX": mod_of(abilities.get("Dexterity")),
+        "CON": mod_of(abilities.get("Constitution")),
+        "INT": mod_of(abilities.get("Intelligence")),
+        "WIS": mod_of(abilities.get("Wisdom")),
+        "CHA": mod_of(abilities.get("Charisma")),
+        "BODY": int(stats.get("body") or 0),
+        "MIND": int(stats.get("mind") or 0),
+        "SOUL": int(stats.get("soul") or 0),
+        "PROF": prof,
+        "LVL": lvl,
+    }
+
+    def repl(m):
+        key = m.group(0).upper()
+        v = tokens.get(key, 0)
+        return f"+{v}" if v >= 0 else str(v)
+
+    pat = re.compile(
+        r"(?<![A-Za-z0-9_])(STR|DEX|CON|INT|WIS|CHA|BODY|MIND|SOUL|PROF|LVL)(?![A-Za-z0-9_])",
+        re.IGNORECASE)
+    out = pat.sub(repl, formula)
+    out = re.sub(r"\+\+", "+", out)
+    out = re.sub(r"\+-", "-", out)
+    out = re.sub(r"--", "+", out)
+    return out
+
