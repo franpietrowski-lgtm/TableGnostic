@@ -358,6 +358,7 @@ export default function CharacterSheet() {
       <AppliedTemplatesPanel character={ch}/>
       {/* V6.25.7 — Quick-Roll Bar for play-by-post macros. */}
       <QuickRollBar character={ch} campaignId={ch.campaign_id}
+                     systemId={campaign?.system_id}
                      channelId={pbpChannelId}
                      onRolled={() => { /* future: scroll-to-channel */ }}/>
       {/* V6.19 — Anime 5E DP/CP audit (only renders for anime-5e campaigns). */}

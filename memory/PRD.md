@@ -14,6 +14,50 @@
 
 ## 2. Implemented (cumulative, condensed)
 
+### V6.25.9 — Character-aware macros + Z-index portal fix + Landing-page ideation (2026-02-08)
+
+User flagged three things: (1) the macro popup's tokens looked D&D-specific and didn't reference the player's actual character sheet — they wanted a builder that surfaces THIS character's attributes (with effective level), skills, defects, derived values, and HP/EP for click-to-insert; (2) the macro creator popup was rendering BEHIND the next scroll section (z-index / stacking context bug); (3) requested a `landingpageideation.md` strategic blueprint covering pitch, vision, asset inventory, copy, and theme.
+
+**🔴 P0 — Character-aware macro grammar** (`backend/routes/channels.py`)
+- `_expand_macro_tokens` extended with a typed-token grammar — all tokens read from the LIVE character sheet:
+  - `{attr:<Name>}`    — effective Level (rank-summed: `level + Σlimiter.rank − Σenhancement.rank`)
+  - `{skill:<Name>}`   — assigned Level
+  - `{def:<Name>}`     — Defect rank
+  - `{stat:body|mind|soul|str|dex|con|int|wis|cha}`
+  - `{derived:cv|atk|dfn|hp|ep|dm|ac|init}`
+  - `{hp}`, `{ep}`, `{sanity}` — current resource pool
+- Legacy bare-scalar tokens (`STR`/`DEX`/`...`/`BODY`/`MIND`/`SOUL`/`PROF`/`LVL`) STILL resolve — back-compat preserved for V6.25.7 macros.
+- Unknown attribute / skill names collapse to `+0` (no 422; the dice engine never sees a malformed expression).
+- `MessageIn` model gained an optional `character_id` so the QuickRollBar fires against the player's CURRENT character rather than guessing the most-recently-touched one. Falls back to the old behaviour if omitted.
+- Tests: 5/5 in `tests/test_v6259_macro_grammar.py` — `{attr:Weapon}` resolves to effective level 5 (3 base + 4 limiter rank − 2 enhancement rank), `{def:Berserk}` → rank 2, `{derived:cv}` → 5, legacy `BODY/MIND` still resolve, unknown names collapse to +0.
+
+**🟧 P1 — Macro Builder UI rebuild** (`frontend/src/components/MacroBuilder.jsx` — NEW)
+- Replaces the old plain-input MacroCreator with a click-to-insert composer:
+  - **Stats** — system-aware (BESM gets body/mind/soul; D&D gets STR-CHA; Anime 5E gets both).
+  - **Attributes** — rendered as chips with the live `eff ×N` hint pulled from the character. Click to insert `{attr:<Name>}`.
+  - **Skills / Defects / Derived** — each group surfaced with current values.
+  - **Operators** (`+ − × ÷ ( )`) and **Dice presets** (`2d6 / 3d6 / 1d20 / ...`) plus a custom `NdM` injector and a numeric flat-modifier injector.
+  - **Live preview line** under the formula input that mirrors the backend's expansion verbatim, so what the GM sees is what the chat will roll.
+  - The whole modal renders via `React.createPortal` → `document.body` so an ancestor stacking context (the V6.25.7 `card-mystic` parent) cannot clip it.
+- `QuickRollBar` now passes `character` + `systemId` to the new builder and includes `character_id` on every fire.
+- The builder is also reusable from anywhere on the character sheet — a future "Add to macro" sprinkle on individual sheet rows can launch it pre-seeded with `seedFormula` (UI hook is wired; row-level checkboxes are a follow-up).
+
+**💎 Z-index audit & portal fix** (`QuickRollBar.jsx`, `MacroBuilder.jsx`)
+- Both `SlotPicker` and `MacroBuilder` modals are now portaled. Their `fixed inset-0 z-[200]` overlay is solid (`backgroundColor: rgb(8, 6, 14)` with `bg-void/80` scrim) so even with backdrop-blur disabled they paint above content.
+- Audit of remaining modals (Marketplace · ConvertCharacter · CodexChartView · CmdK · ReferenceAutoLink) shows they were already either app-level or `z-50+`, so no other fixes were required.
+
+**🧭 Landing-page ideation** (`/app/landingpageideation.md` — NEW)
+- 11-section strategic blueprint authored at `/app/landingpageideation.md`. Covers: pitch + tagline, three-year vision, page architecture (hero → role-gated tour → milestones → wizards → about → contact → footer), theme/scheme/blueprints (obsidian + gold + ember palette, asymmetric layout, glass-morphism wizard tiles), asset inventory (existing + to-commission), data we should publish (test count, marketplace listing count, version trust strip), feature pitches (current + 90-day + aspirational), outreach plan (subreddit + short-form video + worldbuilding podcast), wireframe ASCII, and a definition-of-done checklist. Creator credit: Francis T. Pietrowski.
+
+**Testing**
+- Backend: 5/5 V6.25.9 macro-grammar tests pass + 3/3 V6.25.8 mod-rank still pass + 2/2 V6.25.8 archive-403 still pass = 10 cumulative new tests, 0 regressions.
+- Lint clean: `MacroBuilder.jsx`, `QuickRollBar.jsx`, `channels.py`.
+
+**Deferred (still on roadmap)**
+- Per-row "Add to macro" checkbox on character sheet (attribute / skill / defect / derived rows) — backend grammar supports it; UI hook is on `MacroBuilder` via `seedFormula` prop. Wire next iteration.
+- Mobile Sweep V3 — touch-target audit on Character Sheet roll cells + sticky-header collapse.
+- Strict Permission Gating, Anime 5E / D&D level-20 class library, Marketplace V2 (Stripe).
+
 ### V6.25.8 — Mod ranks + Color-coded chips + Mobile burger + Genesis Archive UI + Footer rebuild (2026-02-07)
 
 User flagged a critical functional gap: BESM attribute customization let you toggle enhancements / limiters but had no per-mod rank input. "1 application of Range is different in function and narration from 4 levels of Range by a lot." Plus mobile-view footer crunch and a request to centre the TableGnostic original logo + a refreshed legal posture crediting Francis T. Pietrowski as sole owner.

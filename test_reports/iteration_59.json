@@ -1,0 +1,63 @@
+{
+  "summary": "V6.25.9 review — character-aware MacroBuilder + React.createPortal z-index fix. Backend 25/25 pytest pass (5/5 new V6.25.9 token grammar + 5 V6.25.8 mod-rank/genesis + 15 V6.25.7/V6.25.6 regression). Frontend live UI smoke via Playwright CONFIRMED end-to-end: login → BESM campaign → QRB Test 3 sheet → Mechanics tab → empty slot → SlotPicker (portaled to <body>) → New macro → MacroBuilder (portaled to <body>, title 'for QRB Test 3'). Chip click-to-insert wires correctly (stat chip → {stat:body}, dice preset auto-joins with '+', operator appends raw). Live preview substitutes to '+4' for body=4. Modal stays fixed and fully visible after scrolling underlying sheet to bottom (bbox 0,0,1920,1080 persists — z-[200] portal cannot be clipped by ancestor stacking context). Close button works. All V6.25.9 P0 acceptance criteria PASS.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "verified_via_pytest": {
+    "test_v6259_macro_grammar.py::test_attr_token_resolves_effective_level": "PASS — Weapon level=3, lim rank=4, enh rank=2 → {attr:Weapon} expands to +5 (effective), combined with {skill:Combat}=+5 produces '+5+5' in formula_expanded",
+    "test_v6259_macro_grammar.py::test_def_and_derived_tokens": "PASS — {def:Berserk}=+2, {derived:cv}=(6+4+5)/3=+5",
+    "test_v6259_macro_grammar.py::test_stat_token_body": "PASS — {stat:body}=+6",
+    "test_v6259_macro_grammar.py::test_legacy_scalar_tokens_still_resolve": "PASS — BODY+MIND legacy bare tokens still resolve to +6+4 (back-compat intact)",
+    "test_v6259_macro_grammar.py::test_unknown_token_collapses_to_zero": "PASS — {attr:DoesNotExist} → +0, no 422",
+    "test_v6258_mod_rank.py (3)": "ALL PASS — no regression",
+    "test_v6258_genesis_403.py (2)": "ALL PASS — no regression",
+    "test_v6257_macros_hk2.py (9)": "ALL PASS — no regression",
+    "test_v6256_chat_hotkeys.py (6)": "ALL PASS — no regression"
+  },
+  "verified_via_playwright": {
+    "login_flow": "OK — /auth?mode=login with data-testid='auth-email-input'/'auth-password-input' + submit button → /app in <5s",
+    "slot_picker_portal": "OK — [data-testid^='qrb-picker-'] renders with parentElement.tagName === 'BODY' (React.createPortal target is document.body)",
+    "macro_builder_portal": "OK — [data-testid='macro-builder'] renders with parentElement.tagName === 'BODY'",
+    "macro_builder_title_character_aware": "OK — title reads 'for QRB Test 3' (not generic 'New macro')",
+    "chip_click_to_insert_stat": "OK — click {stat:body} chip → formula = '{stat:body}', live preview line = '+4' (QRB Test 3 has body=4)",
+    "chip_click_to_insert_dice_2d6": "OK — click macro-dice-2d6 after stat chip → formula becomes '{stat:body}+2d6' (auto-inserts '+' between value-like tokens)",
+    "operator_append": "OK — macro-op-+ appends raw '+' to formula → '{stat:body}+2d6+'",
+    "z_index_scroll_hold": "OK — after window.scrollTo(0, document.body.scrollHeight), MacroBuilder bbox remains {x:0,y:0,width:1920,height:1080} — modal stays fixed over content, no bleed-through",
+    "close_button": "OK — [data-testid='macro-builder-close'] closes modal cleanly",
+    "conditional_chip_groups": "OK — macro-stats and macro-derived render when system has those; macro-attrs/skills/defects correctly hidden for QRB Test 3 (which has no attributes/skills/defects on sheet) — test_v6259 fixture character tears down after pytest so UI couldn't exercise those non-empty groups live, but backend pytest covers them 5/5"
+  },
+  "verified_via_source_inspection": {
+    "MacroBuilder.jsx L108-321": "createPortal(<div className='fixed inset-0 z-[200] ...'>, document.body) — cannot be clipped by ancestor stacking contexts",
+    "MacroBuilder.jsx L84 + L443-494": "Client-side _expandClientSide mirrors backend _expand_macro_tokens grammar (attr/skill/def/stat/derived/hp/ep/sanity + legacy BODY/MIND/SOUL/STR/.../PROF/LVL) so live preview matches fire-time resolution",
+    "QuickRollBar.jsx L173-180": "MacroBuilder mounted with character + systemId + campaignId; onSaved pushes new macro into slot i",
+    "QuickRollBar.jsx L187-229": "SlotPicker also uses createPortal to document.body — same z-[200] fix applied"
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_v6259_macro_grammar.py",
+    "/app/test_reports/pytest/iter59_v6259.xml"
+  ],
+  "action_items": [
+    "INFO — All V6.25.9 P0 acceptance criteria PASS. No code changes required from main agent for this cycle.",
+    "OPTIONAL — The /api/channels/{chid}/messages curl with body='/strike' & character_id=... was NOT exercised directly via curl this round because pytest already covers the same code path 5/5 (test_attr_token_resolves_effective_level, etc.) using the same POST body shape. If E1 wants a literal curl artefact, happy to add one next round — not blocking.",
+    "OPTIONAL — For UI automation of {attr:*}/{skill:*}/{def:*} chip groups, consider seeding a long-lived BESM character with at least 1 attribute + skill + defect (the test_v6259 fixture tears its character down after pytest). Non-blocking."
+  ],
+  "critical_code_review_comments": [
+    "MacroBuilder.jsx (~494 lines) is well within the 700-line guideline. Clean separation of ChipGroup/TokenChip/CustomDicePicker/NumericInjector subcomponents + pure helpers at bottom — good.",
+    "The _expandClientSide() client mirror of backend _expand_macro_tokens is a maintenance hazard — any backend grammar change must be mirrored here or live preview will desync from fire-time. Recommend adding a short comment block at the top of both mirror functions cross-referencing each other + a shared pytest-style contract test that asserts parity (e.g., a /api/macros/preview endpoint the builder could optionally hit). Non-blocking for this cycle.",
+    "MacroBuilder.jsx L70: append() auto-inserts '+' only if lastCh is NOT in '+-*/×÷(' — this is correct for the common case but will still produce '+-N' when appending a negative number after '+'. Acceptable because the backend normalizes '+-' → '-' on L492.",
+    "MacroBuilder.jsx L108-321 portal + z-[200] is the correct fix; rendering at document.body guarantees escape from any card-mystic stacking context ancestor (the V6.25.7 bug).",
+    "QuickRollBar.jsx SlotPicker now also portaled — good; prevents the same bleed-through for the slot picker itself.",
+    "Test file test_v6259_macro_grammar.py exercises Create→Fire verification pattern correctly (POST macro, then POST /messages with character_id, then assert slash_meta.macro.formula_expanded substring) — exemplary.",
+    "Minor: _effLevel() default is Math.max(1, ...) which floors effective level at 1. This matches BESM 4E rule (effective level cannot go below 1 via limiter/enhancement arithmetic) — correct. Backend should do the same."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "100% (25/25 pytest pass — 5 V6.25.9 + 5 V6.25.8 + 15 V6.25.7/V6.25.6 regression)",
+    "frontend": "100% — all V6.25.9 testid contract + portal + scroll-hold behaviours confirmed live via Playwright"
+  },
+  "test_credentials": "GMFran franpietrowski@gmail.com / PieGod08!! (verified via both pytest and UI Playwright login). Aurora albanaszak@ymail.com / AuroraTest123! (not exercised this round).",
+  "seed_data_creation": "Pytest fixture test_v6259_macro_grammar.besm_with_char creates/tears down a BESM campaign + 'Macro Grammar Test' character (Weapon attr level=3 with Penetrating enh rank=2 + Backlash lim rank=4; Combat skill level=5; Berserk defect rank=2). Clean teardown verified. Existing QRB Test 3 character on bedd53adf... campaign was used for UI smoke (body/mind/soul=4, no attrs/skills/defects).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "V6.25.9 acceptance is GREEN. Gotchas: (1) Login inputs DO have data-testids ('auth-email-input' / 'auth-password-input') and type='email'/'password' — earlier iter58 note about missing type attrs is STALE. (2) /login URL redirects; use /auth?mode=login or click 'Sign In' from landing. (3) QRB Test 3 character on campaign bedd53adf8b34c25a3fdf4d28a4e7ead is a good portal-smoke target but has no attributes/skills/defects — to exercise those chip groups live, seed a fresh character with at least 1 of each (or pattern after test_v6259_macro_grammar fixture). (4) The MacroBuilder and SlotPicker both portal to document.body — any test that expects them under the QuickRollBar ancestor DOM subtree will fail; select by data-testid globally instead.",
+  "rca of the issue": "No bugs found. The V6.25.7 stacking-context clip (MacroBuilder rendered behind next scroll section) was root-caused by the card-mystic ancestor creating a stacking context that clipped the z-index:50 modal. The V6.25.9 fix — React.createPortal(…, document.body) — is the textbook solution and is verified live: the modal renders as a direct child of <body>, covers the full viewport (1920x1080 bbox) at z-[200], and stays visible over ALL underlying content regardless of window scroll position."
+}

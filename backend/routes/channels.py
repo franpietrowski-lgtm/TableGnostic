@@ -72,6 +72,10 @@ class MessageIn(BaseModel):
     body: str = Field(min_length=1, max_length=8000)
     thread_id: Optional[str] = None
     attachments: List[AttachmentIn] = []
+    # V6.25.9 — Quick-Roll Bar / character sheet macro fires send the
+    # speaker's active character_id so token expansion reads from THAT
+    # sheet rather than guessing the most-recently-touched one.
+    character_id: Optional[str] = None
 
 
 class MessageEditIn(BaseModel):
@@ -458,11 +462,20 @@ async def post_message(chid: str, body: MessageIn,
             doc["kind"] = "macro"
             doc["slash_meta"] = {**slash, "miss": True}
         else:
-            # Substitute STR/DEX/CON/INT/WIS/CHA + Body/Mind/Soul + prof
-            # tokens from the speaker's most-recently-touched character.
-            char = await db.characters.find_one(
-                {"campaign_id": camp["id"], "owner_id": user["id"]},
-                {"_id": 0}, sort=[("updated_at", -1), ("created_at", -1)])
+            # V6.25.9 — prefer the explicit character_id sent by the
+            # Quick-Roll Bar / sheet macro fire (so the player can have
+            # multiple characters on a campaign and the macro still
+            # resolves against the one they're rolling for). Falls back
+            # to the most-recently-touched character when omitted.
+            char = None
+            if body.character_id:
+                char = await db.characters.find_one(
+                    {"id": body.character_id, "campaign_id": camp["id"]},
+                    {"_id": 0})
+            if not char:
+                char = await db.characters.find_one(
+                    {"campaign_id": camp["id"], "owner_id": user["id"]},
+                    {"_id": 0}, sort=[("updated_at", -1), ("created_at", -1)])
             formula = _expand_macro_tokens(m["formula"], char)
             if slash.get("modifier"):
                 formula = f"{formula}{slash['modifier']}"
@@ -721,8 +734,33 @@ async def undo_message_deduct(mid: str,
 
 
 def _expand_macro_tokens(formula: str, char) -> str:
-    """Substitute STR/DEX/CON/INT/WIS/CHA + Body/Mind/Soul + PROF + LVL
-    tokens from the speaker's character into the macro formula."""
+    """V6.25.9 — character-aware macro expansion.
+
+    Substitutes a richer token grammar pulled FROM THE LIVE CHARACTER
+    SHEET (not the SRD reference). Tokens are case-insensitive.
+
+    Stat / ability scalars (legacy):
+      STR DEX CON INT WIS CHA  → D&D ability MOD (signed)
+      BODY MIND SOUL           → BESM stat value
+      PROF                     → D&D proficiency
+      LVL                      → character level
+
+    V6.25.9 character-bound tokens:
+      {attr:<Name>}    → effective level of the matching Attribute,
+                          which already includes Σlimiter.rank − Σenhancement.rank.
+      {skill:<Name>}   → assigned level of the matching Skill.
+      {def:<Name>}     → rank of the matching Defect.
+      {stat:body|mind|soul|str|dex|con|int|wis|cha}
+                       → raw stat / ability score value.
+      {derived:hp|ep|atk|dfn|cv|dm|ac|init}
+                       → the named BESM / D&D derived value.
+      {hp}, {ep}, {sanity}
+                       → current resource pool (folio.dnd_state.hp /
+                          ep / sanity if tracked, else 0).
+
+    Unknown tokens collapse to 0 with a leading '+' so the formula
+    stays syntactically valid for the dice engine.
+    """
     if not char or not formula:
         return formula
     folio = (char.get("folio") or {})
@@ -738,29 +776,133 @@ def _expand_macro_tokens(formula: str, char) -> str:
         except (TypeError, ValueError):
             return 0
 
-    tokens = {
+    def _mod_rank(m):
+        if isinstance(m, str):
+            return 1
+        if isinstance(m, dict):
+            if isinstance(m.get("rank"), (int, float)):
+                return max(1, int(m["rank"]))
+            if isinstance(m.get("value"), (int, float)):
+                return max(1, abs(int(m["value"])))
+        return 1
+
+    def _attr_eff(attr):
+        if not attr:
+            return 0
+        base = int(attr.get("level") or 1)
+        lim = sum(_mod_rank(m) for m in (attr.get("limiters") or []))
+        enh = sum(_mod_rank(m) for m in (attr.get("enhancements") or []))
+        # Honour explicit effective_level if the validator wrote one.
+        if isinstance(attr.get("effective_level"), int):
+            return max(1, attr["effective_level"])
+        return max(1, base + lim - enh)
+
+    def _by_name(rows, name):
+        n = (name or "").strip().lower()
+        for r in (rows or []):
+            rn = (r.get("name") or r.get("group") or "").strip().lower()
+            if rn == n:
+                return r
+        return None
+
+    body = int(stats.get("body") or 0)
+    mind = int(stats.get("mind") or 0)
+    soul = int(stats.get("soul") or 0)
+    cv = (body + mind + soul) // 3 if (body + mind + soul) else 0
+
+    def _attr_lvl(name):
+        a = _by_name(char.get("attributes"), name)
+        return int(a.get("level") or 0) if a else 0
+
+    derived = {
+        "cv":   cv,
+        "atk":  cv + _attr_lvl("Attack Mastery"),
+        "dfn":  max(0, cv - 2 + _attr_lvl("Defence Mastery")),
+        "hp":   (body + soul) * 5 + _attr_lvl("Tough") * 5,
+        "ep":   (mind + soul) * 5 + _attr_lvl("Energised") * 5,
+        "dm":   5 + _attr_lvl("Massive Damage") * 5,
+        "ac":   int(dnd_state.get("ac") or 10),
+        "init": mod_of(abilities.get("Dexterity")),
+    }
+
+    scalar_tokens = {
         "STR": mod_of(abilities.get("Strength")),
         "DEX": mod_of(abilities.get("Dexterity")),
         "CON": mod_of(abilities.get("Constitution")),
         "INT": mod_of(abilities.get("Intelligence")),
         "WIS": mod_of(abilities.get("Wisdom")),
         "CHA": mod_of(abilities.get("Charisma")),
-        "BODY": int(stats.get("body") or 0),
-        "MIND": int(stats.get("mind") or 0),
-        "SOUL": int(stats.get("soul") or 0),
+        "BODY": body,
+        "MIND": mind,
+        "SOUL": soul,
         "PROF": prof,
         "LVL": lvl,
     }
 
-    def repl(m):
+    # V6.25.9 — typed tokens come first so {stat:body} resolves before
+    # the bare BODY scalar pattern can shadow it.
+    def repl_typed(m):
+        kind = (m.group("kind") or "").lower()
+        name = (m.group("name") or "").strip()
+        v = 0
+        try:
+            if kind == "attr":
+                v = _attr_eff(_by_name(char.get("attributes"), name))
+            elif kind == "skill":
+                s = _by_name(char.get("skills"), name)
+                v = int(s.get("level") or 0) if s else 0
+            elif kind == "def":
+                d = _by_name(char.get("defects"), name)
+                v = int(d.get("rank") or 0) if d else 0
+            elif kind == "stat":
+                key = name.lower()
+                if key in ("body", "mind", "soul"):
+                    v = scalar_tokens.get(key.upper(), 0)
+                elif key in ("str", "dex", "con", "int", "wis", "cha"):
+                    v = mod_of(abilities.get({
+                        "str": "Strength", "dex": "Dexterity", "con": "Constitution",
+                        "int": "Intelligence", "wis": "Wisdom", "cha": "Charisma",
+                    }.get(key)))
+            elif kind == "derived":
+                v = int(derived.get(name.lower(), 0))
+            elif kind == "hp":
+                # bare {hp} / {ep} / {sanity} (no name) — handled by the
+                # short-token regex below, but keep this branch defensive.
+                v = derived["hp"]
+        except (TypeError, ValueError):
+            v = 0
+        return f"+{v}" if v >= 0 else str(v)
+
+    def repl_short(m):
+        key = (m.group(1) or "").lower()
+        if key == "hp":
+            v = derived["hp"]
+        elif key == "ep":
+            v = derived["ep"]
+        elif key == "sanity":
+            v = int((dnd_state.get("sanity") or 0))
+        else:
+            v = 0
+        return f"+{v}" if v >= 0 else str(v)
+
+    typed_pat = re.compile(
+        r"\{(?P<kind>attr|skill|def|stat|derived)\s*:\s*(?P<name>[^}]+)\}",
+        re.IGNORECASE,
+    )
+    short_pat = re.compile(r"\{(hp|ep|sanity)\}", re.IGNORECASE)
+
+    out = typed_pat.sub(repl_typed, formula)
+    out = short_pat.sub(repl_short, out)
+
+    def repl_scalar(m):
         key = m.group(0).upper()
-        v = tokens.get(key, 0)
+        v = scalar_tokens.get(key, 0)
         return f"+{v}" if v >= 0 else str(v)
 
     pat = re.compile(
         r"(?<![A-Za-z0-9_])(STR|DEX|CON|INT|WIS|CHA|BODY|MIND|SOUL|PROF|LVL)(?![A-Za-z0-9_])",
         re.IGNORECASE)
-    out = pat.sub(repl, formula)
+    out = pat.sub(repl_scalar, out)
     out = re.sub(r"\+\+", "+", out)
     out = re.sub(r"\+-", "-", out)
     out = re.sub(r"--", "+", out)

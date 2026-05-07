@@ -13,13 +13,15 @@
  * without leaving the character sheet.
  */
 import React, { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { api } from "../lib/api";
-import { Plus, Dices, Trash2, Pencil, X } from "lucide-react";
+import { Plus, Dices, Pencil, X } from "lucide-react";
+import MacroBuilder from "./MacroBuilder";
 
 const SLOT_COUNT = 6;
 const SLOT_KEY = (charId) => `tg_qrb_slots_${charId}`;
 
-export default function QuickRollBar({ character, campaignId, channelId, onRolled }) {
+export default function QuickRollBar({ character, campaignId, systemId, channelId, onRolled }) {
   const [macros, setMacros] = useState([]);
   const [slots, setSlots] = useState(() => {
     try { return JSON.parse(localStorage.getItem(SLOT_KEY(character?.id)) || "[]"); }
@@ -65,7 +67,7 @@ export default function QuickRollBar({ character, campaignId, channelId, onRolle
     try {
       const body = `/${macro.name}${mod ? ` ${mod.startsWith("+") || mod.startsWith("-") ? mod : "+" + mod}` : ""}`;
       const { data } = await api.post(`/channels/${channelId}/messages`,
-        { body, attachments: [] });
+        { body, attachments: [], character_id: character?.id || null });
       if (onRolled) onRolled(data);
       // Refresh use_count locally so sort-by-most-used responds.
       setMacros((prev) => prev.map((m) =>
@@ -169,8 +171,10 @@ export default function QuickRollBar({ character, campaignId, channelId, onRolle
       )}
 
       {creating !== null && (
-        <MacroCreator
+        <MacroBuilder
           campaignId={campaignId}
+          character={character}
+          systemId={systemId}
           onSaved={(m) => { setMacros([...macros, m]); setSlot(creating, m.id); setCreating(null); }}
           onClose={() => setCreating(null)}/>
       )}
@@ -180,11 +184,13 @@ export default function QuickRollBar({ character, campaignId, channelId, onRolle
 
 
 function SlotPicker({ slot, macros, onPick, onCreate, onUnbind, onClose }) {
-  return (
-    <div className="fixed inset-0 z-50 bg-void/80 flex items-center justify-center p-4"
+  return createPortal(
+    <div className="fixed inset-0 z-[200] bg-void/80 flex items-center justify-center p-4"
          onClick={onClose}
          data-testid={`qrb-picker-${slot}`}>
-      <div className="card-mystic p-5 max-w-md w-full" onClick={(e) => e.stopPropagation()}>
+      <div className="card-mystic p-5 max-w-md w-full"
+           style={{ backgroundColor: "rgb(8, 6, 14)" }}
+           onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-3">
           <div>
             <div className="label-ref">Slot {slot + 1}</div>
@@ -218,82 +224,7 @@ function SlotPicker({ slot, macros, onPick, onCreate, onUnbind, onClose }) {
           </button>
         </div>
       </div>
-    </div>
-  );
-}
-
-
-function MacroCreator({ campaignId, onSaved, onClose }) {
-  const [name, setName] = useState("");
-  const [formula, setFormula] = useState("");
-  const [label, setLabel] = useState("");
-  const [scope, setScope] = useState("user");
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState("");
-
-  const submit = async (e) => {
-    e.preventDefault();
-    setBusy(true); setErr("");
-    try {
-      const { data } = await api.post(`/campaigns/${campaignId}/macros`,
-        { name, formula, label, scope });
-      onSaved(data);
-    } catch (e) {
-      setErr(e.response?.data?.detail || e.message);
-    } finally { setBusy(false); }
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 bg-void/80 flex items-center justify-center p-4"
-         onClick={onClose}
-         data-testid="qrb-creator">
-      <form onSubmit={submit} className="card-mystic p-5 max-w-md w-full"
-            onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between mb-3">
-          <div>
-            <div className="label-ref">New macro</div>
-            <div className="text-[10px] text-mist italic mt-0.5">
-              Tokens: STR / DEX / CON / INT / WIS / CHA · BODY / MIND / SOUL · PROF · LVL.
-              They expand from your character's stats at fire time.
-            </div>
-          </div>
-          <button type="button" onClick={onClose} className="text-mist hover:text-gold-bright"
-                  aria-label="Close">
-            <X className="w-4 h-4"/>
-          </button>
-        </div>
-        <label className="label-ref block mb-1">Name (used as /name)</label>
-        <input className="input mb-2" value={name} required pattern="[A-Za-z][A-Za-z0-9_-]{0,30}"
-               placeholder="e.g. strike" autoFocus
-               onChange={(e) => setName(e.target.value)}
-               data-testid="qrb-creator-name"/>
-        <label className="label-ref block mb-1">Label (display)</label>
-        <input className="input mb-2" value={label}
-               placeholder="e.g. Sword Strike"
-               onChange={(e) => setLabel(e.target.value)}
-               data-testid="qrb-creator-label"/>
-        <label className="label-ref block mb-1">Formula</label>
-        <input className="input mb-2" value={formula} required
-               placeholder="1d20+STR+PROF"
-               onChange={(e) => setFormula(e.target.value)}
-               data-testid="qrb-creator-formula"/>
-        <label className="label-ref block mb-1">Scope</label>
-        <select className="select mb-2" value={scope}
-                onChange={(e) => setScope(e.target.value)}
-                data-testid="qrb-creator-scope">
-          <option value="user">Personal (only me)</option>
-          <option value="campaign">Campaign (everyone — GM-only)</option>
-        </select>
-        {err && <div className="text-ember text-[11px] mt-2"
-                       data-testid="qrb-creator-error">{err}</div>}
-        <div className="flex justify-end gap-2 mt-3">
-          <button type="button" onClick={onClose} className="btn btn-ghost text-xs">Cancel</button>
-          <button type="submit" disabled={busy} className="btn btn-primary text-xs"
-                  data-testid="qrb-creator-save">
-            {busy ? "Saving…" : "Save macro"}
-          </button>
-        </div>
-      </form>
-    </div>
+    </div>,
+    document.body
   );
 }
