@@ -1038,25 +1038,52 @@ function AttributeRow({ idx, a, reference, onUpdate, onRemove, maxRank = 0 }) {
  * point cost. 4 ranks of "Range" = 4 effective levels' worth of range.
  */
 function ModSection({ kind, idx, a, ref_, label, hint, colorClass, onToggle, onRankChange }) {
-  const catalog = kind === "enhancements" ? ref_.enhancements : ref_.limiters;
+  // V6.25.10 — item / weapon-class Attributes (Item, Weapon, Gear, Vehicle,
+  // Companion, etc.) get an EXTRA pool of item-specific or weapon-specific
+  // mods from BESM Extras Ch.3, surfaced beneath the standard pool.
+  // The two pools are visually grouped so the GM can tell at a glance
+  // which mod is from core vs. Extras.
+  const isItem = ITEM_LIKE_ATTRS.has(a.name);
+  const standardCatalog = kind === "enhancements" ? (ref_.enhancements || []) : (ref_.limiters || []);
+  const itemCatalog =
+    kind === "enhancements"
+      ? (isItem ? (ref_.item_enhancements || []) : [])
+      : (isItem ? (ref_.item_limiters || []) : []);
+  const weaponCatalog =
+    a.name === "Weapon"
+      ? (kind === "enhancements" ? (ref_.weapon_enhancements || []) : (ref_.weapon_limiters || []))
+      : [];
   const allowedKey = kind === "enhancements" ? "allowed_enhancements" : "allowed_limiters";
   const arr = a[kind] || [];
-  return (
-    <div data-testid={`attr-${kind}-section-${idx}`}>
-      <div className="label-ref mb-1">{label}</div>
+
+  const renderTags = (catalog, group_label) => (
+    <div className="mt-1.5">
+      {group_label && (
+        <div className="text-[9px] font-ui uppercase tracking-widest text-mist/60 mb-1"
+             data-testid={`attr-${kind}-group-label-${idx}-${group_label.replace(/\s+/g,"-")}`}>
+          {group_label}
+        </div>
+      )}
       <div className="flex flex-wrap gap-1">
         {catalog.map((e) => {
           const attrRef = ref_.attributes.find((x) => x.name === a.name);
-          const allowed = attrRef && !attrRef.open_mods
-            ? (attrRef[allowedKey] || []).includes(e.name)
-            : true;
+          // Item / weapon mods bypass the per-attribute whitelist —
+          // they're already gated by attribute TYPE (the ItemLike check).
+          const isItemScoped = e.scope === "item" || e.scope === "weapon";
+          const allowed = isItemScoped ? true : (
+            attrRef && !attrRef.open_mods
+              ? (attrRef[allowedKey] || []).includes(e.name)
+              : true);
           const selectedIdx = findModIdx(arr, e.name);
           const selected = selectedIdx >= 0;
+          const costNote = e.cost_modifier && Math.abs(e.cost_modifier) !== 1
+            ? ` · ${e.cost_modifier > 0 ? "+" : ""}${e.cost_modifier}/rk`
+            : "";
           return (
-            <button key={e.name} type="button"
+            <button key={`${e.scope || "std"}-${e.name}`} type="button"
                     onClick={() => onToggle(e.name)}
                     disabled={!allowed && !selected}
-                    title={!allowed ? `Not typically allowed on ${a.name} (rule advisory)` : e.name}
+                    title={`${e.note || e.name}${e.page ? ` · p.${e.page} ${e.scope ? "BESM Extras" : "BESM 4E"}${costNote}` : ""}`}
                     data-testid={`attr-${kind === "enhancements" ? "enh" : "lim"}-toggle-${idx}-${e.name.replace(/\s+/g,"-")}`}
                     className={`tag ${selected ? colorClass : ""} ${!allowed && !selected ? "opacity-30 cursor-not-allowed" : ""}`}>
               {e.name}
@@ -1069,6 +1096,15 @@ function ModSection({ kind, idx, a, ref_, label, hint, colorClass, onToggle, onR
           );
         })}
       </div>
+    </div>
+  );
+
+  return (
+    <div data-testid={`attr-${kind}-section-${idx}`}>
+      <div className="label-ref mb-1">{label}</div>
+      {renderTags(standardCatalog, "")}
+      {weaponCatalog.length > 0 && renderTags(weaponCatalog, "Weapon · BESM Extras")}
+      {itemCatalog.length > 0 && renderTags(itemCatalog, "Item · BESM Extras")}
       {arr.length > 0 && (
         <div className="mt-2 space-y-1">
           <div className="text-[10px] font-ui text-mist/70 italic">{hint}</div>

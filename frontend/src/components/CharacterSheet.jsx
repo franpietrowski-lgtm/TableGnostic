@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import { api, formatApiErrorDetail, useAuth } from "../lib/api";
-import { Dice6, Edit3, BookOpen, Trash2, Printer } from "lucide-react";
+import { Dice6, Edit3, BookOpen, Trash2, Printer, Wand2 } from "lucide-react";
 import BesmTerm from "./ui/BesmTerm";
 import XPApprovalQueue, { XPSpendForm } from "./XPApprovalQueue";
 import CharacterApprovalPanel from "./CharacterApprovalPanel";
@@ -20,7 +20,30 @@ import { ConsentCheckbox } from "./ConsentPanel";
 import ClassProgressionPanel from "./ClassProgressionPanel";
 import AppliedTemplatesPanel from "./AppliedTemplatesPanel";
 import QuickRollBar from "./QuickRollBar";
+import MacroBuilder from "./MacroBuilder";
 import Anime5eBudgetAudit from "./Anime5eBudgetAudit";
+
+/**
+ * V6.25.10 — Per-row "Add to macro" sprinkle.
+ *
+ * A small wand icon button rendered next to attribute / skill / defect /
+ * derived rows on the character sheet. Click → opens the MacroBuilder
+ * modal pre-seeded with the appropriate token (e.g. `{attr:Weapon}`).
+ *
+ * Owner-or-GM only — read-only viewers don't get the affordance.
+ */
+function AddToMacroButton({ token, label, onOpen, hide }) {
+  if (hide) return null;
+  return (
+    <button onClick={() => onOpen(token, label)}
+            className="text-mist/50 hover:text-gold-bright p-0.5 rounded-sm
+                          hover:bg-gold/10 transition-colors"
+            title={`Add ${label} to a macro slot`}
+            data-testid={`add-to-macro-${token.replace(/[{}:]/g,"-")}`}>
+      <Wand2 className="w-3 h-3"/>
+    </button>
+  );
+}
 
 export default function CharacterSheet() {
   const { id } = useParams();
@@ -37,6 +60,11 @@ export default function CharacterSheet() {
   const [pbpChannelId, setPbpChannelId] = useState(null);
   const [campaign, setCampaign] = useState(null);
   const [showAdvWizard, setShowAdvWizard] = useState(false);
+  // V6.25.10 — per-row "Add to macro" launcher state.
+  // Holds either { token: "{attr:Weapon}", label: "Weapon" } when
+  // open, or null. Triggers MacroBuilder mount with seedFormula.
+  const [macroSeed, setMacroSeed] = useState(null);
+  const openMacroWith = (token, label) => setMacroSeed({ token, label });
   // V6.14 — active sub-tab. Valid: identity | mechanics | inventory | history.
   const [sheetTab, setSheetTab] = useState(() => {
     const h = ((typeof window !== "undefined" && window.location.hash) || "")
@@ -361,6 +389,18 @@ export default function CharacterSheet() {
                      systemId={campaign?.system_id}
                      channelId={pbpChannelId}
                      onRolled={() => { /* future: scroll-to-channel */ }}/>
+      {/* V6.25.10 — per-row "Add to macro" launcher.
+          Opens the same MacroBuilder used by QuickRollBar but pre-seeded
+          with the row's character-bound token (e.g. `+{attr:Weapon}`). */}
+      {macroSeed && (
+        <MacroBuilder
+          campaignId={ch.campaign_id}
+          character={ch}
+          systemId={campaign?.system_id}
+          seedFormula={`2d6+${macroSeed.token}`}
+          onSaved={(_m) => setMacroSeed(null)}
+          onClose={() => setMacroSeed(null)}/>
+      )}
       {/* V6.19 — Anime 5E DP/CP audit (only renders for anime-5e campaigns). */}
       {(campaign?.system_id === "anime-5e") && (
         <Anime5eBudgetAudit characterId={ch.id} isOwnerOrGm={canEditMech}/>
@@ -379,31 +419,50 @@ export default function CharacterSheet() {
           <div className="label-ref">Core Stats</div>
           <div className="mt-3 grid grid-cols-3 gap-2 text-center">
             {["body", "mind", "soul"].map((s) => (
-              <button key={s} type="button"
-                      onClick={() => roll(`2d6+${s}`, `${ch.name} · ${s} check`)}
-                      className="border border-gold/15 rounded-sm py-3 hover:border-gold/40 hover:bg-gold/5 transition-colors group"
-                      data-testid={`sheet-stat-${s}`}
-                      title={`Roll 2d6+${s} (BESM 4E: meet/beat the Target Number)`}>
-                <div className="label-ref">{s}</div>
-                <div className="font-display text-3xl text-gold">{ch.stats[s]}</div>
-                <div className="text-[9px] font-ui uppercase tracking-widest text-mist/50 group-hover:text-gold-bright">2d6+{s}</div>
-              </button>
+              <div key={s} className="relative">
+                <button type="button"
+                        onClick={() => roll(`2d6+${s}`, `${ch.name} · ${s} check`)}
+                        className="border border-gold/15 rounded-sm py-3 px-2 w-full min-h-[60px]
+                                   hover:border-gold/40 hover:bg-gold/5 transition-colors group"
+                        data-testid={`sheet-stat-${s}`}
+                        title={`Roll 2d6+${s} (BESM 4E: meet/beat the Target Number)`}>
+                  <div className="label-ref">{s}</div>
+                  <div className="font-display text-3xl text-gold">{ch.stats[s]}</div>
+                  <div className="text-[9px] font-ui uppercase tracking-widest text-mist/50 group-hover:text-gold-bright">2d6+{s}</div>
+                </button>
+                {canEditMech && (
+                  <div className="absolute top-1 right-1">
+                    <AddToMacroButton
+                      token={`{stat:${s}}`}
+                      label={s.toUpperCase()}
+                      onOpen={openMacroWith}/>
+                  </div>
+                )}
+              </div>
             ))}
           </div>
           <div className="divider-sigil my-4"/>
           <div className="label-ref">Derived · p.168 BESM 4E</div>
           <div className="mt-3 grid grid-cols-3 gap-2 text-center">
             {[
-              ["CV", ch.derived?.combat_value],
-              ["ATK", ch.derived?.attack_value],
-              ["DEF", ch.derived?.defence_value],
-              ["HP", ch.derived?.health_points],
-              ["EP", ch.derived?.energy_points],
-              ["DM", ch.derived?.damage_multiplier],
-            ].map(([l, v]) => (
-              <div key={l} className="border border-gold/15 rounded-sm py-2">
+              ["CV", ch.derived?.combat_value, "cv"],
+              ["ATK", ch.derived?.attack_value, "atk"],
+              ["DEF", ch.derived?.defence_value, "dfn"],
+              ["HP", ch.derived?.health_points, "hp"],
+              ["EP", ch.derived?.energy_points, "ep"],
+              ["DM", ch.derived?.damage_multiplier, "dm"],
+            ].map(([l, v, tok]) => (
+              <div key={l} className="border border-gold/15 rounded-sm py-2 px-1 relative min-h-[44px]">
                 <div className="label-ref">{l}</div>
                 <div className="font-display text-xl text-gold-bright">{v}</div>
+                {canEditMech && (
+                  <div className="absolute top-0.5 right-0.5">
+                    <AddToMacroButton
+                      token={`{derived:${tok}}`}
+                      label={l}
+                      onOpen={openMacroWith}/>
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -526,6 +585,12 @@ export default function CharacterSheet() {
                           className="btn btn-ghost text-xs" data-testid={`attr-roll-${i}`}>
                     <Dice6 className="w-3 h-3"/> 2d6
                   </button>
+                  {/* V6.25.10 — Add this attribute to a Quick-Roll macro slot. */}
+                  <AddToMacroButton
+                    token={`{attr:${a.name}}`}
+                    label={a.display_name || a.name}
+                    onOpen={openMacroWith}
+                    hide={!canEditMech}/>
                 </div>
                 );
               })}
@@ -571,6 +636,11 @@ export default function CharacterSheet() {
                     </div>
                   </div>
                   <span className="text-ember font-display">+{d.points_per_rank * d.rank}</span>
+                  <AddToMacroButton
+                    token={`{def:${d.name}}`}
+                    label={d.name}
+                    onOpen={openMacroWith}
+                    hide={!canEditMech}/>
                 </div>
               ))}
             </div>
@@ -636,6 +706,11 @@ export default function CharacterSheet() {
                   </div>
                   <button onClick={() => roll("2d6", `${s.group} skill roll`)}
                           className="btn btn-ghost text-xs"><Dice6 className="w-3 h-3"/> Roll</button>
+                  <AddToMacroButton
+                    token={`{skill:${s.group || s.name}}`}
+                    label={s.group || s.name || "skill"}
+                    onOpen={openMacroWith}
+                    hide={!canEditMech}/>
                 </div>
                 );
               })}
@@ -830,12 +905,20 @@ function SheetTabBar({ value, onChange }) {
     { id: "inventory", label: "Inventory", hint: "Gear, cyphers, power packs, magic items" },
     { id: "history",   label: "History",   hint: "Journal, XP log, character audit" },
   ];
+  // V6.25.10 — Mobile Sweep V3: sticky-header collapse on the
+  // character sheet (mirrors the Campaign Hub treatment from V6.25.6).
+  // The tab strip pins to the top when the user scrolls long sheets,
+  // so the player never loses tab orientation. Touch-target audit:
+  // each pill now has min-height 44px on coarse pointers via the
+  // global `.btn` rule + an explicit min-h-[40px] floor here.
   return (
-    <div className="mt-4 flex gap-1 flex-wrap border-b border-gold/20 pb-1"
+    <div className="mt-4 flex gap-1 flex-nowrap overflow-x-auto sm:flex-wrap
+                       border-b border-gold/20 pb-1
+                       sticky top-12 sm:top-0 z-30 bg-void/95 backdrop-blur-sm"
          data-testid="sheet-tabs">
       {tabs.map((t) => (
         <button key={t.id} onClick={() => { onChange(t.id); try { window.location.hash = t.id; } catch (_) {} }}
-                className={`px-3 py-1.5 text-[11px] uppercase tracking-widest font-ui rounded-t-sm transition-colors ${value === t.id ? "bg-gold/15 text-gold-bright border-b-2 border-gold" : "text-mist hover:bg-gold/5"}`}
+                className={`px-3 py-2 min-h-[40px] text-[11px] uppercase tracking-widest font-ui rounded-t-sm transition-colors whitespace-nowrap ${value === t.id ? "bg-gold/15 text-gold-bright border-b-2 border-gold" : "text-mist hover:bg-gold/5"}`}
                 title={t.hint}
                 data-testid={`sheet-tab-${t.id}`}>
           {t.label}

@@ -6,9 +6,11 @@ from besm_data import (
     AUREA_CUSTOM_POWER_PACKS, AUREA_CUSTOM_SKILLS, AUREA_RULE_NOTE,
     BOOK, BOOK_EXTRAS, COMPANIONS, CORE_STATS, DEFECTS, DEFAULT_SYSTEM_ID,
     DERIVED_VALUES, ENHANCEMENTS, EXTRAS_RULES, GAME_SYSTEMS,
-    GENERIC_BLURBS, ITEMS_GEAR, LIMITERS, NODE_TYPES, POWER_LEVELS,
+    GENERIC_BLURBS, ITEMS_GEAR, ITEM_ENHANCEMENTS, ITEM_LIMITERS,
+    LIMITERS, NODE_TYPES, POWER_LEVELS,
     RACE_TEMPLATES, SIZE_MODIFIERS, SIZE_TEMPLATES, SKILL_GROUPS,
-    TARGET_NUMBERS, WEAPONS, attribute_blurb, attribute_whitelist,
+    TARGET_NUMBERS, WEAPONS, WEAPON_ENHANCEMENTS, WEAPON_LIMITERS,
+    attribute_blurb, attribute_whitelist,
     defect_blurb, enhancement_blurb, extras_blurb, limiter_blurb,
     power_level_blurb, with_source,
 )
@@ -39,6 +41,23 @@ async def besm_reference():
         "defects": [enrich_def(d) for d in with_source(DEFECTS)],
         "enhancements": [{**e, "blurb": enhancement_blurb(e["name"])} for e in with_source(ENHANCEMENTS)],
         "limiters": [{**lim, "blurb": limiter_blurb(lim["name"])} for lim in with_source(LIMITERS)],
+        # V6.25.10 — item / weapon-specific Enhancement & Limiter pools
+        # from BESM Extras Ch.3. Gated client-side: a Force Field
+        # Attribute can't pull from these; only Item / Weapon-class
+        # Attributes (Item, Weapon, Gear, Vehicle, Companion) surface
+        # them in their Customise picker.
+        "weapon_enhancements": [
+            {**e, "blurb": e.get("note") or "Weapon-specific Enhancement (BESM Extras)."}
+            for e in with_source(WEAPON_ENHANCEMENTS, source_book=BOOK_EXTRAS)],
+        "weapon_limiters": [
+            {**lim, "blurb": lim.get("note") or "Weapon-specific Limiter (BESM Extras)."}
+            for lim in with_source(WEAPON_LIMITERS, source_book=BOOK_EXTRAS)],
+        "item_enhancements": [
+            {**e, "blurb": e.get("note") or "Item-specific Enhancement (BESM Extras)."}
+            for e in with_source(ITEM_ENHANCEMENTS, source_book=BOOK_EXTRAS)],
+        "item_limiters": [
+            {**lim, "blurb": lim.get("note") or "Item-specific Limiter (BESM Extras)."}
+            for lim in with_source(ITEM_LIMITERS, source_book=BOOK_EXTRAS)],
         "skill_groups": with_source(SKILL_GROUPS),
         "power_levels": [enrich_pl(p) for p in with_source(POWER_LEVELS)],
         "node_types": NODE_TYPES,

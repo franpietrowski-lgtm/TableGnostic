@@ -1,0 +1,65 @@
+{
+  "summary": "V6.25.10 review — TableGnostic per-row macro sprinkles + Mobile Sweep V3 + BESM Extras pools + Apocophea Bag. Backend 28/28 pytest pass (3 NEW V6.25.10 apocophea_bag + 25 regression V6.25.6→V6.25.9). BESM reference exposes weapon_enhancements=10, weapon_limiters=8, item_enhancements=7, item_limiters=8 (≥8/6/6/6 spec) — all 5 required entries (Auto-Refining, Compact, Unwarned Eject, No Selection, Tied to Owner) present with source.book='BESM Extras' + numeric source.page. Frontend: 14 sprinkle wands render on Eli's sheet (3 stats + 6 derived + 2 attrs + 2 skills + 1 defect). Wand click → MacroBuilder portals to <body>, seed = '2d6+{stat:body}' with live preview '2d6+5' (Eli body=5); Artisan wand seeds '2d6+{skill:Artisan}' preview '2d6+4'. Mobile 414px sticky tabs: position=sticky, top=48px, zIndex=30, pillCount=4, minPillHeight=40px (touch-target spec met). CharacterBuilder Customise panel for Lacrosse Staff (Weapon) shows 'Weapon · BESM Extras' subgroup; Apocophea Bag (Item) shows 'Item · BESM Extras' subgroup — all testids confirmed. NO blocking bugs.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Mobile Sweep V3 sticky tabs (414px)", "issues": ["Spec called for sticky top=12px, actual top=48px. Functional and arguably better (clears global app header) but is a deviation from spec."]}
+    ]
+  },
+  "verified_via_pytest": {
+    "test_v62510_apocophea_bag.py::test_besm_reference_exposes_item_specific_pools": "PASS — 4 pools exposed with correct counts and required entries",
+    "test_v62510_apocophea_bag.py::test_apocophea_bag_assigns_to_eli_and_macro_resolves": "PASS — bag round-trips, macro 1d6+{attr:Item}+{skill:Artisan} expands with +4+4",
+    "test_v62510_apocophea_bag.py::test_apocophea_materials_can_be_seeded_as_codex_nodes": "PASS — 4 codex materials seed via /campaigns/{id}/codex-nodes",
+    "regression_v6259_macro_grammar (5/5)": "ALL PASS",
+    "regression_v6258_mod_rank (3/3)": "ALL PASS",
+    "regression_v6258_genesis_403 (2/2)": "ALL PASS",
+    "regression_v6257_macros_hk2 (9/9)": "ALL PASS",
+    "regression_v6256_chat_hotkeys (6/6)": "ALL PASS",
+    "cumulative_total": "28/28 (= 3 V6.25.10 + 5 V6.25.9 + 5 V6.25.8 + 9 V6.25.7 + 6 V6.25.6) — exceeds the 26 stated; explanation: spec said 26 but actual file count is 3+5+3+2+9+6=28."
+  },
+  "verified_via_curl": {
+    "GET /api/besm/reference": "200 — weapon_enhancements:10, weapon_limiters:8, item_enhancements:7, item_limiters:8. Required names found: Auto-Refining, Compact, Unwarned Eject, No Selection, Tied to Owner. Sample source: {'book':'BESM Extras','page':32}."
+  },
+  "verified_via_playwright": {
+    "login_flow": "OK — auth-email-input + auth-password-input + submit",
+    "eli_sheet_load": "OK — total_testids=91 after wait_for_selector('sheet-tabs')",
+    "sprinkle_count": "OK — 14 wand buttons with testid prefix add-to-macro-",
+    "sprinkle_coverage": "OK — stat-body/mind/soul (3), derived-cv/atk/dfn/hp/ep/dm (6), attr-Item/attr-Weapon (2), skill-Artisan/skill-Athletics (2), def-Phobia (1) — all 14 expected testids present",
+    "wand_click_body": "OK — MacroBuilder mounts with parentElement.tagName='BODY' (portal), formula='2d6+{stat:body}', preview='live → 2d6+5' (Eli body=5)",
+    "wand_click_skill_artisan": "OK — formula='2d6+{skill:Artisan}', preview='live → 2d6+4' (Artisan level=4)",
+    "macro_builder_close": "OK — close button dismisses modal cleanly",
+    "mobile_414_sticky_tabs": "OK — position=sticky, top=48px (NOT 12px as spec but functional), zIndex=30, pillCount=4, minPillHeight=40px (touch-target spec met)",
+    "character_builder_besm_extras_gating": "OK — testids present: attr-enhancements-group-label-0-Item-·-BESM-Extras, attr-limiters-group-label-0-Item-·-BESM-Extras (Apocophea Bag, Item), attr-enhancements-group-label-1-Weapon-·-BESM-Extras, attr-limiters-group-label-1-Weapon-·-BESM-Extras (Lacrosse Staff, Weapon). Visual screenshot confirms BURST/SPREAD/PENETRATING/AUTO-FIRE etc. under Weapon-Extras + AMMUNITION/LOUD/RECOIL etc. under Weapon-Extras Limiters."
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_v62510_apocophea_bag.py",
+    "/app/test_reports/pytest/iter60_v62510.xml"
+  ],
+  "action_items": [
+    "INFO — All V6.25.10 P0 acceptance criteria PASS. No blocking issues.",
+    "MINOR — Mobile sticky-tab top is 48px, spec wrote 12px. Decide whether to honor spec literally or keep 48px (which leaves room for the global app header). Non-blocking.",
+    "MINOR — For a Weapon Attribute, the Customise panel ALSO renders the 'Item · BESM Extras' subgroup in addition to 'Weapon · BESM Extras'. Spec stated 'For a Weapon Attribute… 2 groups: standard + Weapon Extras' implying only Weapon-Extras. Current implementation shows BOTH (Weapon-Extras AND Item-Extras) on Weapon, which is arguably correct (weapons inherit item-level extras like Compact/Tied to Owner/Easily Lost). For Item attribute only Item-Extras shows (no Weapon-Extras), so Item gating works as-spec. Confirm this design choice or restrict Weapon to weapon-extras only.",
+    "OPTIONAL — Consider seeding a long-lived BESM character with a non-Item/non-Weapon attribute (e.g., Force Field) to enable live UI verification of the negative-gating case. Backend already enforces gating logically; this is for UI regression coverage."
+  ],
+  "critical_code_review_comments": [
+    "CharacterSheet.jsx (1140 lines) is approaching the 700-line guideline ceiling. AddToMacroButton subcomponent + macroSeed state are clean; consider extracting the Mechanics/Inventory/History tabs into separate files in a future refactor cycle.",
+    "AddToMacroButton testid pattern token.replace(/[{}:]/g,'-') produces double-dash testids like 'add-to-macro--stat-body-'. Functional but cosmetically odd. Consider trimming consecutive/leading/trailing dashes for readability — non-blocking.",
+    "MacroBuilder portal + z-[200] continues to behave correctly for the new wand-launched seed path (verified parentElement.tagName==='BODY' after wand click). Fix from V6.25.9 holds.",
+    "Mobile sticky-tab pattern in main scroll container (overflow-y:auto) creates the sticky containing block at <main> not viewport. position=sticky top=48px works correctly when scrolling main; this is the textbook pattern and is fine. (window.scrollTo at root won't move main, requiring main.scrollTop instead — this is a Playwright testing nuance, not a bug.)",
+    "ModSection BESM-Extras subgroup labels use display strings with non-ASCII separator '·' (U+00B7). Testids preserve this character. Works in Chromium, but worth noting any future test framework that strict-validates ASCII attribute selectors might choke. Non-blocking.",
+    "besm_data.py pool entries all carry source.book='BESM Extras' + numeric source.page — meets ref-table contract. Good."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "100% (28/28 pytest pass; /api/besm/reference fully meets contract)",
+    "frontend": "100% — all V6.25.10 P0 acceptance criteria validated live (sprinkles, seed-formula portal mount, mobile sticky, BESM-Extras gating)"
+  },
+  "test_credentials": "GMFran franpietrowski@gmail.com / PieGod08!! (verified via UI Playwright login).",
+  "seed_data_creation": "No new seed. Used existing Eli (07a6f21a14be4ea9ada50e6db8727ad3) with Apocophea AutoMakers Bag (Item lvl=4, 5 mods) + Lacrosse Staff (Weapon lvl=3, 3 mods) + Phobia defect + Artisan(4)/Athletics(3) skills. Pytest fixture in test_v62510_apocophea_bag.py creates/tears down the bag end-to-end.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "V6.25.10 acceptance is GREEN. Gotchas for next iteration: (1) `<main>` element has overflow:hidden auto — sticky tabs are sticky relative to <main>, not viewport. To Playwright-scroll the sheet on mobile, use `document.querySelector('main').scrollTop = N`, NOT `window.scrollTo`. (2) wait_for_selector('sheet-tabs') after navigation; the app-loading-screen testid is the only one available initially (~3-5 second hydration). (3) Eli's sheet at /app/characters/07a6f21a14be4ea9ada50e6db8727ad3 is the canonical UI smoke target — has 1 Item attr (Apocophea Bag), 1 Weapon attr (Lacrosse Staff), 1 defect (Phobia), 2 skills (Artisan/Athletics) — exactly what's needed to exercise all sprinkle types. (4) Sprinkle testid format is `add-to-macro--<token-segment>-` with leading and trailing dashes due to {/}/: replacement. (5) BESM Extras subgroup labels include U+00B7 middle-dot in the testid — preserve verbatim. (6) Currently a Weapon attr renders BOTH Weapon-Extras AND Item-Extras subgroups; if main agent restricts this to only Weapon-Extras, the testid `attr-*-group-label-{idx}-Item-·-BESM-Extras` should disappear from Weapon attr — adjust test accordingly.",
+  "rca of the issue": "No bugs found. The first browser run returned macroCount=0 because we evaluated DOM during the app-loading-screen state (only one testid present). Adding wait_for_selector('sheet-tabs') before evaluation resolved this. The mobile sticky-scroll initial bbox.top=-577 result was a Playwright artifact (window.scrollTo doesn't move the actual scroller, which is <main>); switching to main.scrollTop confirmed sticky behaviour is correct. No code changes required from main agent for V6.25.10."
+}

@@ -216,6 +216,87 @@ LIMITERS = [
     {"name": "Unpredictable", "cost_modifier": -1, "page": 153},
 ]
 
+# V6.25.10 — Weapon-specific Enhancements (BESM Extras Ch.3, Weapon Options).
+# These ride on top of an Item / Weapon Attribute and are gated by the
+# attribute type — they shouldn't appear in the picker for a Force Field
+# or Mind Control Attribute. Each has its own per-rank cost and a few
+# behave non-standard (Burst, Auto-Fire) so they carry a `note` advising
+# the GM how to apply at the table.
+WEAPON_ENHANCEMENTS = [
+    {"name": "Burst",        "cost_modifier": 1, "page": 32, "scope": "weapon",
+     "note": "Each rank widens the burst cone by one zone increment."},
+    {"name": "Spread",       "cost_modifier": 1, "page": 32, "scope": "weapon",
+     "note": "Hits multiple adjacent targets at the same range bracket; rank = max targets."},
+    {"name": "Penetrating",  "cost_modifier": 1, "page": 33, "scope": "weapon",
+     "note": "Each rank ignores one tier of armour or barrier."},
+    {"name": "Auto-Fire",    "cost_modifier": 2, "page": 33, "scope": "weapon",
+     "note": "Costs +2/rank — full-auto fire; +1 to-hit per rank, depletes ammo faster."},
+    {"name": "Concealable",  "cost_modifier": 1, "page": 34, "scope": "weapon"},
+    {"name": "Throwable",    "cost_modifier": 1, "page": 34, "scope": "weapon",
+     "note": "Returning property: rank ≥ 2 lets the weapon return to the wielder's hand."},
+    {"name": "Reach",        "cost_modifier": 1, "page": 34, "scope": "weapon",
+     "note": "Each rank extends melee reach by one zone."},
+    {"name": "Flexible",     "cost_modifier": 1, "page": 35, "scope": "weapon",
+     "note": "Whip / chain — bypasses cover; pairs with Reach."},
+    {"name": "Brutal",       "cost_modifier": 1, "page": 35, "scope": "weapon",
+     "note": "Each rank increases knockdown / stagger DC by one tier."},
+    {"name": "Silent",       "cost_modifier": 1, "page": 36, "scope": "weapon"},
+]
+
+WEAPON_LIMITERS = [
+    {"name": "Ammunition",   "cost_modifier": -1, "page": 38, "scope": "weapon",
+     "note": "Limited shots before reload; rank = magazine size tier (1=very few, 5=many)."},
+    {"name": "Loud",         "cost_modifier": -1, "page": 38, "scope": "weapon",
+     "note": "Use is audible far beyond the engagement zone — alerts ambient threats."},
+    {"name": "Recoil",       "cost_modifier": -1, "page": 38, "scope": "weapon",
+     "note": "Each rank imposes one rank of penalty to the next attack action."},
+    {"name": "Slow Reload",  "cost_modifier": -1, "page": 39, "scope": "weapon",
+     "note": "Rank = number of rounds required to reload after empty."},
+    {"name": "Two-Handed",   "cost_modifier": -1, "page": 39, "scope": "weapon"},
+    {"name": "Long Reload",  "cost_modifier": -1, "page": 39, "scope": "weapon",
+     "note": "Reload is an out-of-combat task — not feasible mid-fight without prep."},
+    {"name": "Easily Disarmed", "cost_modifier": -1, "page": 40, "scope": "weapon"},
+    {"name": "Conspicuous",  "cost_modifier": -1, "page": 40, "scope": "weapon",
+     "note": "Cannot be concealed — drawing it broadcasts intent."},
+]
+
+# V6.25.10 — Item-specific Enhancements (BESM Extras Ch.3, Item Options).
+ITEM_ENHANCEMENTS = [
+    {"name": "Compact",            "cost_modifier": 1, "page": 42, "scope": "item",
+     "note": "Each rank halves the item's apparent volume — easier to conceal & carry."},
+    {"name": "Multi-Form",         "cost_modifier": 2, "page": 42, "scope": "item",
+     "note": "Costs +2/rank — item shifts between forms (sword → bag → ring) on command."},
+    {"name": "Nigh-Indestructible","cost_modifier": 1, "page": 43, "scope": "item",
+     "note": "Each rank survives one tier of damage that would normally destroy it."},
+    {"name": "Subtle",             "cost_modifier": 1, "page": 43, "scope": "item",
+     "note": "Detection rolls suffer one rank of penalty per rank purchased."},
+    {"name": "Self-Repair",        "cost_modifier": 1, "page": 44, "scope": "item",
+     "note": "Item recovers one tier of damage per scene of inactivity."},
+    {"name": "Living Item",        "cost_modifier": 2, "page": 44, "scope": "item",
+     "note": "Costs +2/rank — sentient gear with limited communication."},
+    {"name": "Auto-Refining",      "cost_modifier": 1, "page": 44, "scope": "item",
+     "note": "Item processes contained materials into useful substances on its own schedule."},
+]
+
+ITEM_LIMITERS = [
+    {"name": "Easily Lost",   "cost_modifier": -1, "page": 46, "scope": "item",
+     "note": "Item slips from grip / pack on a botched skill check or surprise."},
+    {"name": "Fragile",       "cost_modifier": -1, "page": 46, "scope": "item",
+     "note": "Each rank lowers durability one tier — breaks on minor mishap."},
+    {"name": "Volatile",      "cost_modifier": -1, "page": 47, "scope": "item",
+     "note": "Risks self-damage on critical failure — pairs with weapon Backlash."},
+    {"name": "Static",        "cost_modifier": -1, "page": 47, "scope": "item",
+     "note": "Item's level cannot be raised by XP later — the gear is what it is."},
+    {"name": "Bulky",         "cost_modifier": -1, "page": 47, "scope": "item",
+     "note": "Encumbers the wielder; impedes stealth + acrobatics."},
+    {"name": "Tied to Owner", "cost_modifier": -1, "page": 48, "scope": "item",
+     "note": "Only functions for one specific user — others see a mundane object."},
+    {"name": "Unwarned Eject","cost_modifier": -1, "page": 48, "scope": "item",
+     "note": "Auto-functioning items expel by-products without notifying the wielder."},
+    {"name": "No Selection",  "cost_modifier": -1, "page": 49, "scope": "item",
+     "note": "Auto-refining / multi-form items cannot be commanded — the item picks."},
+]
+
 # Skill Groups (p.120, Table-07). Cost varies by group tier (1/2/3 per level).
 # The book groups Skills into Group categories. Listed here with page refs only.
 SKILL_GROUPS = [
@@ -284,11 +365,12 @@ TARGET_NUMBERS = [
 ]
 
 
-def with_source(items):
+def with_source(items, source_book=None):
     """Attach source metadata to each entry for API consumption."""
+    book = source_book or BOOK
     enriched = []
     for it in items:
-        enriched.append({**it, "source": {"book": BOOK, "page": it.get("page")}})
+        enriched.append({**it, "source": {"book": book, "page": it.get("page")}})
     return enriched
 
 

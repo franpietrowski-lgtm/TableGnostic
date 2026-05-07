@@ -243,11 +243,22 @@ export default function MacroBuilder({
             {attrs.map((a, i) => {
               const eff = _effLevel(a);
               const tok = `{attr:${a.name}}`;
+              const limR = (a.limiters || []).reduce((s, m) => s + (typeof m === "string" ? 1 : Math.max(1, +m.rank || Math.abs(+m.value || 0) || 1)), 0);
+              const enhR = (a.enhancements || []).reduce((s, m) => s + (typeof m === "string" ? 1 : Math.max(1, +m.rank || Math.abs(+m.value || 0) || 1)), 0);
+              // Helpful tooltip showing the eff-level breakdown so users
+              // learn the math while authoring macros.
+              const tooltip =
+                `${a.display_name || a.name} (${a.name}) → eff ×${eff}\n`
+                + `  base level ×${a.level || 1}`
+                + (limR ? ` + ${limR} limiter rank${limR === 1 ? "" : "s"}` : "")
+                + (enhR ? ` − ${enhR} enhancement rank${enhR === 1 ? "" : "s"}` : "")
+                + `\nClick to insert ${tok} — resolves to +${eff} at fire-time.`;
               return (
                 <TokenChip key={`${a.name}-${i}`}
                            token={tok}
                            display={a.display_name || a.name}
                            hint={`eff ×${eff}`}
+                           tooltipOverride={tooltip}
                            onPick={append}/>
               );
             })}
@@ -331,14 +342,14 @@ function ChipGroup({ label, testid, children }) {
   );
 }
 
-function TokenChip({ token, display, hint, tone, onPick }) {
+function TokenChip({ token, display, hint, tone, tooltipOverride, onPick }) {
   const toneCls = tone === "ember"
     ? "border-ember/40 hover:border-ember"
     : "border-gold/30 hover:border-gold-bright";
   return (
     <button type="button"
             onClick={() => onPick(token)}
-            title={token}
+            title={tooltipOverride || token}
             className={`tag inline-flex items-center gap-1 ${toneCls}`}
             data-testid={`macro-chip-${token.replace(/[{}:]/g, "-")}`}>
       <span>{display}</span>

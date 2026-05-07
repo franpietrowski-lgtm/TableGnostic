@@ -14,6 +14,63 @@
 
 ## 2. Implemented (cumulative, condensed)
 
+### V6.25.10 — Per-row macro sprinkles + BESM Extras item/weapon mods + Mobile Sweep V3 + Apocophea demo (2026-02-08)
+
+User-flagged: (1) per-row "Add to macro" sprinkles, (2) Mobile Sweep V3 (sticky header + touch targets), (3) BESM Extras weapon/item-specific Enhancements + Limiters from core + Extras books, (4) end-to-end demo with Eli's Apocophea AutoMakers Bag, (5) helpful tooltip hints from screenshots, (6) confirm slash-command vs slot-fire equivalence (CONFIRMED — both paths fire identical resolver: slot uses inline `body=/<macro>+mod`; chat uses raw `/<macro> +mod`).
+
+**🔴 P0 — Per-row "Add to macro" sprinkles** (`CharacterSheet.jsx`)
+- Small `Wand2` icon button injected next to: BESM stat tiles (BODY/MIND/SOUL), every Derived tile (CV/ATK/DFN/HP/EP/DM), every Attribute roll cell, every Skill roll cell, every Defect row.
+- Click → opens `MacroBuilder` modal pre-seeded with `seedFormula = "2d6+{token}"` for the row clicked. The token grammar matches the V6.25.9 backend resolver byte-for-byte.
+- Owner / GM only — read-only viewers don't see the affordance (`canEditMech` guard).
+- Stats / Derived tiles got `min-h-[44px]` touch targets and `relative` positioning so the wand pins to the corner without disturbing the existing roll click area.
+
+**💎 BESM Extras weapon/item-specific Enhancements & Limiters** (`besm_data.py`, `routes/besm.py`, `CharacterBuilder.jsx`)
+- New BESM Extras Ch.3 mod pools seeded with TableGnostic descriptive blurbs + `source_book: "BESM Extras"` + page references:
+  - **Weapon Enhancements** (10): Burst, Spread, Penetrating, Auto-Fire, Concealable, Throwable, Reach, Flexible, Brutal, Silent.
+  - **Weapon Limiters** (8): Ammunition, Loud, Recoil, Slow Reload, Two-Handed, Long Reload, Easily Disarmed, Conspicuous.
+  - **Item Enhancements** (7): Compact, Multi-Form, Nigh-Indestructible, Subtle, Self-Repair, Living Item, Auto-Refining.
+  - **Item Limiters** (8): Easily Lost, Fragile, Volatile, Static, Bulky, Tied to Owner, Unwarned Eject, No Selection.
+- Non-standard cost mods carried (e.g., Auto-Fire +2/rk, Multi-Form +2/rk, Living Item +2/rk).
+- Exposed via `GET /api/besm/reference` as `weapon_enhancements`, `weapon_limiters`, `item_enhancements`, `item_limiters` — Reference Editor + Custom Rules forms can pick from them.
+- `with_source(items, source_book=BOOK_EXTRAS)` extension lets the same helper attach the right book.
+- Frontend `ModSection` gates by attribute type:
+  - `Weapon` Attribute → also surfaces the Weapon-specific pool grouped under "Weapon · BESM Extras".
+  - Item-like Attributes (Item, Gear, Vehicle, Companion, etc. via `ITEM_LIKE_ATTRS`) → also surfaces the Item-specific pool grouped under "Item · BESM Extras".
+  - Item / weapon-scoped mods bypass the per-attribute whitelist (they're already gated by attribute TYPE).
+- Tooltip on each chip surfaces page reference + source book + non-standard cost note (e.g., "+2/rk").
+
+**📱 Mobile Sweep V3** (`CharacterSheet.jsx`)
+- `SheetTabBar` is now `sticky top-12 sm:top-0 z-30 bg-void/95 backdrop-blur-sm` so the tabs pin while scrolling long sheets.
+- Tab pills got `min-h-[40px]` + `py-2` (touch target) and `whitespace-nowrap` + `flex-nowrap overflow-x-auto` on mobile so the row scrolls horizontally instead of wrapping into the content area.
+- BESM stat tiles + Derived tiles now have explicit `min-h-[44px]` floors and `relative` containers for the macro sprinkle button.
+
+**🌀 Apocophea AutoMakers Bag end-to-end demo** (`tests/test_v62510_apocophea_bag.py`)
+- 3/3 tests passing:
+  1. `GET /api/besm/reference` exposes all four new pools with correct source-book + blurbs.
+  2. Apocophea AutoMakers Bag (Item ×4, Auto-Refining ×2 + Compact + Unwarned Eject + No Selection + Tied to Owner) round-trips through `PUT /api/characters/{id}` and macros referencing `{attr:Item}` resolve to effective level 4 (`base 4 + 3 limiter ranks − 3 enhancement ranks`).
+  3. The four refined-material codex nodes (Powdered Mithral, Cleaned Spider Silk, Charming Scent Extract, Pickling Brine) seed into the campaign codex via `POST /api/campaigns/{id}/codex-nodes` for GMs to use in loot generation / encounter design.
+- Demo character `Eli` lives at `/app/characters/07a6f21a14be4ea9ada50e6db8727ad3` with the bag + a Lacrosse Staff (Throwable + Reach ×2 + Two-Handed) so GMFran can manually validate.
+
+**📸 Helpful tooltip hints** (`MacroBuilder.jsx`)
+- Attribute chips in the MacroBuilder now have multi-line tooltips showing the eff-level math breakdown:
+  > `Apocophea AutoMakers Bag (Item) → eff ×4`
+  > `  base level ×4 + 3 limiter ranks − 3 enhancement ranks`
+  > `Click to insert {attr:Item} — resolves to +4 at fire-time.`
+- This pattern is the template for tooltip hints on future fields — show what it RESOLVES TO, not what it IS.
+
+**🔁 Slash command vs slot fire equivalence** (verified, no code change)
+- Both the Quick-Roll Bar slot button AND chat `/<macroname>` typing route through `POST /api/channels/{chid}/messages`. The QRB injects `body = "/<name> +mod"` plus the explicit `character_id`; chat typing produces the same resolver path. **Player can fire any saved macro from chat OR thread by name**, AND from the bound slot. Confirmed by V6.25.9 + V6.25.7 test suites.
+
+**Testing**
+- 26/26 cumulative pytest pass: 3 new V6.25.10 + 5 V6.25.9 + 3 V6.25.8 + 9 V6.25.7 + 6 V6.25.6 = 26 green; zero regressions.
+- All touched files lint clean.
+- Live screenshots captured (`/tmp/v62510_*.png`) demonstrate Eli's sheet + macro builder dropdown showing character-bound chips with eff-level hints.
+
+**Deferred / explicit follow-ups**
+- 🟡 P2 — Strict Permission Gating (players → GM approval queue for codex/genesis edits): substantial multi-endpoint work, scheduled for next session.
+- 🟡 P2 — Anime 5E + D&D class library to level 20 with cross-system auto-conversion: major catalog seeding effort, scheduled for next session.
+- 🟦 Enhancement: Reference Editor UI to compose Items/Weapons FIRST and then assign — the backend pools support it; the form just needs the `kind: "weapon" | "item"` picker + filtered mod chooser. Marketplace V1 already stores arbitrary custom rules so the publishing path is ready.
+
 ### V6.25.9 — Character-aware macros + Z-index portal fix + Landing-page ideation (2026-02-08)
 
 User flagged three things: (1) the macro popup's tokens looked D&D-specific and didn't reference the player's actual character sheet — they wanted a builder that surfaces THIS character's attributes (with effective level), skills, defects, derived values, and HP/EP for click-to-insert; (2) the macro creator popup was rendering BEHIND the next scroll section (z-index / stacking context bug); (3) requested a `landingpageideation.md` strategic blueprint covering pitch, vision, asset inventory, copy, and theme.
