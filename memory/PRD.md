@@ -14,6 +14,53 @@
 
 ## 2. Implemented (cumulative, condensed)
 
+### V6.25.14-V6.25.18 — World Tree lattice + Anime 5E attributes seed + D&D legacy conversion + Private campaign access + Mobile Sweep V3 (2026-02-09)
+
+User-driven five-item cycle in priority order: (1) **World Tree UI/UX revamp** into a staggered three-column lattice with SVG dotted cross-pillar bridges as first-class clickable narrative seeds; (2) **Anime 5E canonical Attributes seed** from PDF p.91+ replacing the placeholder roster; (3) **D&D 5E → Anime 5E legacy class conversion** mapping (PDF pp.82-88, all 12 classes); (4) **Private campaign access** via campaign-level join-passwords + named share-links with optional password / expiry / max-uses; (5) **Mobile Sweep V3** finalisation with a `.touch-target` CSS utility for tight icon-only buttons.
+
+**🌳 World Tree lattice (V6.25.14)** (`WorldTreeLattice.jsx`, `routes/world_creation.py::CREATION_TREE_SCHEMA`)
+- Brand-new `WorldTreeLattice.jsx` mounted as the default `Lattice` view-mode in `WorldCreationTree.jsx` (alongside Pillars / Graph). Three staggered branch columns (Population · Geography · History) with `useLayoutEffect`-measured `BranchCard` refs feeding an absolute-positioned SVG overlay that paints **dotted cross-pillar bridges** between paired cards.
+- `CREATION_TREE_SCHEMA.cross_pillar_links` rebuilt to mirror the canonical "World Building Charts" infographic (Shieldice Studio): **25 canonical bridges** including Population.Laws→Geography.Countries, Population.Wars→Geography.Continents, Population.Beliefs→History.Truth+Lies, Population.Conflicts→Geography.Man-made Borders, Population.Factions→Geography.Locations, Population.Races→Geography.Biomes, Geography.Magic→Natural Laws, History.Truth↔History.Lies. Population pillar gained `Wars` and `Conflicts` branches as first-class entries.
+- New `BRIDGE_PROMPTS` map (~25 entries): each bridge ships a contextual narrative-seed prompt (e.g. "What law of {src} shapes the moral fibre of {tgt}? Whose crime is unforgivable here, and whose is winked at?"). Surfaced as a top-level field on `/creation-tree`.
+- New endpoint `POST /api/campaigns/{cid}/world-tree/bridge-sow` creates twin codex nodes (one per `Pillar.Branch`) with a `creation_tree.via_bridge` provenance flag PLUS a `relationship_type`-tagged `codex_edges` row connecting them. Click a bridge → `BridgePromptModal` opens with the prompt → submit → permanent two-node sub-graph in the codex.
+- `History` column gains a clickable `history_lenses` strip (Political / Cultural / Social / Economic / Diplomatic) that filters the History column to only nodes tagged that way.
+- `BridgesAccordion` renders the bridges as a list on `<md` viewports (SVG hides) so mobile users still get the prompts.
+- 4/4 backend tests passing (`test_v62514_world_tree_lattice.py`).
+
+**📚 Anime 5E canonical attributes (V6.25.15)** (`system_data/anime5e_data.py`)
+- `POINT_BUY_ATTRIBUTES` rewritten from a 9-entry placeholder to the canonical **64-attribute roster** extracted from the Anime 5E core PDF pp.91-130. Every entry carries `name + cost_per_level + page + category + blurb_role`.
+- 7 categories (combat / defensive / mental / physical / social / supernatural / utility) cover everything from `AC Bonus` and `Combat Mastery` to `Dynamic Powers`, `Pocket Dimension`, `Mulligan`, `Item` (which keeps the V6.25.11 ½-cost flag), `Wealth`, and the Lesser variants (`Telepathy – Lesser`, `Mind Control – Lesser`, `Size Change – Lesser`, etc.).
+- All canonical CP costs match the printed values verified against the rulebook (e.g. `Dynamic Powers = 10 pts/Rank`, `Companion = 5`, `Item = 4`, `Mulligan = 1`, `Telepathy = 3`, `Teleport = 5`, `Size Change = 5`).
+- 2/2 backend tests passing (`test_v62515_anime5e_attributes.py`).
+
+**🔄 D&D 5E → Anime 5E legacy conversion (V6.25.16)** (`system_data/dnd_to_anime5e_conversion.py`, `routes/besm.py::anime5e_dnd_conversion`)
+- New `DND_TO_ANIME5E_CLASS_MAP` covering all 12 PHB classes (Barbarian → Wizard) with: target Anime 5E core class id (from the canonical 14-class roster), curated list of Anime 5E approved attributes with starter ranks, suggested defects, and a deconstruction notes blurb.
+- All recommended attributes are validated against the canonical attribute roster — the test `test_dnd_conversion_attributes_match_canonical_roster` will fail loudly if either seed drifts out of sync.
+- Examples: Fighter → Samurai (Combat Mastery 4, Combat Technique 3, Extra Actions 1, AC Bonus 2, Armour Proficiency 2; defects Honour, Wanted, Marked); Wizard → Dynamic Spellbinder (Spell-Like Ability 5, Spell Amplification 2, Energised 2, Skill Proficiency 1).
+- Endpoint: `GET /api/anime5e/dnd-conversion?dnd_class=Fighter` (single) or no param (full mapping).
+- Used to be only a P3 backlog item — promoted to P0 this cycle and shipped end-to-end.
+- 5/5 backend tests passing (`test_v62516_dnd_conversion.py`).
+
+**🔒 Private campaign access (V6.25.17)** (`routes/campaigns.py`, `PrivateAccessPanel.jsx`, `Invite.jsx`, `ShareLink.jsx`)
+- **Campaign-level join password**: `POST /api/campaigns/{cid}/access-password` (GM-only) sets/clears a bcrypted password. The existing `/invites/{token}/accept` flow now refuses 403 on wrong/missing password; `/invites/{token}` public peek surfaces `password_required: bool`. Plaintext is never echoed.
+- **Named share links** (`db.campaign_share_links` collection): GM creates labelled share links (e.g. "patreon-gold", "core-friends") each with optional password + ISO-8601 `expires_at` + `max_uses` cap. Endpoints: `POST /api/campaigns/{cid}/share-links` (create), `GET` (list, GM-only), `DELETE /api/campaigns/{cid}/share-links/{lid}` (revoke). Public peek `GET /api/share-links/{token}` surfaces `password_required + valid + capped + expired`. Redemption `POST /api/share-links/{token}/redeem` validates password / expiry / cap before joining; increments `use_count + last_used_at + last_used_by`.
+- New frontend `PrivateAccessPanel` mounted in `CampaignDetail`'s **Invite & Share** tab (GM-only) — campaign-password block + share-link CRUD with copy-to-clipboard + per-row delete + draft form (label / password / max_uses / expires_at).
+- `Invite.jsx` upgraded with a password prompt that surfaces only when `password_required`. New `ShareLink.jsx` page handles `/share/:token` end-to-end (expired / capped states get their own UX), wired into `App.js`.
+- 4/4 backend tests passing (`test_v62517_private_access.py`).
+
+**📱 Mobile Sweep V3 (V6.25.18)** (`index.css`, `CharacterSheet.jsx::AddToMacroButton`)
+- New `.touch-target` utility that ensures 44×44px tap area on `(hover: none) and (pointer: coarse)` for icon-only buttons that aren't `.btn` styled. Applied to `AddToMacroButton` (the wand-icon macro sprinkle on every attribute / skill / defect row of the character sheet) — these were ~20px previously.
+- Sticky-header collapse + `.btn` 44px touch target on coarse pointers were already in place from V6.25.10; this cycle closes the icon-button gap and finalises the sweep.
+
+**Testing** — 126/126 V6.25.x cumulative pytest pass (15 NEW V6.25.14-17 + 111 regression V6.25.6 onwards). Frontend testing agent (iteration_62.json) confirmed all P0 acceptance GREEN: WorldTreeLattice mounts under Atelier > World Tree subtab with 27 `lattice-bridge-*` testids painting (including all 6 canonical bridges); PrivateAccessPanel mounts in Invite & Share tab with full testid coverage; share-link landing page + invite password flow live. Lint clean across all new files.
+
+**Roadmap (deferred / explicit follow-ups)**
+- 🟦 **Director's Console roll-table designer** — gated to seeded materials with rarity-tier thresholds.
+- 🟦 **Strict Permission Gating UI** — explicit player-side approval-queue submission flow for character / NPC suggestions (backend ready; UI hooks pending).
+- 🟦 **D&D 5E Class Library to Level 20 (full)** — currently we have the conversion mapping; the full L1-L20 D&D feature tables (using OGL/SRD content) still pending.
+- 🟦 **Marketplace V2** — Stripe Connect paywall on premium adventure / system seeds.
+- 🟦 **Refactor**: `besm_data.py` ambiguous-`l` lint warning at line 660.
+
 ### V6.25.13 — Canonical Anime 5E 14-class library + GM Materials Approval Queue + Item-Container UI (2026-02-09)
 
 Three follow-up items shipped this cycle: (1) replaced the V6.25.12 16-class scaffold with the **canonical 14-class roster** extracted verbatim from the user-supplied Anime 5E core PDF (`dys_anime5e_rpg_v1.3.6.pdf`) — full L1-L20 features per class, (2) GM-facing **Materials Approval Queue UI** mounted on the Atelier Workshop subtab so the V6.25.12 player intake pipeline is now end-to-end usable, (3) **Item-Container composer UI** in the Reference Editor (Mecha pattern, BESM 4E p.219) so GMs can author items that carry nested Attributes paying the half-cost rule together.
