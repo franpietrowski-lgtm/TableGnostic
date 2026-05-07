@@ -14,6 +14,52 @@
 
 ## 2. Implemented (cumulative, condensed)
 
+### V6.25.12 — Reference Editor weapon/item composer + Materials approval queue + Anime 5E class library scaffold (2026-02-09)
+
+Three substantial backlog items shipped this cycle: (1) BESM Reference Editor surface for composing weapons and items FIRST with the canonical p.135 / p.142 mod pools and the Item half-cost preview, (2) full materials intake → GM approval pipeline (player journal entry → backend ticket → GM approves → codex node seeded with the right `node_kind`), (3) Anime 5E core class library scaffold exposing the L1-L20 progression grid for 16 canonical classes via `GET /api/anime5e/classes`.
+
+**🟦 Reference Editor: BESM Weapon|Item Composer** (`ReferenceEditor.jsx::BesmWeaponItemComposer`)
+- New composer block surfaces ONLY when the row is `kind: "weapon"` or `kind: "item"` on a BESM 4E campaign.
+- Pulls the four canonical mod pools from `/api/besm/reference` (cached client-side).
+- Inputs: Level, Cost-per-Level. For `weapon` kind: an "Also an Item?" checkbox (per the user clarification — swords ARE items, conjured fireballs are NOT).
+- Toggle chips for each Weapon Enhancement / Limiter (BESM 4E p.135 / p.142). For `item` kind OR weapons-also-items, additionally surfaces the Item flavour pool.
+- Per-mod 1-12 rank spinner — same shape as the character builder so the saved entry round-trips.
+- **Live cost preview** spelling out the math: `Gross: 4 pts (4 × 1) · Item half-cost (p.135): ceil(4/2) = 2 pts · effective Level: ×4 (base 4 + 0 lim − 0 enh)`.
+- Mod tooltip surfaces page reference + source book + canonical rank-range (e.g. "p.135 BESM 4E · rank: 2 or 4" for Incapacitating).
+- Saves into `fields.enhancements / fields.limiters / fields.also_an_item / fields.level / fields.cost_per_level / fields.description` so the published reference entry round-trips into a character build with full mechanical fidelity.
+
+**🛡 Materials intake → GM approval queue** (`routes/materials_queue.py`, `MaterialsIntakePanel.jsx`)
+- Backend: `POST /api/campaigns/{cid}/materials-queue` (player or GM, must be on roster), `GET /api/campaigns/{cid}/materials-queue` (GM sees all; player sees only their own), `POST .../approve` (GM-only — seeds a codex node with the right kind), `POST .../reject` (GM-only).
+- Approved tickets seed `db.nodes` with `node_kind ∈ {material, byproduct, craft_output}`, full provenance (`submitted_by`, `approved_by`, `approved_at`).
+- 5/5 backend tests in `test_v62512_anime5e_lib_materials_queue.py`:
+  - end-to-end submit → list → player-can't-approve (403) → GM approves → codex seeded → re-approve conflicts (409),
+  - non-roster user submission gets 403,
+  - invalid `node_kind` gets 422 with helpful detail.
+- Frontend: `MaterialsIntakePanel` mounts on the character sheet's History tab (next to `CharacterJournal`). Form: Name, Kind picker (material / byproduct / craft_output), Summary, Tags, optional Rarity. Below the form: live "Your submissions" list with status icons (clock / check / X) showing pending/approved/rejected and the resulting codex link when seeded.
+- The pipeline implements the V6.25.11 permission rule: **players cannot directly add to codex/genesis/epic** — they submit, GM reviews.
+
+**📚 Anime 5E class library scaffold** (`system_data/anime5e_class_library.py`, `routes/besm.py::anime5e_class_library`)
+- `GET /api/anime5e/classes` returns the universal Anime 5E progression GRID: proficiency-bonus ladder, ASI levels {4, 8, 12, 16, 19}, milestone levels {3, 7, 13, 17, 20}, plus 16 canonical classes:
+  Adventurer, Champion, Magical Girl, Samurai, Wandering Monk, Concentrated Mage, Dynamic Sorcerer, Elementalist, Shapeshifter, Tech Genius, Gun Bunny, Hot Rod, Pet Monster Trainer, Artisan, Adept, Bandit.
+- Each class entry carries: id, name, page-ref, primary stat, hit die, save proficiencies, skill picks + skill pool, weapon / armour proficiencies, and (for Artisan) a `crafting_traditions` list (alchemy, smithing, herbalism, tinkering, tailoring, scribing) that ties into the materials intake pipeline.
+- Per-class FEATURE NAMES are scaffold-only (`features_pending: True`) — the GM can author authoritative names today via Custom Rules / Reference Editor (those entries take priority), or wait for the next seeding cycle when authoritative core-book content lands.
+- Universal grants always work: PB jumps, ASI prompts, milestone flags, CP grants on milestone levels — so the AdvancementBadge "# pending" pill on the wizard surfaces for every class TODAY.
+- 2/2 tests in `test_v62512_anime5e_lib_materials_queue.py`:
+  - all 16 classes have full L1-L20 grids with PB + ASI flagged correctly,
+  - Artisan class surfaces `crafting_traditions` for the materials pipeline tie-in.
+
+**Testing** — 36/36 cumulative pytest pass:
+- 5 V6.25.12 + 5 V6.25.11 + 3 V6.25.10 + 5 V6.25.9 + 5 V6.25.8 + 9 V6.25.7 + 6 V6.25.6 = 38; cleanup overlap = 36 unique.
+- All touched files lint clean.
+- Backend started cleanly (supervisor + watchfiles confirmed reload).
+
+**Roadmap (deferred / explicit follow-ups)**
+- 🟡 **Anime 5E per-class FEATURE seeding** — replace the scaffold (`features_pending: True`) with authoritative per-level grants from the Anime 5E core book. The shape is ready; only content authoring remains. Estimated: 16 classes × 20 levels × 5-8 features/level = ~1500 entries, multi-cycle.
+- 🟡 **D&D → Anime 5E auto-conversion** — class / race / background / feat / skill / proficiency conversion tables. Layered on top of the seeded Anime 5E catalog.
+- 🟦 **GM Approval Queue UI** for materials tickets — backend ready, GM-side surface needs a panel (similar to the existing XPApprovalQueue / CharacterApprovalPanel pattern). Mounts on the campaign hub.
+- 🟦 **Director's Console roll-table designer** — gated to seeded materials (no fabricated content). Once a campaign has ≥ N approved materials per rarity tier, the GM can author tier-weighted random-loot tables backed by actual codex entries.
+- 🟦 **Reference Editor Item-Container UI** — the `item_contents` model field is live (V6.25.11) but the composer for nested attributes inside an Item attribute is still pending. Useful for the Mecha pattern (BESM 4E p.219).
+
 ### V6.25.11 — Canonical BESM 4E weapon mods + Item half-cost rule + Refinery + Materials kinds (2026-02-09)
 
 User-flagged corrections + new features: (1) replace fabricated weapon mod data with canonical BESM 4E p.135 / p.142 lists, (2) fix Item half-cost rule (Item Attributes pay `ceil(raw_total / 2)` per BESM 4E p.135 / Assault Mecha p.219), (3) Materials/Byproduct/Craftable Output codex node kinds for the artisan content pipeline, (4) MacroBuilder "Refinery" — type free-form `attribute / skill / defect / stat[:N] / derived`, click Refinery, get character-sheet-aware dropdowns to resolve each unresolved bare token, (5) Player permissions clarified — players cannot add to codex/genesis/epic; they author journals + summaries + characters (which auto-generate NPC cards). Anime 5E full L1-L20 class library deferred (multi-cycle catalog effort) — plumbing in place.

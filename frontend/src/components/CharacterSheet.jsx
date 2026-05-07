@@ -21,6 +21,7 @@ import ClassProgressionPanel from "./ClassProgressionPanel";
 import AppliedTemplatesPanel from "./AppliedTemplatesPanel";
 import QuickRollBar from "./QuickRollBar";
 import MacroBuilder from "./MacroBuilder";
+import MaterialsIntakePanel from "./MaterialsIntakePanel";
 import Anime5eBudgetAudit from "./Anime5eBudgetAudit";
 
 /**
@@ -874,6 +875,8 @@ export default function CharacterSheet() {
       {sheetTab === "history" && (
         <>
           <CharacterJournal character={ch} onUpdated={load}/>
+          {/* V6.25.12 — Player materials intake → GM approval queue. */}
+          <MaterialsIntakePanel campaignId={ch.campaign_id}/>
           <SheetHistoryPanel character={ch}/>
         </>
       )}

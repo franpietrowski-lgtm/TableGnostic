@@ -93,6 +93,54 @@ async def list_game_systems(response: Response):
     return {"default": DEFAULT_SYSTEM_ID, "systems": GAME_SYSTEMS}
 
 
+@router.get("/anime5e/classes")
+async def anime5e_class_library(response: Response):
+    """V6.25.12 — Anime 5E core class library scaffold.
+
+    Returns the full L1-L20 progression grid (proficiency bonus, ASI
+    levels, milestone levels) plus the canonical Anime 5E core class
+    roster with starting proficiencies / save profs / skill pools /
+    hit dice. Per-level FEATURE NAMES are scaffold-only until the GM
+    seeds them via Custom Rules / Reference Editor — `features_pending`
+    flags which classes are awaiting authoritative seeding.
+    """
+    from system_data.anime5e_class_library import (
+        ASI_LEVELS, CORE_CLASSES, MILESTONE_LEVELS, PROFICIENCY_BONUS,
+        grants_for,
+    )
+    response.headers["Cache-Control"] = "public, max-age=120"
+    # Build the per-level grant matrix once on read.
+    classes = []
+    for cls in CORE_CLASSES:
+        grants = {lvl: grants_for(cls["id"], lvl) for lvl in range(1, 21)}
+        classes.append({
+            "id": cls["id"], "name": cls["name"], "page": cls.get("page"),
+            "primary_stat": cls.get("primary_stat"),
+            "hit_die": cls.get("hit_die"),
+            "save_proficiencies": cls.get("save_proficiencies", []),
+            "skill_picks": cls.get("skill_picks", 0),
+            "skill_pool": cls.get("skill_pool", []),
+            "weapon_proficiencies": cls.get("weapon_proficiencies", []),
+            "armour_proficiencies": cls.get("armour_proficiencies", []),
+            "crafting_traditions": cls.get("crafting_traditions"),
+            "features_pending": bool(cls.get("_features_pending")),
+            "grants_by_level": grants,
+        })
+    return {
+        "system": "anime-5e",
+        "proficiency_bonus_by_level": PROFICIENCY_BONUS,
+        "asi_levels": sorted(ASI_LEVELS),
+        "milestone_levels": sorted(MILESTONE_LEVELS),
+        "classes": classes,
+        "scaffold_note": (
+            "Per-level feature NAMES are scaffold placeholders until "
+            "authoritative content is seeded from the Anime 5E core book. "
+            "GMs can author class features via Custom Rules / Reference "
+            "Editor TODAY — those entries take priority over this fallback."
+        ),
+    }
+
+
 @router.get("/systems/{system_id}/reference")
 async def system_reference(system_id: str, response: Response):
     """System-aware reference data — D&D 5E, Anime 5E, Cypher, etc.
