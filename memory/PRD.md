@@ -14,6 +14,29 @@
 
 ## 2. Implemented (cumulative, condensed)
 
+### V6.25.22 — Cycle A: Anime 5E race templates + floating CP balance widget (2026-02-09)
+
+**🐉 Race templates (`system_data/anime5e_race_templates.py`, NEW)**
+- Re-extracted all 14 native Anime 5E races from `dys_anime5e_rpg_v1.3.6.pdf` (p.28-45) with the FULL printed template: `speed`, `ability_score_increase`, `bundled_attributes` (name + ranks), `bundled_defects` (name + severity), `languages`. The published `dp_cost` from `ANIME_5E_RACES` is preserved as-is (never recomputed from the bundle so canon stays canon).
+- New helper `merged_race_entry(race)` injects template fields into a base race row idempotently (`once == twice`); `all_races_with_templates(base)` does the list version. The PHB cross-over races (Dragonborn, Dwarf, Elf, etc.) keep their existing rows and gracefully fall through to the empty stub when no template is registered.
+- Spot-checks for Archfiend (speed 120, Augmented STR ranks 4, Vulnerability Lightning), Fairy (speed 4, ASI Wis +1 / Cha +2), Nekojin (Mulligan ranks 2 = 4 re-rolls/session) all match the printed PDF.
+
+**🔌 `/api/anime5e/races` endpoint (`routes/advancement.py`)**
+- Now returns races MERGED with their templates so the character builder + sheet render the full racial profile (CP cost + size + speed + ASI + bundled attrs/defects + languages) in a single round-trip.
+- Updated `rules_note` to cite p.28-45 alongside the existing p.20 / p.24 citations.
+- `/characters/{cid}/anime5e/budget-breakdown` also merges in the race template so the floating CP widget can show `race ${cost} (${name})` inline.
+
+**💰 Floating CP balance widget (`CpBalanceWidget.jsx`, NEW)**
+- Sticky-pinned to top of the Character Sheet on **BESM 4E + Anime 5E only** (every other system has its own currency model).
+- Three live readouts: `Total · Spent · Remaining` plus a thin progress bar that flips to ember on overspend. Anime 5E pulls from the existing budget-breakdown endpoint (RAW: 80 + level − 1); BESM 4E sums `point_buys` against `character.total_points`.
+- Listens for `tg:budget-recomputed` and `tg:character-mutated` window events so the widget refreshes the moment a buy is added, an XP grant lands, or the ledger spends.
+- Surfaces tier name + level on Anime 5E (e.g. `Tier Capable · L5`); shows BESM power-level on BESM. Drift / overspend warnings call out diverging stored vs RAW budgets.
+- Mounted directly under `<SheetTabBar/>` so it's always visible regardless of which sheet sub-tab is active.
+
+**Validation**: 80 + (level − 1) DP formula confirmed RAW-correct against canonical levels (1, 2, 5, 10, 20). The `dp_budget_for_level()` helper has lived in the codebase since V6.21 and was already correct — this cycle adds an explicit regression test against the printed values.
+
+**Testing**: 7/7 new V6.25.22 tests + 151/151 V6.25.x cumulative regression pass. Lint clean. Frontend smoke-tested — landing page renders cleanly with no console errors.
+
 ### V6.25.21 — Classifier Confidence audit panel (2026-02-09)
 
 GMs now have a one-glance dashboard of every codex node the V6.25.19 classifier auto-placed, sorted by ascending confidence so the riskiest placements bubble to the top. Two new endpoints + a mounted React panel:

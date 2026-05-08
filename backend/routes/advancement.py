@@ -62,12 +62,19 @@ async def repair_dnd_states(user: dict = Depends(get_current_user)):
 @router.get("/anime5e/races")
 async def anime5e_race_table(user: dict = Depends(get_current_user)):
     """Return the Anime 5E race / heritage DP-cost table. Used by the
-    character builder, the reference page, and the homebrew validator."""
+    character builder, the reference page, and the homebrew validator.
+
+    V6.25.22 — every race entry is now MERGED with its bundled
+    template (speed, ability_score_increase, bundled_attributes,
+    bundled_defects, languages) so the character sheet can render the
+    full racial profile without a second round-trip.
+    """
     from system_data.anime5e_race_costs import (
         RACE_DP_COSTS, ANIME5E_TIER_TABLE, RACELESS,
     )
+    from system_data.anime5e_race_templates import all_races_with_templates
     return {
-        "races": [RACELESS] + list(RACE_DP_COSTS),
+        "races": all_races_with_templates([RACELESS] + list(RACE_DP_COSTS)),
         "tier_table": [
             {
                 "max_level": t[0],
@@ -85,7 +92,8 @@ async def anime5e_race_table(user: dict = Depends(get_current_user)):
             "Anime 5E DP (Discretionary Points) budget: 80 + (level − 1). "
             "Ability scores cost DP equal to their value (18 STR = 18 DP). "
             "Classes cost 0 DP — features auto-grant per level. "
-            "Races cost as listed above. Core p.20, p.24, Table 04."
+            "Races cost as listed above and bundle attributes / defects / "
+            "ability-score adjustments per Anime 5E core p.28-45."
         ),
     }
 
@@ -119,6 +127,12 @@ async def anime5e_budget_breakdown(
     tier = anime5e_tier_for_level(lvl)
     race_key = (anime.get("race") or dnd.get("race") or "").strip()
     race = get_race(race_key)
+    # V6.25.22 — merge in the bundled race template so the audit /
+    # CP-balance widget has access to size + speed + bundled attrs +
+    # bundled defects + ability-score increases without extra calls.
+    if race:
+        from system_data.anime5e_race_templates import merged_race_entry
+        race = merged_race_entry(race)
     race_cost = (race.get("dp_cost") if race else 0)
     point_buys = anime.get("point_buys") or []
     spent = sum(int(b.get("cost_per_level") or 0) * int(b.get("level") or 1)

@@ -23,6 +23,7 @@ import QuickRollBar from "./QuickRollBar";
 import MacroBuilder from "./MacroBuilder";
 import MaterialsIntakePanel from "./MaterialsIntakePanel";
 import Anime5eBudgetAudit from "./Anime5eBudgetAudit";
+import CpBalanceWidget from "./CpBalanceWidget";
 
 /**
  * V6.25.10 — Per-row "Add to macro" sprinkle.
@@ -277,6 +278,15 @@ export default function CharacterSheet() {
           on its dice surface. Honours URL hash (#inventory, #history) so
           deep links work. */}
       <SheetTabBar value={sheetTab} onChange={setSheetTab}/>
+
+      {/* V6.25.22 — Floating CP / DP balance widget. BESM 4E + Anime 5E
+          only; sticky-pinned to the top of the sheet. Becomes the
+          live XP/CP bank that the existing ledger spends from. */}
+      <CpBalanceWidget
+        character={ch}
+        system={campaign?.system_id}
+        isOwnerOrGm={canEditMech}
+        onRefresh={load}/>
 
       {/* ───────── Identity tab ───────── */}
       {sheetTab === "identity" && (
