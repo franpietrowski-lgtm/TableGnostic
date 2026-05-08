@@ -24,6 +24,7 @@ import MacroBuilder from "./MacroBuilder";
 import MaterialsIntakePanel from "./MaterialsIntakePanel";
 import Anime5eBudgetAudit from "./Anime5eBudgetAudit";
 import CpBalanceWidget from "./CpBalanceWidget";
+import CypherXPPanel from "./CypherXPPanel";
 
 /**
  * V6.25.10 — Per-row "Add to macro" sprinkle.
@@ -423,6 +424,16 @@ export default function CharacterSheet() {
                                     campaignId={ch.campaign_id}
                                     systemId={campaign?.system_id || "dnd-5e"}/>}
       {cypherState && <CypherSheetView state={cypherState} roll={roll}/>}
+      {cypherState && (
+        <div className="mt-4">
+          <CypherXPPanel campId={ch.campaign_id} character={ch}
+                          isGm={!!campaign?.is_gm}
+                          onChange={(newXp) => {
+                            // Optimistically reflect the new balance on the sheet.
+                            setCh((cur) => cur ? { ...cur, xp_unspent: newXp } : cur);
+                          }}/>
+        </div>
+      )}
       {!dndState && !cypherState && (
       <div className="mt-8 grid lg:grid-cols-3 gap-6">
         {/* Left: Core */}

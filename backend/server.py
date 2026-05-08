@@ -53,6 +53,7 @@ from routes import world_creation as world_creation_routes
 from routes import consent_flow as consent_flow_routes
 from routes import marketplace as marketplace_routes
 from routes import macros as macros_routes
+from routes import cypher_xp as cypher_xp_routes
 
 app = FastAPI(title="Table-Gnostic API")
 
@@ -124,6 +125,7 @@ app.include_router(world_creation_routes.router)
 app.include_router(consent_flow_routes.router)
 app.include_router(marketplace_routes.router)
 app.include_router(macros_routes.router)
+app.include_router(cypher_xp_routes.router)
 
 # Static-file mount: serve uploaded battlemap images from disk so GMs can
 # drop in renders from Inkarnate / DungeonCraft / Talespire / RPGEngine

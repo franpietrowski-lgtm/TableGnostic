@@ -26,10 +26,6 @@ import {
   Library, Sparkles, ChevronRight, Plus, X, Loader2, Tag, Globe2,
 } from "lucide-react";
 
-const GENRE_KEY_FALLBACK = [
-  "fantasy", "modern", "science-fiction", "superheroes", "horror",
-  "post-apocalyptic", "fairy-tale", "historical",
-];
 // The reference data uses two genre-key vocabularies — the V6.25.23
 // `genres` list uses 'science-fiction' / 'post-apocalyptic', while
 // the older descriptor / foci tags use 'scifi' / 'post' / 'superhero'.
@@ -46,6 +42,7 @@ const SUB_TABS = [
   { key: "foci",        label: "Foci",        Icon: Sparkles },
   { key: "cyphers",     label: "Cyphers",     Icon: ChevronRight },
   { key: "artifacts",   label: "Artifacts",   Icon: ChevronRight },
+  { key: "bestiary",    label: "Bestiary",    Icon: ChevronRight },
 ];
 
 const matchesGenre = (entry, genreKey) => {
@@ -177,6 +174,7 @@ export default function CypherReferencePanel({ campId, isGm }) {
           isGm={isGm}
           kind="cypher"
           genre={genre}
+          enableRoll={true}
           onMakeCustom={() => setDraft({ kind: "cypher" })}/>
       )}
       {tab === "artifacts" && (
@@ -189,11 +187,15 @@ export default function CypherReferencePanel({ campId, isGm }) {
           isGm={isGm}
           kind="artifact"
           genre={genre}
+          enableRoll={true}
           onMakeCustom={() => setDraft({ kind: "artifact" })}/>
+      )}
+      {tab === "bestiary" && (
+        <BestiarySection genre={genre}/>
       )}
 
       {/* Universal rule strips — always visible, regardless of tab. */}
-      <RuleStrip ref={ref}/>
+      <RuleStrip data={ref}/>
 
       {draft && (
         <CustomDraftModal
@@ -202,6 +204,65 @@ export default function CypherReferencePanel({ campId, isGm }) {
           genre={genre}
           onClose={() => setDraft(null)}/>
       )}
+    </div>
+  );
+}function BestiarySection({ genre }) {
+  const [rows, setRows] = useState([]);
+  const [err, setErr] = useState("");
+  const [levelMin, setLevelMin] = useState(1);
+  const [levelMax, setLevelMax] = useState(10);
+
+  useEffect(() => {
+    api.get(`/cypher/bestiary?genre=${encodeURIComponent(genre || "")}` +
+            `&level_min=${levelMin}&level_max=${levelMax}`)
+      .then((r) => setRows(r.data?.rows || []))
+      .catch((e) => setErr(formatApiErrorDetail(e.response?.data?.detail) || e.message));
+  }, [genre, levelMin, levelMax]);
+
+  return (
+    <div className="card-mystic p-3 space-y-2"
+         data-testid="cypher-ref-bestiary">
+      <div className="flex items-center gap-2 flex-wrap">
+        <div className="text-[10px] text-mist">
+          {rows.length} creature{rows.length === 1 ? "" : "s"} for {genre}
+        </div>
+        <span className="text-[10px] text-mist ml-auto">level</span>
+        <input type="number" min={1} max={10} value={levelMin}
+               onChange={(e) => setLevelMin(Math.max(1, Math.min(10, +e.target.value || 1)))}
+               className="input w-14 text-center text-[10px]"
+               data-testid="cypher-bestiary-level-min"/>
+        <span className="text-mist text-[10px]">–</span>
+        <input type="number" min={1} max={10} value={levelMax}
+               onChange={(e) => setLevelMax(Math.max(1, Math.min(10, +e.target.value || 10)))}
+               className="input w-14 text-center text-[10px]"
+               data-testid="cypher-bestiary-level-max"/>
+      </div>
+      {err && <div className="text-ember text-[10px]">{err}</div>}
+      {rows.length === 0 && (
+        <div className="text-mist italic text-[11px]">
+          No bestiary entries match this genre + level band.
+        </div>
+      )}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+        {rows.map((b) => (
+          <div key={b.id}
+               className="border border-gold/10 rounded-sm p-2 bg-void/30
+                          text-[11px] text-parchment"
+               data-testid={`cypher-bestiary-${b.id}`}>
+            <div className="flex justify-between gap-2">
+              <span className="font-display">{b.name}</span>
+              <span className="text-[10px] text-arcane-light tabular-nums">
+                L{b.level} · TN {b.level * 3}
+              </span>
+            </div>
+            <div className="text-[10px] text-mist italic mt-0.5">{b.role}</div>
+            <div className="text-[10px] text-parchment mt-0.5">{b.blurb}</div>
+            <div className="text-[10px] text-mist mt-1 tabular-nums">
+              HP {b.health} · Dmg {b.damage} · Armor {b.armor}
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -281,22 +342,70 @@ function TypesSection({ types, tierProgression, advancementSteps }) {
 }
 
 
-function ListSection({ rows, emptyHint, campId, isGm, kind, genre, onMakeCustom }) {
+function ListSection({ rows, emptyHint, campId, isGm, kind, genre, onMakeCustom, enableRoll }) {
+  const [rollResult, setRollResult] = useState(null);
+  const [rolling, setRolling] = useState(false);
+
+  const doRoll = async () => {
+    setRolling(true); setRollResult(null);
+    try {
+      const r = await api.get(
+        `/cypher/random-table?kind=${kind === "foci" ? "cypher" : kind}&genre=${genre || ""}`);
+      setRollResult(r.data);
+    } catch (e) {
+      setRollResult({ error: formatApiErrorDetail(e.response?.data?.detail) || e.message });
+    } finally { setRolling(false); }
+  };
+
   return (
     <div className="card-mystic p-3 space-y-2"
          data-testid={`cypher-ref-list-${kind}`}>
-      <div className="flex justify-between items-baseline">
+      <div className="flex justify-between items-baseline flex-wrap gap-2">
         <div className="text-[10px] text-mist">
           {rows.length} {kind}{rows.length === 1 ? "" : "s"} for {genre}
         </div>
-        {isGm && campId && (
-          <button onClick={onMakeCustom}
-                  className="btn btn-ghost text-[10px]"
-                  data-testid={`cypher-ref-make-custom-${kind}`}>
-            <Plus className="w-3 h-3"/> Make custom {kind}
-          </button>
-        )}
+        <div className="flex gap-2 items-center">
+          {enableRoll && (
+            <button onClick={doRoll}
+                    disabled={rolling}
+                    className="btn btn-ghost text-[10px]"
+                    data-testid={`cypher-ref-roll-${kind}`}
+                    title={`Roll a random ${kind} from this genre's pool (1d6 + printed modifier).`}>
+              {rolling ? <Loader2 className="w-3 h-3 animate-spin"/> : <Sparkles className="w-3 h-3"/>}
+              Roll random {kind}
+            </button>
+          )}
+          {isGm && campId && (
+            <button onClick={onMakeCustom}
+                    className="btn btn-ghost text-[10px]"
+                    data-testid={`cypher-ref-make-custom-${kind}`}>
+              <Plus className="w-3 h-3"/> Make custom {kind}
+            </button>
+          )}
+        </div>
       </div>
+      {rollResult && !rollResult.error && (
+        <div className="border border-gold/30 rounded-sm p-2 bg-gold/5"
+             data-testid={`cypher-ref-roll-result-${kind}`}>
+          <div className="text-[11px] font-display text-gold-bright">
+            {rollResult.entry?.name} — level {rollResult.roll?.level}
+          </div>
+          <div className="text-[10px] text-mist italic">
+            roll {rollResult.roll?.die} = {rollResult.roll?.result}
+            {rollResult.roll?.printed_modifier ? ` + ${rollResult.roll.printed_modifier}` : ""}
+            {" · form: "}{rollResult.entry?.form}
+          </div>
+          <div className="text-[10px] text-parchment mt-1">{rollResult.entry?.effect}</div>
+          {rollResult.depletion && (
+            <div className="text-[9px] text-arcane-light mt-1">
+              depletion: {rollResult.depletion}
+            </div>
+          )}
+        </div>
+      )}
+      {rollResult?.error && (
+        <div className="text-ember text-[10px]">{rollResult.error}</div>
+      )}
       {rows.length === 0 && (
         <div className="text-mist italic text-[11px]">{emptyHint}</div>
       )}
@@ -316,6 +425,9 @@ function ListSection({ rows, emptyHint, campId, isGm, kind, genre, onMakeCustom 
               {r.blurb && (
                 <div className="text-[10px] text-mist mt-0.5 italic">{r.blurb}</div>
               )}
+              {r.effect && (
+                <div className="text-[10px] text-parchment mt-0.5">{r.effect}</div>
+              )}
               {(r.genres || []).length > 0 && (
                 <div className="flex flex-wrap gap-1 mt-1">
                   {r.genres.map((g) => (
@@ -332,7 +444,8 @@ function ListSection({ rows, emptyHint, campId, isGm, kind, genre, onMakeCustom 
 }
 
 
-function RuleStrip({ ref }) {
+function RuleStrip({ data }) {
+  const ref = data || {};
   return (
     <div className="card-mystic p-3 space-y-2"
          data-testid="cypher-ref-rules-strip">

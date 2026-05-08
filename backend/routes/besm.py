@@ -202,6 +202,93 @@ async def system_reference(system_id: str, response: Response):
 
 
 
+@router.get("/cypher/bestiary")
+async def cypher_bestiary(genre: str = "", level_min: int = 0, level_max: int = 10):
+    """V6.25.24 (Cycle B-6) — Cypher creature roster.
+
+    Returns the seeded bestiary filtered by optional `genre` and a level
+    band [level_min, level_max]. Each row is mechanic-only (level,
+    health, damage, armor, role, genre tags) — no rulebook prose.
+    """
+    from system_data.cypher_data import list_bestiary
+    rows = list_bestiary(genre)
+    rows = [r for r in rows if level_min <= r["level"] <= level_max]
+    return {
+        "rows": rows,
+        "total": len(rows),
+        "genre": genre or "any",
+        "level_band": [level_min, level_max],
+    }
+
+
+@router.get("/cypher/random-table")
+async def cypher_random_table(kind: str = "cypher", genre: str = "",
+                                level_modifier: int = 0):
+    """V6.25.24 (Cycle B-5) — Cypher / Artifact random-roll table.
+
+    Rolls a 1d<N> against the seeded cypher (12) or artifact (6) list,
+    optionally filtered by genre tag. Returns the chosen entry plus a
+    rolled level (1d6 + entry's printed modifier + caller `level_modifier`).
+    Designed for GM table-side play — "the lucky draw paid out a Spatial
+    Warp at level 5".
+
+    Charges convention:
+      * Cyphers ship with `charges: 1` by default — they're one-shot
+        consumables.
+      * Artifacts carry the printed `depletion` roll (e.g. "1 in 1d20")
+        that the GM rolls after each significant use; on a depleted
+        result the artifact is spent unless it has a `recharge` field.
+    """
+    import random
+    import re
+    from system_data.cypher_data import CYPHERS, ARTIFACTS
+
+    if kind == "cypher":
+        pool = list(CYPHERS)
+    elif kind == "artifact":
+        pool = list(ARTIFACTS)
+    else:
+        raise HTTPException(422, f"kind must be cypher | artifact (got {kind!r})")
+
+    if genre and genre != "any":
+        # Most rows don't carry explicit genre tags yet — those count as
+        # genre-agnostic (always available). If a row HAS tags, gate by them.
+        pool = [
+            r for r in pool
+            if not r.get("genres")
+            or genre in (r.get("genres") or [])
+            or "any" in (r.get("genres") or [])
+        ]
+
+    if not pool:
+        raise HTTPException(404, f"No {kind}s available for genre={genre!r}.")
+
+    pick = random.choice(pool)
+    # Roll the level — parse "1d6+N" / "1d6"
+    m = re.match(r"^\s*1d6\s*(?:\+\s*(\d+))?\s*$", str(pick.get("level", "1d6")))
+    bonus = int(m.group(1)) if m and m.group(1) else 0
+    rolled_die = random.randint(1, 6)
+    rolled_level = rolled_die + bonus + int(level_modifier or 0)
+
+    out = {
+        "kind": kind,
+        "genre": genre or "any",
+        "entry": pick,
+        "roll": {
+            "die": "1d6",
+            "result": rolled_die,
+            "printed_modifier": bonus,
+            "extra_modifier": int(level_modifier or 0),
+            "level": rolled_level,
+        },
+        "charges": pick.get("charges", 1 if kind == "cypher" else None),
+        "depletion": pick.get("depletion"),
+        "recharge": pick.get("recharge"),
+    }
+    return out
+
+
+
 @router.get("/cypher/tier-helper")
 async def cypher_tier_helper(type: str = "warrior", tier: int = 1):
     """V6.25.23 — Cypher tier-progression helper.

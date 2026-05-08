@@ -368,6 +368,17 @@ export function CypherBuilder({ campaign, ref_, charId }) {
         </div>
       </div>
 
+      {/* V6.25.24 — Cycle B-3: Tier-Progression Sidebar + per-tier ability picker. */}
+      <CypherTierProgression
+        type={c.type}
+        tier={c.tier}
+        abilitiesPicked={c.abilities || []}
+        onPick={(name, on) => {
+          const cur = new Set(c.abilities || []);
+          on ? cur.add(name) : cur.delete(name);
+          setC({ abilities: Array.from(cur) });
+        }}/>
+
       {/* V6.23 — ReferencePicker for cyphers (SRD cyphers + artifacts).
           Replaces the prior FreeList so players see effect/level/form
           inline. Type/Focus Abilities stays a FreeList — no SRD list
@@ -396,6 +407,107 @@ export function CypherBuilder({ campaign, ref_, charId }) {
           <Save className="w-4 h-4"/> Save
         </button>
         <Link to={`/app/campaigns/${ch.campaign_id}`} className="btn btn-ghost">Cancel</Link>
+      </div>
+    </div>
+  );
+}
+
+
+/**
+ * V6.25.24 (Cycle B-3) — Tier-progression sidebar + per-tier ability picker.
+ * Calls `/api/cypher/tier-helper?type=<type>&tier=<tier>` for the unlocked
+ * roster, renders abilities grouped by tier band with picker chips, and
+ * surfaces the 4 advancement-step (4 XP each) breakdown for the current tier.
+ */
+function CypherTierProgression({ type, tier, abilitiesPicked, onPick }) {
+  const [data, setData] = useState(null);
+  const [err, setErr] = useState("");
+  const typeKey = (type || "warrior").toLowerCase();
+
+  useEffect(() => {
+    let alive = true;
+    api.get(`/cypher/tier-helper?type=${encodeURIComponent(typeKey)}&tier=${tier || 1}`)
+      .then((r) => alive && setData(r.data))
+      .catch((e) => alive && setErr(formatApiErrorDetail(e.response?.data?.detail) || e.message));
+    return () => { alive = false; };
+  }, [typeKey, tier]);
+
+  if (err) {
+    return (
+      <div className="card-mystic p-4 mt-4 text-ember text-xs"
+           data-testid="cypher-tier-progression-error">{err}</div>
+    );
+  }
+  if (!data) {
+    return (
+      <div className="card-mystic p-4 mt-4 text-mist text-xs italic"
+           data-testid="cypher-tier-progression-loading">Loading tier progression…</div>
+    );
+  }
+
+  // Group abilities by tier band so the picker shows clearly which were
+  // unlocked at which tier (the tier-helper response already tags each row).
+  const byTier = {};
+  (data.abilities_unlocked || []).forEach((a) => {
+    (byTier[a.tier] = byTier[a.tier] || []).push(a);
+  });
+  const tiers = Object.keys(byTier).map((n) => +n).sort();
+  const pickedSet = new Set(abilitiesPicked);
+  const tierBlurb = data.tier?.blurb;
+
+  return (
+    <div className="card-mystic p-5 mt-4 space-y-3"
+         data-testid="cypher-tier-progression">
+      <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-gold/10 pb-2">
+        <div>
+          <div className="h-arcane text-sm">Tier {data.tier?.tier} Progression</div>
+          <div className="text-[10px] text-mist italic">{tierBlurb}</div>
+        </div>
+        <div className="text-[10px] tabular-nums">
+          <span className="text-mist">max effort </span>
+          <span className="text-gold-bright">{data.tier?.max_effort}</span>
+          <span className="text-mist"> · {pickedSet.size} picked / {data.abilities_unlocked?.length || 0} unlocked</span>
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        {tiers.map((tn) => (
+          <div key={tn} data-testid={`cypher-tier-band-${tn}`}>
+            <div className="text-[11px] text-arcane-light font-display">
+              Tier {tn} abilities ({byTier[tn].length})
+            </div>
+            <div className="flex flex-wrap gap-1 mt-1">
+              {byTier[tn].map((a) => {
+                const on = pickedSet.has(a.name);
+                return (
+                  <button key={a.name} type="button"
+                          onClick={() => onPick(a.name, !on)}
+                          className={`tag text-[10px] ${on
+                            ? "border-gold text-gold-bright bg-gold/15"
+                            : "text-parchment hover:border-gold/40"}`}
+                          data-testid={`cypher-ability-${a.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`}>
+                    {a.name}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="border-t border-gold/10 pt-3">
+        <div className="text-[11px] text-arcane-light font-display mb-1">
+          Tier advancement · {data.tier_advancement_xp_total} XP total (4 steps × 4 XP)
+        </div>
+        <ul className="text-[10px] text-mist space-y-0.5">
+          {(data.advancement_steps_per_tier || []).map((s) => (
+            <li key={s.key} data-testid={`cypher-adv-step-${s.key}`}>
+              <span className="text-parchment">{s.name}</span>
+              <span className="text-arcane-light"> ({s.xp_cost} XP)</span>
+              {" — "}<span className="italic">{s.effect}</span>
+            </li>
+          ))}
+        </ul>
       </div>
     </div>
   );

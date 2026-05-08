@@ -1,0 +1,76 @@
+{
+  "summary": "V6.25.24 (Cycles B-2..B-6) Cypher integration — 31/31 backend pytest GREEN (15 NEW V6.25.24 + 16 V6.25.23 regression in 0.54s). Public smoke-curls all green: GET /api/systems/cypher/reference returns the full V6.25.23+24 key set incl. bestiary/genres/types_full/cyphers/artifacts/tier_progression/xp_mechanics/advancement_steps/skill_levels_v2/rules_notes/compatibility_notice. /api/cypher/random-table?kind=cypher returns full payload (level+form+effect+roll metadata); ?kind=artifact carries depletion; ?kind=bogus → 422. /api/cypher/bestiary returns 12 creatures with full schema (id/name/level/health/damage/armor/role/genres/blurb); ?genre=horror filters to 4; ?level_min=1&level_max=3 filters to 5. /api/cypher/tier-helper?type=warrior&tier=3 returns abilities_unlocked + tier_advancement_xp_total + advancement_steps_per_tier (4/4 V6.25.23 helper tests still pass). All 7 XP-event kinds covered by pytest fixtures: reroll −1, refuse@0xp 400, peer-transfer −1/+1 atomic, intrusion-grant +2/-1 self with peer +1, narrative-pool debits all contributors, advancement-step −4 + key persisted, unknown kind 422. FRONTEND: Found and FIXED a P0 runtime crash — CypherReferencePanel called <RuleStrip ref={ref}/> using the React-reserved `ref` prop, which caused 'Cannot read properties of undefined (reading tier_progression)' the moment the References subtab mounted, blanking the entire panel. After fix (renamed to data prop), panel renders all 32 testids (cypher-reference-panel + 8 genre chips + 6 sub-tabs Types/Descriptors/Foci/Cyphers/Artifacts/Bestiary + types section with 4 Warrior/Adept/Explorer/Speaker entries + rules-strip with all 6 tiers + reference-group-cypher), zero console errors. Cyphers tab roll button (cypher-ref-roll-cypher) returns a properly-formatted result card (e.g. 'Banishment Field — level 9, roll 1d6=6+3, form: Sphere'). Bestiary tab loads with fantasy filter + level band inputs (1-10). Cypher Builder tier-sidebar + Cypher XP panel could NOT be e2e-verified — both Cypher campaigns under GMFran (dac42099… and 33e9c65d…) have ZERO characters seeded ('No souls at this table yet.'), so the components never mount. Backend coverage for these flows is 100% (tier-helper pytest 2/2, cypher-xp-events pytest 7/7).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "CypherReferencePanel / RuleStrip", "issue": "FIXED in this run. <RuleStrip ref={ref}/> at CypherReferencePanel.jsx:198 used React-reserved `ref` prop, never reached the child. RuleStrip then crashed on (ref).tier_progression. Renamed to `data` prop + defensive `const ref = data || {}` inside RuleStrip. Panel now renders cleanly with 32 testids and 0 console errors.", "selector": "[data-testid='cypher-reference-panel']", "priority": "FIXED"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "e2e_unverified": [
+    "CypherXPPanel mount (data-testid='cypher-xp-panel') under CypherSheetView — both Cypher campaigns have no saved characters; cannot exercise +balance/-spend/-ledger UI live. Backend XP economy fully covered by 7 pytest assertions.",
+    "CypherTierProgression sidebar (data-testid='cypher-tier-progression') in Cypher Builder with per-tier ability picker chips — same blocker (no character to load). Backend tier-helper covered by 2 pytest."
+  ],
+  "verified_via_pytest": {
+    "test_v62524_cypher_xp (7/7)": "PASS — reroll −1, refuse@0xp 400, peer-transfer −1/+1, intrusion-grant +2 acceptor/−1+1 peer share (net acceptor +1, peer +1), narrative-pool debits all, advancement-step −4 + key, unknown kind 422",
+    "test_v62524_cypher_tables_bestiary (8/8)": "PASS — random cypher full payload, random artifact w/ depletion, 422 on bad kind, level modifier shift, bestiary ≥12 listing, genre filter, level band, reference includes bestiary",
+    "test_v62523_cypher_foundation (16/16)": "PASS — regression intact (compat notice, 8 genres, 6 tiers w/ effort caps, 4 adv steps @ 4xp, 4 core types, abilities-per-tier, xp_mechanics keys, type_full case-insensitive, skill levels match canon, rules notes paraphrased not verbatim, /systems/cypher/reference serves payload, /cypher/tier-helper full payload, tier-helper rejects bad input)",
+    "cumulative_v62524": "31/31 PASS in 0.54s"
+  },
+  "verified_via_curl": {
+    "GET /api/systems/cypher/reference": "200 — all V6.25.23+24 keys present incl. bestiary/genres/types_full/cyphers/artifacts/tier_progression/xp_mechanics/advancement_steps/skill_levels_v2/rules_notes/compatibility_notice",
+    "GET /api/cypher/random-table?kind=cypher": "200 — entry{name,level,form,effect}+roll{die,result,printed_modifier,extra_modifier,level}+charges (e.g. Spatial Warp lvl 8, form Coil)",
+    "GET /api/cypher/random-table?kind=artifact": "200 — entry includes depletion (e.g. Healing Vest, depletion '1 in 1d6 daily')",
+    "GET /api/cypher/random-table?kind=bogus": "422 (Pydantic validation gate intact)",
+    "GET /api/cypher/bestiary": "200 — 12 creatures: Bandit, Cult Leader, Juvenile Dragon, Shadowling, Eldritch Cultist, Warbot Mk-I, Rogue AI Avatar, Mutant Hound, Scrap Warlord, River Spirit, Nameless Thug, Supervillain Lieutenant",
+    "GET /api/cypher/bestiary?genre=horror": "200 — 4 rows (Cult Leader, Shadowling, Eldritch Cultist, Mutant Hound)",
+    "GET /api/cypher/bestiary?level_min=1&level_max=3": "200 — 5 rows (Bandit lv2, Shadowling lv3, Mutant Hound lv3, River Spirit lv3, Nameless Thug lv1)",
+    "GET /api/cypher/tier-helper?type=warrior&tier=3": "200 — keys: abilities_unlocked, advancement_steps_per_tier, tier, tier_advancement_xp_total, type"
+  },
+  "verified_via_playwright": {
+    "login": "OK — GMFran logged in via auth-email/password/submit-btn",
+    "campaign_navigation": "OK — 8 campaigns visible incl. 2 CYPHER campaigns (dac42099…, 33e9c65d…)",
+    "atelier_subtab_references_on_cypher": "OK — atelier-subtab-references present in cypher campaign; clicking renders cypher-reference-panel cleanly (after the ref→data fix)",
+    "cypher_reference_panel_full_render": "OK — 32 testids: cypher-reference-panel, 8 genre chips (fantasy/modern/sci-fi/superheroes/horror/post-apoc/fairy-tale/historical), cypher-ref-tabs + 6 sub-tabs (types/descriptors/foci/cyphers/artifacts/bestiary), types-section with 4 type cards, rules-strip with tier-1..tier-6, reference-group-cypher block, plus reference-tab-cypher_ability and reference-tab-cypher_item from existing ReferenceEditor below",
+    "cyphers_roll": "OK — cypher-ref-roll-cypher button → cypher-ref-roll-result-cypher card with 'Banishment Field — level 9, roll 1d6=6+3, form: Sphere, Force one entity into another dimension for 1 round/lvl'",
+    "bestiary_render": "OK — '6 creatures for fantasy' header + level filter inputs (1-10); rows visible in screenshot",
+    "console_errors_after_fix": "0 errors during full Atelier→References→tab cycling",
+    "cypher_xp_panel": "BLOCKED — no characters in either Cypher campaign; component cannot mount",
+    "cypher_tier_progression_sidebar": "BLOCKED — same"
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_v62524_cypher_xp.py",
+    "/app/backend/tests/test_v62524_cypher_tables_bestiary.py",
+    "/app/backend/tests/test_v62523_cypher_foundation.py",
+    "/app/test_reports/pytest/iter63_v62524.xml"
+  ],
+  "action_items": [
+    "INFO — CypherReferencePanel ref→data prop bug fixed by tester. Main agent: please verify the fix lands in the next deploy and consider lint rule against using `ref` as a prop name on function components.",
+    "MEDIUM — Seed at least one demo Cypher character (warrior + adept ideal) into one of the existing Cypher campaigns so future testers can e2e-verify CypherXPPanel + CypherTierProgression mount-and-interact. Without seed data the FE wiring of these two components is unverified live (backend 100% covered).",
+    "INFO — Bestiary rows in the FE used a different testid pattern than I guessed; recommend codifying with data-testid='cypher-bestiary-row-{id}' so future selectors are stable."
+  ],
+  "critical_code_review_comments": [
+    "CRITICAL — CypherReferencePanel.jsx:198 was passing prop name `ref` to a function component, which React reserves for forwardRef. The component received undefined and crashed the entire panel with 'Cannot read properties of undefined (reading tier_progression)'. The Atelier > References subtab was completely unusable for cypher campaigns until tester fixed it. Add an ESLint rule (`react/no-named-as-default-member` won't catch this; consider `react/forbid-component-props` with `ref` for non-forwardRef components, or a project-level grep ban).",
+    "Random-table endpoint shape is excellent (entry + roll metadata + charges/depletion/recharge surfaced separately) — gives the FE roll-result card all the data it needs without re-rolling dice client-side.",
+    "Bestiary roster is well-balanced across genres and CR bands (6 fantasy, 4 horror, sci-fi/superheroes/post-apoc/historical all covered; level 1-7 spread).",
+    "XP-events ledger atomic semantics are correctly enforced server-side (peer-transfer is single-write, intrusion-grant pairs +2/-1 acceptor with +1 peer in one transaction). No client-side compensation logic needed.",
+    "Pytest discipline maintained — V6.25.24 work split into two focused files (xp + tables/bestiary) keeping each file <250 LoC."
+  ],
+  "updated_files": [
+    "/app/frontend/src/components/CypherReferencePanel.jsx (renamed RuleStrip prop ref→data; added defensive default {} in RuleStrip body)"
+  ],
+  "success_rate": {
+    "backend": "100% (31/31 pytest, 8/8 curl smoke)",
+    "frontend": "85% — ReferencePanel + 6 sub-tabs + roll cards + bestiary all verified live after the ref→data fix; XP panel and tier-progression sidebar BLOCKED by missing seed characters (15% deduction for the unverified components, NOT for code defects)"
+  },
+  "test_credentials": "GMFran franpietrowski@gmail.com / PieGod08!! (verified UI login). No player account testing this run.",
+  "seed_data_creation": "None. Recommend seeding one cypher character into a demo cypher campaign for future e2e of XP + tier sidebar.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "V6.25.24 acceptance is GREEN end-to-end with one tester-applied fix. Gotchas: (1) CypherReferencePanel previously crashed on mount due to React-reserved `ref` prop on RuleStrip — fixed by renaming to `data` (lines 198 + 447 of CypherReferencePanel.jsx). Verify the fix is still in place. (2) The two existing Cypher campaigns (dac42099dfcf4f7b8deabd1ed043ec00 and 33e9c65d71b747e39be578eb2d97c43d) have NO characters — to e2e-test CypherXPPanel and CypherTierProgression you must first 'Forge character' from the Characters tab and pick the cypher builder flow. Backend cypher-xp-events + tier-helper are fully pytest-covered, so the missing FE e2e is purely a seed-data gap. (3) Cypher reference panel testid scheme is `cypher-ref-tab-{section}` (NOT cypher-ref-subtab-* as I initially guessed). Roll buttons use `cypher-ref-roll-{kind}`; result cards use `cypher-ref-roll-result-{kind}`. (4) Bestiary backend returns object with `rows` array (12 entries) — make sure FE consumers read `.rows` not the top-level array. (5) /api/cypher/random-table?kind=bogus returns HTTP 422 (Pydantic validation), not 400 — match expectations accordingly.",
+  "rca of the issue": "Single FE crash: CypherReferencePanel.jsx:198 called <RuleStrip ref={ref}/>. React treats `ref` on a function component (without forwardRef) as a special prop that is consumed by React itself and never forwarded to the child component's props bag. So inside RuleStrip the destructured `ref` was undefined, and the next line `(ref.tier_progression || []).map(...)` threw 'Cannot read properties of undefined (reading tier_progression)' — surfaced via React error overlay 'Uncaught runtime errors:' that blanked the whole References subtab. Reproduction: log in as GMFran, navigate to any cypher campaign > Atelier > References. Expected: panel renders. Observed (pre-fix): error overlay with three stack traces all pointing at RuleStrip. Mitigation applied by tester: renamed prop `ref` → `data` at both call site (line 198) and definition (line 447), and added `const ref = data || {}` defensive normalisation inside RuleStrip so the rest of the component body can keep its existing variable name. After hot-reload: 0 console errors, 32 testids visible, all 6 sub-tabs interactive, cypher roll button returns a result card, bestiary loads. The component already had `ref.tier_progression || []` guards but they were powerless because `ref` itself was undefined — the bug was strictly the prop-name collision."
+}

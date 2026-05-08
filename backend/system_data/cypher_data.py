@@ -447,6 +447,83 @@ def all_abilities_for(type_key: str, up_to_tier: int):
 
 
 
+# ─── V6.25.24 (Cycle B-6) — Bestiary seed ───────────────────────────
+# Cypher creatures use a single LEVEL stat (1-10) which derives target
+# numbers (TN = level × 3), health (level × 3 unless noted), and damage.
+# This seed covers a starter spread across genres so the GM has a working
+# bestiary on day one. Mechanics-only — full lore prose comes from the
+# GM's setting work, not this file.
+
+BESTIARY = [
+    {"id": "fantasy-bandit",      "name": "Bandit",
+     "level": 2, "health": 6, "damage": 3, "armor": 0,
+     "genres": ["fantasy", "modern", "post-apocalyptic", "historical"],
+     "role": "minion · pack-tactics",
+     "blurb": "Common hold-up artist. Operates in groups of 2-6."},
+    {"id": "fantasy-cult-leader", "name": "Cult Leader",
+     "level": 5, "health": 22, "damage": 6, "armor": 1,
+     "genres": ["fantasy", "horror", "modern"],
+     "role": "social caster · debuff",
+     "blurb": "Charismatic, knowledgeable, and terrifying when cornered."},
+    {"id": "fantasy-dragon-juvenile", "name": "Juvenile Dragon",
+     "level": 7, "health": 30, "damage": 9, "armor": 4,
+     "genres": ["fantasy", "fairy-tale"],
+     "role": "boss · breath weapon (level 6 cone, 30 ft)",
+     "blurb": "Big enough to be terrifying, small enough to be killed."},
+    {"id": "horror-shadowling",   "name": "Shadowling",
+     "level": 3, "health": 9, "damage": 4, "armor": 0,
+     "genres": ["horror", "fairy-tale", "fantasy"],
+     "role": "ambusher · light-vulnerable",
+     "blurb": "Half-real silhouette that drains warmth as it grasps."},
+    {"id": "horror-eldritch-cultist", "name": "Eldritch Cultist",
+     "level": 4, "health": 12, "damage": 4, "armor": 2,
+     "genres": ["horror", "modern", "fantasy"],
+     "role": "caster · reality-warp",
+     "blurb": "Madness keeps them upright after wounds that should fell."},
+    {"id": "scifi-warbot-mk1",    "name": "Warbot Mk-I",
+     "level": 4, "health": 16, "damage": 5, "armor": 3,
+     "genres": ["science-fiction", "post-apocalyptic", "superheroes"],
+     "role": "elite · firearm + impact resistance",
+     "blurb": "Mass-produced bipedal combat drone. Outdated, still lethal."},
+    {"id": "scifi-rogue-ai",      "name": "Rogue AI Avatar",
+     "level": 6, "health": 22, "damage": 6, "armor": 2,
+     "genres": ["science-fiction", "modern", "superheroes"],
+     "role": "boss · network-bound · projection",
+     "blurb": "Strikes through any networked surface; pure intellect made manifest."},
+    {"id": "post-mutant-hound",   "name": "Mutant Hound",
+     "level": 3, "health": 9, "damage": 4, "armor": 1,
+     "genres": ["post-apocalyptic", "horror", "science-fiction"],
+     "role": "minion · pack",
+     "blurb": "Twisted descendants of dogs left behind. Faster than the original."},
+    {"id": "post-scrap-warlord", "name": "Scrap Warlord",
+     "level": 5, "health": 16, "damage": 6, "armor": 2,
+     "genres": ["post-apocalyptic", "modern"],
+     "role": "elite · two-handed weapons + crew",
+     "blurb": "Salvage-armoured, oil-stained, and certain you have something they want."},
+    {"id": "fairy-river-spirit",  "name": "River Spirit",
+     "level": 3, "health": 12, "damage": 4, "armor": 0,
+     "genres": ["fairy-tale", "fantasy"],
+     "role": "guardian · water-bound · barters",
+     "blurb": "Polite if respected. Drowning if not."},
+    {"id": "super-nameless-thug", "name": "Nameless Thug",
+     "level": 1, "health": 3, "damage": 2, "armor": 0,
+     "genres": ["superheroes", "modern", "post-apocalyptic", "historical"],
+     "role": "trash mob · fights in groups",
+     "blurb": "Lots of these. Defeat trivially in clusters of 3."},
+    {"id": "super-supervillain-lieutenant", "name": "Supervillain Lieutenant",
+     "level": 6, "health": 24, "damage": 7, "armor": 3,
+     "genres": ["superheroes"],
+     "role": "elite · powered · monologues",
+     "blurb": "Has a code-name. Has a back-story. Will not last the climax."},
+]
+
+
+def list_bestiary(genre: str = ""):
+    if not genre or genre == "any":
+        return list(BESTIARY)
+    return [b for b in BESTIARY if genre in b.get("genres", []) or "any" in b.get("genres", [])]
+
+
 # ─── V6.25.23 — merge supplementary data into the canonical REFERENCE
 # dict so /api/systems/cypher/reference exposes everything in one shot.
 REFERENCE.update({
@@ -458,4 +535,5 @@ REFERENCE.update({
     "skill_levels_v2": SKILL_LEVELS,
     "rules_notes": RULES_NOTES,
     "compatibility_notice": COMPATIBILITY_NOTICE,
+    "bestiary": BESTIARY,
 })

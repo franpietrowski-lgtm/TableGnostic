@@ -207,7 +207,10 @@ export default function AtelierTab({ campId, camp }) {
       )}
 
       {subtab === "references" && (
-        <div data-testid="atelier-references-pane">
+        <div data-testid="atelier-references-pane" className="space-y-4">
+          {camp?.system_id === "cypher" && (
+            <CypherReferencePanel campId={campId} isGm={!!camp?.is_gm}/>
+          )}
           <ReferenceEditor campaignId={campId} systemId={camp?.system_id}
                             isGm={camp?.is_gm}/>
         </div>
