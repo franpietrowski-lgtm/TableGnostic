@@ -3,6 +3,7 @@ import { useNavigate, useParams, Link } from "react-router-dom";
 import { api, formatApiErrorDetail } from "../lib/api";
 import { Plus, X, Save, Trash2, BookOpen } from "lucide-react";
 import SystemBuilderLoader from "./SystemCharacterBuilders";
+import CpBalanceWidget from "./CpBalanceWidget";
 
 // Systems that have a dedicated builder shape — anything else falls through
 // to the BESM-shape (point-buy) builder below.
@@ -286,6 +287,15 @@ export default function CharacterBuilder() {
             </div>
           )}
         </div>
+      )}
+
+      {/* V6.25.27 — CP Bank widget. Edit-window only (per spec).
+          Reads /validate so it agrees with Rules Audit + History. */}
+      {charId && (
+        <CpBalanceWidget
+          character={ch}
+          system={campaign?.system_id || "besm-4e"}
+          isOwnerOrGm={true}/>
       )}
 
       <div className="mt-6 flex items-start justify-between flex-wrap gap-4">

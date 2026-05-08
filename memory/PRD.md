@@ -14,6 +14,40 @@
 
 ## 2. Implemented (cumulative, condensed)
 
+### V6.25.27 — CP Bank reconciliation + Inventory rework + Codex PDF unicode fix (2026-02-09)
+
+This cycle fixes three user-reported issues in one push:
+
+**Codex PDF 500 fix**
+- `/api/campaigns/{cid}/codex-export.pdf` was throwing `UnicodeEncodeError` on the Content-Disposition header for any campaign whose name contained an em-dash (`—`) or other non-ASCII char. HTTP headers are latin-1 only — the chronicle exporter already strips non-ASCII from filenames; the codex exporter didn't. Same scrub now applied to `routes/codex_pdf.py` and `routes/character_pdf.py`.
+- Reproduced + fixed against "Evereantha — The Maiden Adventure" → 200 / 12 KB PDF.
+
+**CP Bank reconciliation (BESM 4E + Anime 5E)**
+- `CpBalanceWidget` removed from the read-only character sheet (per spec). It now lives ONLY inside `CharacterBuilder` — the character-edit window — so it stops competing with the History tab + Rules Audit.
+- BESM source-of-truth switched from raw `point_buys` (which was empty for legacy characters → falsely showed Spent 0 / Remaining 84) to `GET /api/characters/{cid}/validate.breakdown.total_spent` — the same canonical number the Rules Audit shows. p.135 Item half-cost is already applied there.
+- Total semantics per spec:
+    * Pre-approval: `Total = primer.total_points` (e.g. Eli's 84).
+    * Post-approval (`audit.approved_for_play`): `Total = primer + character.xp_total` — the XP ledger feeds the bank, players submit spends from it.
+- `SheetHistoryPanel` "Points spent" now also reads `/validate.breakdown.total_spent` (was reading stale `character.spent.total_spent` which had 45 vs audit's 35 because the legacy `_compute_spent` didn't apply Item half-cost). Falls back to legacy when the audit endpoint 404s.
+
+**Inventory rework (`/sheets/InventoryPanel.jsx`)**
+- New `folio.inventory_state` schema — `{ items[], equipped{slot:id}, attuned_ids[], readied_ids[] }`. Persisted via the existing `PATCH /characters/{cid}/folio` mutator (bucket=`inventory_state`).
+- Tabbed sections: **All · Weapons · Shields · Armor · Items · Readied · Materials · Mundane · Magic · Accessory**.
+- Auto-derives read-only rows from BESM Attributes (Item / Weapon / Shield / Armor / Wealth / Healing-as-consumable) plus Power Packs and Power Bundles, so existing characters show inventory immediately. Manual rows live in `inventory_state.items` and have full edit / delete / charge-tracking.
+- Equipment slots — **L-Hand · R-Hand · Head · Torso · Legs · Feet** — surfaced both at the top of the Inventory tab and as `EquippedStripFor` at the top of the Mechanics tab. Two-handed weapons claim both hands; conflicts block equip with a polite slot-occupied error.
+- Per-row toggles: `Equip` (target slot), `Attune` (slotless attuned items list), `Ready` (readied list with charges counter ±). `attune_required` / `ready_required` flags drive which toggles render.
+- Item editor: name, category, qty / max, handed (0/1/2), slot_hint, charges current/max, attune & ready required flags, effect, notes.
+
+### V6.25.26 — Crafting service · Encounters Library · Atelier lazy-load · Cypher reference cleanup (2026-02-09)
+
+- **Crafting Service** (`routes/materials.py` + `CraftingServicePanel.jsx`) — Raw → Refined → Assembled material tiers, with cost / yield / time tracking per tier. GMs commission a craft → players watch progress in the panel.
+- **Encounters Library** (`routes/encounters_library.py` + `EncountersLibrary.jsx`) — anti-railroad encounter pool. GMs clone, archive, and deploy encounters dynamically per session. Solves the "I built three encounters, the players took the fourth path" problem.
+- **Roll-Table Designer** (Director's Console) shipped under V6.25.25; V6.25.26 included it in the Chronicle PDF + Genesis Archive marketplace share.
+- **Atelier lazy-load** — `AtelierTab.jsx` refactored to `React.lazy()` + `<Suspense>` so the heavy editor surface only ships when the user opens the Atelier tab.
+- **Cypher reference architecture cleanup** — Reference Editor `kind` dropdown is now system-aware via `SYSTEM_KIND_ORDER[systemId]`. Cypher campaigns no longer see the 22-kind BESM dropdown.
+- Tests — `test_v62526_materials_encounters.py` (22/22) green. Combined with V6.25.23-25 = 74/74 pass in 2.4s.
+
+
 ### V6.25.25 — Reference architecture cleanup + Cypher Flavor + Cypher→BESM converter + Codex inverted-PDF + Roll-Table Designer (2026-02-09)
 
 This cycle delivered the user's full backlog ask in one push: the dashboard Reference page now aggregates source + custom user-created reference material per system, the Atelier ReferenceEditor's kind dropdown is system-aware, the Cypher SRD ships with Flavor variants that re-skin canonical mechanics by genre, the Cypher→BESM character converter previews a transparent CP-cost rebuild with cross-system balancing notes, codex nodes can be exported as a printable inverted-theme PDF, and the Director's Console hosts a roll-table designer gated to seeded materials with rarity-tier thresholds.

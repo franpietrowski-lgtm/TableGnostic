@@ -1,0 +1,48 @@
+{
+  "summary": "V6.25.27 verification — ALL 4 NEW V6.25.27 backend tests PASS (codex-PDF em-dash unicode header, ASCII codex regression, /validate audit shape, folio.inventory_state PATCH round-trip). All 34 V6.25.25/.26 regression tests still GREEN. Frontend end-to-end on Eli's character sheet (id 35b9746b30a24d2bafac5f117d673bd1): cp-balance-widget correctly REMOVED from read-only sheet (all 4 tabs); EquippedStrip + 6 slot tiles render at top of Mechanics tab; new InventoryPanel renders with all 10 tab pills + add button; auto-derived rows (Healing→Tinctures, Item→Apothecary bandolier, Wealth→Mundane, Magic→Apocophae's Field Kit, plus persisted Test Potion consumable) all visible; History tab shows 'POINTS SPENT 35 / 84' from /validate (audit hint 'was 45' shown alongside) — NOT the stale 45; Builder edit window mounts cp-balance-widget with Total 84 / Spent 35 and pre-approval chip visible. One minor cosmetic finding documented below.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "CharacterBuilder edit window (Eli)",
+        "issues": [
+          "There are now TWO point displays visible at the same time: (a) the new top-banner cp-balance-widget showing 'CP BANK · pre-approval (primer) · TOTAL 84 · SPENT 35 · REMAINING 49' (correct, /validate-driven) and (b) the legacy right-side 'POINTS 45 / 90' panel (using character.spent=45 and total_points=90 — inconsistent with the audit). Spec says CP Bank moved to the builder; consider removing or rewiring the legacy 'POINTS 45/90' panel so all three surfaces (CP Bank widget, Rules Audit, History) consistently agree on 35/84.",
+          "History tab POINTS SPENT card shows '35 / 84' (correct) with sub-text 'audit · was 45' — this is fine for transparency but slightly cluttered; consider hiding the 'was 45' hint once /validate is the source of truth."
+        ]
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_v62527_codex_validate_inventory.py",
+    "/app/test_reports/pytest/iter66_v62527.xml",
+    "/app/test_reports/pytest/iter66_regression.xml"
+  ],
+  "action_items": [
+    "Optional cleanup: in CharacterBuilder, remove or rewire the legacy 'POINTS 45 / 90' summary panel (right column) to read from /validate so it aligns with the new CpBalanceWidget. Currently shows stale 45/90 alongside the new 84/35 banner.",
+    "Optional polish: hide the 'audit · was 45' hint under sheet-history-points-spent now that /validate is canonical."
+  ],
+  "critical_code_review_comments": [
+    "codex_pdf.py and character_pdf.py latin-1 strip is correct and self-contained — header now safe even for em-dash/non-ASCII campaign names; regression tests pass for both the dash and ASCII campaigns.",
+    "InventoryPanel deriveRows path correctly synthesises rows when folio.inventory_state is null on first render (verified: Apothecary bandolier / Tinctures / Wealth all visible despite Eli's stored state having only the manually-PATCHed 'Test Potion').",
+    "PATCH /characters/{cid}/folio with bucket=inventory_state correctly merges and persists items + readied_ids + charges_max/current — round-trip GET confirms all fields preserved.",
+    "/validate response shape is now self-describing (total_points, breakdown.total_spent, approved_for_play, app_validated, gm_approved bools) — UI-side reconciliation across CP Bank widget / Rules Audit / History tab is straightforward."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_v62527_codex_validate_inventory.py (NEW)"
+  ],
+  "success_rate": {
+    "backend": "100% (4/4 V6.25.27 + 34/34 V6.25.25-26 regression = 38/38)",
+    "frontend": "100% on the 5 spec'd UI assertions (cp-widget removal, equipped-strip+6 slots, inventory-panel+10 tabs+add-btn+derived rows, history 35/84, builder cp-widget Total 84 / Spent 35 / pre-approval)"
+  },
+  "test_credentials": "GMFran admin: franpietrowski@gmail.com / PieGod08!! (worked via /auth form).",
+  "seed_data_creation": "test_v62527 backend test will, if needed, POST one TEST_v62527_unicode_node into the dash-name campaign (af461ae0...) to exercise the codex-pdf header fix when the campaign starts with 0 nodes. Otherwise non-destructive. Inventory test patches Eli's folio.inventory_state with a single 'Test Potion' (id=test-1, charges 3/3, readied) — visible on the live sheet now.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run `cd /app/backend && REACT_APP_BACKEND_URL=https://rules-forge.preview.emergentagent.com pytest tests/test_v62527_codex_validate_inventory.py tests/test_v62526_*.py tests/test_v62525_*.py -v` for the full V6.25.25-27 regression suite (38 tests, all green). Frontend testids confirmed live: sheet-tab-{identity,mechanics,inventory,history}, equipped-strip, equip-slot-{l-hand,r-hand,head,torso,legs,feet}, equip-attuned-list, equip-readied-list, inventory-panel, inventory-tabs, inventory-tab-{all,weapon,shield,armor,item,consumable,material,mundane,magic,accessory}, inventory-add-btn, sheet-history-points-spent, cp-balance-widget (builder only), cp-balance-total, cp-balance-spent, cp-balance-pre-approval. Routes: /app/characters/{id} (sheet) and /app/characters/{id}/edit (builder). The edit-with-campaign-id form `/campaigns/{cid}/characters/{cid}/edit` from the spec is NOT a defined route — App.js only mounts /app/characters/:id/edit; this still works because CharacterBuilder receives charId from the URL.",
+  "rca of the issue": "N/A — all three V6.25.27 fixes verified working. Codex PDF: latin-1 strip on Content-Disposition filename eliminates UnicodeEncodeError. CP Bank parity: CpBalanceWidget reads /validate and computes Total = primer + (approved ? xp_total : 0) — Eli is gm_approved=False so Total stays at primer 84 (not 84+4), pre-approval chip renders. Inventory rework: SheetInventoryPanel replaced with new tabbed InventoryPanel that derives rows from BESM Attributes + manually persists via PATCH /characters/{cid}/folio bucket=inventory_state."
+}

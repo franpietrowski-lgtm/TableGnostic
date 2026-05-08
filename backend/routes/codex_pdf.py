@@ -161,7 +161,12 @@ async def export_codex_pdf(cid: str, user: dict = Depends(get_current_user)):
                onLaterPages=lambda c, d: _bg(c, d, p))
 
     buf.seek(0)
-    safe_name = (camp.get("name") or "codex").replace(" ", "-").replace("/", "-")
+    # Header values must be latin-1 safe; strip non-ASCII from filename
+    # (campaign names commonly contain em-dashes / accented chars).
+    raw_name = (camp.get("name") or "codex").replace(" ", "-").replace("/", "-")
+    safe_name = "".join(
+        ch if ord(ch) < 128 and ch not in '"\\' else "-" for ch in raw_name
+    ).strip("-") or "codex"
     return StreamingResponse(
         buf, media_type="application/pdf",
         headers={

@@ -1,23 +1,22 @@
 /**
- * CpBalanceWidget — V6.25.22
+ * CpBalanceWidget — V6.25.27
  *
- * Floating CP / DP balance widget. Pinned to the top of the
- * Character Sheet on BESM 4E and Anime 5E systems ONLY (every
- * other system has its own currency model).
+ * BESM 4E + Anime 5E CP/DP bank.
  *
- * Three live stats:
- *   • TOTAL — the assigned discretionary budget.
- *       BESM: `character.total_points` (set in builder).
- *       Anime 5E: 80 + (level − 1) per core p.20.
- *   • SPENT — sum of every Attribute / Defect / Race CP cost.
- *   • REMAINING — TOTAL − SPENT, doubles as the live CP/XP bank
- *       that the existing XP ledger spends from. The ledger and
- *       this widget agree because both pull from the same
- *       `/anime5e/budget-breakdown` (or `/besm/audit`) endpoint.
+ * Single source of truth, finally aligned with the Rules Audit:
+ *   • BESM 4E  → `GET /api/characters/{cid}/validate` returns
+ *                `breakdown.total_spent` (the same number the GM
+ *                approval audit shows). Total = `total_points` from
+ *                the player primer; once the character is GM-approved,
+ *                every subsequently-earned XP rolls into Total via
+ *                `character.xp_total`. Remaining doubles as the live
+ *                XP-bank the player submits spends from.
+ *   • Anime 5E → `GET /api/characters/{cid}/anime5e/budget-breakdown`.
  *
- * The widget is sticky-positioned (top: 0 with backdrop blur) so
- * it stays visible as the user scrolls through Attributes / Skills
- * / Inventory. It collapses to a 36px pill on mobile.
+ * V6.25.27 — moved out of the read-only CharacterSheet into the
+ * CharacterBuilder edit surface (per spec). The sheet's History tab
+ * now reads the same `/validate` endpoint, so CP Bank, Rules Audit
+ * and History all show identical numbers.
  */
 import React, { useEffect, useState, useCallback } from "react";
 import { api, formatApiErrorDetail } from "../lib/api";
@@ -41,12 +40,22 @@ export default function CpBalanceWidget({
     setBusy(true); setErr("");
     try {
       if (isAnime) {
-        const { data } = await api.get(
-          `/characters/${cid}/anime5e/budget-breakdown`);
+        const [bRes, vRes] = await Promise.all([
+          api.get(`/characters/${cid}/anime5e/budget-breakdown`),
+          api.get(`/characters/${cid}/validate`).catch(() => ({ data: {} })),
+        ]);
+        const data = bRes.data;
+        const xpEarned = Number(character?.xp_total || 0);
+        const primer = data.canonical_raw_dp || 0;
+        const approved = !!vRes.data?.approved_for_play;
+        const total = approved ? primer + xpEarned : primer;
         setData({
-          total: data.canonical_raw_dp || 0,
+          total,
+          primer,
+          xp_earned: xpEarned,
+          approved,
           spent: data.total_spent || 0,
-          remaining: (data.canonical_raw_dp || 0) - (data.total_spent || 0),
+          remaining: total - (data.total_spent || 0),
           tier: data.tier?.name,
           level: data.level,
           race_cost: data.race_cost,
@@ -63,20 +72,36 @@ export default function CpBalanceWidget({
           },
         });
       } else {
-        // BESM 4E — use the character's own total_points + sum buys.
-        const total = Number(character?.total_points || 0);
-        const buys = (character?.point_buys || character?.folio?.point_buys || []);
-        const spent = buys.reduce(
-          (s, b) => s + (Number(b.cost_per_level || 0)
-                          * Number(b.level || 1)), 0);
+        // BESM 4E — Rules Audit endpoint is the canonical spend.
+        // p.135 Item half-cost is already applied here.
+        const { data: audit } = await api.get(`/characters/${cid}/validate`);
+        const xpEarned = Number(character?.xp_total || 0);
+        const primer = Number(audit.total_points || character?.total_points || 0);
+        // `approved_for_play` is a derived flag on the validate response —
+        // canonical for "the GM has signed off, XP now flows into Total".
+        const approved = !!audit.approved_for_play;
+        // Per spec: pre-approval Total = primer; post-approval Total =
+        // primer + xp_total (the XP ledger feeds the bank).
+        const total = approved ? primer + xpEarned : primer;
+        const spent = Number(audit.breakdown?.total_spent ?? 0);
         setData({
           total,
+          primer,
+          xp_earned: xpEarned,
+          approved,
           spent,
           remaining: total - spent,
           unit: "CP",
           system: "besm-4e",
           formula: character?.power_level || "—",
-          breakdown: { point_buys: spent },
+          breakdown: {
+            stats: audit.breakdown?.stat_total,
+            attrs: audit.breakdown?.attribute_total,
+            skills: audit.breakdown?.skill_total,
+            defects: -Math.abs(audit.breakdown?.defect_refund || 0),
+            packs: (audit.breakdown?.power_pack_total || 0)
+                    + (audit.breakdown?.power_bundle_total || 0),
+          },
         });
       }
     } catch (e) {
@@ -114,6 +139,20 @@ export default function CpBalanceWidget({
         <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-widest text-gold/80 font-ui">
           <Coins className="w-3 h-3"/>
           <span data-testid="cp-balance-unit">{data.unit} bank</span>
+          {data.approved && data.xp_earned > 0 && (
+            <span className="text-arcane-light/80 normal-case tracking-normal text-[10px] ml-1"
+                  data-testid="cp-balance-xp-bonus"
+                  title="XP earned post-approval rolls into Total via the XP ledger.">
+              · primer {data.primer} + ledger {data.xp_earned}
+            </span>
+          )}
+          {!data.approved && (
+            <span className="text-mist/60 normal-case tracking-normal text-[10px] ml-1"
+                  data-testid="cp-balance-pre-approval"
+                  title="XP ledger feeds Total once the GM approves this character.">
+              · pre-approval (primer)
+            </span>
+          )}
         </div>
 
         <div className="flex items-baseline gap-3">
@@ -206,8 +245,16 @@ export default function CpBalanceWidget({
             )}
           </>
         )}
-        {isBesm && data.breakdown.point_buys > 0 && (
-          <span>attributes {data.breakdown.point_buys}</span>
+        {isBesm && (
+          <>
+            {data.breakdown.stats > 0 && <span>stats {data.breakdown.stats}</span>}
+            {data.breakdown.attrs > 0 && <span>attrs {data.breakdown.attrs}</span>}
+            {data.breakdown.skills > 0 && <span>skills {data.breakdown.skills}</span>}
+            {data.breakdown.defects < 0 && (
+              <span className="text-arcane-light/80">defects {data.breakdown.defects}</span>
+            )}
+            {data.breakdown.packs > 0 && <span>packs {data.breakdown.packs}</span>}
+          </>
         )}
         {err && (
           <span className="text-ember"
