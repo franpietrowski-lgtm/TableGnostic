@@ -7,6 +7,7 @@ import XPApprovalQueue from "./XPApprovalQueue";
 import MaterialsApprovalQueue from "./MaterialsApprovalQueue";
 import EpicCampaignPanel from "./EpicCampaignPanel";
 import ReferenceEditor from "./ReferenceEditor";
+import CypherReferencePanel from "./CypherReferencePanel";
 import TimelinePanel from "./TimelinePanel";
 import AtelierWorkshop from "./AtelierWorkshop";
 import WorldCreationTree from "./WorldCreationTree";
