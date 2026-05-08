@@ -1,5 +1,5 @@
 """BESM 4E reference + Game-systems registry — public read-only endpoints."""
-from fastapi import APIRouter, Response
+from fastapi import APIRouter, HTTPException, Response
 
 from besm_data import (
     ACTIONS, ARMOUR, ATTRIBUTES, AUREA_CUSTOM_ATTRIBUTES, AUREA_CUSTOM_BOOK,
@@ -199,3 +199,48 @@ async def system_reference(system_id: str, response: Response):
                               "to seed campaign-scoped Attributes / Skills / "
                               "Defects / Weapons / Items / Companions / Custom rules."}
     return REFERENCE_BY_SYSTEM[system_id]
+
+
+
+@router.get("/cypher/tier-helper")
+async def cypher_tier_helper(type: str = "warrior", tier: int = 1):
+    """V6.25.23 — Cypher tier-progression helper.
+
+    For a given character `type` (warrior / adept / explorer / speaker)
+    and `tier` (1-6), returns:
+      * the tier's effort cap + advancement step list (4 × 4 XP)
+      * full ability roster up to and including that tier (with
+        `tier` per row so the builder can colour-band them)
+      * starting-stat snapshot the builder uses to seed pools / edge
+      * unlocked tier blurb / role blurb for the wizard banner
+
+    This is what the Cycle B-2 character builder calls when a player
+    picks their type + tier; the response is everything the builder
+    needs to render a tier-progression sidebar without re-fetching
+    /reference.
+    """
+    from system_data.cypher_data import (
+        get_type_full, tier_caps, all_abilities_for, ADVANCEMENT_STEPS_PER_TIER,
+    )
+    t = get_type_full(type)
+    if not t:
+        raise HTTPException(404, f"Unknown Cypher type: {type}")
+    cap = tier_caps(tier)
+    if not cap:
+        raise HTTPException(422, f"Tier must be 1-6 (got {tier})")
+    return {
+        "type": {
+            "key": t["key"],
+            "name": t["name"],
+            "role_blurb": t["role_blurb"],
+            "starting_stat_pools": t["starting_stat_pools"],
+            "starting_edge": t["starting_edge"],
+            "free_pool_points": t["free_pool_points"],
+            "starting_effort": t["starting_effort"],
+            "starting_cypher_limit": t["starting_cypher_limit"],
+        },
+        "tier": cap,
+        "abilities_unlocked": all_abilities_for(t["key"], int(tier)),
+        "advancement_steps_per_tier": ADVANCEMENT_STEPS_PER_TIER,
+        "tier_advancement_xp_total": 16,
+    }

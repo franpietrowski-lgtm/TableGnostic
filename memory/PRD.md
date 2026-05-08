@@ -14,6 +14,33 @@
 
 ## 2. Implemented (cumulative, condensed)
 
+### V6.25.23 — Cycle B-1: Cypher System foundational data layer (2026-02-09)
+
+This is **B-1 of a multi-cycle Cycle B**. The foundational backend data + helper endpoints ship now; the Reference page UI, the XP-mechanics surfaces (intrusion buy-off / peer transfer / narrative pool), the cyphers/artifacts random-tables, and the bestiary seed each get their own follow-up cycle.
+
+**📚 Foundational seed (`system_data/cypher_data.py` — extended)**
+- 8 **GENRES** (Fantasy / Modern / Science-Fiction / Superheroes / Horror / Post-Apocalyptic / Fairy-Tale / Historical) with paraphrased blurbs.
+- **TIER_PROGRESSION** — 6 tiers, max_effort caps 1→6, advancement_xp_per_step 4 (canonical 4 × 4 = 16 XP per tier).
+- **ADVANCEMENT_STEPS_PER_TIER** — the four canonical Cypher advancement steps (Increasing Capabilities / Moving Toward Perfection / Extra Effort / Skill Training), each at 4 XP, with effect descriptions.
+- **CYPHER_TYPES_FULL** — Warrior / Adept / Explorer / Speaker with canonical starting stat pools (11/10/8 · 7/9/12 · 10/9/9 · 8/9/11), starting edge, free pool points (6), starting effort (1), starting cypher limit (Adept 3, others 2), and **the full per-tier ability roster** (T1-T6) for each — 11+6+12+9+8+6 abilities across the bands for the Warrior; 11+7+7+10+9+5 for the Adept; etc. All ability names are referenced by mechanic-name only — full rules text is never reproduced (CSOL 2022 compliant).
+- **XP_MECHANICS** — three award sources (GM Intrusion / Discovery / Character Arc) and **nine spend types** including the canonical Re-roll (1 XP), Refuse a GM Intrusion (1 XP), Player Intrusion (1 XP), Short/Medium/Long-term Benefits (2/3/4 XP), Advancement Step (4 XP), **Peer XP Transfer (1 XP)**, and **Narrative-Pool Spend** (variable, GM ratifies). The peer-transfer rule + intrusion-refusal rule + tier-advancement rule are exposed as discrete sentence-level paraphrases.
+- **SKILL_LEVELS** ladder (Inability +1 / Untrained 0 / Trained −1 / Specialised −2 step shifts).
+- **RULES_NOTES** — six sentence-level paraphrased notes covering Difficulty target = 3 × difficulty, Effort cost-per-step, Edge cost reduction, Cypher Limit + intrusion trigger, GM Intrusion XP economy, Damage Track ladder.
+- **COMPATIBILITY_NOTICE** constant — the legal-clean disclaimer the Reference Editor will surface in its "Why this is legal" tooltip.
+
+**🔌 Endpoints**
+- `GET /api/systems/cypher/reference` (existing) now includes the V6.25.23 keys (`genres`, `tier_progression`, `types_full`, `xp_mechanics`, `skill_levels_v2`, `rules_notes`, `compatibility_notice`, `advancement_steps`).
+- New `GET /api/cypher/tier-helper?type=warrior&tier=N` returns everything the character builder's tier-progression sidebar needs in a single call: type metadata + tier caps + flat ability list (with `tier` per row for colour-banding) + the four advancement steps + total tier-advancement XP (16). Adept tier 4 verified to unlock 35 abilities (11 + 7 + 7 + 10 across T1-T4).
+
+**Testing** — 16/16 new V6.25.23 tests cover: 8 genres, 6-tier progression with effort caps, 4 advancement steps × 4 XP, 4 core types with canonical pools, every type having ≥4 abilities at every tier, XP mechanics including peer transfer + intrusion refusal + 16-XP tier rule, paraphrased (not verbatim) rules notes, e2e `/reference` and `/tier-helper` endpoints with proper 404/422 error handling. 167/167 V6.25.x cumulative regression pass; no breakage. Lint clean.
+
+**Cycle B remaining sub-cycles (queued)**
+- 🟧 **B-2** — Cypher Reference page UI (Atelier): genre tabs + Type/Descriptor/Foci/Cyphers/Artifacts sub-sections + GM "Make custom" affordances mirroring the printed-book field layout.
+- 🟧 **B-3** — Cypher character builder + sheet smart editor: pool/edge/effort/cypher-limit boxes + tier-progression sidebar + per-tier ability picker.
+- 🟧 **B-4** — XP mechanics surfaces: Refuse-Intrusion modal, Peer XP transfer modal, Narrative-Pool authoring panel, all hooked to a new `/cypher/xp-events` ledger.
+- 🟧 **B-5** — Cyphers / Artifacts random-tables (charges, depletion, recharge) seeded by genre.
+- 🟧 **B-6** — Bestiary seed extraction + reference grouping.
+
 ### V6.25.22 — Cycle A: Anime 5E race templates + floating CP balance widget (2026-02-09)
 
 **🐉 Race templates (`system_data/anime5e_race_templates.py`, NEW)**
