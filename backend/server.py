@@ -56,6 +56,8 @@ from routes import macros as macros_routes
 from routes import cypher_xp as cypher_xp_routes
 from routes import codex_pdf as codex_pdf_routes
 from routes import roll_tables as roll_tables_routes
+from routes import materials as materials_routes
+from routes import encounters_library as encounters_library_routes
 
 app = FastAPI(title="Table-Gnostic API")
 
@@ -130,6 +132,8 @@ app.include_router(macros_routes.router)
 app.include_router(cypher_xp_routes.router)
 app.include_router(codex_pdf_routes.router)
 app.include_router(roll_tables_routes.router)
+app.include_router(materials_routes.router)
+app.include_router(encounters_library_routes.router)
 
 # Static-file mount: serve uploaded battlemap images from disk so GMs can
 # drop in renders from Inkarnate / DungeonCraft / Talespire / RPGEngine

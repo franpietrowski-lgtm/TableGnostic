@@ -174,16 +174,43 @@ export default function ReferenceEditor({ campaignId, isGm, systemId }) {
   const blank = () => ({
     kind: tab, name: "", summary: "", page: "",
     book: systemId || "besm-4e", cost: "", fields: {},
+    also_to_codex: false,
   });
 
   const save = async (row) => {
     setBusy(true); setErr("");
     try {
       const payload = { ...row, page: row.page === "" ? null : Number(row.page) };
+      const alsoCodex = !!row.also_to_codex;
+      delete payload.also_to_codex;  // server schema doesn't expect this
+      let saved;
       if (row.id) {
-        await api.patch(`/campaigns/${campaignId}/reference/${row.id}`, payload);
+        const r = await api.patch(`/campaigns/${campaignId}/reference/${row.id}`, payload);
+        saved = r.data;
       } else {
-        await api.post(`/campaigns/${campaignId}/reference`, payload);
+        const r = await api.post(`/campaigns/${campaignId}/reference`, payload);
+        saved = r.data;
+      }
+      // V6.25.26 — When the GM ticked "also submit to Codex", we mirror
+      // the entry as a codex node. The classifier picks `node_kind` and
+      // World-Tree section automatically from name + summary heuristics.
+      if (alsoCodex && saved && !row.id) {
+        try {
+          await api.post(`/campaigns/${campaignId}/codex-nodes`, {
+            title: saved.name,
+            name: saved.name,
+            summary: saved.summary || "",
+            content: saved.summary || "",
+            type: "concept",
+            visibility: "gm",
+            tags: ["from-reference", saved.kind],
+            fields: { source_reference_id: saved.id, source_kind: saved.kind },
+          });
+        } catch (codexErr) {
+          // Don't fail the whole save — surface it but the reference is saved.
+          setErr("Reference saved, but Codex mirror failed: " +
+                  (formatApiErrorDetail(codexErr.response?.data?.detail) || codexErr.message));
+        }
       }
       setDraft(null);
       await refresh();
@@ -227,12 +254,14 @@ export default function ReferenceEditor({ campaignId, isGm, systemId }) {
                 <BookOpen className="w-3 h-3"/> Import from templates
               </button>
             )}
-            <button onClick={() => setShowAtlas(true)}
-                    className="btn btn-ghost text-xs"
-                    data-testid="reference-open-atlas-btn"
-                    title="Read-only atlas: D&D spells & class abilities translated to BESM Attributes with SRD citations.">
-              <BookOpen className="w-3 h-3"/> Spell Conversion Atlas
-            </button>
+            {systemId === "anime-5e" && (
+              <button onClick={() => setShowAtlas(true)}
+                      className="btn btn-ghost text-xs"
+                      data-testid="reference-open-atlas-btn"
+                      title="Anime 5E only: D&D spells & class abilities translated to BESM/Anime 5E Attributes with SRD citations.">
+                <BookOpen className="w-3 h-3"/> Spell Conversion Atlas
+              </button>
+            )}
             <button onClick={() => setDraft(blank())} className="btn btn-primary text-xs"
                     data-testid="reference-add-btn">
               <Plus className="w-3 h-3"/> Add {String(labelOf(tab)).split(" ")[0]}
@@ -505,12 +534,28 @@ function Row({ row, onChange, onSave, onCancel, busy, systemId, editing, onEdit,
             })}
           </select>
         </div>
-        <div className="flex justify-end gap-2">
-          <button onClick={onCancel} className="btn btn-ghost text-xs">Cancel</button>
-          <button onClick={() => onSave(row)} disabled={busy || !row.name}
-                  className="btn btn-primary text-xs" data-testid="reference-save-btn">
-            <Save className="w-3 h-3"/> Save
-          </button>
+        <div className="flex items-center justify-between gap-3 border-t border-gold/10 pt-2 flex-wrap">
+          <label className="flex items-center gap-2 text-[11px] text-parchment cursor-pointer">
+            <input type="checkbox"
+                    checked={!!row.also_to_codex}
+                    onChange={(e) => onChange({ ...row, also_to_codex: e.target.checked })}
+                    disabled={!!row.id}
+                    data-testid="reference-also-to-codex"/>
+            <span>
+              <b>Also submit to Codex</b>
+              <span className="text-mist italic ml-1">
+                — mirrors this entry as a codex node (auto-classified onto the World Tree).
+                Available on first save only.
+              </span>
+            </span>
+          </label>
+          <div className="flex justify-end gap-2">
+            <button onClick={onCancel} className="btn btn-ghost text-xs">Cancel</button>
+            <button onClick={() => onSave(row)} disabled={busy || !row.name}
+                    className="btn btn-primary text-xs" data-testid="reference-save-btn">
+              <Save className="w-3 h-3"/> Save
+            </button>
+          </div>
         </div>
       </div>
     );

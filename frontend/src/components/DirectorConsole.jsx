@@ -7,6 +7,7 @@ import {
   AlertTriangle, CheckCircle2, Crown, Activity,
 } from "lucide-react";
 import RollTableDesigner from "./RollTableDesigner";
+import EncountersLibrary from "./EncountersLibrary";
 
 /**
  * GM Director's Console — the tactical brain of the campaign.
@@ -464,6 +465,11 @@ export default function DirectorConsole() {
       {/* V6.25.25 (Cycle D) — Roll-Table Designer (gated to seeded materials). */}
       <div className="mt-6">
         <RollTableDesigner campId={cid} partyTier={partyTier}/>
+      </div>
+
+      {/* V6.25.26 — Encounters Library (anti-railroad: bulk-author + pick from session). */}
+      <div className="mt-6">
+        <EncountersLibrary campId={cid} isGm={true}/>
       </div>
     </div>
   );

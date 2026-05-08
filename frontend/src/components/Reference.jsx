@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { api } from "../lib/api";
+import CypherReferencePanel from "./CypherReferencePanel";
 import { BookOpen, Search, Sparkles } from "lucide-react";
 import { InstructionsPanel } from "./ReferenceEditor";
 
@@ -439,6 +440,15 @@ function SystemReferenceView({ ref_, systemId, q }) {
       </aside>
 
       <div className="space-y-6 min-w-0">
+      {/* V6.25.26 — When the active system is Cypher, the dashboard
+          embeds the full CypherReferencePanel (genres, sub-tabs,
+          flavors, bestiary, roll-tables) ABOVE the legacy quick-ref
+          cards. The user requested the Cypher system reference live
+          on the dashboard Reference page rather than the Atelier. */}
+      {systemId === "cypher" && (
+        <CypherReferencePanel campId={null} isGm={false}/>
+      )}
+
       <div className="card-mystic p-4">
         <div className="label-ref mb-1">Rule of thumb</div>
         <div className="text-sm text-parchment/90 leading-snug">{ref_.rule_note}</div>

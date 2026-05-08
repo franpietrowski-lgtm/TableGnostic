@@ -28,6 +28,7 @@ export default function RollTableDesigner({ campId, partyTier = 1 }) {
   const [draft, setDraft] = useState(null);
   const [refLib, setRefLib] = useState([]);
   const [nodes, setNodes] = useState([]);
+  const [materials, setMaterials] = useState([]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [rollResult, setRollResult] = useState(null);
@@ -50,6 +51,9 @@ export default function RollTableDesigner({ campId, partyTier = 1 }) {
     api.get(`/campaigns/${campId}/codex-nodes`)
       .then((r) => setNodes(r.data?.rows || r.data || []))
       .catch(() => setNodes([]));
+    api.get(`/campaigns/${campId}/materials`)
+      .then((r) => setMaterials(r.data?.rows || []))
+      .catch(() => setMaterials([]));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [campId]);
 
@@ -59,7 +63,7 @@ export default function RollTableDesigner({ campId, partyTier = 1 }) {
       description: "",
       rarity_tier: "common",
       min_party_tier: 1,
-      entries: [{ weight: 1, label: "", reference_id: null, node_id: null, body: "" }],
+      entries: [{ weight: 1, label: "", reference_id: null, node_id: null, material_id: null, body: "" }],
     });
     setSelected(null);
     setRollResult(null);
@@ -73,6 +77,7 @@ export default function RollTableDesigner({ campId, partyTier = 1 }) {
         label: e.label || "",
         reference_id: e.reference_id || null,
         node_id: e.node_id || null,
+        material_id: e.material_id || null,
         body: e.body || "",
       })),
     });
@@ -87,6 +92,7 @@ export default function RollTableDesigner({ campId, partyTier = 1 }) {
       const cleanEntries = draft.entries.map((e) => {
         if (e.reference_id) return { weight: e.weight, label: e.label, reference_id: e.reference_id };
         if (e.node_id)      return { weight: e.weight, label: e.label, node_id: e.node_id };
+        if (e.material_id)  return { weight: e.weight, label: e.label, material_id: e.material_id };
         return { weight: e.weight, label: e.label, body: e.body };
       });
       const payload = { ...draft, entries: cleanEntries };
@@ -222,7 +228,7 @@ export default function RollTableDesigner({ campId, partyTier = 1 }) {
       {/* Editor */}
       {draft && (
         <RollTableEditor draft={draft} setDraft={setDraft}
-                          refLib={refLib} nodes={nodes}
+                          refLib={refLib} nodes={nodes} materials={materials}
                           onCancel={() => { setDraft(null); setSelected(null); }}
                           onSave={saveDraft} busy={busy}/>
       )}
@@ -231,7 +237,7 @@ export default function RollTableDesigner({ campId, partyTier = 1 }) {
 }
 
 
-function RollTableEditor({ draft, setDraft, refLib, nodes, onCancel, onSave, busy }) {
+function RollTableEditor({ draft, setDraft, refLib, nodes, materials, onCancel, onSave, busy }) {
   const totalWeight = useMemo(() =>
     (draft.entries || []).reduce((s, e) => s + (Number(e.weight) || 0), 0),
     [draft.entries]);
@@ -243,7 +249,7 @@ function RollTableEditor({ draft, setDraft, refLib, nodes, onCancel, onSave, bus
   });
   const addEntry = () => setDraft({
     ...draft,
-    entries: [...draft.entries, { weight: 1, label: "", reference_id: null, node_id: null, body: "" }],
+    entries: [...draft.entries, { weight: 1, label: "", reference_id: null, node_id: null, material_id: null, body: "" }],
   });
   const removeEntry = (i) => setDraft({
     ...draft,
@@ -297,7 +303,7 @@ function RollTableEditor({ draft, setDraft, refLib, nodes, onCancel, onSave, bus
         <div className="space-y-2">
           {draft.entries.map((e, i) => (
             <RollEntryRow key={i} idx={i} entry={e}
-                            refLib={refLib} nodes={nodes}
+                            refLib={refLib} nodes={nodes} materials={materials}
                             onChange={(patch) => setEntry(i, patch)}
                             onRemove={() => removeEntry(i)}/>
           ))}
@@ -324,14 +330,17 @@ function RollTableEditor({ draft, setDraft, refLib, nodes, onCancel, onSave, bus
 }
 
 
-function RollEntryRow({ idx, entry, refLib, nodes, onChange, onRemove }) {
+function RollEntryRow({ idx, entry, refLib, nodes, materials, onChange, onRemove }) {
   const sourceKind = entry.reference_id ? "reference"
-                        : entry.node_id ? "node" : entry.body ? "body" : "";
+                        : entry.node_id ? "node"
+                        : entry.material_id ? "material"
+                        : entry.body ? "body" : "";
 
   const setSource = (kind) => {
-    const cleared = { reference_id: null, node_id: null, body: "" };
+    const cleared = { reference_id: null, node_id: null, material_id: null, body: "" };
     if (kind === "reference") cleared.reference_id = refLib[0]?.id || null;
     if (kind === "node")      cleared.node_id      = nodes[0]?.id  || null;
+    if (kind === "material")  cleared.material_id  = materials[0]?.id || null;
     if (kind === "body")      cleared.body         = "";
     onChange(cleared);
   };
@@ -367,6 +376,11 @@ function RollEntryRow({ idx, entry, refLib, nodes, onChange, onRemove }) {
                  data-testid={`roll-entry-src-node-${idx}`}>
           <Network className="w-3 h-3"/> Codex node
         </button>
+        <button type="button" onClick={() => setSource("material")}
+                 className={`tag ${sourceKind === "material" ? "border-gold text-gold-bright bg-gold/15" : ""}`}
+                 data-testid={`roll-entry-src-material-${idx}`}>
+          <Dices className="w-3 h-3"/> Material
+        </button>
         <button type="button" onClick={() => setSource("body")}
                  className={`tag ${sourceKind === "body" ? "border-gold text-gold-bright bg-gold/15" : ""}`}
                  data-testid={`roll-entry-src-body-${idx}`}>
@@ -391,6 +405,16 @@ function RollEntryRow({ idx, entry, refLib, nodes, onChange, onRemove }) {
           <option value="">— pick a codex node —</option>
           {nodes.map((n) => (
             <option key={n.id} value={n.id}>{n.node_kind || n.type} · {n.title || n.name}</option>
+          ))}
+        </select>
+      )}
+      {sourceKind === "material" && (
+        <select className="select" value={entry.material_id || ""}
+                 onChange={(e) => onChange({ material_id: e.target.value })}
+                 data-testid={`roll-entry-material-pick-${idx}`}>
+          <option value="">— pick a material —</option>
+          {materials.map((m) => (
+            <option key={m.id} value={m.id}>{m.tier} · {m.rarity} · {m.name}</option>
           ))}
         </select>
       )}

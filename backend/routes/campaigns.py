@@ -702,6 +702,108 @@ async def restore_genesis_archive(cid: str, aid: str,
     return restored
 
 
+@router.post("/campaigns/{cid}/genesis/archives/{aid}/marketplace-share")
+async def share_genesis_archive(cid: str, aid: str,
+                                   access: str = "public",
+                                   price_cents: int = 0,
+                                   summary: str = "",
+                                   license_text: str = "",
+                                   license_attestation: bool = False,
+                                   user: dict = Depends(get_current_user)):
+    """V6.25.26 — Per-archive marketplace share.
+
+    Publishes a Genesis archive snapshot to the Marketplace so other
+    GMs can clone it as a starter for their own campaign. Each archive
+    gets its OWN listing — versions and forks remain linked through
+    `cloned_from_archive_id`. Only the campaign GM can publish.
+    """
+    if access not in ("public", "private", "paywall"):
+        raise HTTPException(422, "access must be public | private | paywall")
+    if access == "paywall" and price_cents <= 0:
+        raise HTTPException(422, "Paywall listings need a positive price_cents.")
+    if not license_attestation:
+        raise HTTPException(422, "License attestation is required to publish.")
+
+    camp = await db.campaigns.find_one({"id": cid}, {"_id": 0})
+    if not camp:
+        raise HTTPException(404, "Campaign not found.")
+    if camp["gm_id"] != user["id"] and user.get("role") != "admin":
+        raise HTTPException(403, "Only the campaign GM may share Genesis archives.")
+    archive = await db.genesis_archives.find_one(
+        {"campaign_id": cid, "archive_id": aid, "kind": "genesis"},
+        {"_id": 0})
+    if not archive:
+        raise HTTPException(404, "Archive not found")
+
+    # Already-shared check — one listing per archive.
+    existing = await db.marketplace_listings.find_one(
+        {"source_kind": "genesis_archive", "source_id": aid}, {"_id": 0})
+    if existing:
+        raise HTTPException(409, "This archive is already on the marketplace.")
+
+    listing = {
+        "id": new_id(),
+        "kind": "genesis_archive",
+        "name": archive.get("logline") or archive.get("title")
+                or f"Genesis archive {aid[:8]}",
+        "summary": (summary or archive.get("logline") or "")[:600],
+        "license_text": license_text[:600],
+        "access": access,
+        "price_cents": int(price_cents),
+        "source_kind": "genesis_archive",
+        "source_id": aid,
+        "source_campaign_id": cid,
+        "system_id": camp.get("system_id"),
+        "author_id": user["id"],
+        "author_name": user.get("name") or user.get("email"),
+        # Snapshot: strip mongo + audit fields so re-fork is clean.
+        "snapshot": {k: v for k, v in archive.items()
+                       if k not in ("archive_id", "archived_at", "archived_by",
+                                       "archived_from", "kind", "_id")},
+        "downloads": 0,
+        "license_attestation_at": now_iso(),
+        "created_at": now_iso(),
+    }
+    await db.marketplace_listings.insert_one(listing)
+    listing.pop("_id", None)
+    return listing
+
+
+@router.post("/marketplace/{lid}/clone-genesis-archive")
+async def clone_genesis_archive_listing(lid: str,
+                                            into_campaign_id: str,
+                                            user: dict = Depends(get_current_user)):
+    """Fork a marketplace Genesis archive into the user's campaign as
+    a new archive entry. Player can apply it via the existing /restore
+    flow once it's in their campaign's archive list."""
+    listing = await db.marketplace_listings.find_one(
+        {"id": lid, "kind": "genesis_archive"}, {"_id": 0})
+    if not listing:
+        raise HTTPException(404, "Listing not found")
+    target = await db.campaigns.find_one({"id": into_campaign_id}, {"_id": 0})
+    if not target:
+        raise HTTPException(404, "Target campaign not found")
+    if target["gm_id"] != user["id"] and user.get("role") != "admin":
+        raise HTTPException(403, "Only the GM of the target campaign may clone archives.")
+    # Append the snapshot as a new archive entry.
+    snap = dict(listing.get("snapshot") or {})
+    snap.update({
+        "campaign_id": into_campaign_id,
+        "archive_id": new_id(),
+        "archived_at": now_iso(),
+        "archived_by": user["id"],
+        "archived_from": "marketplace",
+        "kind": "genesis",
+        "cloned_from_archive_id": listing["source_id"],
+        "cloned_from_listing_id": lid,
+    })
+    await db.genesis_archives.insert_one(snap)
+    await db.marketplace_listings.update_one(
+        {"id": lid}, {"$inc": {"downloads": 1}})
+    snap.pop("_id", None)
+    return {"ok": True, "archive_id": snap["archive_id"]}
+
+
 @router.post("/campaigns/{cid}/genesis/seed-nodes")
 async def seed_nodes_from_genesis(cid: str, user: dict = Depends(get_current_user)):
     """Convert genesis seed_npcs / nemesis / adventures / locations /

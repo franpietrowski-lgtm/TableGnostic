@@ -49,16 +49,18 @@ RARITY_TIERS = {
 class RollTableEntry(BaseModel):
     """One row in a weighted roll table.
 
-    Exactly ONE of `reference_id`, `node_id`, or `body` must be set —
-    this is the seeded-materials gate.
+    Exactly ONE of `reference_id`, `node_id`, `material_id`, or `body`
+    must be set — this is the seeded-materials gate.
     """
     weight: int = Field(default=1, ge=1, le=100)
     label: str = Field(default="", max_length=200,
-                        description="Short display name. Auto-fills from the linked reference / node when empty.")
+                        description="Short display name. Auto-fills from the linked source when empty.")
     reference_id: Optional[str] = Field(default=None,
                         description="campaign_reference row id.")
     node_id: Optional[str] = Field(default=None,
                         description="codex node id.")
+    material_id: Optional[str] = Field(default=None,
+                        description="crafting material id (raw / refined / assembled).")
     body: Optional[str] = Field(default=None, max_length=2000,
                         description="Literal text body when no seeded source exists. Authored deliberately.")
 
@@ -89,8 +91,10 @@ async def _validate_entries(cid: str, entries: List[Dict[str, Any]]):
         raise HTTPException(422, "A roll table must have at least one entry.")
     ref_ids = [e.get("reference_id") for e in entries if e.get("reference_id")]
     node_ids = [e.get("node_id") for e in entries if e.get("node_id")]
+    mat_ids = [e.get("material_id") for e in entries if e.get("material_id")]
     valid_refs = set()
     valid_nodes = set()
+    valid_mats = set()
     if ref_ids:
         rows = await db.campaign_reference.find(
             {"campaign_id": cid, "id": {"$in": ref_ids}},
@@ -101,16 +105,23 @@ async def _validate_entries(cid: str, entries: List[Dict[str, Any]]):
             {"campaign_id": cid, "id": {"$in": node_ids}},
             {"_id": 0, "id": 1}).to_list(500)
         valid_nodes = {r["id"] for r in rows}
+    if mat_ids:
+        rows = await db.materials.find(
+            {"campaign_id": cid, "id": {"$in": mat_ids}},
+            {"_id": 0, "id": 1}).to_list(500)
+        valid_mats = {r["id"] for r in rows}
     for i, e in enumerate(entries):
-        sources = sum(bool(e.get(k)) for k in ("reference_id", "node_id", "body"))
+        sources = sum(bool(e.get(k)) for k in ("reference_id", "node_id", "material_id", "body"))
         if sources == 0:
-            raise HTTPException(422, f"Entry {i}: must point at a seeded reference, codex node, or carry a literal body. No silent free-text drift allowed.")
+            raise HTTPException(422, f"Entry {i}: must point at a seeded reference, codex node, material, or carry a literal body. No silent free-text drift allowed.")
         if sources > 1:
-            raise HTTPException(422, f"Entry {i}: pick exactly one source (reference / node / body), got {sources}.")
+            raise HTTPException(422, f"Entry {i}: pick exactly one source (reference / node / material / body), got {sources}.")
         if e.get("reference_id") and e["reference_id"] not in valid_refs:
             raise HTTPException(422, f"Entry {i}: reference_id {e['reference_id']!r} is not a seeded reference in this campaign.")
         if e.get("node_id") and e["node_id"] not in valid_nodes:
             raise HTTPException(422, f"Entry {i}: node_id {e['node_id']!r} is not a codex node in this campaign.")
+        if e.get("material_id") and e["material_id"] not in valid_mats:
+            raise HTTPException(422, f"Entry {i}: material_id {e['material_id']!r} is not a campaign material.")
 
 
 @router.post("/campaigns/{cid}/roll-tables")
@@ -248,6 +259,17 @@ async def roll_table(cid: str, tid: str,
                                     "name": node.get("title") or node.get("name"),
                                     "summary": node.get("summary"),
                                     "node_kind": node.get("node_kind")}
+    elif pick.get("material_id"):
+        mat = await db.materials.find_one(
+            {"id": pick["material_id"]}, {"_id": 0})
+        if mat:
+            if not hydrated.get("label"):
+                hydrated["label"] = mat.get("name")
+            hydrated["source"] = {"kind": "material",
+                                    "name": mat.get("name"),
+                                    "summary": mat.get("summary"),
+                                    "tier": mat.get("tier"),
+                                    "rarity": mat.get("rarity")}
     else:
         hydrated["source"] = {"kind": "body"}
     return {

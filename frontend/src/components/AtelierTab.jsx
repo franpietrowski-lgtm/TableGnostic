@@ -1,17 +1,28 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, lazy, Suspense } from "react";
 import { Link } from "react-router-dom";
 import { api, formatApiErrorDetail } from "../lib/api";
 import { Plus, X, AlertTriangle, CheckCircle2, Save, Layers, ListTree, ScrollText, FileDown } from "lucide-react";
 import IngestPanel from "./IngestPanel";
-import XPApprovalQueue from "./XPApprovalQueue";
-import MaterialsApprovalQueue from "./MaterialsApprovalQueue";
-import EpicCampaignPanel from "./EpicCampaignPanel";
-import ReferenceEditor from "./ReferenceEditor";
-import CypherReferencePanel from "./CypherReferencePanel";
-import TimelinePanel from "./TimelinePanel";
-import AtelierWorkshop from "./AtelierWorkshop";
-import WorldCreationTree from "./WorldCreationTree";
-import GenesisArchivePanel from "./GenesisArchivePanel";
+
+// V6.25.26 — lazy-split heavy sub-tab panels so the initial Atelier
+// load isn't bottlenecked on Cypher/Crafting/WorldTree code that the
+// GM may never visit in a given session.
+const XPApprovalQueue        = lazy(() => import("./XPApprovalQueue"));
+const MaterialsApprovalQueue = lazy(() => import("./MaterialsApprovalQueue"));
+const EpicCampaignPanel      = lazy(() => import("./EpicCampaignPanel"));
+const ReferenceEditor        = lazy(() => import("./ReferenceEditor"));
+const CraftingServicePanel   = lazy(() => import("./CraftingServicePanel"));
+const TimelinePanel          = lazy(() => import("./TimelinePanel"));
+const AtelierWorkshop        = lazy(() => import("./AtelierWorkshop"));
+const WorldCreationTree      = lazy(() => import("./WorldCreationTree"));
+const GenesisArchivePanel    = lazy(() => import("./GenesisArchivePanel"));
+
+const SubtabFallback = () => (
+  <div className="card-mystic p-6 text-mist italic text-sm"
+       data-testid="atelier-subtab-loading">
+    Summoning…
+  </div>
+);
 
 /**
  * AtelierTab — V4.4 dynamic-scaling tiers.
@@ -206,19 +217,33 @@ export default function AtelierTab({ campId, camp }) {
         </div>
       )}
 
+      <Suspense fallback={<SubtabFallback/>}>
       {subtab === "references" && (
         <div data-testid="atelier-references-pane" className="space-y-4">
-          {camp?.system_id === "cypher" && (
-            <CypherReferencePanel campId={campId} isGm={!!camp?.is_gm}/>
-          )}
-          <ReferenceEditor campaignId={campId} systemId={camp?.system_id}
-                            isGm={camp?.is_gm}/>
+          <div className="card-mystic p-4 border-arcane/30"
+               data-testid="atelier-references-relocation-notice">
+            <div className="label-ref text-arcane-light mb-1">References moved</div>
+            <div className="text-[11px] text-mist leading-snug">
+              The Reference Tables editor now lives on <b>Atelier ▸ Table Tools</b>,
+              where it sits next to your other GM authoring tools. The full system
+              reference catalogue (Cypher, BESM, Anime 5E, etc.) lives on the main
+              <b> Reference</b> page (toolbar ▸ Reference). World narrative goes in
+              the <b>Codex</b>; system rules &amp; mechanics go in <b>References</b>.
+            </div>
+            <button onClick={() => setSubtab("table-tools")}
+                    className="btn btn-primary text-xs mt-3"
+                    data-testid="atelier-references-jump-to-tabletools">
+              Open Table Tools →
+            </button>
+          </div>
         </div>
       )}
 
       {subtab === "table-tools" && (
-        <div data-testid="atelier-table-tools-pane">
+        <div data-testid="atelier-table-tools-pane" className="space-y-6">
           <AtelierWorkshop campId={campId}/>
+          <ReferenceEditor campaignId={campId} systemId={camp?.system_id}
+                            isGm={camp?.is_gm}/>
         </div>
       )}
 
@@ -237,6 +262,9 @@ export default function AtelierTab({ campId, camp }) {
 
       {/* ---------- Materials / Byproduct / Craft Output Approval (GM-side) ---------- */}
       <MaterialsApprovalQueue campaignId={campId} isGm={!!camp?.is_gm}/>
+
+      {/* V6.25.26 — Crafting Service ⌥C : Raw / Refined / Assembled materials. */}
+      <CraftingServicePanel campId={campId} isGm={!!camp?.is_gm}/>
 
       <div className="text-[11px] text-mist/60 italic px-1" data-testid="atelier-ref-moved-note">
         Looking for the campaign Reference tables and the GM Quickstart instructions?
@@ -322,6 +350,7 @@ export default function AtelierTab({ campId, camp }) {
         </div>
       )}
       </>)}
+      </Suspense>
     </div>
   );
 }
