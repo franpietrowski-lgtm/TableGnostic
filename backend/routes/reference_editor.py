@@ -42,6 +42,8 @@ REFERENCE_KINDS = {
     "spell", "feat", "background", "race_trait", "class_feature",
     # Cypher
     "cypher_ability", "cypher_item", "artifact", "descriptor", "focus", "type",
+    # V6.25.28 — D&D 5E SRD extended kinds.
+    "subclass", "magic_item", "monster", "language", "tool",
 }
 
 router = APIRouter(prefix="/api", tags=["reference-editor"])
@@ -69,6 +71,8 @@ class ReferenceItemIn(BaseModel):
         # Cypher
         "cypher_ability", "cypher_item", "artifact", "descriptor", "focus",
         "type",
+        # V6.25.28 — D&D 5E SRD extended kinds.
+        "subclass", "magic_item", "monster", "language", "tool",
     ]
     name: str = Field(min_length=1, max_length=120)
     summary: str = Field(default="", max_length=500)

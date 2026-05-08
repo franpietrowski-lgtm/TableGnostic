@@ -416,6 +416,14 @@ function SystemReferenceView({ ref_, systemId, q }) {
   if (has(ref_.cyphers)) sectionList.push({ slug: "cyphers", label: "Cyphers" });
   if (has(ref_.artifacts)) sectionList.push({ slug: "artifacts", label: "Artifacts" });
   if (has(ref_.skills)) sectionList.push({ slug: "skills", label: "Skills" });
+  if (has(ref_.feats)) sectionList.push({ slug: "feats", label: "Feats" });
+  if (has(ref_.subclasses)) sectionList.push({ slug: "subclasses", label: "Subclasses" });
+  if (has(ref_.magic_items)) sectionList.push({ slug: "magic-items", label: "Magic Items" });
+  if (has(ref_.monsters)) sectionList.push({ slug: "monsters", label: "Monsters" });
+  if (has(ref_.languages)) sectionList.push({ slug: "languages", label: "Languages" });
+  if (has(ref_.tools)) sectionList.push({ slug: "tools", label: "Tools" });
+  if (has(ref_.damage_types)) sectionList.push({ slug: "damage-types", label: "Damage Types" });
+  if (has(ref_.schools)) sectionList.push({ slug: "schools", label: "Schools of Magic" });
   if (has(ref_.conditions)) sectionList.push({ slug: "conditions", label: "Conditions" });
   if (has(ref_.actions)) sectionList.push({ slug: "actions", label: "Actions" });
   if (has(ref_.power_levels)) sectionList.push({ slug: "power-levels", label: "Power Levels" });
@@ -568,6 +576,74 @@ function SystemReferenceView({ ref_, systemId, q }) {
           {f(ref_.skills).map((s, i) => (
             <Card key={i} title={typeof s === "string" ? s : s.name}
                   sub={typeof s === "string" ? "" : `Ability: ${s.ability}`}/>
+          ))}
+        </Section>
+      )}
+      {f(ref_.feats).length > 0 && (
+        <Section title="Feats">
+          {f(ref_.feats).map((ft, i) => (
+            <Card key={i} title={ft.name}
+                  sub={`${ft.prereq && ft.prereq !== "—" ? `Prereq: ${ft.prereq} · ` : ""}${ft.summary}`}
+                  page={ft.page}/>
+          ))}
+        </Section>
+      )}
+      {f(ref_.subclasses).length > 0 && (
+        <Section title="Subclasses">
+          {f(ref_.subclasses).map((sc, i) => (
+            <Card key={i} title={`${sc.class} · ${sc.name}`}
+                  sub={(sc.key || []).join(" · ")}
+                  page={sc.page}/>
+          ))}
+        </Section>
+      )}
+      {f(ref_.magic_items).length > 0 && (
+        <Section title="Magic Items">
+          {f(ref_.magic_items).map((mi, i) => (
+            <Card key={i} title={mi.name}
+                  sub={`${mi.rarity} · ${mi.type}${mi.attune ? " · attune" : ""} · ${mi.summary}`}
+                  page={mi.page}/>
+          ))}
+        </Section>
+      )}
+      {f(ref_.monsters).length > 0 && (
+        <Section title="Monsters">
+          {f(ref_.monsters).map((m, i) => (
+            <Card key={i} title={`${m.name}${m.cr ? ` · CR ${m.cr}` : ""}`}
+                  sub={`${m.size} ${m.type} · AC ${m.ac} · HP ${m.hp} · ${m.speed} · ${m.atks}`}
+                  page={m.page}/>
+          ))}
+        </Section>
+      )}
+      {f(ref_.languages).length > 0 && (
+        <Section title="Languages">
+          {f(ref_.languages).map((l, i) => (
+            <Card key={i} title={l.name}
+                  sub={`${l.category} · script ${l.script} · spoken by ${l.speakers}`}
+                  page={l.page}/>
+          ))}
+        </Section>
+      )}
+      {f(ref_.tools).length > 0 && (
+        <Section title="Tools">
+          {f(ref_.tools).map((t, i) => (
+            <Card key={i} title={t.name}
+                  sub={`${t.category} · ${t.ability} checks`}
+                  page={t.page}/>
+          ))}
+        </Section>
+      )}
+      {f(ref_.damage_types).length > 0 && (
+        <Section title="Damage Types">
+          {f(ref_.damage_types).map((d, i) => (
+            <Card key={i} title={d.name} page={d.page}/>
+          ))}
+        </Section>
+      )}
+      {f(ref_.schools).length > 0 && (
+        <Section title="Schools of Magic">
+          {f(ref_.schools).map((s, i) => (
+            <Card key={i} title={s.name} sub={s.summary} page={s.page}/>
           ))}
         </Section>
       )}

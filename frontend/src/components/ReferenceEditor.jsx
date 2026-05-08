@@ -36,6 +36,12 @@ const KIND_LABELS = {
   descriptor: "Descriptors",
   focus: "Foci",
   type: "Types",
+  // V6.25.28 — D&D 5E SRD kinds.
+  subclass: "Subclasses",
+  magic_item: "Magic Items",
+  monster: "Monsters",
+  language: "Languages",
+  tool: "Tools",
 };
 // V6.25 — `custom` kind removed from the Atelier Reference Editor.
 // Custom / House Rules now live exclusively in the Campaign page's
@@ -108,8 +114,9 @@ const SYSTEM_KIND_ORDER = {
                "skill", "attribute", "defect", "enhancement", "limiter",
                "power_pack", "power_bundle", "weapon", "armor", "item",
                "companion"],
-  "dnd-5e": ["class_feature", "race_trait", "background", "spell", "feat",
-             "skill", "weapon", "armor", "item", "companion"],
+  "dnd-5e": ["class_feature", "race_trait", "background", "subclass",
+             "spell", "feat", "skill", "weapon", "armor", "item",
+             "magic_item", "monster", "language", "tool", "companion"],
   "cypher": ["type", "descriptor", "focus", "cypher_ability", "cypher_item",
              "artifact", "skill", "weapon", "armor", "item"],
 };

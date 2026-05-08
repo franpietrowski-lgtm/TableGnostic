@@ -14,6 +14,30 @@
 
 ## 2. Implemented (cumulative, condensed)
 
+### V6.25.28 — D&D 5E full canonical SRD seeding (2026-02-09)
+
+The user's **P2 backlog item**: full SRD-5.1 reference data wired into `/api/systems/dnd-5e/reference` and the dashboard Reference page so a D&D 5E campaign opens with a complete in-app rulebook without needing the SRD PDF.
+
+**Backend — `system_data/dnd5e_extended.py` (NEW)** ships:
+- **42 SRD feats** (name + prereq + mechanic summary + p.165) — every PHB feat from Alert through Weapon Master.
+- **61 SRD magic items** (name + rarity + type + attune flag + summary + page) — boots, cloaks, rings, wands, weapons +1/+2/+3, armor +1/+2, potions (Healing → Supreme + Speed + Invisibility), 60 iconic adventuring rewards.
+- **62 SRD monsters** (name + CR + type + size + AC + HP + speed + key actions + page) — Aboleth → Zombie, covering CR 1/8 to 23 (Kraken, Lich, Tarrasque-tier).
+- **16 SRD languages** with script + canonical speakers + standard / exotic category.
+- **27 SRD tools** — 13 artisan's tools + 7 kits + 5 instruments + 2 vehicles.
+- **CLASS_FEATURES** dict — per-class level-feature timeline (Barbarian rage progression, Bard inspiration die scaling, Cleric Channel Divinity, Fighter Action Surge, Monk martial-arts die, Paladin smite, all 12 classes).
+- **12 SRD subclasses** (one canonical per class — Berserker, Lore, Life Domain, Land, Champion, Open Hand, Devotion, Hunter, Thief, Draconic, Fiend, Evocation) with key-feature levels + page.
+- **13 damage types** + **8 schools of magic** with one-line summaries.
+- **12 additional races** (Aasimar, Firbolg, Goliath, Kenku, Lizardfolk, Tabaxi, Triton, Yuan-ti Pureblood, Genasi air/earth/fire/water) → races now total 21.
+
+**Reference Editor extension**:
+- 5 NEW kinds — `subclass`, `magic_item`, `monster`, `language`, `tool` — wired through both the backend `REFERENCE_KINDS` enum + the Pydantic Literal, and the frontend `KIND_LABELS` + `SYSTEM_KIND_ORDER["dnd-5e"]`. GMs can now author homebrew subclasses / monsters / magic items / regional languages / artisan tools per-campaign and they'll show up under the dashboard Reference page's "Custom · Yours" section automatically.
+
+**Reference dashboard renders**:
+- New sections in `Reference.jsx::SystemReferenceView` for Feats / Subclasses / Magic Items / Monsters / Languages / Tools / Damage Types / Schools of Magic. Quick-reference left rail auto-detects which sections will populate. Free-text search filter (top of Reference page) works across every section.
+
+**Tests** — `test_v62528_dnd5e_canon_seed.py` (7/7 NEW) covering payload shape, feat / monster / magic-item structure, language categorisation, Reference Editor round-trip on all 5 new kinds, and 4xx-rejection for unknown kinds. Combined: V6.25.25-28 = **45/45 pass in 23s**.
+
+
 ### V6.25.27 — CP Bank reconciliation + Inventory rework + Codex PDF unicode fix (2026-02-09)
 
 This cycle fixes three user-reported issues in one push:

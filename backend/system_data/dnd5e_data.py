@@ -324,13 +324,23 @@ CANTRIPS_KNOWN = {
 }
 
 
+# ── V6.25.28 — Extended SRD content (CC-BY 4.0). ────────────────────
+# RACES_EXT, LANGUAGES, TOOLS, FEATS, MAGIC_ITEMS, MONSTERS,
+# CLASS_FEATURES, SUBCLASSES, DAMAGE_TYPES, SCHOOLS — all live in the
+# sibling `dnd5e_extended.py` module so this file stays scannable.
+from .dnd5e_extended import (  # noqa: E402
+    RACES_EXT, LANGUAGES, TOOLS, FEATS, MAGIC_ITEMS, MONSTERS,
+    CLASS_FEATURES, SUBCLASSES, DAMAGE_TYPES, SCHOOLS,
+)
+
+
 REFERENCE = {
     "system_id": "dnd-5e",
     "kind": "class-and-slot",  # selector-driven, not point-buy
     "book": BOOK,
     "abilities": ABILITIES,
     "classes": CLASSES,
-    "races": RACES,
+    "races": RACES + RACES_EXT,             # 9 + 12 = 21 SRD races
     "backgrounds": BACKGROUNDS,
     "skills": SKILLS,
     "spells": SPELLS,
@@ -344,6 +354,16 @@ REFERENCE = {
     "spell_slots_half": SPELL_SLOTS_HALF,
     "spell_slots_warlock": SPELL_SLOTS_WARLOCK,
     "cantrips_known": CANTRIPS_KNOWN,
+    # V6.25.28 — extended SRD reference content.
+    "languages":      LANGUAGES,
+    "tools":          TOOLS,
+    "feats":          FEATS,
+    "magic_items":    MAGIC_ITEMS,
+    "monsters":       MONSTERS,
+    "class_features": CLASS_FEATURES,
+    "subclasses":     SUBCLASSES,
+    "damage_types":   DAMAGE_TYPES,
+    "schools":        SCHOOLS,
     "modifier_formula": "(score - 10) // 2",
     "proficiency_by_level": [2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6],
     "rule_note": (
