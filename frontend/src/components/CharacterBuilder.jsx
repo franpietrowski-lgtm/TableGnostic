@@ -78,9 +78,13 @@ export default function CharacterBuilder() {
   const maxAttrRank = (campaign && campaign.max_per_attribute_rank) || 0;
 
   useEffect(() => {
-    if (ch && ref) setCh((c) => ({ ...c, total_points: effectiveCap }));
+    // V6.25.27 — only auto-set total_points to the campaign cap on a
+    // BRAND-NEW character (no charId). Editing an existing character
+    // must respect the primer-set total stored in the DB; otherwise
+    // the CP Bank in the builder shows 90 while /validate keeps 84.
+    if (ch && ref && !charId) setCh((c) => ({ ...c, total_points: effectiveCap }));
   // eslint-disable-next-line
-  }, [effectiveCap]);
+  }, [effectiveCap, charId]);
 
   const spent = useMemo(() => {
     if (!ch) return { stat_cost: 0, attribute_cost: 0, skill_cost: 0, defect_points: 0, total_spent: 0 };
@@ -89,11 +93,20 @@ export default function CharacterBuilder() {
     // change the *effective Level* at which the Attribute functions
     // (Limiters raise it, Enhancements lower it). Cost is base × level only,
     // minus any nested Item/Weapon defect refunds (floored at 0).
+    // V6.25.27 — apply p.135 Item half-cost when attribute name is "Item"
+    // (and "Weapon" / "Companion" container variants in V4.1) so the
+    // builder's live preview agrees with the Rules Audit on save.
+    const isHalfCostContainer = (n) =>
+      ["item", "weapon", "companion"].includes((n || "").toLowerCase());
     const attribute_cost = ch.attributes.reduce((s, a) => {
       const lvl = Math.max(1, a.level || 1);
-      const subtotal = (a.cost_per_level || 0) * lvl;
+      const raw = (a.cost_per_level || 0) * lvl;
       const itemDefRefund = (a.defects || []).reduce((x, d) => x + (d.points_per_rank || 0) * (d.rank || 0), 0);
-      return s + Math.max(0, subtotal - itemDefRefund);
+      const net = Math.max(0, raw - itemDefRefund);
+      // p.135: container attributes (Item / Weapon / Companion) charge
+      // ceil(raw / 2); ceil so partial points round in the GM's favour.
+      const cost = isHalfCostContainer(a.name) ? Math.ceil(net / 2) : net;
+      return s + cost;
     }, 0);
     const skill_cost = ch.skills.reduce((s, k) => s + (k.cost_per_level || 0) * (k.level || 0), 0);
     const defect_points = ch.defects.reduce((s, d) => s + (d.points_per_rank || 0) * (d.rank || 0), 0);

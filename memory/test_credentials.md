@@ -1,9 +1,28 @@
-# Test credentials — V6.25.24 (current)
+# Test credentials — V6.25.27 (current)
 
 **GMFran (admin/GM)**: franpietrowski@gmail.com / PieGod08!!
 **Aurora (player)**: albanaszak@ymail.com / AuroraTest123!
 
 Both seeded on backend startup.
+
+## V6.25.27 verification targets
+
+### Codex PDF unicode header (P0 fix)
+- `GET /api/campaigns/af461ae004364002932f93c5b71cd483/codex-export.pdf` (em-dash campaign name) — was 500, now 200 + valid PDF (provided codex nodes exist; otherwise 400 "no nodes").
+
+### CP Bank reconciliation
+- `CpBalanceWidget` REMOVED from `/characters/{cid}` (read-only sheet) on every tab.
+- `CpBalanceWidget` MOUNTED at top of `/campaigns/{cid}/characters/{cid}/edit` (CharacterBuilder).
+- BESM widget reads `/api/characters/{cid}/validate.breakdown.total_spent` (matches Rules Audit).
+- Pre-approval: Total = primer's `total_points`. Post-approval (`audit.approved_for_play`): Total = primer + `character.xp_total`.
+- History tab "Points spent" reads `/validate.breakdown.total_spent` (was stale `character.spent.total_spent`).
+- Builder live-preview applies p.135 Item half-cost (ceil(raw/2)) for Item / Weapon / Companion containers.
+- Builder edit mode no longer overwrites saved `total_points` with campaign cap (only new chars auto-snap).
+
+### Inventory rework
+- New `folio.inventory_state = { items[], equipped{slot:id}, attuned_ids[], readied_ids[] }` schema.
+- `/sheets/InventoryPanel.jsx` — 10 category tabs, equipment slots (L-Hand · R-Hand · Head · Torso · Legs · Feet), per-row Equip / Attune / Ready toggles + charges counter, manual item editor, auto-derived rows from BESM Attributes (Item / Weapon / Shield / Armor / Wealth / Healing) + Power Packs / Bundles.
+- `EquippedStripFor` mounted at top of Mechanics tab, mirrors inventory state.
 
 ## V6.25.24 verification targets (Cypher Cycles B-2..B-6)
 

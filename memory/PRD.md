@@ -25,6 +25,8 @@ This cycle fixes three user-reported issues in one push:
 **CP Bank reconciliation (BESM 4E + Anime 5E)**
 - `CpBalanceWidget` removed from the read-only character sheet (per spec). It now lives ONLY inside `CharacterBuilder` — the character-edit window — so it stops competing with the History tab + Rules Audit.
 - BESM source-of-truth switched from raw `point_buys` (which was empty for legacy characters → falsely showed Spent 0 / Remaining 84) to `GET /api/characters/{cid}/validate.breakdown.total_spent` — the same canonical number the Rules Audit shows. p.135 Item half-cost is already applied there.
+- Builder live-preview also now applies p.135 Item half-cost (ceil(raw/2)) for `Item` / `Weapon` / `Companion` container attributes, so the in-builder POINTS card and the new CP Bank widget agree on the same spend value.
+- Builder no longer overwrites `total_points` with the campaign cap when **editing** an existing character — only new characters auto-snap to the cap. Editing Eli (saved with 84) no longer flips to 90 on edit.
 - Total semantics per spec:
     * Pre-approval: `Total = primer.total_points` (e.g. Eli's 84).
     * Post-approval (`audit.approved_for_play`): `Total = primer + character.xp_total` — the XP ledger feeds the bank, players submit spends from it.

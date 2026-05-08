@@ -1221,11 +1221,6 @@ function SheetHistoryPanel({ character }) {
                data-testid="sheet-history-points-spent">
             {pointsSpent}<span className="text-mist text-sm"> / {totalPoints}</span>
           </div>
-          {auditSpent != null && auditSpent !== fallbackSpent && (
-            <div className="text-[10px] text-mist/60 italic mt-0.5">
-              audit · was {fallbackSpent}
-            </div>
-          )}
         </div>
       </div>
       {xpLog.length > 0 && (
