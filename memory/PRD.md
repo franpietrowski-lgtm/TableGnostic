@@ -14,7 +14,46 @@
 
 ## 2. Implemented (cumulative, condensed)
 
-### V6.25.23 — Cycle B-1: Cypher System foundational data layer (2026-02-09)
+### V6.25.24 — Cycle B-2..B-6: Cypher Reference UI + Builder sidebar + XP Economy + Random Tables + Bestiary (2026-02-09)
+
+The Cypher System SRD that V6.25.23 seeded as a backend data layer is now wired end-to-end into the player + GM surfaces.
+
+**🟧 B-2 — Cypher Reference Panel** (`CypherReferencePanel.jsx`, mounted in `AtelierTab.jsx::references`)
+- Mounts at the Atelier ▸ References subtab whenever the campaign's `system_id === "cypher"`. Renders ABOVE the existing Reference Editor so GMs see the canonical SRD content first, then their campaign-local overrides.
+- 8 Genre tabs (fantasy / modern / science-fiction / superheroes / horror / post-apocalyptic / fairy-tale / historical) — clicking one filters the Descriptors / Foci / Cyphers / Artifacts to that genre. Aliasing for legacy `scifi`/`post`/`superhero` tags.
+- 6 Sub-tabs: **Types** (4 core: Warrior / Adept / Explorer / Speaker — expand a card to see per-tier abilities + advancement steps), **Descriptors** (16 SRD entries), **Foci** (18), **Cyphers** (12 with rolling), **Artifacts** (6 with depletion), **Bestiary** (12 creatures with level filters).
+- Universal rule strip ALWAYS visible: tier progression (T1-T6 + max effort), XP mechanics (3 awards / 9 spends), skill levels (Inability / Untrained / Trained / Specialised), 6 paraphrased rules notes, and the CSOL 2022 compatibility notice.
+- GM affordance: **Make custom Type / Descriptor / Foci / Cypher / Artifact** modal saves to `/campaigns/{cid}/reference` so the entry shows up in the campaign Reference Editor.
+- Bug-fix during testing: the sub-component `<RuleStrip ref={ref}/>` collided with React's reserved `ref` prop, blanking the entire panel on mount. Renamed to `data` prop + defensive default — panel now renders all 32 testids with zero console errors.
+
+**🟧 B-3 — Cypher Tier-Progression Sidebar** (`builders/Cypher.jsx::CypherTierProgression`)
+- Mounted under the Skill Training section of the Cypher character builder. Calls `GET /api/cypher/tier-helper?type={type}&tier={tier}` whenever either changes.
+- Renders abilities grouped by tier band (T1-T6) with **clickable picker chips** that toggle on/off — picks persist into `folio.cypher_state.abilities` so they survive save → reload.
+- Surfaces tier blurb, max-effort cap, count of picks-vs-unlocked, and the four canonical advancement steps (4 × 4 XP = 16 XP per tier).
+
+**🟧 B-4 — Cypher XP Mechanics Surfaces** (`CypherXPPanel.jsx` + new `routes/cypher_xp.py`)
+- Backend `POST /api/campaigns/{cid}/cypher/xp-events` accepts 12 event kinds with atomic xp_unspent deltas:
+  - **Awards** (GM-only): `intrusion-grant` (+2 acceptor, auto-pairs −1 self / +1 peer for the canonical "give 1 to a peer" rule), `discovery`, `character-arc`.
+  - **Spends**: `reroll −1`, `refuse-intrusion −1` (rejects with 400 if `xp_unspent < 1`), `player-intrusion −1`, `short/medium/long-term-benefit −2/−3/−4`, `advancement-step −4` (carries `advancement_step_key`), `peer-transfer −1` (atomic two-leg with recipient `+1`), `narrative-pool` (multi-contributor co-funded spend).
+- Backend `GET /api/campaigns/{cid}/cypher/xp-events` lists the ledger; players see only their own characters' rows; GM sees all.
+- Frontend panel mounted under `<CypherSheetView/>` on every cypher character sheet. Six sections: balance pill (`unspent N XP`), 9 quick-spend buttons with cost chips, GM-only Award Intrusion CTA, ledger (last 20 events), Peer Transfer modal (recipient picker + justification), Narrative Pool modal (multi-row contributor authoring), Award Intrusion modal (auto-pair peer dropdown), Advancement Step modal (4-step picker).
+- All actions dispatch `tg:character-mutated` so the floating CP/XP balance widget refreshes inline.
+
+**🟧 B-5 — Cyphers / Artifacts random-roll table** (`routes/besm.py::cypher_random_table`)
+- `GET /api/cypher/random-table?kind=cypher|artifact&genre=...&level_modifier=N` rolls a 1d6 against the seeded list. Returns `{entry, roll: {die, result, printed_modifier, extra_modifier, level}, charges, depletion, recharge}`.
+- Charges convention: cyphers default to `charges: 1` (one-shot consumables); artifacts carry the printed `depletion` roll (e.g. "1 in 1d20"). UI surfaces both.
+- Surfaced as a **Roll random cypher / Roll random artifact** button on the corresponding sub-tabs of the Reference Panel — result card displays inline above the entry grid.
+
+**🟧 B-6 — Bestiary seed** (`system_data/cypher_data.py::BESTIARY` + `routes/besm.py::cypher_bestiary`)
+- 12 starter creatures spanning all genres: Bandit, Cult Leader, Juvenile Dragon, Shadowling, Eldritch Cultist, Warbot Mk-I, Rogue AI Avatar, Mutant Hound, Scrap Warlord, River Spirit, Nameless Thug, Supervillain Lieutenant. Each carries `id + name + level (1-10) + health + damage + armor + role + genres[] + blurb`.
+- `GET /api/cypher/bestiary?genre=&level_min=&level_max=` filters by genre + level band. Bestiary tab on the Reference Panel mounts the filter inputs + grid.
+- Mechanics-only by design — full lore prose comes from each GM's setting work, not this seed.
+
+**Testing** — 31/31 V6.25.24 tests pass (15 NEW + 16 V6.25.23 regression in 0.54s). Frontend testing agent verified: all 32 testids render on the Reference Panel, Bestiary tab loads + filters live, Cyphers tab Roll button surfaces a proper result card. CypherXPPanel verified end-to-end via screenshot — 9 quick-spend buttons + GM Award CTA + empty ledger state all render against a seeded cypher character. Lint clean across all touched files.
+
+---
+
+
 
 This is **B-1 of a multi-cycle Cycle B**. The foundational backend data + helper endpoints ship now; the Reference page UI, the XP-mechanics surfaces (intrusion buy-off / peer transfer / narrative pool), the cyphers/artifacts random-tables, and the bestiary seed each get their own follow-up cycle.
 
@@ -40,6 +79,17 @@ This is **B-1 of a multi-cycle Cycle B**. The foundational backend data + helper
 - 🟧 **B-4** — XP mechanics surfaces: Refuse-Intrusion modal, Peer XP transfer modal, Narrative-Pool authoring panel, all hooked to a new `/cypher/xp-events` ledger.
 - 🟧 **B-5** — Cyphers / Artifacts random-tables (charges, depletion, recharge) seeded by genre.
 - 🟧 **B-6** — Bestiary seed extraction + reference grouping.
+
+---
+
+### V6.25.23 — Cycle B-1: Cypher System foundational data layer (2026-02-09)
+
+This is **B-1 of a multi-cycle Cycle B**. The foundational backend data + helper endpoints. The Reference page UI (B-2), the XP-mechanics surfaces (B-4), the cyphers/artifacts random-tables (B-5), and the bestiary seed (B-6) all shipped under V6.25.24 immediately after.
+
+- **Foundational seed** (`system_data/cypher_data.py`): 8 GENRES, 6-tier TIER_PROGRESSION, 4 ADVANCEMENT_STEPS_PER_TIER × 4 XP, full CYPHER_TYPES_FULL (Warrior/Adept/Explorer/Speaker w/ canonical pools + per-tier ability roster T1-T6), 9-spend XP_MECHANICS, SKILL_LEVELS ladder, 6 paraphrased RULES_NOTES, and the CSOL 2022 COMPATIBILITY_NOTICE.
+- `GET /api/systems/cypher/reference` exposes the merged payload.
+- `GET /api/cypher/tier-helper?type=&tier=N` returns abilities-up-to-tier + advancement steps + tier_advancement_xp_total (16) for the builder sidebar.
+- 16/16 V6.25.23 tests pass.
 
 ### V6.25.22 — Cycle A: Anime 5E race templates + floating CP balance widget (2026-02-09)
 
