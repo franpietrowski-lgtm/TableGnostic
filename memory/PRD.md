@@ -14,7 +14,55 @@
 
 ## 2. Implemented (cumulative, condensed)
 
-### V6.25.24 — Cycle B-2..B-6: Cypher Reference UI + Builder sidebar + XP Economy + Random Tables + Bestiary (2026-02-09)
+### V6.25.25 — Reference architecture cleanup + Cypher Flavor + Cypher→BESM converter + Codex inverted-PDF + Roll-Table Designer (2026-02-09)
+
+This cycle delivered the user's full backlog ask in one push: the dashboard Reference page now aggregates source + custom user-created reference material per system, the Atelier ReferenceEditor's kind dropdown is system-aware, the Cypher SRD ships with Flavor variants that re-skin canonical mechanics by genre, the Cypher→BESM character converter previews a transparent CP-cost rebuild with cross-system balancing notes, codex nodes can be exported as a printable inverted-theme PDF, and the Director's Console hosts a roll-table designer gated to seeded materials with rarity-tier thresholds.
+
+**Reference architecture cleanup**
+- `ReferenceEditor.jsx` — kind dropdown now consults `SYSTEM_KIND_ORDER[systemId]` first so a Cypher campaign sees only Type/Descriptor/Foci/Cypher/Artifact/Bestiary while a BESM campaign sees Attribute/Skill/Defect/Weapon/Item/Companion/Mecha/etc. No more 22-kind dropdown noise.
+- NEW `GET /api/reference/library?system_id=X[&kind=Y]` aggregates user-visible custom reference rows across **every** campaign the caller is involved in for the given system. Player visibility filters out `gm_only` rows from campaigns where the player is not the GM. Each row tagged with its `campaign_name`.
+- Dashboard `Reference.jsx` mounts a "Custom · Yours" panel under both BESM Attributes tab and the SystemReferenceView for non-BESM systems. Filter chips by kind. Empty-state copy directs the user to the Atelier when they have campaigns but no custom rows yet.
+
+**Cypher Flavor (Cycle B-7)**
+- `system_data/cypher_data.py::FLAVORS` ships 6 canonical flavor variants (Magic / Combat / Stealth / Technology / Skills & Knowledge / Horror-Occult) each with a genre-tag list + role blurb + substitution dict (e.g. Magic flavor → `Onslaught: Eldritch Bolt`, `Ward: Mystic Aegis`).
+- NEW `GET /api/cypher/flavors[?genre=X]` lists flavors for a genre (or all when blank).
+- `REFERENCE.flavors` exposed in the canonical `/systems/cypher/reference` payload.
+- `CypherReferencePanel.jsx` adds a **Flavors** sub-tab between Artifacts and Bestiary, rendering each flavor's substitution table + genre tags.
+- Per the canonical Cypher rules, Flavors NEVER add new mechanics — they substitute names so the same ability fits a different genre vocabulary at the table.
+
+**Cypher → BESM 4E character converter**
+- NEW `system_data/cypher_to_besm_conversion.py` with three mappings:
+    * `TYPE_TO_BESM` — Warrior / Adept / Explorer / Speaker → BESM stat tilt + attribute bundle + suggested defects.
+    * `DESCRIPTOR_TWEAKS` — 16 descriptor adjectives → small attribute add or defect rank.
+    * `FOCUS_TO_BESM` — 17 canonical foci → BESM "power-pack" recommendation.
+- NEW `GET /api/cypher/besm-conversion?type=&descriptor=&focus=&tier=` returns the recommended type block + descriptor tweak + focus power-pack + recommended stats + estimated CP cost + balancing notes.
+- **Cost-balancing audit notes** built into every response — the user asked for this:
+    * BESM Item attributes pay ceil(raw_total / 2) per p.135 — converter applies it; user re-verifies.
+    * Cypher Effort/Edge has no direct BESM equivalent; folded into Combat Technique / Energy Bonus where the Type calls for it.
+    * Both BESM 4E and Anime 5E price each weapon at full cost — neither has a native "primary/secondary" discount. Confirmed the user's reading. Multi-cypher carriers map each cypher to its own Item attribute at half cost.
+- Frontend: Cypher Builder ships a "**Convert to BESM**" button that opens a modal with the full preview — type block · descriptor tweak · focus power-pack · recommended stats · estimated CP · balancing notes.
+
+**Codex PDF inverted theme (Cycle E)**
+- NEW `routes/codex_pdf.py` with `GET /api/campaigns/{cid}/codex-export.pdf`. Codex-only PDF (no chronicle prose, no characters), grouped by node_kind. INVERTED palette: white background, black text, darkened-gold accents, black border on every page — prints cleanly on standard office paper. Layout / font / section ordering unchanged from the chronicle exporter — only the palette inverts.
+- Atelier ▸ Export PDF popover now ships a "**Download codex (printable, inverted)**" button alongside the existing chronicle download.
+
+**Director's Console roll-table designer (Cycle D)**
+- NEW `routes/roll_tables.py` with full CRUD + `POST /roll`:
+    * **Seeded-materials gate** — every entry MUST point at exactly one of: a Reference Editor row (`reference_id`), a codex node (`node_id`), or a deliberate literal body. Silent free-text drift returns 422.
+    * **Rarity tiers** — common / uncommon / rare / very_rare / legendary, each with canonical die (1d6 → 1d100) and `min_party_tier` floor (1 / 2 / 4 / 6 / 9). The floor auto-snaps up if the GM tries to lower it — Common-rarity tables can't be turned into legendary delivery vehicles.
+    * Rolling the table when `party_tier < min_party_tier` returns 403 with a polite gate message.
+    * Hydrated rolls — the response includes the source's name + summary + ref_kind/node_kind tag.
+- NEW `RollTableDesigner.jsx` mounted at the bottom of the Director's Console:
+    * List of campaign roll-tables with rarity badge + entry count + roll/edit/delete buttons.
+    * Editor with rarity dropdown auto-snapping `min_party_tier`, weighted entry rows that pick exactly one source (Reference / Codex node / literal text).
+    * Result card surfaces the rolled label + source kind + summary.
+- `DirectorConsole.jsx` derives `partyTier` from the seated characters (Cypher → cypher_state.tier; D&D → ceil(level/3); BESM → ceil(total_points/50)) and passes it to the designer for gating.
+
+**Tests** — 21 NEW V6.25.25 tests in two files (test_v62525_flavor_converter_lib_codex.py 11/11 + test_v62525_roll_tables.py 10/10). Combined with V6.25.23 + V6.25.24 = **52/52 V6.25.23-25 tests pass in 2.18s**. Lint clean across all touched files. Frontend testing agent verified Cypher Flavors tab end-to-end (30 cards across 8 genres). Director's Console + Roll-Table Designer verified by main-agent screenshot — full UI loads with the gating description visible.
+
+---
+
+
 
 The Cypher System SRD that V6.25.23 seeded as a backend data layer is now wired end-to-end into the player + GM surfaces.
 
