@@ -446,6 +446,90 @@ def all_abilities_for(type_key: str, up_to_tier: int):
     return out
 
 
+# ─── V6.25.25 (Cypher Flavor) ─────────────────────────────────────────
+# Flavors are genre-locked tweaks that re-skin Types, Descriptors, Foci,
+# Cyphers, and Artifacts so the SAME core mechanics fit a different
+# fictional setting. Per the canonical Cypher rules, Flavors do not
+# add new abilities — they SUBSTITUTE flavour-tagged variants of the
+# canonical roster (e.g. a Warrior in a Sci-Fi Combat flavor still
+# uses Bash / Combat Prowess but with a re-skinned name + cosmetic
+# blurb so the player can speak the table's vocabulary).
+#
+# Each flavor row carries:
+#   key          — slug
+#   name         — display label
+#   genres       — which genres support this flavor (subset of GENRES)
+#   role_blurb   — what kind of character it produces
+#   substitutions — dict of canonical ability name → flavor-skinned name
+#                   (NOT a new mechanic — just a re-label so the GM /
+#                    player can speak the genre's vocabulary at the table)
+
+FLAVORS = [
+    {"key": "magic", "name": "Magic Flavor",
+     "genres": ["fantasy", "horror", "fairy-tale", "superheroes"],
+     "role_blurb": "Sword-and-sorcery, hedge wizardry, divine wonder. Re-skins combat tricks as cantrips and physical defenses as wards.",
+     "substitutions": {
+         "Onslaught":      "Eldritch Bolt",
+         "Ward":           "Mystic Aegis",
+         "Hedge Magic":    "Cantrip",
+         "Far Step":       "Step Through Veils",
+     }},
+    {"key": "combat", "name": "Combat Flavor",
+     "genres": ["fantasy", "modern", "post-apocalyptic", "science-fiction", "historical"],
+     "role_blurb": "Hard-edged martial training. Adept abilities re-skin as battle techniques; Speakers gain commander vocabulary.",
+     "substitutions": {
+         "Onslaught":         "Power Strike",
+         "Ward":              "Bracing Stance",
+         "Skill With Attacks": "Trained Strike",
+         "Demeanor of Command": "Battlefield Voice",
+     }},
+    {"key": "stealth", "name": "Stealth Flavor",
+     "genres": ["modern", "fantasy", "horror", "post-apocalyptic", "historical", "science-fiction"],
+     "role_blurb": "Shadows, knives, soft-soled boots. Onslaught becomes a silent strike; Ward becomes camouflage.",
+     "substitutions": {
+         "Onslaught":      "Silent Strike",
+         "Ward":           "Camouflage",
+         "Far Step":       "Slip Through",
+         "Hedge Magic":    "Sleight of Hand",
+     }},
+    {"key": "technology", "name": "Technology Flavor",
+     "genres": ["science-fiction", "modern", "post-apocalyptic", "superheroes"],
+     "role_blurb": "Rebreathers, smart-guns, neural lace. Magic abilities re-skin as devices; foci hot-swap to gear.",
+     "substitutions": {
+         "Onslaught":         "Pulse Weapon",
+         "Ward":              "Force Field",
+         "Hedge Magic":       "Field Repair",
+         "Far Step":          "Jump Drive",
+         "Resonance Field":   "Shield Generator",
+     }},
+    {"key": "skills-knowledge", "name": "Skills & Knowledge Flavor",
+     "genres": ["any"],
+     "role_blurb": "Scholars, librarians, savants. Trades combat tricks for languages, lore, and investigation.",
+     "substitutions": {
+         "Onslaught":      "Devastating Question",
+         "Skill Training": "Specialised Lore",
+         "Hedge Magic":    "Footnote Knowledge",
+     }},
+    {"key": "horror-occult", "name": "Horror/Occult Flavor",
+     "genres": ["horror", "fairy-tale", "fantasy"],
+     "role_blurb": "Madness-tinged. Each spell costs a sliver of sanity narratively; cyphers manifest as cursed relics.",
+     "substitutions": {
+         "Onslaught":      "Mind-Touch Curse",
+         "Ward":           "Sigil of Banishment",
+         "Hedge Magic":    "Whispered Rite",
+     }},
+]
+
+
+def flavors_for_genre(genre: str):
+    if not genre:
+        return list(FLAVORS)
+    g = genre.strip().lower()
+    return [f for f in FLAVORS
+            if "any" in f["genres"] or g in f["genres"]]
+
+
+
 
 # ─── V6.25.24 (Cycle B-6) — Bestiary seed ───────────────────────────
 # Cypher creatures use a single LEVEL stat (1-10) which derives target
@@ -536,4 +620,5 @@ REFERENCE.update({
     "rules_notes": RULES_NOTES,
     "compatibility_notice": COMPATIBILITY_NOTICE,
     "bestiary": BESTIARY,
+    "flavors": FLAVORS,
 })

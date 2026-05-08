@@ -499,7 +499,7 @@ function Row({ row, onChange, onSave, onCancel, busy, systemId, editing, onEdit,
           <select className="select" value={row.kind}
                   onChange={(e) => onChange({ ...row, kind: e.target.value })}
                   data-testid="reference-input-kind">
-            {KIND_KEYS.map((k) => {
+            {(SYSTEM_KIND_ORDER[systemId] || KIND_KEYS).map((k) => {
               const sysLabels = SYSTEM_KIND_LABELS[systemId] || SYSTEM_KIND_LABELS["besm-4e"];
               return <option key={k} value={k}>{sysLabels[k] || KIND_LABELS[k]}</option>;
             })}

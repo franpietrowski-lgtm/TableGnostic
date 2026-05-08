@@ -402,13 +402,144 @@ export function CypherBuilder({ campaign, ref_, charId }) {
 
       {err && <div className="text-ember text-sm mt-3">{err}</div>}
 
-      <div className="mt-6 flex gap-2">
+      <div className="mt-6 flex gap-2 flex-wrap">
         <button onClick={save} className="btn btn-primary" data-testid="cypher-save-btn">
           <Save className="w-4 h-4"/> Save
         </button>
+        <CypherToBesmButton sentence={sentence} type={c.type}
+                             descriptor={c.descriptor} focus={c.focus}
+                             tier={c.tier}/>
         <Link to={`/app/campaigns/${ch.campaign_id}`} className="btn btn-ghost">Cancel</Link>
       </div>
     </div>
+  );
+}
+
+
+/**
+ * V6.25.25 — Cypher → BESM 4E conversion preview button.
+ * Calls /api/cypher/besm-conversion and surfaces a modal with the
+ * recommended type block + descriptor tweak + focus power-pack +
+ * suggested stats + estimated CP cost + balancing notes.
+ */
+function CypherToBesmButton({ sentence, type, descriptor, focus, tier }) {
+  const [open, setOpen] = useState(false);
+  const [data, setData] = useState(null);
+  const [err, setErr] = useState("");
+  const load = async () => {
+    setOpen(true); setErr(""); setData(null);
+    try {
+      const r = await api.get("/cypher/besm-conversion", {
+        params: { type: type || "warrior", descriptor: descriptor || "",
+                  focus: focus || "", tier: tier || 1 },
+      });
+      setData(r.data);
+    } catch (e) {
+      setErr(formatApiErrorDetail(e.response?.data?.detail) || e.message);
+    }
+  };
+  return (
+    <>
+      <button type="button" onClick={load} className="btn btn-ghost"
+              data-testid="cypher-to-besm-btn"
+              title="Preview a BESM 4E rebuild of this Cypher character — type/descriptor/focus → BESM attributes + estimated CP.">
+        <Sparkles className="w-3 h-3"/> Convert to BESM
+      </button>
+      {open && (
+        <div className="fixed inset-0 z-[200] bg-void/80 flex items-center justify-center p-4"
+             onClick={() => setOpen(false)}
+             data-testid="cypher-to-besm-modal">
+          <div className="card-mystic p-5 max-w-3xl w-full max-h-[90vh] overflow-y-auto space-y-3"
+               onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-baseline justify-between border-b border-gold/10 pb-2">
+              <div>
+                <div className="h-arcane text-sm">BESM 4E rebuild preview</div>
+                <div className="text-[10px] text-mist italic">"{sentence}"</div>
+              </div>
+              <div className="text-[10px] text-arcane-light tabular-nums">
+                est. CP {data?.estimated_cp_cost ?? "…"}
+              </div>
+            </div>
+            {err && <div className="text-ember text-xs">{err}</div>}
+            {!data && !err && (
+              <div className="text-mist italic text-xs">Computing conversion…</div>
+            )}
+            {data && (
+              <div className="space-y-3">
+                <div>
+                  <div className="label-ref">Type block — {type}</div>
+                  <div className="text-[11px] text-mist mb-1">
+                    Primary: <span className="text-parchment">{data.type_block.primary_stat}</span>
+                  </div>
+                  <ul className="text-[11px] space-y-0.5">
+                    {data.type_block.attributes.map((a, i) => (
+                      <li key={i} data-testid={`cypher-besm-type-attr-${i}`}>
+                        <span className="text-parchment">{a.name}</span>
+                        <span className="text-arcane-light"> ×{a.level} @ {a.cost_per_level}/lvl</span>
+                        <span className="text-mist"> = {a.level * a.cost_per_level} CP</span>
+                        {a.note && <span className="text-mist italic"> · {a.note}</span>}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                {data.descriptor_tweak?.add_attribute && (
+                  <div>
+                    <div className="label-ref">Descriptor tweak — {descriptor}</div>
+                    <div className="text-[11px]">
+                      + <span className="text-parchment">{data.descriptor_tweak.add_attribute.name}</span>
+                      {" ×"}{data.descriptor_tweak.add_attribute.level}
+                      {" — "}<span className="italic text-mist">{data.descriptor_tweak.blurb}</span>
+                    </div>
+                  </div>
+                )}
+                {data.descriptor_tweak?.add_defect && (
+                  <div>
+                    <div className="label-ref">Descriptor tweak — {descriptor}</div>
+                    <div className="text-[11px]">
+                      Defect: <span className="text-parchment">{data.descriptor_tweak.add_defect.name}</span>
+                      {" rank "}{data.descriptor_tweak.add_defect.rank}
+                      {" — "}<span className="italic text-mist">{data.descriptor_tweak.blurb}</span>
+                    </div>
+                  </div>
+                )}
+                <div>
+                  <div className="label-ref">Focus power-pack — {focus}</div>
+                  <div className="text-[11px] text-arcane-light mb-1">
+                    {data.focus_block.power_pack}
+                  </div>
+                  <ul className="text-[11px] space-y-0.5">
+                    {(data.focus_block.attributes || []).map((a, i) => (
+                      <li key={i}>
+                        <span className="text-parchment">{a.name}</span>
+                        <span className="text-arcane-light"> ×{a.level} @ {a.cost_per_level}/lvl</span>
+                        <span className="text-mist"> = {a.level * a.cost_per_level} CP</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <div>
+                  <div className="label-ref">Recommended stats</div>
+                  <div className="text-[11px] tabular-nums">
+                    BODY {data.stats_recommended.body} ·
+                    MIND {data.stats_recommended.mind} ·
+                    SOUL {data.stats_recommended.soul}
+                  </div>
+                </div>
+                <div className="border-t border-gold/10 pt-2">
+                  <div className="label-ref">Balancing notes</div>
+                  <ul className="text-[10px] text-mist italic list-disc pl-5 space-y-0.5">
+                    {(data.balancing_notes || []).map((n, i) => <li key={i}>{n}</li>)}
+                  </ul>
+                </div>
+              </div>
+            )}
+            <div className="flex justify-end border-t border-gold/10 pt-3">
+              <button onClick={() => setOpen(false)} className="btn btn-ghost text-xs">Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 

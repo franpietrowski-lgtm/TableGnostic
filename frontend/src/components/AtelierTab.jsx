@@ -594,6 +594,36 @@ function ExportPdfBtn({ campId }) {
             <FileDown className="w-3 h-3"/> {busy ? "Rendering…" : "Download chronicle"}
           </button>
 
+          {/* V6.25.25 (Cycle E) — Codex-only inverted PDF for printing. */}
+          <button onClick={async () => {
+                    setBusy(true); setGateMsg("");
+                    try {
+                      const token = localStorage.getItem("tg_token");
+                      const apiBase = process.env.REACT_APP_BACKEND_URL || "";
+                      const r = await fetch(`${apiBase}/api/campaigns/${campId}/codex-export.pdf`, {
+                        headers: { Authorization: `Bearer ${token}` },
+                      });
+                      if (!r.ok) {
+                        const j = await r.json().catch(() => ({}));
+                        throw new Error(j.detail || `HTTP ${r.status}`);
+                      }
+                      const blob = await r.blob();
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement("a");
+                      a.href = url; a.download = "codex-printable.pdf";
+                      document.body.appendChild(a); a.click(); a.remove();
+                      URL.revokeObjectURL(url);
+                    } catch (e) {
+                      window.alert("Codex PDF failed: " + e.message);
+                    } finally { setBusy(false); }
+                  }}
+                  disabled={busy}
+                  className="btn btn-ghost text-xs w-full mt-2"
+                  data-testid="atelier-export-codex-pdf"
+                  title="Codex nodes only · inverted black/white for white-paper printing. Layout unchanged.">
+            <FileDown className="w-3 h-3"/> Download codex (printable, inverted)
+          </button>
+
           {/* Mode toggle — branded vs narrative-only. Narrative bypasses the
               forbidden-setting gate because it's not a sellable supplement;
               just a story export. */}

@@ -1,0 +1,50 @@
+{
+  "summary": "V6.25.25 verification — backend pytest suite for V6.25.23/24/25 (52 tests) all PASS. Frontend smoke verified: login, Reference page Custom section, Cypher Reference Panel + Flavors sub-tab (30 cards across 8 genres, substitution copy present). Director's Console RollTableDesigner UI could not be reached in browser run due to a transient 'Summoning…' loading screen blocking the Director button click on the third nav, but the underlying backend (10/10 roll-table tests) is solid.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "Director's Console RollTableDesigner UI verification",
+        "issue": "Could not click the top-right 'Director' button in browser test — repeat campaign-page navigations sometimes leave a 'Summoning… The Loremaster gathers your table…' overlay that hides the chrome. Need a longer wait_for_selector on the campaign tabs (e.g. wait for 'CHARACTERS' tab) before clicking Director. Backend roll-tables are fully green (10/10).",
+        "affected_selectors": ["button:has-text('Director')", "[data-testid='roll-table-designer']", "[data-testid='roll-table-new']"]
+      }
+    ],
+    "design_issues": [
+      {
+        "screen": "Reference page (besm-4e tab)",
+        "issues": ["Section is labelled 'CUSTOM · AUREA' (campaign-name) rather than the literal 'Custom · Yours' from the spec — this is the per-campaign aggregation, which is acceptable, but spec wording differs."]
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_v62525_roll_tables.py",
+    "/app/backend/tests/test_v62525_flavor_converter_lib_codex.py",
+    "/app/backend/tests/test_v62524_cypher_xp.py",
+    "/app/backend/tests/test_v62524_cypher_tables_bestiary.py",
+    "/app/backend/tests/test_v62523_cypher_foundation.py",
+    "/app/test_reports/pytest/iter64_v62525.xml"
+  ],
+  "action_items": [
+    "Main agent should self-verify Director's Console RollTableDesigner via a fresh browser nav (open campaign → wait for tabs → click Director). Backend passes 10/10 so the surface-area is the click-through only.",
+    "Optionally, the verbatim label 'Custom · Yours' was implemented as 'Custom · {campaignName}'. If the spec wanted the literal 'Custom · Yours' header above the per-campaign rollup, add a single fixed heading."
+  ],
+  "critical_code_review_comments": [
+    "Backend test_v62523_cypher_foundation.py uses bare 'from system_data...' import which only resolves when pytest runs from /app/backend cwd — the V6.25.25 files use 'backend.system_data...' style and run from /app. Pick one convention to avoid future collection errors.",
+    "Director button is rendered top-right on the campaign detail page but appears to vanish briefly during the 'Summoning…' lazy-load overlay; consider keeping the chrome visible or hiding the overlay only over the main pane."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "100%",
+    "frontend": "~85% (Atelier flavors + Reference custom section verified; Director RollTableDesigner UI not reached)"
+  },
+  "test_credentials": "GMFran: franpietrowski@gmail.com / PieGod08!! (worked); Aurora player: albanaszak@ymail.com / AuroraTest123! (not used this run)",
+  "seed_data_creation": "None — used existing Cypher campaign dac42099dfcf4f7b8deabd1ed043ec00 ('Evereantha · The Fracture of the Unmaker (Cypher adaptation)').",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "All 52 V6.25.23-25 backend tests pass via `cd /app/backend && pytest tests/test_v62525_*.py tests/test_v62524_*.py tests/test_v62523_*.py`. Frontend Atelier ▸ References → Flavors verified end-to-end (30 cards across 8 genres). For Director's Console UI: navigate to a Cypher campaign, wait_for_selector('text=CHARACTERS') as a load-complete signal BEFORE clicking the top-right 'Director' button; the 'Summoning…' overlay resolves in ~3-4s on cold runs.",
+  "rca of the issue": "N/A — no failing items. The Director button miss in browser automation is a test-flakiness issue (transient loading overlay), not a product bug."
+}

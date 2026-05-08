@@ -202,6 +202,34 @@ async def system_reference(system_id: str, response: Response):
 
 
 
+@router.get("/cypher/flavors")
+async def cypher_flavors(genre: str = ""):
+    """V6.25.25 — Cypher Flavor catalogue.
+
+    Flavors re-skin canonical Type / Descriptor / Foci / Cypher / Artifact
+    mechanics so the SAME rules fit a different genre vocabulary at the
+    table. They never add new mechanics — they substitute names.
+    Returns the full set when no `genre` is given.
+    """
+    from system_data.cypher_data import flavors_for_genre
+    rows = flavors_for_genre(genre)
+    return {"genre": genre or "any", "rows": rows, "total": len(rows)}
+
+
+@router.get("/cypher/besm-conversion")
+async def cypher_besm_conversion(type: str = "", descriptor: str = "",
+                                   focus: str = "", tier: int = 1):
+    """V6.25.25 — Cypher → BESM 4E character converter.
+
+    Maps a "[descriptor] [type] who [focus]" sentence to a BESM 4E
+    starter build (stats + attribute list + defects + estimated CP).
+    Use to re-instantiate the same fictional concept under BESM rules.
+    """
+    from system_data.cypher_to_besm_conversion import convert_to_besm
+    return convert_to_besm(cypher_type=type, descriptor=descriptor,
+                            focus=focus, tier=int(tier or 1))
+
+
 @router.get("/cypher/bestiary")
 async def cypher_bestiary(genre: str = "", level_min: int = 0, level_max: int = 10):
     """V6.25.24 (Cycle B-6) — Cypher creature roster.

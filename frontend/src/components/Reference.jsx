@@ -26,8 +26,15 @@ export default function Reference() {
   const [tab, setTab] = useState("attributes");
   const [systemId, setSystemId] = useState("besm-4e");
   const [systemRef, setSystemRef] = useState(null);
+  const [besmCustomLib, setBesmCustomLib] = useState(null);
 
   useEffect(() => { api.get("/besm/reference").then((r) => setRef(r.data)); }, []);
+  useEffect(() => {
+    if (systemId !== "besm-4e") return;
+    api.get(`/reference/library?system_id=besm-4e`)
+      .then((r) => setBesmCustomLib(r.data))
+      .catch(() => setBesmCustomLib({ rows: [], total: 0, campaign_count: 0 }));
+  }, [systemId]);
   useEffect(() => {
     if (systemId === "besm-4e") { setSystemRef(null); return; }
     api.get(`/systems/${systemId}/reference`)
@@ -68,6 +75,9 @@ export default function Reference() {
   }, [ref, ql]);
 
   if (!ref) return <div className="p-10 text-mist">Opening the tome…</div>;
+
+  // V6.25.25 — Custom (yours) library aggregator (only for BESM tab; the
+  // SystemReferenceView mounts its own for non-BESM systems).
 
   const TAB_GROUPS = [
     {
@@ -342,6 +352,12 @@ export default function Reference() {
           </div>
         </div>
       )}
+
+      {besmCustomLib && (
+        <div className="mt-6" data-testid="besm-custom-library-mount">
+          <CustomLibrarySection lib={besmCustomLib} systemId="besm-4e"/>
+        </div>
+      )}
       </>
       )}
     </div>
@@ -357,12 +373,23 @@ export default function Reference() {
  *   - scaffold       (no content yet)
  */
 function SystemReferenceView({ ref_, systemId, q }) {
+  const [customLib, setCustomLib] = useState(null);
+  useEffect(() => {
+    if (!systemId) return;
+    api.get(`/reference/library?system_id=${systemId}`)
+      .then((r) => setCustomLib(r.data))
+      .catch(() => setCustomLib({ rows: [], total: 0, campaign_count: 0 }));
+  }, [systemId]);
+
   if (!ref_) return <div className="text-mist mt-6">Loading {systemId} reference…</div>;
   if (ref_.kind === "scaffold") {
     return (
       <div className="card-mystic p-6 mt-6" data-testid="system-ref-scaffold">
         <div className="label-ref mb-2">Coming Soon</div>
         <div className="text-sm text-parchment/90">{ref_.rule_note}</div>
+        {customLib && customLib.total > 0 && (
+          <CustomLibrarySection lib={customLib} systemId={systemId}/>
+        )}
       </div>
     );
   }
@@ -556,6 +583,79 @@ function SystemReferenceView({ ref_, systemId, q }) {
           <Card title="The Cypher Tax" sub={ref_.gm_intrusion.summary} page={ref_.gm_intrusion.page}/>
         </Section>
       )}
+      {customLib && (
+        <CustomLibrarySection lib={customLib} systemId={systemId}/>
+      )}
+      </div>
+    </div>
+  );
+}
+
+
+/**
+ * V6.25.25 — Custom (yours) reference rows aggregated across every
+ * campaign the caller is involved in for the active system. Surfaces
+ * Reference Editor + House Rules + character-derived custom entries
+ * in ONE place so players + GMs see the full system catalogue.
+ */
+function CustomLibrarySection({ lib, systemId }) {
+  const [kindFilter, setKindFilter] = useState("");
+  if (!lib || lib.total === 0) {
+    return (
+      <div className="card-mystic p-4 border-arcane/30 mt-4"
+           data-testid="custom-library-empty">
+        <div className="label-ref mb-1 text-arcane-light">Custom · Yours</div>
+        <div className="text-[11px] text-mist italic">
+          {lib?.campaign_count === 0
+            ? `No ${systemId} campaigns yet — create one to start authoring custom references.`
+            : "No custom entries authored for this system. Open a campaign's Atelier ▸ References tab to seed your first."}
+        </div>
+      </div>
+    );
+  }
+  const kinds = Array.from(new Set((lib.rows || []).map((r) => r.kind))).sort();
+  const filtered = kindFilter
+    ? lib.rows.filter((r) => r.kind === kindFilter) : lib.rows;
+  return (
+    <div className="card-mystic p-4 border-arcane/30 mt-4"
+         data-testid="custom-library-section">
+      <div className="flex items-baseline justify-between flex-wrap gap-2 mb-2">
+        <div>
+          <div className="label-ref text-arcane-light">Custom · Yours</div>
+          <div className="text-[10px] text-mist italic">
+            {lib.total} entr{lib.total === 1 ? "y" : "ies"} across {lib.campaign_count} campaign
+            {lib.campaign_count === 1 ? "" : "s"} (Reference Editor, House Rules, character-derived)
+          </div>
+        </div>
+        <div className="flex gap-1.5 flex-wrap">
+          <button onClick={() => setKindFilter("")}
+                  className={`btn btn-ghost text-[10px] ${!kindFilter ? "border-arcane/50 text-arcane-light" : ""}`}
+                  data-testid="custom-library-filter-all">All</button>
+          {kinds.map((k) => (
+            <button key={k} onClick={() => setKindFilter(k)}
+                    className={`btn btn-ghost text-[10px] ${kindFilter === k ? "border-arcane/50 text-arcane-light" : ""}`}
+                    data-testid={`custom-library-filter-${k}`}>{k}</button>
+          ))}
+        </div>
+      </div>
+      <div className="grid md:grid-cols-2 gap-2">
+        {filtered.map((r) => (
+          <div key={r.id} className="border border-arcane/20 rounded-sm p-2 bg-void/40"
+               data-testid={`custom-library-row-${r.id}`}>
+            <div className="flex justify-between items-baseline gap-2">
+              <div className="text-sm font-display text-parchment">{r.name}</div>
+              <div className="text-[9px] text-arcane-light uppercase tracking-widest">{r.kind}</div>
+            </div>
+            {r.summary && (
+              <div className="text-[11px] text-parchment/85 italic mt-1 leading-snug">{r.summary}</div>
+            )}
+            <div className="text-[9px] text-mist mt-1 flex items-center gap-2 flex-wrap">
+              <span>from <span className="text-arcane-light">{r.campaign_name}</span></span>
+              {r.book && <span>· {r.book}{r.page ? ` p.${r.page}` : ""}</span>}
+              {r.created_by && <span>· by {r.created_by}</span>}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );

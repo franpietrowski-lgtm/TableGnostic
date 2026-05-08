@@ -6,6 +6,7 @@ import {
   Mountain, Compass, Flame, Scroll, Sparkles, ChevronRight, MapPin,
   AlertTriangle, CheckCircle2, Crown, Activity,
 } from "lucide-react";
+import RollTableDesigner from "./RollTableDesigner";
 
 /**
  * GM Director's Console — the tactical brain of the campaign.
@@ -231,6 +232,22 @@ export default function DirectorConsole() {
     } finally { setBusy(false); }
   };
 
+  // V6.25.25 (Cycle D) — derive average party tier for roll-table gating.
+  // Must be defined BEFORE any early returns to satisfy rules-of-hooks.
+  // For Cypher: use cypher_state.tier; for D&D: ceil(level/3); for BESM:
+  // ceil(total_points / 50). Default tier 1 if no characters.
+  const partyTier = useMemo(() => {
+    if (!characters || characters.length === 0) return 1;
+    const tiers = characters.map((c) => {
+      const cy = c.folio?.cypher_state;
+      if (cy && cy.tier) return Math.max(1, Math.min(6, cy.tier));
+      const dnd = c.folio?.dnd_state;
+      if (dnd && dnd.level) return Math.max(1, Math.ceil(dnd.level / 3));
+      return Math.max(1, Math.ceil((c.total_points || 0) / 50));
+    });
+    return Math.max(1, Math.round(tiers.reduce((s, t) => s + t, 0) / tiers.length));
+  }, [characters]);
+
   if (err) return <div className="px-8 py-10 text-ember">{err}</div>;
   if (!doc || !campaign) return <div className="px-8 py-10 text-mist italic">Summoning the Director's Console…</div>;
 
@@ -442,6 +459,11 @@ export default function DirectorConsole() {
 
         {/* CR + suggestions */}
         <CrPanel analysis={analysis} systemId={sysId}/>
+      </div>
+
+      {/* V6.25.25 (Cycle D) — Roll-Table Designer (gated to seeded materials). */}
+      <div className="mt-6">
+        <RollTableDesigner campId={cid} partyTier={partyTier}/>
       </div>
     </div>
   );

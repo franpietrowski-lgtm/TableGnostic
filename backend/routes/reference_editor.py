@@ -288,3 +288,66 @@ async def delete_reference(cid: str, rid: str,
     res = await db.campaign_reference.delete_one(
         {"id": rid, "campaign_id": cid})
     return {"ok": True, "deleted": res.deleted_count}
+
+
+@router.get("/reference/library")
+async def reference_library(system_id: str = "",
+                              kind: Optional[str] = None,
+                              user: dict = Depends(get_current_user)):
+    """V6.25.25 — Aggregate user-visible custom reference rows across ALL
+    of the caller's campaigns, filtered by `system_id` (and optional `kind`).
+
+    Powers the dashboard Reference page's "Custom" tab so GMs and players
+    see every house-rule / Reference Editor / character-derived custom
+    entry for the active system in ONE place — sidesteps having to walk
+    each campaign individually.
+
+    Visibility rules:
+      * GMs see all of their own campaigns' custom rows.
+      * Players see custom rows from campaigns they're rostered on,
+        EXCLUDING `fields.gm_only` rows.
+      * Admin users see everything tagged with the active `system_id`.
+    """
+    if not system_id:
+        raise HTTPException(422, "system_id is required.")
+    is_admin = user.get("role") == "admin"
+
+    # Find every campaign the caller is involved in.
+    if is_admin:
+        camp_q: Dict[str, Any] = {}
+    else:
+        camp_q = {"$or": [
+            {"gm_id": user["id"]},
+            {"player_ids": user["id"]},
+        ]}
+    camp_q["system_id"] = system_id
+    campaigns = await db.campaigns.find(
+        camp_q, {"_id": 0, "id": 1, "name": 1, "gm_id": 1}).to_list(500)
+    cid_to_name = {c["id"]: c["name"] for c in campaigns}
+    gm_cids = {c["id"] for c in campaigns if c.get("gm_id") == user["id"]}
+
+    if not cid_to_name:
+        return {"system_id": system_id, "rows": [], "total": 0,
+                "campaign_count": 0}
+
+    q: Dict[str, Any] = {"campaign_id": {"$in": list(cid_to_name.keys())}}
+    if kind:
+        if kind not in REFERENCE_KINDS:
+            raise HTTPException(400, f"Unknown kind {kind!r}.")
+        q["kind"] = kind
+    rows = await db.campaign_reference.find(q, {"_id": 0}) \
+                                        .sort("created_at", -1).to_list(2000)
+    # Strip GM-only rows for non-GMs of that campaign.
+    visible: List[dict] = []
+    for r in rows:
+        if (r.get("fields") or {}).get("gm_only") and r["campaign_id"] not in gm_cids and not is_admin:
+            continue
+        r["campaign_name"] = cid_to_name.get(r["campaign_id"])
+        visible.append(r)
+    return {
+        "system_id": system_id,
+        "rows": visible,
+        "total": len(visible),
+        "campaign_count": len(cid_to_name),
+    }
+

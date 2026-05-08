@@ -42,6 +42,7 @@ const SUB_TABS = [
   { key: "foci",        label: "Foci",        Icon: Sparkles },
   { key: "cyphers",     label: "Cyphers",     Icon: ChevronRight },
   { key: "artifacts",   label: "Artifacts",   Icon: ChevronRight },
+  { key: "flavors",     label: "Flavors",     Icon: Sparkles },
   { key: "bestiary",    label: "Bestiary",    Icon: ChevronRight },
 ];
 
@@ -193,6 +194,9 @@ export default function CypherReferencePanel({ campId, isGm }) {
       {tab === "bestiary" && (
         <BestiarySection genre={genre}/>
       )}
+      {tab === "flavors" && (
+        <FlavorSection genre={genre}/>
+      )}
 
       {/* Universal rule strips — always visible, regardless of tab. */}
       <RuleStrip data={ref}/>
@@ -218,7 +222,6 @@ export default function CypherReferencePanel({ campId, isGm }) {
       .then((r) => setRows(r.data?.rows || []))
       .catch((e) => setErr(formatApiErrorDetail(e.response?.data?.detail) || e.message));
   }, [genre, levelMin, levelMax]);
-
   return (
     <div className="card-mystic p-3 space-y-2"
          data-testid="cypher-ref-bestiary">
@@ -259,6 +262,66 @@ export default function CypherReferencePanel({ campId, isGm }) {
             <div className="text-[10px] text-parchment mt-0.5">{b.blurb}</div>
             <div className="text-[10px] text-mist mt-1 tabular-nums">
               HP {b.health} · Dmg {b.damage} · Armor {b.armor}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+
+function FlavorSection({ genre }) {
+  const [rows, setRows] = useState([]);
+  const [err, setErr] = useState("");
+  useEffect(() => {
+    api.get(`/cypher/flavors?genre=${encodeURIComponent(genre || "")}`)
+      .then((r) => setRows(r.data?.rows || []))
+      .catch((e) => setErr(formatApiErrorDetail(e.response?.data?.detail) || e.message));
+  }, [genre]);
+
+  return (
+    <div className="card-mystic p-3 space-y-2"
+         data-testid="cypher-ref-flavors">
+      <div className="text-[10px] text-mist">
+        {rows.length} flavor{rows.length === 1 ? "" : "s"} for {genre} —
+        Flavors re-skin canonical mechanics so the SAME ability fits a
+        different genre vocabulary at the table. They never grant new powers.
+      </div>
+      {err && <div className="text-ember text-[10px]">{err}</div>}
+      {rows.length === 0 && (
+        <div className="text-mist italic text-[11px]">
+          No flavor variants tagged for this genre yet.
+        </div>
+      )}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+        {rows.map((f) => (
+          <div key={f.key}
+               className="border border-gold/10 rounded-sm p-2 bg-void/30
+                          text-[11px] text-parchment"
+               data-testid={`cypher-flavor-${f.key}`}>
+            <div className="font-display text-parchment">{f.name}</div>
+            <div className="text-[10px] text-mist italic mt-0.5">{f.role_blurb}</div>
+            {Object.keys(f.substitutions || {}).length > 0 && (
+              <div className="mt-1 pt-1 border-t border-gold/10">
+                <div className="text-[9px] uppercase tracking-widest text-arcane-light">
+                  Substitutions
+                </div>
+                <ul className="text-[10px] text-mist space-y-0.5 mt-0.5">
+                  {Object.entries(f.substitutions).map(([k, v]) => (
+                    <li key={k}>
+                      <span className="text-parchment">{k}</span>
+                      {" → "}
+                      <span className="text-gold-bright">{v}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            <div className="flex flex-wrap gap-1 mt-1">
+              {(f.genres || []).map((g) => (
+                <span key={g} className="tag text-[9px]">{g}</span>
+              ))}
             </div>
           </div>
         ))}
