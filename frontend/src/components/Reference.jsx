@@ -486,7 +486,11 @@ function SystemReferenceView({ ref_, systemId, q }) {
       {f(ref_.descriptors).length > 0 && (
         <Section title="Descriptors">
           {f(ref_.descriptors).map((d, i) => (
-            <Card key={i} title={d}/>
+            <Card key={i}
+                  title={typeof d === "string" ? d : d.name}
+                  sub={typeof d === "object" && Array.isArray(d.genres)
+                    ? d.genres.join(" · ")
+                    : (typeof d === "object" ? d.role || d.blurb || "" : "")}/>
           ))}
         </Section>
       )}
