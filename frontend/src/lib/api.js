@@ -15,13 +15,27 @@ api.interceptors.request.use((cfg) => {
   return cfg;
 });
 
-function formatApiErrorDetail(detail) {
-  if (detail == null) return "Something went wrong. Please try again.";
-  if (typeof detail === "string") return detail;
+function formatApiErrorDetail(detail, errOrStatus = null) {
+  // V6.25.31 — surface actionable diagnostics when the backend
+  // doesn't return a {detail: …} payload. Generic "Something went
+  // wrong" hides 423 lockouts, 401 invalid creds, and CORS errors,
+  // making login bugs un-debuggable from the UI.
+  if (typeof detail === "string" && detail.trim()) return detail;
   if (Array.isArray(detail))
-    return detail.map((e) => (e && typeof e.msg === "string" ? e.msg : JSON.stringify(e))).filter(Boolean).join(" ");
+    return detail.map((e) => (e && typeof e.msg === "string" ? e.msg : JSON.stringify(e)))
+                  .filter(Boolean).join(" ");
   if (detail && typeof detail.msg === "string") return detail.msg;
-  return String(detail);
+  // No detail — fall back to the original error/status if we have it.
+  const err = errOrStatus;
+  if (err && typeof err === "object" && err.response) {
+    const s = err.response.status;
+    if (s === 401) return "Invalid email or password.";
+    if (s === 423) return "Too many failed attempts. Locked for 15 minutes.";
+    if (s >= 500)  return `Server error (${s}). Please try again in a moment.`;
+    if (s >= 400)  return `Request rejected (${s}). Please check your input.`;
+  }
+  if (err && err.message) return err.message;  // Network Error, etc.
+  return "Something went wrong. Please try again.";
 }
 export { formatApiErrorDetail };
 
