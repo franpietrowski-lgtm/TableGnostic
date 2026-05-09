@@ -82,12 +82,19 @@ export default function EncountersLibrary({ campId, sessionId = null, isGm = fal
     refresh();
   };
   const run = async (eid) => {
-    if (!sessionId) {
-      window.alert("Open a session view to run an encounter.");
-      return;
-    }
-    await api.post(`/campaigns/${campId}/encounters-library/${eid}/run?session_id=${sessionId}`);
-    refresh();
+    // V6.25.29 — session_id is optional now. In Director Console
+    // (no session) the encounter still flips to "running" so the
+    // GM can resolve + propagate to the codex out-of-band.
+    setBusy(true); setErr("");
+    try {
+      const url = sessionId
+        ? `/campaigns/${campId}/encounters-library/${eid}/run?session_id=${sessionId}`
+        : `/campaigns/${campId}/encounters-library/${eid}/run`;
+      await api.post(url);
+      await refresh();
+    } catch (e) {
+      setErr(formatApiErrorDetail(e.response?.data?.detail) || e.message);
+    } finally { setBusy(false); }
   };
   const complete = async (encounter) => {
     // V6.25.29 — open the completion modal instead of a prompt; the
@@ -226,16 +233,19 @@ function EncounterRow({ e, sessionId, isGm, onEdit, onRemove, onClone, onRun, on
           {e.cloned_from_id ? " · cloned" : ""}
         </div>
       </div>
-      {sessionId && isGm && e.status !== "running" && e.status !== "completed" && (
+      {/* V6.25.29 — Run/Complete also exposed in Director Console
+          (no sessionId), since GMs commonly resolve out-of-band
+          encounters and the codex propagation must work everywhere. */}
+      {isGm && e.status !== "running" && e.status !== "completed" && (
         <button onClick={onRun} className="btn btn-primary text-[10px]"
-                title="Run this encounter in the current session."
+                title="Mark this encounter as running."
                 data-testid={`encounter-run-${e.id}`}>
           <Play className="w-3 h-3"/> Run
         </button>
       )}
-      {sessionId && isGm && e.status === "running" && (
+      {isGm && e.status === "running" && (
         <button onClick={onComplete} className="btn btn-ghost text-[10px]"
-                title="Mark this encounter completed (with optional notes)."
+                title="Resolve & propagate to codex (vigilize NPCs, tally kills)."
                 data-testid={`encounter-complete-${e.id}`}>
           <CheckCircle2 className="w-3 h-3"/> Complete
         </button>

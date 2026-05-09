@@ -385,8 +385,13 @@ export default function CharacterSheet() {
           GM/player can read what's in each hand + body slot at a glance.
           Uses the same inventory rows as the Inventory tab. */}
       <EquippedStripFor character={ch}/>
-      {/* V6.17 — Spell + Cooldown tracker (renders only when sheet has slots/bundles/EP). */}
-      <SpellTracker characterId={ch.id} isOwnerOrGm={canEditMech}/>
+      {/* V6.17 — Spell + Cooldown tracker (renders only when sheet has slots/bundles/EP).
+          V6.25.29 — only render for systems that natively use spell-slot mechanics.
+          Anime 5E + BESM 4E use BESM Power Packs / Bundles for casting; Cypher uses
+          cypher-state pools. SpellTracker is D&D-shaped and would mis-render for them. */}
+      {campaign?.system_id === "dnd-5e" && (
+        <SpellTracker characterId={ch.id} isOwnerOrGm={canEditMech}/>
+      )}
       {/* V6.19 — Class progression (saves/armor/weapons/tools + per-level features timeline).
           V6.25.3 — Suppressed for BESM 4E (no D&D-style class progression);
           BESM uses the AppliedTemplatesPanel instead. */}

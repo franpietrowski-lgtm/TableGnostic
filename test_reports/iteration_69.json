@@ -1,0 +1,65 @@
+{
+  "summary": "V6.25.29 retest after main-agent fixes. Cypher (Vex Ashenhart) + D&D 5E (Lyra Stormblade) sheet renderers loaded successfully via /app/characters/{id} (NOTE: review request used wrong path /characters/{id} which is a 404 redirect). CypherSheetView renders correctly (sentence, type/descriptor/focus, tier 2, abilities, CypherXPPanel mounts) and SpellTracker is HIDDEN for cypher. DnD chassis (Paladin/Half-Elf/lv3/HP 28), spell-slots panel, and inventory render — SpellTracker is VISIBLE for dnd-5e. BESM Eli Mechanics tab confirms SpellTracker HIDDEN per V6.25.29 fix. HOWEVER: TWO data-shape bugs found — (1) Cypher pools render 0/0/Edge 0 (CypherSheetView reads state.pools[\"Might\"] flat number; seed writes pools.might={max,current,edge} nested+lowercase). (2) DnD spell slots are derived from class progression table and IGNORE seeded folio.dnd_state.spell_slots (Lyra's seeded 4/2 slots not honoured; renders 3/0 from Paladin lv3 RAW table). Encounter Complete modal flow was code-verified (Run/Complete buttons no longer sessionId-gated per EncountersLibrary.jsx:239-252; modal markup present at lines 592-734) but NOT exercised end-to-end in this run due to time budget after sheet bug discovery.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "CypherSheetView /app/frontend/src/components/sheets/CypherSheetView.jsx:46-72",
+        "issue": "Cypher pool rings render 0/0 with Edge 0 instead of seeded values (Might 17/17 edge 1, Speed 15/15 edge 1, Intellect 10/10 edge 0). Code reads state.pools?.[\"Might\"] (capitalised, flat number) and state.edge?.[\"Might\"], but Vex's seeded folio.cypher_state.pools shape is {might:{max:17,current:17,edge:1}, speed:{...}, intellect:{...}} (lowercase keys, nested object). Either the view must adopt the nested shape, or the seed/migration must flatten. ALSO state.cyphers_max=2 with state.cyphers=[2 entries] is correct in folio but UI did not surface a 'Cyphers carried 2/2' label anywhere.",
+        "selector": "[data-testid=cypher-pool-ring-might] / cypher-pool-ring-speed / cypher-pool-ring-intellect",
+        "priority": "HIGH"
+      },
+      {
+        "component": "DndSheetView /app/frontend/src/components/sheets/DndSheetView.jsx:276-290",
+        "issue": "Spell slots panel ignores state.spell_slots from folio and instead derives slots purely from the class progression table (HALF_TBL[lvl-1]). For Lyra (Paladin lv3) it renders '1st 3/3' from RAW table; the seeded folio.dnd_state.spell_slots={'1':{max:4,used:0},'2':{max:2,used:0}} is dropped. Used slots are read from state.slot_usage (also missing in seed). Should honour state.spell_slots overrides when present (level→{max,used} shape).",
+        "selector": "[data-testid=dnd-spell-slots]",
+        "priority": "HIGH"
+      },
+      {
+        "component": "DndSheetView ability roll buttons",
+        "issue": "data-testid='dnd-sheet-roll-{abbr}' elements were present but text_content empty (likely icon-only rolls). Verified chassis-summary contains correct Paladin/Half-Elf/Soldier/speed-30/skills, AC and HP 28/28 ring rendered. Ability score values themselves (STR 16 etc.) not surfaced via the roll-{abbr} testids — minor UX/testability concern.",
+        "selector": "[data-testid=dnd-sheet-roll-str]",
+        "priority": "LOW"
+      }
+    ],
+    "integration_issues": [
+      {
+        "flow": "Encounter Complete modal full e2e (create draft → run → complete with notes/casualty/kill → kill-tally propagation)",
+        "issue": "NOT exercised end-to-end in this run. Code review confirms the V6.25.29 fix is correctly in place: EncountersLibrary.jsx renders {encounter-run-${id}} for status∈{draft|seeded|prepared} and {encounter-complete-${id}} when status==='running' with no sessionId gate (lines 236-252). Complete modal markup with [data-testid=encounter-complete-modal], encounter-complete-notes, complete-casualties, complete-kills, complete-cas-toggle-{eid}, complete-kill-count-{i}, complete-kill-killer-{i}, complete-submit (lines 592-734) is correct. Backend /run accepts session_id Optional. Recommend main agent self-test or next testing-agent iteration to walk the modal end-to-end now that the path is unblocked.",
+        "affected_selectors": ["[data-testid=encounter-run-*]", "[data-testid=encounter-complete-*]", "[data-testid=encounter-complete-modal]", "[data-testid=complete-submit]"]
+      }
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/test_reports/iteration_68.json",
+    "/app/backend/tests/test_v62529_encounter_propagation.py"
+  ],
+  "action_items": [
+    "FIX CypherSheetView pool reader to handle nested {max,current,edge} shape OR migrate seeded cypher_state.pools to flat {Might,Speed,Intellect} numbers + edge map. Recommendation: update view to read either shape (state.pools.might?.max ?? state.pools?.Might ?? 0) since folio model is already nested in V6.25.x.",
+    "FIX DndSheetView to honour folio.dnd_state.spell_slots overrides when present (use state.spell_slots[i+1]?.max instead of class-table value, fall back to table). Apply state.spell_slots[i+1]?.used likewise.",
+    "Update review-request URL convention: character sheets live at /app/characters/{id}, not /characters/{id}. Future test-prompts should match App.js routes (/app prefix on all protected routes).",
+    "Self-test or schedule next testing iteration for Encounter Complete modal end-to-end now that Run/Complete buttons are no longer sessionId-gated.",
+    "Optional: surface 'Cyphers carried N/MAX' header in CypherSheetView (currently buried in component; not on the visible sheet view)."
+  ],
+  "critical_code_review_comments": [
+    "CypherSheetView pool/edge readers (lines 50-67) use capitalised string keys against a lowercase nested data shape — this is a clear contract drift between the seed/builder writer and the view reader.",
+    "DndSheetView spell-slots block silently ignores explicit state.spell_slots overrides — this is brittle for homebrew classes, multiclassed casters, and any GM-side tweak.",
+    "CharacterSheet.jsx:392 SpellTracker gate `campaign?.system_id === 'dnd-5e'` is correct and was verified to hide on cypher and BESM 4E sheets and show on D&D 5E.",
+    "EncountersLibrary.jsx Run button mounting (line 239-244) now guards correctly on `e.status !== 'running' && e.status !== 'completed'` and Complete on `e.status === 'running'` — this is the right state machine, no sessionId dependency."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "100% (per iteration_68 — not re-run; only frontend retest requested)",
+    "frontend": "60% (3/5: CypherSheetView mounts + sentence + xp-panel + spell-tracker-hidden PASS; DndSheetView mounts + chassis + hp + magic-items + spell-tracker-visible PASS; BESM Eli SpellTracker-hidden PASS via screenshot; CYPHER POOL VALUES BUG; DND SPELL-SLOT OVERRIDE BUG; Encounter Complete modal e2e UNTESTED)"
+  },
+  "test_credentials": "GMFran admin: franpietrowski@gmail.com / PieGod08!! (worked).",
+  "seed_data_creation": "None (seeded characters Vex/Lyra/Eli used as-is from main agent seed).",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Character sheet routes are /app/characters/{id} (NOT /characters/{id}). Login persists tg_token in localStorage. SPA shows a 'SUMMONING — The Loremaster gathers your table' splash for 2-5s on lazy-loaded route chunks; wait for splash to disappear before querying testids. Vex (Cypher) folio.cypher_state has nested pools {might:{max,current,edge}}; CypherSheetView expects flat capitalised state.pools.Might. Lyra (D&D 5E) folio.dnd_state.spell_slots has {'1':{max:4,used:0},'2':{max:2,used:0}} which DndSheetView IGNORES. Encounter Complete modal markup is in EncountersLibrary.jsx 592-734 (key testids: encounter-complete-modal, encounter-complete-notes, complete-cas-toggle-{eid}, complete-kill-count-{i}, complete-kill-killer-{i}, complete-submit). Run/Complete buttons render at line 236-252 without sessionId gate.",
+  "rca of the issue": "Both sheet bugs are data-contract drift between the V6.25.29 seed payload (nested + lowercase) and the V6.10-era sheet view readers (flat + capitalised for Cypher; class-table-derived for DnD). Reproduce: GET /api/characters/7fb9f4341cf741c5a1f16fd42b4764cf — see folio.cypher_state.pools.might.max=17 — then visit /app/characters/7fb9f4341cf741c5a1f16fd42b4764cf — pool ring shows 0/0. Mitigation (recommended in CypherSheetView): const pool = state.pools?.[k] ?? state.pools?.[k.toLowerCase()]; const max = typeof pool === 'object' ? (pool?.max ?? 0) : (pool ?? 0); const cur = typeof pool === 'object' ? (pool?.current ?? max) : (state.current_pools?.[k] ?? max); const edge = typeof pool === 'object' ? (pool?.edge ?? 0) : (state.edge?.[k] ?? 0). Mitigation (DnD): tbl[i] = state.spell_slots?.[String(i+1)]?.max ?? (isFull ? FULL_TBL : HALF_TBL)[lvl-1][i] ?? 0; used[i+1] = state.spell_slots?.[String(i+1)]?.used ?? state.slot_usage?.[i+1] ?? 0."
+}

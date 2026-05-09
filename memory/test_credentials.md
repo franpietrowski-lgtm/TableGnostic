@@ -1,9 +1,18 @@
-# Test credentials — V6.25.27 (current)
+# Test credentials — V6.25.29 (current)
 
 **GMFran (admin/GM)**: franpietrowski@gmail.com / PieGod08!!
 **Aurora (player)**: albanaszak@ymail.com / AuroraTest123!
 
 Both seeded on backend startup.
+
+## Seeded characters for cross-system QA
+
+| System    | Campaign id                      | Character id                     | Name              | Notes |
+|-----------|----------------------------------|----------------------------------|-------------------|-------|
+| BESM 4E   | af461ae004364002932f93c5b71cd483 | 35b9746b30a24d2bafac5f117d673bd1 | Eli               | Healing×3 tinctures, Item×6 bandolier, Wealth×2. |
+| Cypher    | dac42099dfcf4f7b8deabd1ed043ec00 | 7fb9f4341cf741c5a1f16fd42b4764cf | Vex Ashenhart     | Strong Glaive who Wields Power with Precision. Tier 2. Pools: Might 17 / Speed 15 / Intellect 10. 2 cyphers carried. |
+| D&D 5E    | 368d4e21b86641b7a184befff3f9b559 | b5d47d9477fc4181983343065554b94c | Lyra Stormblade   | Half-Elf Paladin (Oath of Devotion) lv 3. AC 18, HP 28. Smite + Lay on Hands + 1st & 2nd-level slots. |
+| Anime 5E  | 0e615f1275d3445ea5997f345a8c54a3 | (varies — see GET /characters)   |                   | Use any seeded Anime 5E char; budget-breakdown endpoint required. |
 
 ## V6.25.27 verification targets
 

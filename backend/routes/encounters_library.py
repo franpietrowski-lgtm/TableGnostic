@@ -206,18 +206,22 @@ async def delete_encounter(cid: str, eid: str,
 
 
 @router.post("/campaigns/{cid}/encounters-library/{eid}/run")
-async def run_encounter(cid: str, eid: str, session_id: str = Query(...),
+async def run_encounter(cid: str, eid: str,
+                          session_id: Optional[str] = Query(None),
                           user: dict = Depends(get_current_user)):
-    """Link an encounter to a session and mark it as running. The
-    anti-railroad flow: GM picks from the library WHILE running the
-    session, instead of pre-binding encounters at planning time."""
+    """Mark an encounter as running. Optionally link it to a session.
+
+    V6.25.29 — session_id is optional so GMs can flip an encounter to
+    'running' from the Director Console (out-of-session) before
+    completing it and propagating updates to the codex."""
     camp = await _campaign_or_404(cid)
     if not _is_gm(camp, user):
         raise HTTPException(403, "GM only.")
+    update: Dict[str, Any] = {"status": "running", "started_at": now_iso()}
+    if session_id:
+        update["linked_session_id"] = session_id
     res = await db.encounters_library.update_one(
-        {"campaign_id": cid, "id": eid},
-        {"$set": {"linked_session_id": session_id, "status": "running",
-                    "started_at": now_iso()}})
+        {"campaign_id": cid, "id": eid}, {"$set": update})
     if res.matched_count == 0:
         raise HTTPException(404, "Encounter not found.")
     return await db.encounters_library.find_one(
