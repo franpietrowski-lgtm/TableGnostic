@@ -3,6 +3,8 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./lib/api";
 import { useMinDelay } from "./lib/useMinDelay";
 import Landing from "./components/Landing";
+import DiscoverShowcase from "./components/DiscoverShowcase";
+import DiscoverBrowse from "./components/DiscoverBrowse";
 import Auth from "./components/Auth";
 import Shell from "./components/Shell";
 import Dashboard from "./components/Dashboard";
@@ -69,6 +71,8 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Landing />} />
           <Route path="/discover" element={<Landing />} />
+          <Route path="/discover/browse" element={<DiscoverBrowse />} />
+          <Route path="/discover/:slug" element={<DiscoverShowcase />} />
           <Route path="/auth" element={<Auth />} />
           <Route path="/invite/:token" element={<Invite />} />
           <Route path="/reset" element={<Reset />} />

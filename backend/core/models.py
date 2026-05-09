@@ -127,6 +127,15 @@ class CampaignIn(BaseModel):
     # primer acknowledgement (via `POST /api/campaigns/{cid}/consent`)
     # before their character sheet becomes editable.
     consent_required: bool = False
+    # V6.25.13 — Public showcase gate. Independent of `visibility` (which
+    # controls open-seat Discover) and `canon_published` (which controls
+    # the GM Canon Registry). When `discover_published=true`, the campaign
+    # is reachable at the public URL `/discover/{discover_slug}` as a
+    # browsable showcase (campaign blurb + public/shared codex nodes +
+    # marketplace listings sourced from this campaign + canon entries).
+    # Defaults FALSE so existing campaigns are NOT surprise-exposed.
+    discover_published: bool = False
+    discover_slug: str = ""
 
 
 class CampaignOut(CampaignIn):

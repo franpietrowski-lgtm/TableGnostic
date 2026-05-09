@@ -11,6 +11,7 @@ import FeatureHighlights from "./landing/FeatureHighlights";
 import WizardTeasers from "./landing/WizardTeasers";
 import MarketplaceSection from "./landing/MarketplaceSection";
 import Roadmap from "./landing/Roadmap";
+import PublicTables from "./landing/PublicTables";
 import AboutCreator from "./landing/AboutCreator";
 import ContactWaitlist from "./landing/ContactWaitlist";
 import LandingFooter from "./landing/LandingFooter";
@@ -93,6 +94,7 @@ export default function Landing() {
         <WizardTeasers />
         <MarketplaceSection />
         <Roadmap />
+        <PublicTables />
         <AboutCreator />
         <ContactWaitlist />
       </main>
