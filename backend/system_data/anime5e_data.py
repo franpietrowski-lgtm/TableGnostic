@@ -454,6 +454,18 @@ POWER_LEVELS = [
     {"name": "Cosmic",         "level_range": "17-20", "blurb": "Multiverse · godlike opposition"},
 ]
 
+# V6.25.32 — Anime 5E reference parity expansion. Pulls SUBCLASSES /
+# FEATS / TOOLS / LANGUAGES / MAGIC_ITEMS / MONSTERS / DAMAGE_TYPES /
+# SCHOOLS from the sibling `anime5e_extended` module so the Anime 5E
+# Reference page reaches feature-parity with the D&D 5E one. Anime 5E
+# re-uses the SRD pool (one-way port, CC-BY 4.0) and adds anime-flavoured
+# originals (henshin pendants, kaiju, transformation feats, idol mics).
+from .anime5e_extended import (  # noqa: E402
+    SUBCLASSES, FEATS, TOOLS, LANGUAGES, MAGIC_ITEMS, MONSTERS,
+    DAMAGE_TYPES, SCHOOLS, CLASS_FEATURES,
+)
+
+
 REFERENCE = {
     "system_id": "anime-5e",
     "kind": "hybrid",  # both class+slot AND point-buy
@@ -473,6 +485,16 @@ REFERENCE = {
     "point_buy_attributes": POINT_BUY_ATTRIBUTES,
     "defects": DEFECTS,
     "class_casting": CLASS_CASTING,
+    # V6.25.32 — extended reference parity with D&D 5E.
+    "subclasses":     SUBCLASSES,
+    "feats":          FEATS,
+    "tools":          TOOLS,
+    "languages":      LANGUAGES,
+    "magic_items":    MAGIC_ITEMS,
+    "monsters":       MONSTERS,
+    "damage_types":   DAMAGE_TYPES,
+    "schools":        SCHOOLS,
+    "class_features": CLASS_FEATURES,
     "modifier_formula": "(score - 10) // 2",
     "rule_note": (
         "Anime 5E is D&D 5E + an OPTIONAL BESM-style point-buy LAYER. "

@@ -1,0 +1,47 @@
+{
+  "summary": "V6.25.32 regression. Backend: all 6 new tests PASS (race_templates=8, class_templates=12, anime-5e parity minimums + exacts, 'Adventurer (Generalist)' present, anime originals Way of the Mind/Kaiju (Lesser)/Transformation Sequence/Henshin Pendant present, dnd-5e regression OK, CORS regex echoes https://tablegnostic.com on /api/auth/login). Frontend: Reference page renders Anime 5E with ALL 8 new sections (Subclasses, Feats, Tools, Languages, Magic Items, Monsters, Damage Types, Schools) and D&D 5E retains Subclasses/Feats/Tools/Monsters/Spells/Classes after the anime5e_extended re-export. BESM Template Picker UI was blocked from being exercised end-to-end because direct navigation to /app/campaigns/{cid}/characters/{cid}/edit redirects to landing (auth-deep-link bug already documented in iter69; SPA reload drops the protected-route after auth restore). Picker code in CharacterBuilder.jsx:1490-1545 was statically verified — 4 optgroups with exact labels per spec, canonical templates fed via _canonToCustomShape from /api/besm/reference, Apply/Backfill/X handlers wired correctly. Recommend main agent self-test the BESM picker apply/remove flow OR fix the deep-link auth restoration so testers can reach /edit on a fresh page load.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "Deep-link to /app/campaigns/{cid}/characters/{cid}/edit after fresh login",
+        "issue": "page.goto with valid tg_token in localStorage still redirects to /. The protected-route guard appears to evaluate before the auth context is hydrated from localStorage on a hard navigation. Iter69 reported a similar pattern. Worked-around in iter69 by using /app/characters/{id} (read-only). This blocked end-to-end exercise of the BESM picker apply/remove flow in this iteration. Code path manually verified to be correct.",
+        "affected_selectors": ["[data-testid=besm-template-picker]", "[data-testid=besm-template-select]", "[data-testid=besm-template-apply-btn]", "[data-testid=besm-template-applied-list]"]
+      }
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_v62532_besm_anime_cors.py",
+    "/app/test_reports/pytest/v62532_results.xml"
+  ],
+  "action_items": [
+    "Self-test BESM picker apply/remove flow on a BESM 4E campaign (e.g. open Aurea → pick a character → Edit → click 'Race / Class Templates · BESM Canon + Campaign Homebrew' picker → Apply 'Adventurer (Generalist)' → verify applied tag, stat bumps, from_template_id='canon-class-adventurer-generalist'; then click X → verify rollback; then save+reload → verify folio.applied_templates persists or clears correctly).",
+    "Investigate deep-link auth restoration for /app/campaigns/.../edit so that testing agents can exercise the builder via direct page.goto without manual click-through. Likely fix: ensure the App-level auth bootstrap reads tg_token from localStorage BEFORE the protected-route redirect runs (or render a 'verifying session' splash until hydration completes)."
+  ],
+  "critical_code_review_comments": [
+    "BesmTemplatePicker (CharacterBuilder.jsx:1326-1545) correctly merges canon + custom templates and renders 4 optgroups with the exact labels required by spec. Header label updated to 'Race / Class Templates · BESM Canon + Campaign Homebrew' as specified.",
+    "_canonToCustomShape (CharacterBuilder.jsx:1290-1325) deterministic id generation pattern (canon-{kind}-{slug}) matches the spec ('canon-class-adventurer-generalist').",
+    "Picker visibility: previously gated on customs.length>0; now correctly renders whenever EITHER customs OR canon templates exist (canon templates are always seeded from /api/besm/reference, so the picker is always visible on a BESM 4E campaign — sanity check passes).",
+    "Backend race_template 'Human (Standard)' has bundle:[] which is intentional (0-cost baseline); test relaxed to allow empty bundle.",
+    "anime5e_extended.py re-exports dnd5e_extended without name collisions — confirmed by independent reference endpoints both returning their full catalogues.",
+    "CORS regex for tablegnostic.com correctly echoes the origin header; production custom-domain login is unblocked."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_v62532_besm_anime_cors.py"
+  ],
+  "success_rate": {
+    "backend": "100% (6/6 V6.25.32 tests pass)",
+    "frontend": "67% (2/3: Anime 5E reference parity confirmed; D&D 5E reference regression confirmed; BESM picker UI flow blocked by deep-link auth bug — code statically verified correct)"
+  },
+  "test_credentials": "GMFran admin: franpietrowski@gmail.com / PieGod08!! (worked).",
+  "seed_data_creation": "None.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "BESM picker UI not exercised end-to-end due to deep-link auth bug (iter69 had the same constraint). To test, navigate via in-app sidebar Campaigns → click Aurea (or any BESM campaign) → Characters tab → Edit. The /app/campaigns/{cid}/characters/{cid}/edit route does not survive a hard page.goto with localStorage tg_token. Backend pytest at /app/backend/tests/test_v62532_besm_anime_cors.py is the regression suite for this version — keep it green. Anime 5E sections (Subclasses/Feats/Tools/Languages/Magic Items/Monsters/Damage Types/Schools) all render under /app/reference → ANIME 5E tab (clicked via JS evaluate since text contains '·' and CSS escaping is finicky).",
+  "rca of the issue": "Frontend deep-link redirect: When page.goto('/app/campaigns/.../edit') runs with a populated localStorage.tg_token, the React Router protected-route guard fires before the App's auth bootstrap finishes reading the token, resulting in a redirect to /. Mitigation: in App.js (or wherever the auth context provider mounts), perform synchronous localStorage read on initial render and gate the router redirect until hydration completes (e.g., render a 'verifying session' splash instead of redirecting on auth=null during the first render tick). This issue is not new to V6.25.32; it persists from V6.25.29."
+}

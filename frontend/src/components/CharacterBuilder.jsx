@@ -450,8 +450,11 @@ export default function CharacterBuilder() {
               and classes (authored in the Campaign's Custom Rules tab)
               pre-fill stat adjustments + attributes + skills + defects
               so the player starts from a canonical base and extends from
-              there within the CP budget. */}
-          <BesmTemplatePicker customs={customs} ch={ch} setCh={setCh}/>
+              there within the CP budget.
+              V6.25.32 — Now also exposes the BESM 4E book canon races
+              (RACE_TEMPLATES, p.35-41) and class archetypes
+              (CLASS_TEMPLATES, p.142-153) from `/api/besm/reference`. */}
+          <BesmTemplatePicker customs={customs} ref={ref} ch={ch} setCh={setCh}/>
 
           <div className="divider-sigil" />
           <div className="label-ref">Derived · ch.8 p.168 BESM 4E</div>
@@ -1269,12 +1272,65 @@ function SkillRow({ idx, s, onUpdate, onRemove }) {
  * button that merges the template's stat_adjustments + components into
  * the character's working draft. Rows added by a template are tagged
  * with `_from_template` so they can be cleanly removed later.
+ *
+ * V6.25.32 — Also reads the canonical BESM 4E book templates
+ * (`ref.race_templates`, `ref.class_templates`) and normalises them
+ * into the same shape so the player gets a single drop-down with
+ * "BESM Canon · Races", "BESM Canon · Classes", "Campaign · Races",
+ * "Campaign · Classes" optgroups. Canonical IDs are deterministic
+ * (`canon-race-<slug>` / `canon-class-<slug>`) so re-applying or
+ * removing them works across reloads.
  */
-function BesmTemplatePicker({ customs, ch, setCh }) {
+
+// Convert a canonical RACE_TEMPLATES / CLASS_TEMPLATES row (which
+// uses `bundle: [{kind, name, level/rank, note}]`) into the same
+// shape `customs` rows use (`effects: {total_cp, stat_adjustments,
+// components: [...]}`). The `kind=stat` rows roll up into
+// `stat_adjustments`; everything else becomes a `component`.
+function _canonToCustomShape(row, kind) {
+  const slug = (row.name || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+  const bundle = row.bundle || [];
+  const stat_adjustments = { body: 0, mind: 0, soul: 0 };
+  const components = [];
+  for (const b of bundle) {
+    if (b.kind === "stat") {
+      const k = (b.name || "").toLowerCase();
+      if (k === "body" || k === "mind" || k === "soul") {
+        stat_adjustments[k] = (stat_adjustments[k] || 0) + (+b.level || 0);
+      }
+    } else if (b.kind === "skill_group" || b.kind === "skill") {
+      components.push({ kind: "skill", name: b.name, level: +b.level || 1, note: b.note || "" });
+    } else if (b.kind === "attribute") {
+      components.push({ kind: "attribute", name: b.name, level: +b.level || 1, note: b.note || "" });
+    } else if (b.kind === "defect") {
+      components.push({ kind: "defect", name: b.name, rank: +b.rank || 1, note: b.note || "" });
+    }
+  }
+  return {
+    id: `canon-${kind}-${slug}`,
+    name: row.name,
+    kind,
+    description_note: `${row.summary || ""}${row.page ? ` (BESM 4E p.${row.page})` : ""}`.trim(),
+    effects: {
+      total_cp: +row.cp_cost || 0,
+      stat_adjustments,
+      components,
+    },
+    _canonical: true,
+  };
+}
+
+function BesmTemplatePicker({ customs, ref, ch, setCh }) {
   const [sel, setSel] = React.useState("");
-  const templates = (customs || []).filter(
+  const customTemplates = (customs || []).filter(
     (c) => (c.kind === "race" || c.kind === "class")
       && c.effects && (c.effects.components || c.effects.stat_adjustments));
+  const canonRaces = (ref?.race_templates || []).map((r) => _canonToCustomShape(r, "race"));
+  const canonClasses = (ref?.class_templates || []).map((r) => _canonToCustomShape(r, "class"));
+  const templates = [...canonRaces, ...canonClasses, ...customTemplates];
   if (templates.length === 0) return null;
   const chosen = templates.find((t) => t.id === sel);
   // V6.25.3 — applied templates persist via `folio.applied_templates`
@@ -1434,22 +1490,36 @@ function BesmTemplatePicker({ customs, ch, setCh }) {
   return (
     <div className="mt-3 border border-gold/20 rounded-sm p-3 bg-void/30"
          data-testid="besm-template-picker">
-      <div className="label-ref mb-2">Campaign Race / Class Templates</div>
+      <div className="label-ref mb-2">Race / Class Templates · BESM Canon + Campaign Homebrew</div>
       <div className="flex gap-2 items-end flex-wrap">
         <div className="flex-1 min-w-[240px]">
           <label className="label-ref block mb-1 text-[9px]">Template</label>
           <select className="select" value={sel} onChange={(e) => setSel(e.target.value)}
                   data-testid="besm-template-select">
             <option value="">— pick a race or class —</option>
-            <optgroup label="Races">
-              {templates.filter((t) => t.kind === "race").map((t) => (
+            <optgroup label="BESM 4E Canon · Races">
+              {templates.filter((t) => t._canonical && t.kind === "race").map((t) => (
                 <option key={t.id} value={t.id}>
                   {t.name} · {(t.effects?.total_cp ?? 0)} CP
                 </option>
               ))}
             </optgroup>
-            <optgroup label="Classes">
-              {templates.filter((t) => t.kind === "class").map((t) => (
+            <optgroup label="BESM 4E Canon · Classes">
+              {templates.filter((t) => t._canonical && t.kind === "class").map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name} · {(t.effects?.total_cp ?? 0)} CP
+                </option>
+              ))}
+            </optgroup>
+            <optgroup label="Campaign Custom · Races">
+              {templates.filter((t) => !t._canonical && t.kind === "race").map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name} · {(t.effects?.total_cp ?? 0)} CP
+                </option>
+              ))}
+            </optgroup>
+            <optgroup label="Campaign Custom · Classes">
+              {templates.filter((t) => !t._canonical && t.kind === "class").map((t) => (
                 <option key={t.id} value={t.id}>
                   {t.name} · {(t.effects?.total_cp ?? 0)} CP
                 </option>
