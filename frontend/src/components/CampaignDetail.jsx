@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Link, useParams, useNavigate } from "react-router-dom";
 import { api, formatApiErrorDetail } from "../lib/api";
 import * as Tabs from "@radix-ui/react-tabs";
-import { Users, Plus, UserPlus2, ArrowRight, Trash2, Sparkles, Eye, EyeOff, Link as LinkIcon, Wand2, Shield, Copy, RefreshCw, Check, Save, Network, ListTree, Lightbulb, X, BookOpen, ChevronDown, ChevronRight, ScrollText, Upload, Globe, Lock, DollarSign } from "lucide-react";
+import { Users, Plus, UserPlus2, ArrowRight, Trash2, Sparkles, Eye, EyeOff, Link as LinkIcon, Wand2, Shield, Copy, RefreshCw, Check, Save, Network, ListTree, Lightbulb, X, BookOpen, ChevronDown, ChevronRight, ScrollText, Upload, Globe, Lock, DollarSign, Newspaper } from "lucide-react";
 import KnowledgeGraph from "./KnowledgeGraph";
 import CodexChartView from "./CodexChartView";
 import KnowledgeTab from "./campaignDetail/KnowledgeTab";
@@ -102,6 +102,10 @@ export default function CampaignDetail() {
                               title="GM Director's Console — pull NPCs from your Atelier into encounters, judge Challenge Rating, get tactical suggestions.">
             <Wand2 className="w-4 h-4"/> Director
           </Link>}
+          <Link to={`/app/campaigns/${id}/news`} className="btn" data-testid="newsroom-btn"
+                title="Old-timey campaign Gazette — LLM-drafted articles, kill-count leaderboard, Press the Issue.">
+            <Newspaper className="w-4 h-4"/> Gazette
+          </Link>
           {camp.is_gm && <button onClick={() => setShowLedger(true)} className="btn" data-testid="xp-ledger-btn"
                                  title="Campaign-level XP ledger — every award + conversion across all characters.">
             <ScrollText className="w-4 h-4"/> XP Ledger
@@ -891,6 +895,7 @@ function InviteTab({ camp, onRefresh }) {
         </div>
       </div>
       <CanonPublishCard camp={camp} onRefresh={onRefresh}/>
+      <DiscoverPublishCard camp={camp} onRefresh={onRefresh}/>
       {/* V6.25.17 — campaign-level password + named share-links. */}
       <PrivateAccessPanel camp={camp} onRefresh={onRefresh}/>
       {/* V6.21 — GM/Player consent flow: seat applications queue +
@@ -981,6 +986,83 @@ function CanonPublishCard({ camp, onRefresh }) {
           {busy ? "Saving…" : pub ? "Publish" : "Unpublish"}
         </button>
         {err && <span className="text-ember text-[11px]" data-testid="canon-publish-error">{err}</span>}
+      </div>
+    </div>
+  );
+}
+
+
+/** V6.25.37 — Public Showcase publish card. Distinct from Canon Registry
+ *  (GM-to-GM delta-drop discovery) — this is GM-to-WORLD: a SEO-indexed
+ *  public page at `/discover/{slug}` that merges campaign blurb + public
+ *  codex nodes + marketplace listings + canon delta drops.
+ *  Independent of `visibility=public` (open-seat Discover) so existing
+ *  campaigns aren't surprise-exposed. */
+function DiscoverPublishCard({ camp, onRefresh }) {
+  const [pub, setPub] = useState(!!camp.discover_published);
+  const [blurb, setBlurb] = useState(camp.canon_blurb || "");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const slug = camp.discover_slug || "";
+  const publicUrl = slug ? `/discover/${slug}` : "";
+  const save = async () => {
+    setBusy(true); setErr("");
+    try {
+      if (pub) {
+        await api.post(`/campaigns/${camp.id}/discover-publish`, { blurb });
+      } else {
+        await api.delete(`/campaigns/${camp.id}/discover-publish`);
+      }
+      onRefresh && onRefresh();
+    } catch (e) {
+      setErr(formatApiErrorDetail(e.response?.data?.detail) || e.message);
+    } finally { setBusy(false); }
+  };
+  return (
+    <div className="card-mystic p-5 mt-4" data-testid="discover-publish-card">
+      <div className="label-ref mb-2 flex items-center gap-2">
+        Publish Public Showcase
+        {camp.discover_published && (
+          <span className="tag bg-gold/20 text-gold-bright text-[9px] uppercase tracking-widest">
+            live
+          </span>
+        )}
+      </div>
+      <div className="text-[11px] text-mist/80 italic mb-3">
+        Lights up a SEO-indexed public page at
+        <code className="text-gold-bright"> /discover/{slug || "{slug}"}</code> —
+        codex graph (public/shared nodes only), marketplace listings sourced
+        from this campaign, and your canon registry blurb. No login required.
+        Players + private seats stay private.
+      </div>
+      <label className="flex items-center gap-2 text-sm text-parchment cursor-pointer">
+        <input type="checkbox" checked={pub}
+               onChange={(e) => setPub(e.target.checked)}
+               data-testid="discover-publish-checkbox"/>
+        <span>Publish this campaign to <code>/discover</code></span>
+      </label>
+      {pub && (
+        <textarea
+          className="input mt-3 min-h-[70px] text-sm"
+          placeholder="One-sentence pitch for the showcase card (max 600 chars). Shows on the gallery card and at the top of /discover/{slug}."
+          maxLength={600}
+          value={blurb}
+          onChange={(e) => setBlurb(e.target.value)}
+          data-testid="discover-publish-blurb"/>
+      )}
+      <div className="flex items-center gap-3 mt-3 flex-wrap">
+        <button onClick={save} disabled={busy} className="btn btn-primary text-xs"
+                data-testid="discover-publish-save">
+          {busy ? "Saving…" : pub ? "Publish" : "Unpublish"}
+        </button>
+        {camp.discover_published && publicUrl && (
+          <a href={publicUrl} target="_blank" rel="noopener noreferrer"
+             className="btn btn-ghost text-xs"
+             data-testid="discover-publish-preview-link">
+            Preview public showcase →
+          </a>
+        )}
+        {err && <span className="text-ember text-[11px]" data-testid="discover-publish-error">{err}</span>}
       </div>
     </div>
   );

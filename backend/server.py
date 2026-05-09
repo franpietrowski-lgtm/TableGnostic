@@ -64,6 +64,7 @@ from routes import character_validators as character_validators_routes
 from routes import voice_lines as voice_lines_routes
 from routes import leads as leads_routes
 from routes import public_discover as public_discover_routes
+from routes import news as news_routes
 
 app = FastAPI(title="Table-Gnostic API")
 
@@ -146,6 +147,7 @@ app.include_router(character_validators_routes.router)
 app.include_router(voice_lines_routes.router)
 app.include_router(leads_routes.router)
 app.include_router(public_discover_routes.router)
+app.include_router(news_routes.router)
 
 # Static-file mount: serve uploaded battlemap images from disk so GMs can
 # drop in renders from Inkarnate / DungeonCraft / Talespire / RPGEngine

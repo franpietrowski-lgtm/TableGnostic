@@ -190,6 +190,13 @@ export default function DiscoverShowcase() {
             >
               I already have a seat <ArrowRight className="w-3 h-3" />
             </Link>
+            <Link
+              to={`/discover/${slug}/gazette`}
+              className="btn btn-ghost px-5 py-2.5 text-xs"
+              data-testid="showcase-cta-gazette"
+            >
+              Read the Gazette <ArrowRight className="w-3 h-3" />
+            </Link>
           </div>
         </div>
       </header>

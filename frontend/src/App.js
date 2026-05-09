@@ -29,6 +29,8 @@ const HowToGuide      = lazy(() => import("./components/HowToGuide"));
 const CanonRegistry   = lazy(() => import("./components/CanonRegistry"));
 const Marketplace     = lazy(() => import("./components/Marketplace"));
 const ConceptForge    = lazy(() => import("./components/ConceptForge"));
+const NewsRoom       = lazy(() => import("./components/NewsRoom"));
+const PublicGazette  = lazy(() => import("./components/PublicGazette"));
 
 function Protected({ children }) {
   const { user, loading } = useAuth();
@@ -103,7 +105,9 @@ export default function App() {
             <Route path="/app/canon" element={<Suspense fallback={<RouteFallback/>}><CanonRegistry /></Suspense>} />
             <Route path="/app/marketplace" element={<Suspense fallback={<RouteFallback/>}><Marketplace /></Suspense>} />
             <Route path="/app/concept-forge" element={<Suspense fallback={<RouteFallback/>}><ConceptForge /></Suspense>} />
+            <Route path="/app/campaigns/:id/news" element={<Suspense fallback={<RouteFallback/>}><NewsRoom /></Suspense>} />
           </Route>
+          <Route path="/discover/:slug/gazette" element={<Suspense fallback={<RouteFallback/>}><PublicGazette /></Suspense>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>

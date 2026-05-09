@@ -14,6 +14,38 @@
 
 ## 2. Implemented (cumulative, condensed)
 
+### V6.25.38 — TableGnostic Gazette · Public Discover toggle UI · Newspaper leaderboards (2026-02-09)
+
+**GM-side Public Showcase publish UI** (`frontend/src/components/CampaignDetail.jsx`)
+- New `DiscoverPublishCard` renders on the campaign's "Invite & Share" tab next to `CanonPublishCard` (GM-only). Toggle `discover_published`, edit blurb (≤600 chars), one-click "Preview public showcase →" link to `/discover/{slug}` opening in a new tab. Wires existing `POST/DELETE /api/campaigns/{cid}/discover-publish` endpoints — no backend work required.
+- Top-bar `Gazette` button (with Newspaper icon, testid `newsroom-btn`) routes to the new `/app/campaigns/:id/news` editorial newsroom.
+
+**TableGnostic Gazette — old-timey newspaper for every campaign**
+Backend (`backend/routes/news.py` NEW):
+- DB collections: `news_articles` (headline/kicker/byline/body/column/status), `news_issues` (issue_number/masthead/date_label/article_ids), `news_kills` (per-character kill log).
+- Article CRUD (GM only for write; any seated for read): POST/GET/PATCH/DELETE `/api/campaigns/{cid}/news/articles[/{aid}]`. Status flow draft → approved → published; status="published" reserved for issue-press only.
+- LLM auto-draft: `POST /api/campaigns/{cid}/news/draft-from-session/{sid}` → reads chat_logs + voice_lines + news_kills for that session, calls Claude Sonnet 4.5 via emergentintegrations + EMERGENT_LLM_KEY, returns 3-5 article drafts in 1880s broadsheet voice (headline + kicker + byline + 80-150 word body + suggested column ∈ {front|world|marketplace|obituaries}). Drafts persist as `status="draft"` for GM review.
+- Press the Issue: `POST /api/campaigns/{cid}/news/issues` → bundles every `status="approved"` article into a new numbered issue (auto-increments per campaign), marks them `status="published"`, stamps `issue_id` + `published_at`. 400 if no approved drafts.
+- Kill log: `POST /api/campaigns/{cid}/news/log-kill` (GM only) records `{character_id, foe_name, foe_kind, session_id}` → fuels the leaderboard.
+- Leaderboards: `GET /api/campaigns/{cid}/news/leaderboards` returns `{kills, xp, sessions, players}` aggregated from news_kills + characters.xp_total + voice_lines distinct sessions + per-owner rollups.
+- Public surfaces (no auth): `GET /api/public/news/{slug}/issues/latest` and `GET /api/public/news/{slug}/leaderboards` — only resolve for `discover_published=true` campaigns.
+
+Frontend:
+- `components/NewsRoom.jsx` (in-app GM editorial desk): tabs Editorial Desk · Issues · Leaderboards · Kill Log. Compose by hand or "LLM Draft from Session", per-article Approve / Edit / Delete, "Press the Issue" CTA shows approved count, BoxScore ranking tables.
+- `components/PublicGazette.jsx` (public, mounts at `/discover/{slug}/gazette`): old-timey broadsheet styling — sepia/parchment background, double-bordered masthead (UnifrakturCook/Cinzel serif), datestamp + "Pressed at the TableGnostic Print-Works" + issue number, drop-cap on the lead article, two/three-column secondary articles by section (Front Page · World Wire · Marketplace · Obituaries), sports-page box-score leaderboards underneath ("THE MER DER HOH BOHS") with stocks-ticker running header (`▲ XP LDR · LARYK 2XP ▲`), bordered ScoreTables for kills/XP/sessions/players. Mobile responsive.
+- `components/DiscoverShowcase.jsx`: added "Read the Gazette →" CTA next to "I already have a seat".
+
+**Routing** (`frontend/src/App.js`)
+- `/app/campaigns/:id/news` (auth, GM-aware): `NewsRoom`.
+- `/discover/:slug/gazette` (public): `PublicGazette`.
+
+**Testing — V6.25.38**
+- Backend: `tests/test_v62538_news.py` 8/8 PASS — article CRUD lifecycle, invalid-column 400, press-with-no-approved 400, press-the-issue lifecycle (article locks `status=published` + `issue_id` set), kill log + leaderboard aggregation, public no-auth endpoints + 404 on unknown slug.
+- Regression: 28/28 PASS combined (`test_v62538_news.py` 8 + `test_v62536_voice_admin_macros.py` 10 + `test_iter61_leads.py` 10).
+- Frontend: smoke-tested live — Public Gazette renders the masthead, drop-cap front-page article, and full box-score panel at `/discover/evereantha-the-maiden-adventure/gazette`. NewsRoom navigates correctly with Editorial Desk tab / Leaderboards (XP standings populated) / Kill Log form.
+- Note: The merged-from-GitHub `test_iter62_v62513_discover.py` expects a slug `apocophea-veil` and CID `81ffab38…` that don't exist in this preview pod (different seed data). Pre-existing mismatch, not a V6.25.38 regression — would require seeding that specific test fixture campaign.
+
+
 ### V6.25.37 — Landing-page merge · Public Discover showcase · Concept Forge BESM-quiz chips (2026-02-09)
 
 **GitHub branch merge — `TG_landing-page` → main, reconciled with v62536** (2026-02-09)
