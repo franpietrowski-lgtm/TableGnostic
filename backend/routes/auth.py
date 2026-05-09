@@ -24,9 +24,25 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 @router.post("/register")
 async def register(body: RegisterIn, response: Response):
+    """V6.25.30 — email uniqueness gate removed.
+
+    A single inbox can now own multiple TableGnostic identities, e.g.
+    franpietrowski@gmail.com as both a GM (PieGod08!!) and a player
+    (PieBan18!!). Each account stores its own password_hash, role,
+    and id; login disambiguates by matching the supplied password
+    against every account on that email. Different password ⇒
+    different role / persona.
+    """
     email = body.email.lower()
-    if await db.users.find_one({"email": email}):
-        raise HTTPException(400, "Email already registered")
+    # Soft guard only — block creating two accounts with the SAME password
+    # under the same email (that would be ambiguous on login).
+    cursor = db.users.find({"email": email}, {"_id": 0, "password_hash": 1})
+    for u in await cursor.to_list(50):
+        if verify_password(body.password, u.get("password_hash", "")):
+            raise HTTPException(
+                400,
+                "An account with this email + password already exists. "
+                "Pick a different password to create an additional persona.")
     user_id = new_id()
     user = {
         "id": user_id, "email": email, "password_hash": hash_password(body.password),
@@ -56,8 +72,14 @@ async def login(body: LoginIn, request: Request, response: Response):
         locked_until = attempt.get("locked_until")
         if locked_until and datetime.fromisoformat(locked_until) > datetime.now(timezone.utc):
             raise HTTPException(423, "Too many attempts — locked for 15 minutes")
-    user = await db.users.find_one({"email": email})
-    if not user or not verify_password(body.password, user.get("password_hash", "")):
+    # V6.25.30 — multiple accounts may share an email; password disambiguates.
+    candidates = await db.users.find({"email": email}, {"_id": 0}).to_list(50)
+    user = None
+    for cand in candidates:
+        if verify_password(body.password, cand.get("password_hash", "")):
+            user = cand
+            break
+    if not user:
         await db.login_attempts.update_one(
             {"key": key},
             {"$inc": {"count": 1},

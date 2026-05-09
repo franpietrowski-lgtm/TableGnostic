@@ -33,18 +33,14 @@ export default function Landing() {
           <span className="font-display tracking-[0.35em] text-lg text-parchment">TABLE<span className="text-gold">·</span>GNOSTIC</span>
         </div>
         <div className="flex items-center gap-2">
-          {user && user !== false ? (
+          {user && user !== false && (
             <button onClick={() => nav("/app")} className="btn" data-testid="enter-app-btn">
               Enter the Table <ArrowRight className="w-4 h-4" />
             </button>
-          ) : (
-            <>
-              <Link to="/auth?mode=login" className="btn btn-ghost" data-testid="nav-login">Sign In</Link>
-              <Link to="/auth?mode=register" className="btn btn-primary" data-testid="nav-register">
-                Take a Seat <ArrowRight className="w-4 h-4" />
-              </Link>
-            </>
           )}
+          {/* V6.25.30 — auth CTAs collapsed to the hero section per spec.
+              Top-nav now shows ONLY the brand + (when logged in) the
+              "Enter the Table" shortcut. */}
         </div>
       </nav>
 
@@ -61,14 +57,31 @@ export default function Landing() {
           unfolds at the pace of the table. Build characters, run sessions, weave knowledge,
           discover new games — all citing sources, never reproducing them.
         </p>
-        <div className="mt-10 flex flex-wrap gap-3">
-          <button onClick={() => nav(user ? "/app" : "/auth?mode=register")}
-                  className="btn btn-primary px-6 py-3" data-testid="cta-primary">
-            Begin the Rite <ArrowRight className="w-4 h-4" />
-          </button>
-          <Link to="/auth?mode=login" className="btn px-6 py-3" data-testid="cta-secondary">
-            I already have a seat
-          </Link>
+        {/* V6.25.30 — hero now exposes exactly two doors: a colourful
+            sign-up CTA + a colourful sign-in CTA. Nothing else. */}
+        <div className="mt-10 flex flex-wrap gap-3" data-testid="hero-cta-row">
+          {!(user && user !== false) && (
+            <>
+              <button onClick={() => nav("/auth?mode=register")}
+                      className="btn btn-primary px-6 py-3"
+                      data-testid="cta-primary"
+                      title="Carve your sigil into the ledger and take a seat at the table.">
+                Carve Your Sigil <ArrowRight className="w-4 h-4" />
+              </button>
+              <Link to="/auth?mode=login" className="btn px-6 py-3"
+                     data-testid="cta-secondary"
+                     title="Resume the rite where you left it.">
+                Resume the Rite
+              </Link>
+            </>
+          )}
+          {user && user !== false && (
+            <button onClick={() => nav("/app")}
+                    className="btn btn-primary px-6 py-3"
+                    data-testid="cta-primary">
+              Enter the Table <ArrowRight className="w-4 h-4" />
+            </button>
+          )}
         </div>
         <div className="mt-14 divider-sigil max-w-sm" />
         <p className="mt-6 text-xs font-ui tracking-widest uppercase text-gold/60">

@@ -1,9 +1,12 @@
-# Test credentials — V6.25.29 (current)
+# Test credentials — V6.25.30 (current)
 
-**GMFran (admin/GM)**: franpietrowski@gmail.com / PieGod08!!
-**Aurora (player)**: albanaszak@ymail.com / AuroraTest123!
+**GMFran (admin/GM)**: franpietrowski@gmail.com / PieGod08!! — id `7ce7580f...`
+**Fran (Player)**:    franpietrowski@gmail.com / PieBan18!! — id `aef91fbb...` *(NEW V6.25.30 — same email, different password ⇒ different persona)*
+**Aurora (player)**:   albanaszak@ymail.com / AuroraTest123!
 
-Both seeded on backend startup.
+V6.25.30 — email uniqueness gate removed. A single inbox can now own multiple
+TableGnostic identities; login disambiguates by password. Useful for GMs who
+need a player seat at someone else's table without juggling another inbox.
 
 ## Seeded characters for cross-system QA
 
