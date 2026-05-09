@@ -1,0 +1,34 @@
+{
+  "summary": "V6.25.36 — Super-admin seed + Voice Lines (PTT) + Macro Resolver (Cypher / Anime 5E hybrid). Backend 10/10 PASS. POST /api/auth/login for tablegnostic-admin@tablegnostic.com / LoremasterAurea2026!Forge returns 200 with role=admin and name='TableGnostic Admin' (idempotent — survives boot via core/startup.py seed_user). Voice lines lifecycle full pass: POST multipart audio/webm (synthetic 4KB) -> 200 with voice_line.id + character_name + transcribed flag (false on synthetic noise — accepted per spec). 400 on empty body. 415 on text/plain mime. 413 on 13MB payload (>12MB cap). GET sorted ascending by started_at and includes count. PATCH text by GM updates and re-marks transcribed. DELETE by GM at any time succeeds. Macro resolver unit tests (routes.channels._expand_macro_tokens) confirm Cypher tokens {stat:Might}=14, {stat:Intellect}=18, {derived:edge_intellect}=2, {derived:effort}=2, {derived:tier}=3 from folio.cypher_state, and Anime 5E hybrid {attr:Combat Mastery}=2 from folio.anime5e_state.point_buys. Frontend: PushToTalkButton mounted in SessionView.jsx:483 with data-testid='ptt-bar' + data-testid='ptt-button' + disabled={busy || !characterId} guard verified by static review (live UI navigation to session route was inconclusive due to /app routing redirects but component code is correctly wired).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_v62536_voice_admin_macros.py",
+    "/app/test_reports/pytest/iter74_v62536.xml"
+  ],
+  "action_items": [
+    "(LOW) Recap voice-block integration was not directly exercised at runtime (would require ~30s LLM round-trip plus a real chat history); code review confirms voice_lines collection is queried with transcribed=true filter and rendered into user_prompt as 'In-character voice lines (push-to-talk; the CHARACTER spoke...)' block in routes/recap.py.",
+    "(LOW) Live UI test of PushToTalkButton on a real session page was inconclusive — /app/sessions/{sid} kept the URL but ptt-bar was not found in DOM within 3.5s; may be loading delay or different route. Code review confirms <PushToTalkButton sessionId={id} characterId={characterId} ...> is mounted under chat input in SessionView.jsx:483."
+  ],
+  "critical_code_review_comments": [
+    "voice_lines.py is well-structured: 12MB cap, mime allow-list with prefix tolerance, owner check (player can only speak as own char; GM/admin can speak as any), 60s author-delete grace window via timezone-aware ISO compare. Whisper failure tolerated — empty-text row stored so GM can re-trigger. Good.",
+    "recap.py V6.25.36 update: voice_lines query filters {transcribed: True}, sorted by started_at ASC, weaved into user_prompt as IN-CHARACTER speech block. Comment correctly notes voice lines are deliberately NOT pushed to player journals (preserves journal-as-POV semantics). Good.",
+    "channels.py _expand_macro_tokens: Cypher pools/edges/effort/tier added under 'stat'/'derived' kinds; Anime 5E point_buys merged with attributes via _by_name(char.attributes, name) or _by_name(pb_rows, name). Correctly handles both client-side preview (MacroBuilder.jsx) AND fire-time (channels.py) substitution per spec.",
+    "core/startup.py seed_user is idempotent — updates role/name on every boot and re-hashes password if verify_password fails, so password changes propagate across deploys without orphaning the admin account. V6.25.36 super-admin seeded alongside GMFran. Good.",
+    "PushToTalkButton.jsx: Space-bar PTT, mouse + touch handlers, MAX_PUSH_SECONDS=60s soft cap matches backend 60s author-undo window (AUTHOR_UNDO_WINDOW_MS=60_000). disabled={busy || !characterId} satisfies spec. mime picker tries webm/opus first then ogg/mp4. Cleanup on unmount stops mic tracks. Good."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_v62536_voice_admin_macros.py"
+  ],
+  "success_rate": {"backend": "100% (10/10)", "frontend": "code-review verified (live nav inconclusive)"},
+  "test_credentials": "Admin tablegnostic-admin@tablegnostic.com / LoremasterAurea2026!Forge confirmed working. GMFran franpietrowski@gmail.com / PieGod08!! used for voice line CRUD on cypher campaign dac42099dfcf4f7b8deabd1ed043ec00 / Vex 7fb9f4341cf741c5a1f16fd42b4764cf.",
+  "seed_data_creation": "Created TEST_v62536_voice_session under cypher campaign and one voice_line row (subsequently deleted via GM delete test). Session row remains; safe to remove on next cleanup pass.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Login response is FLAT — uses 'access_token' (not 'token') and top-level 'role'/'name'/'email'/'id' fields, NOT nested under 'user'. Voice-lines endpoint mounted under /api/sessions/{sid}/voice-lines (POST/GET) and /api/sessions/{sid}/voice-lines/{vid} (PATCH/DELETE). Synthetic webm audio (~4KB random bytes with EBML magic) is accepted by the backend; Whisper returns empty text and row is stored with transcribed=false — that's by design. Macro tokens {stat:Might/Speed/Intellect} for Cypher are case-sensitive on the LOOKUP key (.title() casing) — values are stored under 'Might', 'Speed', 'Intellect' in cypher_state.pools/edges. The login API returns role at top-level, so use d.get('role') == 'admin' not d.get('user',{}).get('role').",
+  "rca of the issue": "n/a — no failures."
+}

@@ -84,6 +84,15 @@ async def run_startup():
         await db.password_reset_tokens.delete_many({"email": email})
     # GMFran — sole authoritative account (admin/GM testing identity).
     await seed_user("franpietrowski@gmail.com", "PieGod08!!", "GMFran", "admin")
+    # V6.25.36 — Super-admin / moderator account that survives across
+    # deploys. Distinct from any personal user identity. Use this on
+    # production for app-wide authority + moderation.
+    await seed_user(
+        "tablegnostic-admin@tablegnostic.com",
+        "LoremasterAurea2026!Forge",
+        "TableGnostic Admin",
+        "admin",
+    )
     # Backfill invite tokens for legacy campaigns.
     async for c in db.campaigns.find({"invite_token": {"$exists": False}}, {"_id": 0, "id": 1}):
         await db.campaigns.update_one(

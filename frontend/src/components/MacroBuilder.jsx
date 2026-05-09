@@ -39,13 +39,17 @@ const SYSTEM_STATS = {
   "besm-4e":  ["body", "mind", "soul"],
   "anime-5e": ["body", "mind", "soul", "str", "dex", "con", "int", "wis", "cha"],
   "dnd-5e":   ["str", "dex", "con", "int", "wis", "cha"],
-  "cypher":   [],
+  // V6.25.36 — Cypher uses pools (Might/Speed/Intellect) instead of
+  // ability scores. The macro resolver reads them off `folio.cypher_state.pools`.
+  "cypher":   ["might", "speed", "intellect"],
 };
 const SYSTEM_DERIVED = {
   "besm-4e":  ["cv", "atk", "dfn", "hp", "ep", "dm"],
   "anime-5e": ["cv", "atk", "dfn", "hp", "ep", "dm", "ac", "init"],
   "dnd-5e":   ["ac", "init"],
-  "cypher":   [],
+  // V6.25.36 — Cypher exposes per-pool edges (subtract from cost),
+  // a global effort cap (max applied per action), and `tier`.
+  "cypher":   ["edge_might", "edge_speed", "edge_intellect", "effort", "tier"],
 };
 const DICE_PRESETS = ["2d6", "3d6", "1d20", "1d10", "1d8", "1d6", "1d4"];
 
@@ -509,8 +513,13 @@ function _describeStat(key, ch) {
   if (!ch) return "—";
   const s = ch.stats || {};
   const ab = (ch.folio?.dnd_state?.ability_scores) || {};
+  const cyp = (ch.folio?.cypher_state?.pools) || {};
   const k = key.toLowerCase();
   if (["body","mind","soul"].includes(k)) return String(s[k] || 0);
+  if (["might","speed","intellect"].includes(k)) {
+    const cap = k.charAt(0).toUpperCase() + k.slice(1);
+    return cyp[cap] != null ? String(cyp[cap]) : "—";
+  }
   const map = {str:"Strength",dex:"Dexterity",con:"Constitution",
                 int:"Intelligence",wis:"Wisdom",cha:"Charisma"};
   const v = ab[map[k]];
@@ -532,12 +541,22 @@ function _expandClientSide(formula, ch) {
     (_, kind, name) => {
       const k = kind.toLowerCase(); const n = (name || "").trim();
       let v = 0;
-      if (k === "attr")  v = _effLevel(_by(ch.attributes, n));
+      if (k === "attr") {
+        // V6.25.36 — Anime 5E hybrid sheets: also look in
+        // folio.anime5e_state.point_buys for the BESM point-buy layer.
+        v = _effLevel(_by(ch.attributes, n))
+            || _effLevel(_by(ch.folio?.anime5e_state?.point_buys, n));
+      }
       if (k === "skill") v = (_by(ch.skills, n)?.level) || 0;
       if (k === "def")   v = (_by(ch.defects, n)?.rank) || 0;
       if (k === "stat") {
         const lk = n.toLowerCase();
         if (["body","mind","soul"].includes(lk)) v = +stats[lk] || 0;
+        else if (["might","speed","intellect"].includes(lk)) {
+          // V6.25.36 — Cypher pool lookup.
+          const cap = lk.charAt(0).toUpperCase() + lk.slice(1);
+          v = +(ch.folio?.cypher_state?.pools?.[cap]) || 0;
+        }
         else {
           const map = {str:"Strength",dex:"Dexterity",con:"Constitution",
                        int:"Intelligence",wis:"Wisdom",cha:"Charisma"};

@@ -41,6 +41,14 @@ async def generate_recap(sid: str, body: RecapIn,
 
     chat = await db.chat_logs.find({"session_id": sid}, {"_id": 0}).sort("created_at", 1).to_list(500)
     dice = await db.dice_rolls.find({"session_id": sid}, {"_id": 0}).sort("created_at", 1).to_list(300)
+    # V6.25.36 — Voice push-to-talk lines are IN-CHARACTER speech (the
+    # character is talking, not the player). Fold them into the chronicle
+    # alongside chat / rolls / encounter ticks. We deliberately do NOT
+    # surface them on player journals — the journal stays a player's own
+    # perspective so we can still detect lies / sub-plot drift.
+    voice = await db.voice_lines.find(
+        {"session_id": sid, "transcribed": True}, {"_id": 0}
+    ).sort("started_at", 1).to_list(400)
     chars = await db.characters.find(
         {"campaign_id": s["campaign_id"]},
         {"_id": 0, "name": 1, "concept": 1},
@@ -63,6 +71,13 @@ async def generate_recap(sid: str, body: RecapIn,
     char_lines = "\n".join(f"  • {c['name']} — {c.get('concept','')}" for c in chars[:20]) or "  (none)"
     transcript = "\n".join(transcript_lines[-180:])
     dice_block = "\n".join(dice_summary[-40:]) or "  (none)"
+    # V6.25.36 — In-character speech lines from push-to-talk. We mark
+    # them as IN-CHARACTER so the LLM treats them as the character
+    # speaking (not the player narrating).
+    voice_block = "\n".join(
+        f"  • [{v.get('started_at','?')}] {v.get('character_name','?')} (in-character): \"{v.get('text','').strip()}\""
+        for v in voice[-80:] if (v.get("text") or "").strip()
+    ) or "  (none)"
 
     style_instruction = {
         "narrative": "Write a flowing narrative recap (~180–240 words) in third-person past tense. Capture the emotional beats, the pivotal rolls, and any unanswered questions. Skip dice mechanics that didn't matter.",
@@ -82,6 +97,7 @@ async def generate_recap(sid: str, body: RecapIn,
         f"Characters at the table:\n{char_lines}\n\n"
         f"Transcript:\n{transcript}\n\n"
         f"Notable dice:\n{dice_block}\n\n"
+        f"In-character voice lines (push-to-talk; the CHARACTER spoke, not the player):\n{voice_block}\n\n"
         f"Now write the recap."
     )
 

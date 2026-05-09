@@ -810,8 +810,21 @@ def _expand_macro_tokens(formula: str, char) -> str:
     soul = int(stats.get("soul") or 0)
     cv = (body + mind + soul) // 3 if (body + mind + soul) else 0
 
+    # V6.25.36 — Anime 5E hybrid sheets store BESM-style point-buy
+    # rows under folio.anime5e_state.point_buys. Make them visible to
+    # the macro resolver as if they were attributes (matching
+    # MacroBuilder.jsx's client-side fallback).
+    pb_rows = (((char.get("folio") or {}).get("anime5e_state") or {})
+               .get("point_buys") or [])
+
+    # V6.25.36 — Cypher sheet state for {stat:Might/Speed/Intellect}
+    # and {derived:edge_*/effort/tier}.
+    cyp_state = (char.get("folio") or {}).get("cypher_state") or {}
+    cyp_pools = cyp_state.get("pools") or {}
+    cyp_edges = cyp_state.get("edges") or {}
+
     def _attr_lvl(name):
-        a = _by_name(char.get("attributes"), name)
+        a = _by_name(char.get("attributes"), name) or _by_name(pb_rows, name)
         return int(a.get("level") or 0) if a else 0
 
     derived = {
@@ -823,6 +836,12 @@ def _expand_macro_tokens(formula: str, char) -> str:
         "dm":   5 + _attr_lvl("Massive Damage") * 5,
         "ac":   int(dnd_state.get("ac") or 10),
         "init": mod_of(abilities.get("Dexterity")),
+        # V6.25.36 — Cypher derived.
+        "edge_might":     int(cyp_edges.get("Might") or 0),
+        "edge_speed":     int(cyp_edges.get("Speed") or 0),
+        "edge_intellect": int(cyp_edges.get("Intellect") or 0),
+        "effort":         int(cyp_state.get("effort") or 1),
+        "tier":           int(cyp_state.get("tier") or 1),
     }
 
     scalar_tokens = {
@@ -847,7 +866,9 @@ def _expand_macro_tokens(formula: str, char) -> str:
         v = 0
         try:
             if kind == "attr":
-                v = _attr_eff(_by_name(char.get("attributes"), name))
+                # V6.25.36 — also look at Anime 5E hybrid point-buy rows.
+                a = _by_name(char.get("attributes"), name) or _by_name(pb_rows, name)
+                v = _attr_eff(a)
             elif kind == "skill":
                 s = _by_name(char.get("skills"), name)
                 v = int(s.get("level") or 0) if s else 0
@@ -863,6 +884,9 @@ def _expand_macro_tokens(formula: str, char) -> str:
                         "str": "Strength", "dex": "Dexterity", "con": "Constitution",
                         "int": "Intelligence", "wis": "Wisdom", "cha": "Charisma",
                     }.get(key)))
+                elif key in ("might", "speed", "intellect"):
+                    # V6.25.36 — Cypher pool lookup.
+                    v = int(cyp_pools.get(key.title()) or 0)
             elif kind == "derived":
                 v = int(derived.get(name.lower(), 0))
             elif kind == "hp":

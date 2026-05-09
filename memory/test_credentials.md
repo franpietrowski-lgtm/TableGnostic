@@ -1,7 +1,9 @@
-# Test credentials — V6.25.30 (current)
+# Test credentials — V6.25.36 (current)
+
+**TableGnostic Admin (super-admin / moderation)**: `tablegnostic-admin@tablegnostic.com` / `LoremasterAurea2026!Forge` — role=`admin`. Survives across deploys via `core/startup.py` seed. **Use this on production for app-wide authority + moderation.**
 
 **GMFran (admin/GM)**: franpietrowski@gmail.com / PieGod08!! — id `7ce7580f...`
-**Fran (Player)**:    franpietrowski@gmail.com / PieBan18!! — id `aef91fbb...` *(NEW V6.25.30 — same email, different password ⇒ different persona)*
+**Fran (Player)**:    franpietrowski@gmail.com / PieBan18!! — id `aef91fbb...` *(multi-persona — same email, different password ⇒ different persona)*
 **Aurora (player)**:   albanaszak@ymail.com / AuroraTest123!
 
 V6.25.30 — email uniqueness gate removed. A single inbox can now own multiple

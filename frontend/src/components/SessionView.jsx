@@ -7,6 +7,7 @@ import AVSeats from "./AVSeats";
 import Battlemap from "./Battlemap";
 import XPAwardPanel from "./XPAwardPanel";
 import MacroBar from "./MacroBar";
+import PushToTalkButton from "./PushToTalkButton";
 import EncounterDesigner from "./EncounterDesigner";
 import QuickCastDock from "./QuickCastDock";
 import EncountersLibrary from "./EncountersLibrary";
@@ -475,6 +476,17 @@ export default function SessionView() {
                  onChange={(e) => setMsg(e.target.value)} data-testid="chat-input"/>
           <button type="submit" className="btn btn-primary" data-testid="chat-send-btn"><Send className="w-4 h-4"/></button>
         </form>
+        {/* V6.25.36 — Push-to-talk for in-character speech. Audio is
+            transcribed by Whisper and folded into the recap chronicle
+            (NOT into player journals — those stay a player's own POV). */}
+        <div className="flex items-center justify-between gap-2 mt-2">
+          <PushToTalkButton sessionId={id}
+                            characterId={characterId}
+                            characterName={(characters.find((c) => c.id === characterId) || {}).name}/>
+          <span className="text-[10px] text-mist/70 italic">
+            Voice lines feed the recap, not journals — speak as your character.
+          </span>
+        </div>
       </div>
 
       {recap && (
