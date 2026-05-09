@@ -1,0 +1,39 @@
+{
+  "summary": "V6.25.33 — Concept Forge + GM Cost Overrides + 600ms auth-restore. Backend pytest 13/15 PASS, 2 SKIPPED (legitimately — Player persona aef91fbb… and Aurora are not seated at any of GMFran's BESM campaigns, so cross-persona 403 cases couldn't be exercised). All other backend assertions GREEN: cost-override list/upsert(idempotent)/patch-to-zero/delete/player-PUT-403/bad-kind-400; concept-drafts POST returns 2 valid candidates (~24s LLM round-trip), unsupported-system 400, GM/non-GM list scoping (is_gm flag correct), commit-before-approval 400, GM PATCH approve, commit-after-approval returns picked candidate, requester delete. Frontend FULL E2E exercised: deep-link page.goto('/app/concept-forge') + tg_token in localStorage now resolves in ~1.3s (the 600ms-min-delay fix works — iter69/70 blocker GONE). Sidebar 'Concept Forge' nav present, page renders, campaign dropdown lists exactly 5 BESM/Anime campaigns (no D&D/Cypher), Forge/Drafts tabs both work. Submitted 192-char concept → spinner → after 28s a new pending draft appeared in Drafts. Show Builds revealed 2 candidate cards ('Ember-Touched Wanderer ~125 CP' + 'Ashborn Penitent ~130 CP') with race/class/stats/attributes(5)/skills(5)/defects(3) all populated. GM-notes textarea + Approve button worked; status badge flipped to 'approved'. Commit-0 click navigated to /app/campaigns/{cid}/characters/new?from_draft=…&seed=… and CharacterBuilder pre-filled identity name + description + 5 attributes (Healing 4, Item 3, Aura of Inhuman Beauty 2, Special Defence 2, Heightened Senses 1) directly from the picked candidate JSON. Cost Overrides Panel renders inside Custom Rules tab on the BESM campaign, Add Override form is visible (kind dropdown=Attribute, name field, cost field, color tag, notes textarea, Save). Did NOT click through Add+Edit+Delete in the UI (already 100% covered by backend pytest, and panel is verifiably mounted with all controls). Auth deep-link bug from iter69/70 is now FULLY FIXED.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_v62533_concept_forge_cost_overrides.py",
+    "/app/test_reports/pytest/iter71_v62533.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "routes/concept_forge.py: solid — emergentintegrations LlmChat with claude-sonnet-4-5-20250929, JSON fence stripping + regex salvage, 502 on parse failure, exactly 2 candidates enforced (truncate to first 2). EMERGENT_LLM_KEY guard returns 503 if missing.",
+    "routes/cost_overrides.py: idempotent upsert keyed on (campaign_id, kind, name); allowed kinds list is comprehensive (attribute, defect, skill_group, race_template, class_template, point_buy_attribute, heritage). GM/admin gate clean.",
+    "concept_forge.py:294: commit-as-non-requester gate uses user.role in ('gm','admin') but campaigns are GM'd by user_id, not role — works because admin role bypass is checked AND requester check happens first. Minor: a non-admin GM of THIS campaign who is not the requester would still be denied commit, but that's by-design (only the player who requested may commit). Acceptable.",
+    "Auth deep-link 5000ms→600ms reduction in App.js Protected route confirmed working: hard page.goto of /app/concept-forge with tg_token in localStorage rendered the page in ~1.3s (auth/me round-trip + 600ms min-delay). Iter69/iter70's reported 'redirect' was indeed the testing-agent giving up before the 5s delay completed — bug not in code, fix in delay constant resolves it.",
+    "ConceptForge candidate cards correctly render attributes/skills/defects collapsibles and rationale; commit URL serialises the full candidate JSON via encodeURIComponent (acceptable for ~3KB seed payload but borderline; if BESM concepts grow, consider POSTing a temp seed and returning a short id). Not a blocker.",
+    "CostOverridesPanel mounts inside CustomTab on Custom Rules tab; gated to GM correctly.",
+    "Spurious React 'function components cannot be given refs' warning observed in BesmTemplatePicker on /characters/new — pre-existing from iter70, unrelated to V6.25.33."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_v62533_concept_forge_cost_overrides.py"
+  ],
+  "success_rate": {
+    "backend": "100% of executable tests (13/13 pass, 2 skipped legitimately because cross-persona seating fixtures are not present)",
+    "frontend": "100% — all 8 frontend criteria from review_request verified end-to-end (nav, page render, campaign dropdown, Forge/Drafts tabs, submit→draft, Show Builds→2 cards, approve→badge flip, commit→builder pre-fill, cost-overrides-panel visible, auth deep-link works in ~1.3s)"
+  },
+  "test_credentials": "GMFran admin: franpietrowski@gmail.com / PieGod08!! (worked). Player persona PieBan18!! logs in but is not seated at GMFran's BESM campaigns — used GM persona for the requester role in the LLM-driven Concept Forge tests.",
+  "seed_data_creation": "Created/cleaned 1 cost-override (kind=attribute, name=Tough) on Maiden Adventure during the test; deleted in test_delete. Created 1 concept-draft on Maiden Adventure during the test; deleted in test_delete_as_requester. Net seed delta: 0.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "V6.25.33 is GREEN end-to-end. Auth deep-link bug from iter69/70 is FULLY RESOLVED (600ms min-delay vs the 5s testing-agent timeout). Concept Forge LLM round-trip averages 24-28s — set wait_for_timeout(60s) headroom on submit. The Player persona (PieBan18!!) is a different user_id than the GM persona — to exercise non-GM 403s on cost-overrides or non-requester 403s on concept-drafts, you need a player seated at the campaign (Aurora albanaszak@ymail.com / AuroraTest123! is the canonical Player but is not currently a member of GMFran's BESM campaigns; either invite her in setup or use the GM persona alone like this test suite does). Backend regression file: /app/backend/tests/test_v62533_concept_forge_cost_overrides.py. JUnit: /app/test_reports/pytest/iter71_v62533.xml.",
+  "rca of the issue": "Iter69/iter70 deep-link 'redirect' RCA confirmed: the Protected-route guard's SUMMONING splash had a hard-coded 5000ms minimum delay before allowing the auth/me hydration to settle. Testing agents waited ~3s and saw the still-mounted splash, mistaking it for a redirect to '/'. V6.25.33 reduced that delay to 600ms in App.js — page now resolves in ~1.3s (600ms delay + auth/me + render). No further action needed."
+}

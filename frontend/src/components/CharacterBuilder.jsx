@@ -45,7 +45,52 @@ export default function CharacterBuilder() {
         setCh(existing);
         campaignId = existing.campaign_id;
       } else {
-        setCh(emptyChar(campaignIdFromUrl));
+        // V6.25.33 — When the URL carries a ?seed=<encoded JSON> query
+        // (set by the Concept Forge "Pick this & Open Builder" button),
+        // pre-fill the empty char draft with the picked candidate's
+        // stats / attributes / skills / defects so the player lands on
+        // a partially-built character instead of a blank slate.
+        const params = new URLSearchParams(window.location.search);
+        const seedParam = params.get("seed");
+        let seed = null;
+        if (seedParam) {
+          try { seed = JSON.parse(decodeURIComponent(seedParam)); } catch (_e) { /* ignore */ }
+        }
+        const base = emptyChar(campaignIdFromUrl);
+        if (seed) {
+          base.name    = seed.title || base.name;
+          base.concept = seed.summary || seed.rationale || base.concept;
+          base.stats   = {
+            body: +seed?.stats?.body || base.stats.body,
+            mind: +seed?.stats?.mind || base.stats.mind,
+            soul: +seed?.stats?.soul || base.stats.soul,
+          };
+          base.attributes = (seed.attributes || []).map((a) => ({
+            name: a.name || "Unnamed", level: +a.level || 1,
+            cost_per_level: 0, enhancements: [], limiters: [],
+            note: a.note || "From Concept Forge",
+            from_concept_draft: params.get("from_draft") || true,
+          }));
+          base.skills = (seed.skills || []).map((s) => ({
+            group: s.name || "Unnamed", level: +s.level || 1,
+            cost_per_level: 0, components: [],
+            note: s.note || "From Concept Forge",
+            from_concept_draft: params.get("from_draft") || true,
+          }));
+          base.defects = (seed.defects || []).map((d) => ({
+            name: d.name || "Unnamed", rank: +d.rank || 1,
+            points_per_rank: 1, category: "Concept",
+            note: d.note || "From Concept Forge",
+            from_concept_draft: params.get("from_draft") || true,
+          }));
+          base.folio = {
+            ...base.folio,
+            from_concept_draft_id: params.get("from_draft") || "",
+            concept_seed_summary: seed.summary || "",
+            concept_seed_rationale: seed.rationale || "",
+          };
+        }
+        setCh(base);
       }
       const [cu, camp, refs] = await Promise.all([
         api.get(`/campaigns/${campaignId}/custom`).then((x) => x.data).catch(() => []),

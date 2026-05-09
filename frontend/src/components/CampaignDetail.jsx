@@ -15,6 +15,7 @@ import XPLedgerPanel from "./XPLedgerPanel";
 import DeltaDropPanel from "./DeltaDropPanel";
 import { SeatApplicationsPanel, ConsentRollPanel } from "./ConsentPanel";
 import PrivateAccessPanel from "./PrivateAccessPanel";
+import CostOverridesPanel from "./CostOverridesPanel";
 import { useAuth } from "../lib/api";
 import { NODE_TYPES, NODE_TEMPLATES, colorForType, labelForType } from "../lib/nodeTemplates";
 
@@ -178,6 +179,14 @@ export default function CampaignDetail() {
         {camp.is_gm && (
           <Tabs.Content value="custom" className="pt-6">
             <CustomTab campId={id} customs={customs} onRefresh={load} systemId={camp.system_id}/>
+            {/* V6.25.33 — Per-campaign CP cost overrides. GM-only. Lets the
+                GM replace the canon CP cost for any reference-mechanic
+                entry (attribute / defect / skill / race-template /
+                class-template / point-buy / heritage). Set to 0 to grant
+                an entry as a starting perk. */}
+            <div className="mt-6">
+              <CostOverridesPanel campId={id} systemId={camp.system_id}/>
+            </div>
           </Tabs.Content>
         )}
         {camp.is_gm && (
