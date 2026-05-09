@@ -85,10 +85,57 @@ export default function CharacterBuilder() {
           }));
           base.folio = {
             ...base.folio,
-            from_concept_draft_id: params.get("from_draft") || "",
-            concept_seed_summary: seed.summary || "",
-            concept_seed_rationale: seed.rationale || "",
+            from_concept_draft_id:   params.get("from_draft") || "",
+            concept_seed_summary:    seed.summary || "",
+            concept_seed_rationale:  seed.rationale || "",
+            // V6.25.34 — Forge V2 outputs identity / folio fields directly.
+            physical_description:    seed.appearance || base.folio.physical_description,
+            history_events:          (seed.history || []).map((s) => (typeof s === "string" ? { event: s } : s)),
+            goals:                   (seed.goals || []).map((s) => (typeof s === "string" ? { goal: s } : s)),
+            // Use folio.dreams as a free-form journal entry list since the
+            // schema's "journal" already handles arbitrary text rows.
+            personality:             seed.personality_knots || base.folio.personality,
+            motivations:             (seed.dreams || []).join(" · ") || base.folio.motivations,
+            occupation:              seed.class || base.folio.occupation,
+            gender_species_age:      seed.race || base.folio.gender_species_age,
           };
+          // V6.25.34 — Inventory pre-fill: items + weapons (incl. weapon-items).
+          // The InventoryPanel reads `folio.inventory` (array of rows).
+          const seedInventory = [
+            ...(seed.items || []).map((it) => ({
+              id: `seed-item-${Math.random().toString(36).slice(2, 8)}`,
+              name: it.name || "Unnamed item",
+              category: it.category || "Carry",
+              kind: "item",
+              note: it.note || "From Concept Forge",
+              from_concept_draft: params.get("from_draft") || true,
+            })),
+            ...(seed.weapons || []).map((w) => ({
+              id: `seed-weapon-${Math.random().toString(36).slice(2, 8)}`,
+              name: w.name || "Unnamed weapon",
+              category: w.class || "Weapon",
+              kind: w.is_weapon_item ? "weapon-item" : "weapon",
+              damage_mod: +w.damage_mod || 0,
+              rank: +w.rank || 1,
+              range_m: w.range_m ?? null,
+              note: w.note || "From Concept Forge",
+              from_concept_draft: params.get("from_draft") || true,
+            })),
+          ];
+          if (seedInventory.length > 0) {
+            base.folio.inventory = [...(base.folio.inventory || []), ...seedInventory];
+          }
+          // V6.25.34 — Power Packs pre-fill (BESM signature bundles).
+          if ((seed.power_packs || []).length > 0) {
+            base.power_packs = (seed.power_packs || []).map((p) => ({
+              name: p.name || "Power Pack",
+              effects: p.effects || [],
+              defect: p.defect || "",
+              total_cp: +p.total_cp || 0,
+              narrative: p.narrative || "",
+              from_concept_draft: params.get("from_draft") || true,
+            }));
+          }
         }
         setCh(base);
       }

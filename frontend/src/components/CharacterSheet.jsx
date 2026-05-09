@@ -19,6 +19,7 @@ import PendingAdvancementPanel from "./PendingAdvancementPanel";
 import { ConsentCheckbox } from "./ConsentPanel";
 import ClassProgressionPanel from "./ClassProgressionPanel";
 import AppliedTemplatesPanel from "./AppliedTemplatesPanel";
+import ValidationPanel from "./ValidationPanel";
 import QuickRollBar from "./QuickRollBar";
 import MacroBuilder from "./MacroBuilder";
 import MaterialsIntakePanel from "./MaterialsIntakePanel";
@@ -400,6 +401,9 @@ export default function CharacterSheet() {
       )}
       {/* V6.25.3 — Applied BESM race / class templates (no-op when none applied). */}
       <AppliedTemplatesPanel character={ch}/>
+      {/* V6.25.34 — Live validation: duplicate attributes, over-benchmark
+          stats / attrs / defects. Weapons exempt. Dismissals persist. */}
+      <ValidationPanel characterId={ch.id}/>
       {/* V6.25.7 — Quick-Roll Bar for play-by-post macros. */}
       <QuickRollBar character={ch} campaignId={ch.campaign_id}
                      systemId={campaign?.system_id}
