@@ -911,6 +911,15 @@ function AttributeRow({ idx, a, reference, onUpdate, onRemove, maxRank = 0 }) {
   // V4.1 BESM 4E: cost is base × level (Enh/Lim do NOT change cost).
   // V6.25.8 — Effective Level now sums rank-weighted limiters & enhancements:
   // effLvl = level + Σlimiter ranks − Σenhancement ranks (floored at 1).
+  // V6.25.31 — IMPORTANT: per BESM 4E core + Extras, some
+  // Enhancements/Limiters are weighted (×2 or ×3 ranks per application —
+  // e.g. "Backlash" is +1 rank per application but "Item Specialist"
+  // counts as +2 ranks; "Detectable" is −1 rank but "Always On" is −2
+  // ranks). The rank field on each modifier captures this directly,
+  // so the math here stays correct as long as the Reference Editor
+  // entries set rank > 1 where the rulebook calls for it. The "1 rank
+  // per application" assumption was implicit copy in older UI strings;
+  // the underlying engine has always honoured rank-weighting.
   const subtotal = (a.cost_per_level || 0) * a.level;
   const itemDefectRefund = (a.defects || []).reduce((s, d) => s + (d.points_per_rank || 0) * (d.rank || 0), 0);
   const cost = Math.max(0, subtotal - itemDefectRefund);

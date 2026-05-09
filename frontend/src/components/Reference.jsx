@@ -232,8 +232,14 @@ export default function Reference() {
           <div className="text-sm text-parchment/95 font-body leading-relaxed">
             <strong>Cost = base × assigned Level</strong> (fixed). Enhancements
             and Limiters do <em>not</em> change point cost — they shift{" "}
-            <strong>effective Level</strong>: <code className="text-gold">+1 per Limiter</code>,{" "}
-            <code className="text-gold">−1 per Enhancement</code>, floored at 1.
+            <strong>effective Level</strong> by their <em>rank</em>:{" "}
+            <code className="text-gold">+rank per Limiter</code>,{" "}
+            <code className="text-gold">−rank per Enhancement</code>, floored at 1.
+            Most modifiers are rank&nbsp;1, but the BESM 4E core + Extras call
+            out heavier applications (e.g. <em>Item Specialist</em> at rank 2,
+            <em> Always On</em> at rank 2, <em>Restriction Severe</em> at rank 3).
+            Enter the rank the rulebook prescribes when authoring a custom row;
+            stacking compounds linearly.
             Stack Limiters for narrow but powerful Attributes; stack Enhancements
             for broad-but-cheap utility ones.
           </div>
