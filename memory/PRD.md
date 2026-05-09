@@ -14,7 +14,21 @@
 
 ## 2. Implemented (cumulative, condensed)
 
-### V6.25.32 — Anime 5E reference parity · BESM canonical templates in builder · CORS regex fix (2026-02-09)
+### V6.25.33 — Concept Forge · GM Cost Overrides · Auth deep-link fix (2026-02-09)
+
+**Concept Forge** (`backend/routes/concept_forge.py`, `frontend/src/components/ConceptForge.jsx`)
+- New sidebar entry "Concept Forge" → `/app/concept-forge`. Player or GM types a free-form character concept; Claude Sonnet 4.5 (via emergentintegrations + Emergent LLM key) returns **two mechanically-distinct build candidates** — race / class / stats / attributes / skills / defects / estimated CP / rationale. Drafts go to a per-campaign approval queue (`concept_drafts` collection): `pending` → GM `approved` / `rejected` (with notes) → Player picks an index → `committed`. Commit redirects to `/app/campaigns/{cid}/characters/new?from_draft={id}&seed=<encoded>` and CharacterBuilder pre-fills the empty draft from the picked candidate (name, summary, stats, attributes, skills, defects — each row tagged with `from_concept_draft`). Supported on BESM 4E + Anime 5E only (D&D 5E + Cypher follow-on).
+- Round-trip ~24-28s for the LLM call. JSON-only output enforced by system prompt + fence-strip + regex salvage; 502 on parse failure.
+
+**GM CP Cost Overrides** (`backend/routes/cost_overrides.py`, `frontend/src/components/CostOverridesPanel.jsx`)
+- New `cost_overrides` collection: per-campaign override of the canon CP cost for any reference-mechanic entry. Allowed kinds: `attribute`, `defect`, `skill_group`, `race_template`, `class_template`, `point_buy_attribute`, `heritage`. Single number replaces canon outright; level/effective-level/mechanics intact, only the price changes. Setting cost to 0 grants the entry as a starting perk so the player keeps the full CP budget for further customisation.
+- Idempotent upsert keyed on `(campaign_id, kind, name)`. GM-only writes (admin bypass); seated players may read.
+- Panel mounts inside Campaign Detail → Custom Rules tab (GM-only). Name auto-complete pulled live from the campaign's system reference (`/api/besm/reference` or `/api/systems/{system}/reference`).
+
+**Auth deep-link fix** (`frontend/src/App.js`)
+- `Protected` route's `useMinDelay` cinematic SUMMONING splash reduced from 5000ms → 600ms. Iter69/iter70's reported "redirect to /" was the testing agent giving up before the 5s splash completed; with 600ms the protected route hydrates in ~1.3s (auth/me round-trip + min-delay) and deep-links work end-to-end.
+
+
 
 **Anime 5E reference parity** (`backend/system_data/anime5e_extended.py` NEW)
 - New module re-exports the SRD 5.1 `LANGUAGES`, `TOOLS`, `FEATS`, `MAGIC_ITEMS`, `MONSTERS`, `SUBCLASSES`, `DAMAGE_TYPES`, `SCHOOLS`, `CLASS_FEATURES` from `dnd5e_extended` (one-way port, CC-BY 4.0) **plus** anime-original additions: 10 anime-class subclasses (2 each for Adept/Champion/Idol/Pilot/Tinker), 8 anime tools (Hacker's Kit, Mecha Diagnostic Rig, Idol Concert Kit, etc.), 5 anime languages (Spirit-Tongue, Mech-Cant, Hex-cant, Earth-tongue, Lyrical Bardic), 15 anime feats (Power Limiter, Transformation Sequence, Mecha-Bond, Tsundere Reflex, Plot Armor, etc.), 15 anime relics (Henshin Pendant, Pilot's Visor, Idol's Microphone, Magical Girl Wand, Catgirl Ear Ribbon, etc.), and 15 anime monsters (Kaiju Lesser/Great, Yokai Tengu/Kitsune-9/Oni, Cyberdemon, Mecha Drone/Trooper/Frame, Vengeful Spirit, Idol Fan Swarm, etc.).
@@ -29,6 +43,17 @@
 - Regex expanded to also match `https://*.emergentagent.com`, `https://*.emergent.host`, and `https://(www.)?tablegnostic.com`.
 - Verified locally: POST `/api/auth/login` with `Origin: https://tablegnostic.com` now returns `access-control-allow-origin: https://tablegnostic.com` and a 200 with both GM and Player personas.
 - **User must redeploy** (Emergent Deploy button) for the production environment to pick up the fix.
+
+
+### V6.25.32 — Anime 5E reference parity · BESM canonical templates in builder · CORS regex fix (2026-02-09)
+
+**Anime 5E reference parity** (`backend/system_data/anime5e_extended.py` NEW, `anime5e_data.py` REFERENCE updated)
+- New module re-exports SRD 5.1 `LANGUAGES`, `TOOLS`, `FEATS`, `MAGIC_ITEMS`, `MONSTERS`, `SUBCLASSES`, `DAMAGE_TYPES`, `SCHOOLS`, `CLASS_FEATURES` from `dnd5e_extended` (one-way port, CC-BY 4.0) **plus anime-original additions**: 10 anime-class subclasses (2 each for Adept/Champion/Idol/Pilot/Tinker), 8 anime tools, 5 anime languages, 15 anime feats (Power Limiter, Transformation Sequence, Tsundere Reflex, Plot Armor, …), 15 anime relics (Henshin Pendant, Idol's Microphone, Magical Girl Wand, …), 15 anime monsters (Kaiju Lesser/Great, Yokai Tengu/Kitsune-9/Oni, Cyberdemon, Mecha Frame, …).
+- `/api/systems/anime-5e/reference` now returns 22 subclasses · 57 feats · 35 tools · 21 languages · 76 magic_items · 77 monsters · 13 damage_types · 8 schools. Frontend `Reference.jsx` is data-driven so all sections render automatically.
+
+**BESM canonical Race / Class templates wired into builder** (`frontend/src/components/CharacterBuilder.jsx`)
+- New `_canonToCustomShape()` helper normalises `RACE_TEMPLATES` (8) + `CLASS_TEMPLATES` (12) from `/api/besm/reference` into the same `{id, name, kind, effects:{total_cp, stat_adjustments, components}}` shape used by campaign-custom homebrew.
+- `BesmTemplatePicker` now renders **four optgroups**: BESM 4E Canon · Races / Classes + Campaign Custom · Races / Classes. Apply / Remove / Backfill / per-row provenance (`from_template_id`) all inherit from the existing flow; `AppliedTemplatesPanel` renders canonical applied templates without modification (deterministic IDs `canon-race-<slug>` / `canon-class-<slug>`).
 
 
 ### V6.25.30 — Multi-persona auth · Azazel-style PDF · Hero cleanup · How-To overhaul (2026-02-09)
