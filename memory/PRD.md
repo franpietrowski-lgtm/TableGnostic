@@ -54,7 +54,37 @@
 
 ## 2. Implemented (cumulative, condensed)
 
-## V6.25.12 — Landing polish + /discover route + CTA orbital flourish (2026-05-09)
+## V6.25.13 — Public campaign showcase pages at /discover/:slug (2026-05-09)
+
+User asked for the improvement teased in V6.25.11's finish summary: every GM-published campaign becomes a public, SEO-indexed showcase page at `tablegnostic.com/discover/{slug}` so the marketplace becomes a self-marketing flywheel.
+
+**🟢 Backend** (`routes/public_discover.py` — new, 224 lines)
+- New gate `discover_published: bool = False` on `CampaignIn` (default off — opt-in only). Independent of `visibility=public` (open-seat Discover) and `canon_published` (GM-to-GM Canon Registry) so existing campaigns are not surprise-exposed.
+- New `discover_slug: str` auto-generated from name on first publish. Slug regex: lowercase alphanumeric + dashes; collisions append `-2/-3/...` via `_unique_slug` helper.
+- `POST /api/campaigns/{cid}/discover-publish` (auth, GM-or-admin only) — sets `discover_published=true`, generates unique slug, optional blurb override; returns `{ok, published, slug}`.
+- `DELETE /api/campaigns/{cid}/discover-publish` — flips back to false.
+- `GET /api/public/discover` (no auth) — paginated gallery with optional `system` and `q` filters; returns cards with name, blurb, system, gm_name, tags, marketplace_count, canon_published.
+- `GET /api/public/discover/{slug}` (no auth) — full showcase merge: campaign card + nodes (`visibility="shared"` only) + edges (filtered to visible nodes) + marketplace listings (`source_campaign_id=cid` AND `access ∈ public/paywall`) + canon summary (`canon_blurb` + `deltas_count` when `canon_published=true`).
+
+**🟢 Frontend** (3 new components)
+- `components/DiscoverShowcase.jsx` (`/discover/:slug`) — public showcase page. Hero with system/setting eyebrow, name, blurb, GM credit, tone+genre pills, tags strip, primary CTA "Begin the Rite to clone" → `/auth?mode=register`. Sticky tab bar with 3 tabs:
+  - **World** (default) — public codex nodes grouped by type (NPC / Faction / Location / Quest / Lore / other) with content, tags, line-clamped previews.
+  - **Marketplace** — listing cards from this campaign with kind, name, summary, source system, clone count.
+  - **Canon** — "enrolled in canon" panel with blurb + delta-drop counter + subscribe CTA, OR opt-in nudge if not canon_published.
+- Error state for unknown slug, loading state with "Unfolding the table…" copy.
+- `components/DiscoverBrowse.jsx` (`/discover/browse`) — public gallery with search + system filter; cards link to `/discover/{slug}`. Empty state nudges first GM to publish.
+- `components/landing/PublicTables.jsx` — 6-card strip on the marketing Landing between Roadmap and AboutCreator. Hides itself entirely when zero campaigns are published (no depressing zero-state on the marketing page).
+- `App.js` — added `/discover/:slug` and `/discover/browse` routes (above `/discover` so Landing still handles bare path).
+- SEO: showcase page sets `document.title` and `meta[name=description]` from campaign data on mount.
+
+**🔍 Verified** (12/12 pytest pass + 11/11 frontend acceptance)
+- Public list returns shape `{items, total, limit, skip}`; `system` and `q` filters work; unknown slug 404; auth-required on POST/DELETE; non-GM gets 403; slug-uniqueness collision appends `-2`; gm_only nodes do NOT leak into public showcase; unpublish→404→re-publish round-trip clean.
+- Frontend: showcase + browse + landing strip all render seeded "Apocophea Veil" (5 shared nodes: Eli the Apprentice / The Forge-Cathedral / The Apocophea Guild / The Cooling Heart / The Sealed Vault). Section ordering on Landing verified (Roadmap → PublicTables → About). Zero console / page errors.
+
+**Seeded showcase**
+- Campaign: "Apocophea Veil" (`id 81ffab383c004f9d817b6cf5f0f477dc`, `slug apocophea-veil`), GM=GMFran, BESM 4E, Heroic, setting "Apocophea". 5 shared nodes for live demo at `/discover/apocophea-veil`.
+
+### V6.25.12 — Landing polish + /discover route + CTA orbital flourish (2026-05-09)
 
 User asked to align the landing with the live rules-forge.emergent.host design and prepare it for the new domain layout (tablegnostic.com root = app, `/discover` = landing).
 
