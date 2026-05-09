@@ -85,7 +85,7 @@ export default function CypherSheetView({ state, roll }) {
         </div>
         <div className="text-[10px] text-mist/70 italic mt-2">
           Players: spend Pool with the Effort lever above. GMs: edit `current_pools`
-          (or `pools.{name}.current`) on the character sheet to mark damage between sessions.
+          (or `pools.&lt;name&gt;.current`) on the character sheet to mark damage between sessions.
         </div>
       </div>
 
