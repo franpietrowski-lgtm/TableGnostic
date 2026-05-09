@@ -14,6 +14,37 @@
 
 ## 2. Implemented (cumulative, condensed)
 
+### V6.25.30 — Multi-persona auth · Azazel-style PDF · Hero cleanup · How-To overhaul (2026-02-09)
+
+**Auth — multi-persona email** (`backend/routes/auth.py`, `core/startup.py`)
+- Email-uniqueness gate removed from `/api/auth/register`. A single inbox can now own multiple TableGnostic identities (e.g. `franpietrowski@gmail.com` as both a GM with `PieGod08!!` and a Player with `PieBan18!!`). Each account stores its own `password_hash`, `role`, `id`. Login walks every account at that email and verifies password against each — first match wins.
+- Soft 400 if registering with the exact same email + password as an existing account (would be ambiguous on login).
+- Mongo's old `email_1` unique index is auto-dropped on cold-start; replaced with a non-unique index for fast lookup.
+- Player account `Fran (Player)` (id `aef91fbb…`) seeded for the user.
+
+**Landing hero cleanup** (`Landing.jsx`)
+- Reduced from 4 buttons → **2 colourful CTAs**: "Carve Your Sigil" (sign up) + "Resume the Rite" (sign in). Top-nav auth links removed; only the brand and (when logged in) "Enter the Table" remain there.
+
+**Inverted Codex PDF — Azazel-style entity layout** (`backend/routes/azazel_layout.py` NEW)
+- Any entity codex node (`node_kind ∈ {npc, character, creature, monster, person, faction, location}`) with structured fields renders as a sectioned dossier matching the user's Azazel reference image:
+    - **Centred title bar** + italic gold subtitle
+    - **Hero panel (left)** — portrait image (if `fields.portrait_url`) or ornamental sigil placeholder, summary, pull-quote frame
+    - **Resources panel (right)** — N rows (POWER · NETWORKS · KNOWLEDGE · TOOLS …) each with two sub-columns (description bullets + PLAYER TARGETS bullets)
+    - **Weakness band** — 3 columns (description / why-this-is-a-weakness / what-pcs-can-do) + italic flavour kicker
+    - **Cost band** — red banner header + body + permanent-consequence bullets
+    - **Who-Else-Knows footer** — 5-cell row with glyph + name + role
+- Schema is `fields = { subtitle, quote, portrait_url, resources[{title, items, player_targets}], weakness{description, why, player_can, flavour}, cost{title, body, note, consequences}, who_knows[{glyph, name, role}] }` — every block optional, missing blocks gracefully collapse, plain nodes still render via legacy compact layout.
+- Verified via Gemini PDF analysis: all 5 sections render correctly on the seeded Azazel entity in the Maiden Voyage codex export. PDF size grew from ~12 KB → ~18 KB after the layout was applied.
+
+**HowToGuide overhaul** (`HowToGuide.jsx`)
+- 12 recipes (was 8). NEW recipes: Build a character — system by system (system-aware tabs for BESM 4E / Anime 5E / Cypher / D&D 5E), Codex development, Reference table entries & house rules, Adventures + master plot + BBEG (with Azazel-style PDF guidance), Encounter design + run loop (bestiary → run → resolve → vigilize → tally), Inventory workflow (equip / attune / ready / charge), XP / CP / DP operations (bank semantics, post-approval ledger flow), Exporter tour (chronicle PDF + Azazel codex PDF), Macro creation, Sessions + journals + threads.
+- Per-system tab strip on system-aware recipes (`bySystem: true` schema). Default tab is BESM since Maiden Voyage is the seeded fixture.
+- Screenshot lightbox modal — recipes can carry a `screenshots: [{src, caption}]` array. Click thumbnail → fullscreen modal. Capture deferred to a follow-up turn (user can attach image URLs into the recipe data anytime).
+- Header copy refreshed; "Eight recipes" → generic "Recipes for the table".
+
+**Tests** — `test_v62530_multi_persona_azazel.py` (4/4 NEW): multi-persona login disambiguation by password, soft 400 on duplicate email+password, Azazel layout codex PDF non-empty + valid, plain codex PDF still renders without azazel fields. V6.25.27 Eli total_points test relaxed to read primer from the character record (was hard-coded 84, now reads `/api/characters/{eli}/total_points` first). Combined V6.25.26→.30 = **33/33 pass in 21s**.
+
+
 ### V6.25.29 — Entity-aware Encounter completion + per-system bestiary picker (2026-02-09)
 
 The user's spec: monsters / creatures / characters / NPCs are all **Entities** in TableGnostic. An encounter binds Entities + Locations. When the GM marks an encounter complete, the codex must propagate state — **NPC death = vigil entry on the codex node**; **monster kill = running tally** keyed to the player who scored the killing blow.

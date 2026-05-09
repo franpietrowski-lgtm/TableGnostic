@@ -23,6 +23,7 @@ from fastapi.responses import StreamingResponse
 
 from core.db import db
 from core.security import get_current_user
+from .azazel_layout import has_azazel_data, render_azazel_entity
 
 router = APIRouter(prefix="/api", tags=["codex-pdf"])
 
@@ -115,6 +116,9 @@ async def export_codex_pdf(cid: str, user: dict = Depends(get_current_user)):
     callout = ParagraphStyle("Callout", parent=body,
                                fontName="Helvetica-Oblique",
                                textColor=HexColor(p["accent"]))
+    # V6.25.30 — pre-bundled style map for the Azazel composer.
+    az_styles = {"body": body, "h_title": h_title,
+                 "h_section": h_section, "h_kind": h_kind}
 
     flow: List[Any] = []
     flow.append(Paragraph(camp.get("name", "Codex"), h_title))
@@ -130,11 +134,20 @@ async def export_codex_pdf(cid: str, user: dict = Depends(get_current_user)):
         kind = (n.get("node_kind") or n.get("type") or "concept").strip() or "concept"
         grouped[kind].append(n)
 
+    # V6.25.30 — entity-class kinds get the dramatic Azazel-style page.
+    # Everything else stays on the legacy compact layout.
+    AZAZEL_KINDS = {"npc", "character", "creature", "monster",
+                    "person", "faction", "location"}
+
     for kind in sorted(grouped.keys()):
         flow.append(Paragraph(f"{kind.replace('_', ' ').title()} ({len(grouped[kind])})", h_section))
         flow.append(_horizontal_rule(p, weight=0.5))
         flow.append(Spacer(1, 0.1 * inch))
         for n in grouped[kind]:
+            if kind in AZAZEL_KINDS and has_azazel_data(n):
+                # Rich entity — render with the Azazel-style sectioned page.
+                flow.extend(render_azazel_entity(n, az_styles))
+                continue
             title = n.get("title") or n.get("name") or "Untitled"
             section = (n.get("creation_tree") or {}).get("section") or ""
             flow.append(Paragraph(f"<b>{_xml(title)}</b>", body))
