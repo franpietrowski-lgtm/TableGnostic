@@ -34,18 +34,50 @@ const BLANK_BRIEF = {
   history:           "",
 };
 
-// Five questions the BESM 4E character quiz asks plus narrative anchors.
+// BESM 4E Character Quiz — structured questions that mirror the guided
+// rite from the BESM 4E core book (pp. 58-61). Each `chips` array offers
+// authentic genre-tagged suggestions a player can append to seed the
+// brief; the textarea always remains free-form for custom answers.
 const FIELD_DEFS = [
-  { k: "role",              l: "Role at the table",          ph: "Tank? Healer? Skill-monkey infiltrator? Pure caster? Social face?", rows: 2, important: true },
-  { k: "signature_traits",  l: "Signature traits / abilities", ph: "What 2-3 abilities make this character iconic? (e.g. flame magic, mecha pilot, healing hands, perfect aim).", rows: 2, important: true },
-  { k: "appearance",        l: "Appearance",                  ph: "Physical description, age, distinctive markings or accoutrements.", rows: 2 },
-  { k: "origin",            l: "Origin / homeland / heritage",ph: "Where they're from, what culture, family standing, defining childhood.", rows: 2 },
-  { k: "carried_gear",      l: "Carried gear / weapons",      ph: "What's in their kit by default? (e.g. ‘a phoenix-themed staff and a pouch of healing tinctures’). The Forge will translate this into proper Items / Weapons / Weapon-Items.", rows: 2 },
-  { k: "goals",             l: "Goals (short-term + long)",   ph: "Active drives at and beyond the table.", rows: 2 },
-  { k: "dreams",             l: "Dreams (aspirational)",      ph: "What would they do if no one was watching? Their truest hope.", rows: 2 },
-  { k: "personality_knots", l: "Personality knots / flaws / vows", ph: "What slows them down narratively? Codes they cannot break.", rows: 2 },
-  { k: "history",           l: "History / formative events",  ph: "Notable beats already lived. Wounds, lessons, betrayals.", rows: 2 },
-  { k: "concept_text",      l: "Free-form additional notes",  ph: "Anything that didn't fit the boxes above. Pitch it like a paragraph.", rows: 3 },
+  { k: "role", l: "Role at the table", important: true, rows: 2,
+    ph: "Tank? Healer? Skill-monkey infiltrator? Pure caster? Social face?",
+    chips: ["Tank / front line", "Healer / support", "Skill-monkey / scout",
+            "Pure caster", "Social face / negotiator", "Mecha pilot",
+            "Beastmaster / summoner", "Infiltrator / assassin"] },
+  { k: "signature_traits", l: "Signature traits / abilities", important: true, rows: 2,
+    ph: "What 2-3 abilities make this character iconic? (e.g. flame magic, mecha pilot, healing hands, perfect aim).",
+    chips: ["Flame magic", "Healing hands", "Telekinesis", "Mecha pilot",
+            "Lightning swordplay", "Perfect aim", "Shapeshift", "Time-bend"] },
+  { k: "appearance", l: "Appearance", rows: 2,
+    ph: "Physical description, age, distinctive markings or accoutrements.",
+    chips: ["Lean & wiry", "Towering / armoured", "Ageless / ethereal",
+            "Battle-scarred", "Ornate regalia", "Cloaked stranger"] },
+  { k: "origin", l: "Origin / homeland / heritage", rows: 2,
+    ph: "Where they're from, what culture, family standing, defining childhood.",
+    chips: ["Noble house", "Orphan of the streets", "Forest tribe",
+            "Imperial academy", "Lost civilisation", "Outer-realm exile"] },
+  { k: "carried_gear", l: "Carried gear / weapons", rows: 2,
+    ph: "What's in their kit by default? (e.g. ‘a phoenix-themed staff and a pouch of healing tinctures’). The Forge will translate this into proper Items / Weapons / Weapon-Items.",
+    chips: ["Heirloom blade", "Spell-staff", "Twin daggers", "Healing tinctures",
+            "Mecha tether-key", "Codex of vows", "Trickster's pouch"] },
+  { k: "goals", l: "Goals (short-term + long)", rows: 2,
+    ph: "Active drives at and beyond the table.",
+    chips: ["Avenge a fallen mentor", "Restore a lost homeland",
+            "Master forbidden art", "Protect a sibling", "Earn a true name"] },
+  { k: "dreams", l: "Dreams (aspirational)", rows: 2,
+    ph: "What would they do if no one was watching? Their truest hope.",
+    chips: ["Found a sanctuary", "Open a tavern", "Walk among the gods",
+            "Be remembered in song", "Quiet life on a farm"] },
+  { k: "personality_knots", l: "Personality knots / flaws / vows", rows: 2,
+    ph: "What slows them down narratively? Codes they cannot break.",
+    chips: ["Pacifist vow", "Curse of pride", "Cannot lie", "Owed a life-debt",
+            "Phobia of fire", "Marked by a god"] },
+  { k: "history", l: "History / formative events", rows: 2,
+    ph: "Notable beats already lived. Wounds, lessons, betrayals.",
+    chips: ["Survived a massacre", "Betrayed by a friend",
+            "Witnessed a miracle", "Failed an oath", "Sealed away a demon"] },
+  { k: "concept_text", l: "Free-form additional notes", rows: 3,
+    ph: "Anything that didn't fit the boxes above. Pitch it like a paragraph." },
 ];
 
 
@@ -223,6 +255,13 @@ function PrimerBanner({ camp }) {
 function ForgeBriefForm({ brief, setBrief, codexNodes, importedNodeIds,
                           setImportedNodeIds, submit, loading, err }) {
   const update = (k, v) => setBrief((b) => ({ ...b, [k]: v }));
+  // Append a chip to the field's text (comma-separated for natural reads).
+  const appendChip = (k, chip) => setBrief((b) => {
+    const cur = (b[k] || "").trim();
+    if (!cur) return { ...b, [k]: chip };
+    if (cur.toLowerCase().includes(chip.toLowerCase())) return b; // dedupe
+    return { ...b, [k]: cur.endsWith(",") || cur.endsWith(".") ? `${cur} ${chip}` : `${cur}, ${chip}` };
+  });
   return (
     <div className="card-mystic p-5" data-testid="forge-input-panel">
       <div className="grid md:grid-cols-2 gap-4">
@@ -237,6 +276,19 @@ function ForgeBriefForm({ brief, setBrief, codexNodes, importedNodeIds,
                       onChange={(e) => update(f.k, e.target.value)}
                       placeholder={f.ph}
                       data-testid={`forge-field-${f.k}`}/>
+            {Array.isArray(f.chips) && f.chips.length > 0 && (
+              <div className="mt-1.5 flex flex-wrap gap-1"
+                   data-testid={`forge-chips-${f.k}`}>
+                {f.chips.map((c) => (
+                  <button key={c} type="button"
+                          onClick={() => appendChip(f.k, c)}
+                          className="px-2 py-0.5 text-[10px] tracking-wide rounded-full border border-gold/20 text-mist hover:text-gold-bright hover:border-gold/50 transition-colors"
+                          data-testid={`forge-chip-${f.k}-${c.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`}>
+                    + {c}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -270,10 +322,20 @@ function ForgeBriefForm({ brief, setBrief, codexNodes, importedNodeIds,
 
 
 function CodexImportPicker({ nodes, selected, onChange }) {
-  const [open, setOpen] = useState(false);
+  // Auto-open when entities exist so the picker is immediately discoverable.
+  // Players were previously missing this feature because it was collapsed
+  // behind a "+" toggle that looked decorative.
+  const [open, setOpen] = useState(true);
+  const [q, setQ] = useState("");
   const toggle = (id) => onChange(selected.includes(id)
     ? selected.filter((x) => x !== id)
     : [...selected, id]);
+  const filtered = q.trim()
+    ? nodes.filter((n) => {
+        const hay = `${n.title || ""} ${n.summary || ""} ${n.node_kind || n.type || ""}`.toLowerCase();
+        return hay.includes(q.trim().toLowerCase());
+      })
+    : nodes;
   return (
     <div className="mt-4 border-t border-gold/10 pt-3"
          data-testid="forge-codex-picker">
@@ -281,33 +343,47 @@ function CodexImportPicker({ nodes, selected, onChange }) {
               className="flex items-center gap-2 text-[11px] uppercase tracking-widest text-gold-bright hover:text-parchment"
               data-testid="forge-codex-toggle">
         <Library className="w-3 h-3"/>
-        Import Codex Entities ({selected.length} selected)
+        Import Codex Entities ({selected.length} selected · {nodes.length} available)
         <ChevronDown className={`w-3 h-3 transition-transform ${open ? "rotate-180" : ""}`}/>
       </button>
       {open && (
-        <div className="mt-2 max-h-64 overflow-y-auto border border-gold/10 rounded-sm p-2 grid grid-cols-1 sm:grid-cols-2 gap-1">
-          {nodes.map((n) => (
-            <label key={n.id} className="flex items-start gap-2 text-[11px] cursor-pointer p-1 rounded-sm hover:bg-gold/5"
-                   data-testid={`forge-codex-row-${n.id}`}>
-              <input type="checkbox" checked={selected.includes(n.id)}
-                     onChange={() => toggle(n.id)}
-                     className="mt-0.5"/>
-              <div className="min-w-0">
-                <div className="text-parchment truncate">
-                  <span className="text-gold/70 uppercase tracking-widest text-[9px] mr-1">
-                    {n.node_kind || n.type}
-                  </span>
-                  {n.title}
-                </div>
-                {n.summary && (
-                  <div className="text-mist/70 text-[10px] truncate italic">
-                    {n.summary}
+        <>
+          <div className="mt-2">
+            <input type="text" value={q}
+                   onChange={(e) => setQ(e.target.value)}
+                   placeholder="Search codex entities by name, kind, or blurb…"
+                   className="input text-[11px] w-full"
+                   data-testid="forge-codex-search"/>
+          </div>
+          <div className="mt-2 max-h-64 overflow-y-auto border border-gold/10 rounded-sm p-2 grid grid-cols-1 sm:grid-cols-2 gap-1">
+            {filtered.map((n) => (
+              <label key={n.id} className="flex items-start gap-2 text-[11px] cursor-pointer p-1 rounded-sm hover:bg-gold/5"
+                     data-testid={`forge-codex-row-${n.id}`}>
+                <input type="checkbox" checked={selected.includes(n.id)}
+                       onChange={() => toggle(n.id)}
+                       className="mt-0.5"/>
+                <div className="min-w-0">
+                  <div className="text-parchment truncate">
+                    <span className="text-gold/70 uppercase tracking-widest text-[9px] mr-1">
+                      {n.node_kind || n.type}
+                    </span>
+                    {n.title}
                   </div>
-                )}
+                  {n.summary && (
+                    <div className="text-mist/70 text-[10px] truncate italic">
+                      {n.summary}
+                    </div>
+                  )}
+                </div>
+              </label>
+            ))}
+            {filtered.length === 0 && (
+              <div className="col-span-full text-[11px] italic text-mist/60 p-2">
+                No entities match “{q}”.
               </div>
-            </label>
-          ))}
-        </div>
+            )}
+          </div>
+        </>
       )}
     </div>
   );

@@ -14,6 +14,37 @@
 
 ## 2. Implemented (cumulative, condensed)
 
+### V6.25.37 — Landing-page merge · Public Discover showcase · Concept Forge BESM-quiz chips (2026-02-09)
+
+**GitHub branch merge — `TG_landing-page` → main, reconciled with v62536** (2026-02-09)
+- User merged the standalone landing-page branch on GitHub. Pulled the merged tree from `https://github.com/franpietrowski-lgtm/TableGnostic.git` into the preview pod and reconciled with the local v62536 work (Voice PTT, super-admin, MacroBuilder fixes) without losing either side.
+- New backend routes copied verbatim: `routes/leads.py`, `routes/public_discover.py` (GitHub iter61/62 work).
+- New frontend pieces copied verbatim: `components/Landing.jsx` (rewritten as section-orchestrator), `components/landing/*` (17 marketing components — Hero/Pillars/SystemTrustStrip/WhatItDoes/RoleTour/ProductProof/FeatureHighlights/WizardTeasers/MarketplaceSection/Roadmap/PublicTables/AboutCreator/ContactWaitlist/LandingNav/LandingFooter/Sigil/CtaOrbits), `components/DiscoverBrowse.jsx`, `components/DiscoverShowcase.jsx`.
+- Surgical merges (preserved v62536 work): `server.py` (added leads + public_discover router include), `App.js` (added `/landing`, `/discover`, `/discover/browse`, `/discover/:slug` public routes alongside the existing in-app `/app/discover`), `core/models.py` (added `discover_published`, `discover_slug` to Campaign — defaults FALSE so no surprise exposure).
+- Adopted GitHub's cleaner `.gitignore` (de-duplicated). Skipped GitHub's older versions of `channels.py`, `recap.py`, `startup.py`, `MacroBuilder.jsx`, `SessionView.jsx` (would have undone v62536 voice/macro work).
+
+**Public landing page available at `/`, `/landing`, `/discover`** (SEO-aware)
+- Title: "TableGnostics — Worldbuilding, Character Automation & Tabletop Campaign Tools"
+- Sections: Hero (NOT THE SYSTEM. The table.) → Pillars → SystemTrustStrip → WhatItDoes → RoleTour → ProductProof → FeatureHighlights → WizardTeasers → MarketplaceSection → Roadmap → PublicTables → AboutCreator → ContactWaitlist → Footer.
+- Lead capture: `POST /api/leads` (public, dedupes on email+role within 24h), `GET /api/leads` + `GET /api/leads/count` (admin only).
+
+**Public Discover showcase** (campaign-level SEO surface)
+- New gate `Campaign.discover_published` (independent of `visibility=public` and `canon_published`). When true, campaign reachable at public URL `/discover/{discover_slug}` — campaign blurb + public/shared codex nodes + marketplace listings sourced from this campaign + canon registry.
+- `GET /api/public/discover` (gallery list), `GET /api/public/discover/{slug}` (showcase detail), `POST /api/campaigns/{cid}/discover-publish` + `DELETE` (GM-only publish/unpublish).
+- `/discover/browse` — searchable gallery filtered by system; defaults to all systems.
+
+**All preview-pod campaigns flipped to `visibility=public`** (`backend/scripts/v62537_mark_campaigns_public.py`)
+- 6 campaigns flipped, 8 total now public — preserves user's test catalogue post super-admin wipe so any campaign can be cherry-picked for `discover_published=true` later.
+
+**Concept Forge BESM-quiz polish — guided chips + auto-open codex import** (`frontend/src/components/ConceptForge.jsx`)
+- Every BESM-quiz field now ships with one-click suggestion chips (Tank/Healer/Caster/Face/Mecha pilot for Role; Flame magic/Telekinesis/Healing hands/etc. for Signature traits; Noble house/Orphan/Forest tribe/etc. for Origin; etc.). Clicking a chip appends to the field's free-form textarea, deduping by case.
+- Codex Import picker auto-opens whenever the campaign has entity-typed nodes (was hidden behind a click), gained a search box (`forge-codex-search` testid) that filters by name/kind/blurb, and shows live `(N selected · M available)` counter on the toggle.
+
+**Testing — V6.25.37**
+- Backend: 22/22 PASS combined (`tests/test_iter61_leads.py` 10/10 + `tests/test_iter62_v62513_discover.py` 12/12). v62536 regression — 10/10 PASS (`tests/test_v62536_voice_admin_macros.py`). Smoke-test endpoints: `/api/healthz` 404 (no such route — expected), `/api/public/discover` 200 empty, `/api/leads/count` 401 unauth → 200 with admin token, `POST /api/leads` 400 without consent.
+- Frontend: Public landing renders cleanly at `/discover` (data-testid `landing-root` present, title set). Public showcase browser at `/discover/browse` shows empty state ("Be the first GM to publish"). Concept Forge `/app/concept-forge` — chips visible on every quiz field, codex picker auto-open with 39 entities + search bar (verified on Evereantha BESM campaign).
+
+
 ### V6.25.36 — MacroBuilder audit · Voice push-to-talk v1 · Super-admin account (2026-02-09)
 
 **MacroBuilder audit & fixes** (`frontend/src/components/MacroBuilder.jsx`, `backend/routes/channels.py`)

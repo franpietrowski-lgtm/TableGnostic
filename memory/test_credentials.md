@@ -1,10 +1,12 @@
-# Test credentials — V6.25.36 (current)
+# Test credentials — V6.25.37 (current)
 
-**TableGnostic Admin (super-admin / moderation)**: `tablegnostic-admin@tablegnostic.com` / `LoremasterAurea2026!Forge` — role=`admin`. Survives across deploys via `core/startup.py` seed. **Use this on production for app-wide authority + moderation.**
+**TableGnostic Admin (super-admin / moderation)**: `tablegnostic-admin@tablegnostic.com` / `LoremasterAurea2026!Forge` — role=`admin`. Survives across deploys via `core/startup.py` seed. **Use this on production for app-wide authority + moderation.** Deliberately separate from any personal user identity.
 
 **GMFran (admin/GM)**: franpietrowski@gmail.com / PieGod08!! — id `7ce7580f...`
 **Fran (Player)**:    franpietrowski@gmail.com / PieBan18!! — id `aef91fbb...` *(multi-persona — same email, different password ⇒ different persona)*
 **Aurora (player)**:   albanaszak@ymail.com / AuroraTest123!
+
+V6.25.37 — All 8 preview-pod campaigns now `visibility=public` (script: `backend/scripts/v62537_mark_campaigns_public.py`). Lets the test catalogue stay browsable post super-admin wipe.
 
 V6.25.30 — email uniqueness gate removed. A single inbox can now own multiple
 TableGnostic identities; login disambiguates by password. Useful for GMs who
