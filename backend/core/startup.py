@@ -27,7 +27,17 @@ _RETIRED_DEMO_EMAILS = (
 
 
 async def ensure_indexes():
-    await db.users.create_index("email", unique=True)
+    # V6.25.30 — email is no longer unique; multiple personas may share an
+    # inbox (e.g. one user owning a GM identity and a separate player
+    # identity). Drop any pre-existing unique index, then create the
+    # non-unique replacement so lookups stay fast.
+    try:
+        existing = await db.users.index_information()
+        if "email_1" in existing and existing["email_1"].get("unique"):
+            await db.users.drop_index("email_1")
+    except Exception:  # noqa: BLE001 — best-effort migration on cold-start
+        pass
+    await db.users.create_index("email")
     await db.users.create_index("id", unique=True)
     await db.campaigns.create_index("id", unique=True)
     await db.characters.create_index("id", unique=True)

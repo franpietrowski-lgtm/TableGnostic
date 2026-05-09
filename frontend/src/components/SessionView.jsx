@@ -9,6 +9,7 @@ import XPAwardPanel from "./XPAwardPanel";
 import MacroBar from "./MacroBar";
 import EncounterDesigner from "./EncounterDesigner";
 import QuickCastDock from "./QuickCastDock";
+import EncountersLibrary from "./EncountersLibrary";
 
 export default function SessionView() {
   const { id } = useParams();
@@ -590,6 +591,15 @@ export default function SessionView() {
           onClose={() => setXpOpen(false)}
           onCommitted={() => loadAll()}
         />
+      )}
+
+      {/* V6.25.26 — Anti-railroad encounters library: GM picks live during a session. */}
+      {campaign?.is_gm && session && (
+        <div className="mt-6 px-4">
+          <EncountersLibrary campId={campaign.id || campaign._id || session.campaign_id}
+                                sessionId={id} isGm={true}
+                                systemId={campaign?.system_id}/>
+        </div>
       )}
 
       {/* V6.17 — Floating Quick-Cast dock for the active player. */}

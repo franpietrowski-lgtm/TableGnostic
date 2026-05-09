@@ -53,54 +53,153 @@ CREATION_TREE_SCHEMA: Dict[str, Any] = {
     "pillars": {
         "Population": {
             "branches": [
-                "Races", "Nations", "Languages", "Factions",
-                "Prominent People", "Technology", "Religions",
-                "Beliefs", "Laws",
+                "Beliefs", "Religions", "Technology", "Wars",
+                "Prominent People", "Laws", "Conflicts", "Factions",
+                "Races", "Nations", "Languages",
             ],
             "blurb": "Who lives in this world and what they make of it.",
         },
         "Geography": {
             "branches": [
-                "Biomes", "Locations", "Man-made Borders", "Countries",
-                "Continents", "Natural Divides", "Natural Laws", "Magic",
-                "Gods", "Dimensions", "Connected Worlds", "Uniqueness",
+                "Continents", "Countries", "Man-made Borders", "Locations",
+                "Biomes", "Natural Divides", "Natural Laws",
+                "Connected Worlds", "Gods", "Magic", "Dimensions",
+                "Uniqueness",
             ],
             "blurb": "Where it all happens — physical, metaphysical, multiversal.",
         },
         "History": {
             "branches": [
-                "Natural History", "Of the People", "Written", "Oral",
-                "Truth", "Lies",
+                "Truth", "Lies", "Written", "Oral",
+                "Of the People", "Natural History",
             ],
             "blurb": "How the past is remembered, told, and falsified.",
         },
     },
+    # V6.25.14 — bridge layout matches the canonical World Building Charts
+    # infographic (Shieldice Studio). Each tuple is
+    # (src "Pillar.Branch", tgt "Pillar.Branch", relationship_label).
+    # The frontend lattice renders these as dotted SVG arrows between
+    # the staggered pillar columns; each one is also a clickable seed
+    # prompt that GMs can spawn linked codex nodes from.
     "cross_pillar_links": [
-        # (source pillar.branch → target pillar.branch, relationship)
-        ("Population.Laws", "Geography.Countries", "governs"),
-        ("Population.Nations", "Geography.Countries", "claims"),
-        ("Population.Conflicts", "Geography.Locations", "occurs at"),
-        ("Population.Factions", "Geography.Locations", "based at"),
-        ("Population.Races", "Geography.Biomes", "native to"),
-        ("Population.Religions", "Geography.Gods", "worships"),
-        ("Population.Beliefs", "Population.Religions", "shapes"),
-        ("Population.Technology", "Geography.Natural Laws", "tensions"),
-        ("Geography.Dimensions", "Geography.Connected Worlds", "leads to"),
-        ("Geography.Connected Worlds", "Geography.Magic", "shares"),
-        ("Geography.Connected Worlds", "Geography.Gods", "shares"),
-        ("Population.Conflicts", "History.Of the People", "remembered as"),
-        ("Population.Wars", "History.Written", "documented in"),
-        ("Population.Prominent People", "History.Of the People", "central to"),
-        ("Population.Religions", "History.Truth", "claims as"),
-        ("History.Truth", "History.Lies", "contradicts"),
-        ("History.Written", "History.Oral", "tensions"),
-        ("History.Natural History", "History.Of the People", "predates"),
+        # ── Population ⤳ Geography ────────────────────────────────────
+        ("Population.Laws",            "Geography.Countries",       "governs"),
+        ("Population.Wars",            "Geography.Continents",      "redraws"),
+        ("Population.Conflicts",       "Geography.Man-made Borders", "redraws"),
+        ("Population.Factions",        "Geography.Locations",       "operates from"),
+        ("Population.Nations",         "Geography.Countries",       "claims"),
+        ("Population.Nations",         "Geography.Biomes",          "settles"),
+        ("Population.Races",           "Geography.Biomes",          "native to"),
+        ("Population.Religions",       "Geography.Gods",            "worships"),
+        ("Population.Technology",      "Geography.Natural Laws",    "tensions"),
+        # ── Geography ⤳ Geography (canonical chart triangles) ────────
+        ("Geography.Connected Worlds", "Geography.Gods",            "shares"),
+        ("Geography.Connected Worlds", "Geography.Magic",           "shares"),
+        ("Geography.Magic",            "Geography.Natural Laws",    "bends"),
+        ("Geography.Dimensions",       "Geography.Connected Worlds", "leads to"),
+        ("Geography.Dimensions",       "Geography.Uniqueness",      "defines"),
+        # ── Population ⤳ History ──────────────────────────────────────
+        ("Population.Beliefs",         "History.Truth",             "anchors"),
+        ("Population.Beliefs",         "History.Lies",              "denies"),
+        ("Population.Wars",            "History.Written",           "documented in"),
+        ("Population.Conflicts",       "History.Of the People",     "remembered as"),
+        ("Population.Prominent People", "History.Of the People",    "central to"),
+        ("Population.Religions",       "History.Truth",             "claims as"),
+        ("Population.Languages",       "History.Oral",              "carries"),
+        # ── History ⤳ History (truth ↔ lies, written ↔ oral) ─────────
+        ("History.Truth",              "History.Lies",              "contradicts"),
+        ("History.Written",            "History.Oral",              "tensions"),
+        ("History.Natural History",    "History.Of the People",     "predates"),
+        # ── Population ⤳ Population (beliefs shape religion) ─────────
+        ("Population.Beliefs",         "Population.Religions",      "shapes"),
+    ],
+    # V6.25.14 — History lenses (chart bottom strip). Five common
+    # interpretive lenses every History entry can be tagged with so
+    # GMs can filter the history pillar by axis.
+    "history_lenses": [
+        "Political", "Cultural", "Social", "Economic", "Diplomatic",
     ],
     "logic_notes": [
         "Population, Geography, History are a triangular dependency.",
         "Magic emerges from Natural Laws + Gods + Dimensions.",
         "Conflict is the central connector across all three pillars.",
+        "Cross-pillar bridges are first-class narrative seeds — click "
+        "any to author a linked node on both sides.",
     ],
+}
+
+
+# V6.25.14 — Bridge prompt templates. Maps (src, tgt) → a sentence the
+# GM can drop into the bridge-sow modal. Templates that aren't in this
+# map fall back to a generic "How does {src} affect {tgt}?" sentence.
+BRIDGE_PROMPTS: Dict[str, str] = {
+    "Population.Laws|Geography.Countries":
+        "What law of {src} shapes the moral fibre of {tgt}? Whose crime "
+        "is unforgivable here, and whose is winked at?",
+    "Population.Wars|Geography.Continents":
+        "Which war redrew the map of {tgt}? What border moved, what "
+        "people were displaced, and what scars still mark the land?",
+    "Population.Conflicts|Geography.Man-made Borders":
+        "What ongoing conflict keeps {tgt} contested? Who walks the wall, "
+        "and who slips around it?",
+    "Population.Factions|Geography.Locations":
+        "Where in {tgt} does this faction operate? What landmark do "
+        "locals point to when they whisper its name?",
+    "Population.Nations|Geography.Countries":
+        "What does {src}'s claim on {tgt} look like — sovereignty, "
+        "occupation, or unrecognised diaspora?",
+    "Population.Nations|Geography.Biomes":
+        "How did {src} settle into {tgt}? What did the land demand of them?",
+    "Population.Races|Geography.Biomes":
+        "What about {tgt} shaped {src} — physiology, custom, song?",
+    "Population.Religions|Geography.Gods":
+        "Which god does {src} worship, and what does the god demand back?",
+    "Population.Technology|Geography.Natural Laws":
+        "What natural law of {tgt} does {src}'s technology bend, break, "
+        "or politely ignore?",
+    "Geography.Connected Worlds|Geography.Gods":
+        "Which gods cross between worlds via {src}? What do they leave "
+        "behind on each side?",
+    "Geography.Connected Worlds|Geography.Magic":
+        "What kind of magic only works when both sides of {src} are aligned?",
+    "Geography.Magic|Geography.Natural Laws":
+        "Which natural law breaks when this magic is invoked? What's the "
+        "cost paid by the world?",
+    "Geography.Dimensions|Geography.Connected Worlds":
+        "How does one travel from {src} to {tgt}? What survives the crossing?",
+    "Geography.Dimensions|Geography.Uniqueness":
+        "What single rule of {src} defines its uniqueness — and what "
+        "happens to anyone who breaks it?",
+    "Population.Beliefs|History.Truth":
+        "Which fact of {tgt} is held sacred because of {src}? Who would "
+        "bleed to keep it canon?",
+    "Population.Beliefs|History.Lies":
+        "What lie of {tgt} survives because {src} cannot live without it?",
+    "Population.Wars|History.Written":
+        "Which scribe wrote the official account of {src}? What did they "
+        "leave out, and who paid them to leave it out?",
+    "Population.Conflicts|History.Of the People":
+        "How is {src} remembered around the hearth? Whose version is "
+        "told to the children?",
+    "Population.Prominent People|History.Of the People":
+        "Which deed of {src} is told and retold? Which deed is buried?",
+    "Population.Religions|History.Truth":
+        "What does {src} claim as historical truth that outsiders dispute?",
+    "Population.Languages|History.Oral":
+        "What story can ONLY be told in {src} — and dies in translation?",
+    "History.Truth|History.Lies":
+        "Pick one event: write the truth and the lie side by side. Who "
+        "benefits from each version?",
+    "History.Written|History.Oral":
+        "Where do the written and oral records of this event diverge? "
+        "Which is older — and which is more accurate?",
+    "History.Natural History|History.Of the People":
+        "What did {src} record about this land that {tgt}'s memory has "
+        "since forgotten?",
+    "Population.Beliefs|Population.Religions":
+        "Which folk belief was codified into {tgt}'s doctrine? What was "
+        "scrubbed off in the codification?",
 }
 
 
@@ -199,6 +298,7 @@ async def get_creation_tree(cid: str,
     return {
         "campaign_id": cid,
         "schema": CREATION_TREE_SCHEMA,
+        "bridge_prompts": BRIDGE_PROMPTS,
         "populated": grouped,
         "unplaced": unplaced,
         "node_count": len(rows),
@@ -374,22 +474,51 @@ async def sow_codex_node(
     user: dict = Depends(get_current_user),
 ):
     """Create a creation-tree-tagged codex node. Used by the world
-    tree's sow() flow to seed new entries directly into a pillar."""
+    tree's sow() flow to seed new entries directly into a pillar.
+
+    V6.25.19 — when the caller doesn't ship a `creation_tree.section`
+    AND the supplied `node_kind == "concept"`, run the canonical
+    classifier (`core.codex_classifier.codexify_node`) so the node
+    auto-routes to the right Pillar.Branch instead of piling up in
+    the unplaced tray.
+    """
     camp = await db.campaigns.find_one({"id": cid}, {"_id": 0})
     if not camp:
         raise HTTPException(404, "Campaign not found")
     if camp["gm_id"] != user["id"] and user.get("role") != "admin":
         raise HTTPException(403, "GM/admin only.")
+
+    ct = dict(body.creation_tree or {})
+    explicit_sec = ct.get("section")
+    name = body.name.strip()
+    summary = body.summary.strip()
+
+    # If the caller already pinned a section, honour it. Otherwise run
+    # the classifier (using the caller's node_kind as a hint).
+    if explicit_sec:
+        node_kind = body.node_kind
+        ct.setdefault("color", None)
+        ct.setdefault("auto_classified", False)
+    else:
+        from core.codex_classifier import codexify_node
+        cls_payload = codexify_node(
+            name=name, content=summary, summary=summary,
+            tags=[], hint=body.node_kind,
+        )
+        node_kind = cls_payload["node_kind"]
+        if "creation_tree" in cls_payload:
+            ct = cls_payload["creation_tree"]
+
     doc = {
         "id": new_id(),
         "campaign_id": cid,
-        "name": body.name.strip(),
-        "title": body.name.strip(),
-        "node_kind": body.node_kind,
-        "type": body.node_kind,
-        "summary": body.summary.strip(),
-        "content": body.summary.strip(),
-        "creation_tree": dict(body.creation_tree or {}),
+        "name": name,
+        "title": name,
+        "node_kind": node_kind,
+        "type": node_kind,
+        "summary": summary,
+        "content": summary,
+        "creation_tree": ct,
         "tags": [],
         "fields": {},
         "visibility": "gm",
@@ -401,6 +530,184 @@ async def sow_codex_node(
     }
     await db.nodes.insert_one(dict(doc))
     return {"ok": True, "node": doc}
+
+
+@router.post("/campaigns/{cid}/codex/auto-classify")
+async def auto_classify_codex(
+    cid: str, user: dict = Depends(get_current_user),
+):
+    """V6.25.19 — backfill: re-run the canonical classifier on every
+    codex node that doesn't yet carry a `creation_tree.section`.
+
+    Idempotent: nodes that already have an explicit section are NEVER
+    overwritten. Returns the number of nodes that landed somewhere
+    they weren't before, plus the count that stayed unplaced (no
+    signal in name / content / tags).
+    """
+    camp = await db.campaigns.find_one({"id": cid}, {"_id": 0})
+    if not camp:
+        raise HTTPException(404, "Campaign not found")
+    if camp["gm_id"] != user["id"] and user.get("role") != "admin":
+        raise HTTPException(403, "GM/admin only.")
+
+    from core.codex_classifier import classify_concept
+
+    rows = await db.nodes.find(
+        {"campaign_id": cid}, {"_id": 0},
+    ).to_list(length=5000)
+
+    classified = 0
+    still_unplaced = 0
+    skipped = 0
+    placements: List[Dict[str, Any]] = []
+
+    for r in rows:
+        ct = r.get("creation_tree") or {}
+        if ct.get("section"):
+            skipped += 1
+            continue
+        # Run classifier on (name|title) + content + tags, with the
+        # legacy `type` value as a hint when present.
+        name = r.get("name") or r.get("title") or ""
+        cls = classify_concept(
+            name=name,
+            content=r.get("content") or r.get("summary") or "",
+            tags=r.get("tags") or [],
+            hint=(r.get("node_kind") or r.get("type")),
+        )
+        sec = cls["creation_tree_section"]
+        if not sec:
+            still_unplaced += 1
+            continue
+        upd = {
+            "creation_tree": {
+                "section": sec,
+                "color": ct.get("color"),
+                "auto_classified": True,
+                "classifier_confidence": cls["confidence"],
+                "classifier_reasoning": cls["reasoning"],
+            },
+            "node_kind": cls["node_kind"],
+            "type": cls["type"],
+            "updated_at": now_iso(),
+        }
+        await db.nodes.update_one({"id": r["id"]}, {"$set": upd})
+        classified += 1
+        placements.append({
+            "id": r["id"], "name": name, "section": sec,
+            "confidence": cls["confidence"], "reasoning": cls["reasoning"],
+        })
+
+    return {
+        "ok": True,
+        "classified": classified,
+        "still_unplaced": still_unplaced,
+        "already_placed": skipped,
+        "placements": placements[:50],  # cap echo so the response stays small
+    }
+
+
+@router.get("/campaigns/{cid}/codex/classifier-audit")
+async def codex_classifier_audit(
+    cid: str, user: dict = Depends(get_current_user),
+):
+    """V6.25.21 — Classifier Confidence audit.
+
+    Returns every auto-placed codex node in the campaign, sorted by
+    ASCENDING confidence so the GM can scan the riskiest placements
+    first. Each row carries:
+      * id / name / section / kind
+      * confidence (0.0-1.0) + reasoning string
+      * fields.source provenance (genesis / epic_campaign / etc.)
+
+    Also bundles totals (auto vs manual vs unplaced) so the frontend
+    panel can render a one-glance "world is converging" meter.
+    """
+    camp = await db.campaigns.find_one({"id": cid}, {"_id": 0})
+    if not camp:
+        raise HTTPException(404, "Campaign not found")
+    if camp["gm_id"] != user["id"] and user.get("role") != "admin":
+        raise HTTPException(403, "GM/admin only.")
+
+    rows = await db.nodes.find(
+        {"campaign_id": cid},
+        {"_id": 0, "id": 1, "name": 1, "title": 1, "node_kind": 1,
+         "type": 1, "summary": 1, "content": 1, "creation_tree": 1,
+         "fields": 1, "updated_at": 1},
+    ).to_list(length=5000)
+
+    auto_placed: List[Dict[str, Any]] = []
+    manual_placed = 0
+    unplaced = 0
+
+    for r in rows:
+        ct = r.get("creation_tree") or {}
+        sec = ct.get("section")
+        if not sec:
+            unplaced += 1
+            continue
+        if not ct.get("auto_classified"):
+            manual_placed += 1
+            continue
+        # Auto-placed — surface it.
+        display = (r.get("name") or r.get("title") or "(unnamed)")
+        auto_placed.append({
+            "id": r.get("id"),
+            "name": display,
+            "section": sec,
+            "node_kind": r.get("node_kind") or r.get("type"),
+            "confidence": ct.get("classifier_confidence") or 0.0,
+            "reasoning": ct.get("classifier_reasoning") or "",
+            "source": (r.get("fields") or {}).get("source"),
+            "summary": (r.get("summary") or r.get("content") or "")[:200],
+            "updated_at": r.get("updated_at"),
+        })
+
+    # Lowest-confidence first — that's the audit's whole purpose.
+    auto_placed.sort(key=lambda p: (p["confidence"], p["name"].lower()))
+
+    return {
+        "campaign_id": cid,
+        "totals": {
+            "auto_placed": len(auto_placed),
+            "manual_placed": manual_placed,
+            "unplaced": unplaced,
+            "total": len(rows),
+        },
+        "rows": auto_placed,
+    }
+
+
+@router.post("/campaigns/{cid}/codex/classifier-audit/{nid}/confirm")
+async def codex_classifier_confirm(
+    cid: str, nid: str, user: dict = Depends(get_current_user),
+):
+    """V6.25.21 — GM confirms an auto-placed node's section is correct.
+
+    Stamps `creation_tree.auto_classified = false` so future PUTs
+    (e.g. content edits) don't re-route the row. The placement itself
+    is preserved.
+    """
+    camp = await db.campaigns.find_one({"id": cid}, {"_id": 0})
+    if not camp:
+        raise HTTPException(404, "Campaign not found")
+    if camp["gm_id"] != user["id"] and user.get("role") != "admin":
+        raise HTTPException(403, "GM/admin only.")
+    n = await db.nodes.find_one(
+        {"id": nid, "campaign_id": cid}, {"_id": 0})
+    if not n:
+        raise HTTPException(404, "Node not found")
+    ct = n.get("creation_tree") or {}
+    if not ct.get("section"):
+        raise HTTPException(400, "Node has no section to confirm")
+    res = await db.nodes.update_one(
+        {"id": nid},
+        {"$set": {
+            "creation_tree.auto_classified": False,
+            "updated_at": now_iso(),
+        }},
+    )
+    return {"ok": True, "modified": res.modified_count}
 
 
 class CodexNodePlacement(BaseModel):
@@ -424,6 +731,9 @@ async def place_codex_node(
         raise HTTPException(403, "GM/admin only.")
     upd = {
         "creation_tree.section": body.section,
+        # V6.25.20 — manual pin must clear auto_classified so a later
+        # PUT to /nodes/{nid} doesn't accidentally re-classify it.
+        "creation_tree.auto_classified": False,
         "updated_at": now_iso(),
     }
     if body.color is not None:
@@ -539,3 +849,105 @@ async def delete_codex_link(
         raise HTTPException(403, "GM/admin only.")
     res = await db.codex_edges.delete_one({"id": eid, "campaign_id": cid})
     return {"ok": True, "deleted": res.deleted_count}
+
+
+
+# ─── V6.25.14 — World Tree bridge-sow ──────────────────────────────────
+
+class BridgeSowIn(BaseModel):
+    """Spawn a pair of linked codex nodes from a cross-pillar bridge.
+    The lattice UI calls this when the GM clicks a bridge prompt and
+    types a narrative seed: it creates ONE node on each side of the
+    bridge and a `relationship_type`-tagged codex edge connecting them.
+    """
+    src_section: str = Field(min_length=3, max_length=80)   # "Pillar.Branch"
+    tgt_section: str = Field(min_length=3, max_length=80)
+    relationship: str = Field(default="related", max_length=60)
+    src_name: str = Field(min_length=1, max_length=200)
+    src_summary: str = Field(default="", max_length=2000)
+    tgt_name: str = Field(min_length=1, max_length=200)
+    tgt_summary: str = Field(default="", max_length=2000)
+    color: str = Field(default="#9CC4FF", pattern=r"^#[0-9A-Fa-f]{6}$")
+
+
+def _section_to_kind(section: str) -> str:
+    """Coarse 'Pillar.Branch' → node_kind mapping for the seeded node.
+
+    V6.25.19 — delegates to the canonical
+    `core.codex_classifier._kind_from_section` so the lattice and
+    classifier never drift out of sync.
+    """
+    from core.codex_classifier import _kind_from_section
+    return _kind_from_section(section)
+
+
+@router.post("/campaigns/{cid}/world-tree/bridge-sow")
+async def bridge_sow(
+    cid: str, body: BridgeSowIn,
+    user: dict = Depends(get_current_user),
+):
+    """Author twin codex nodes connected by a relationship edge.
+    Each side is docked to its `Pillar.Branch` section so the World
+    Tree lattice picks them up immediately.
+    """
+    camp = await db.campaigns.find_one({"id": cid}, {"_id": 0})
+    if not camp:
+        raise HTTPException(404, "Campaign not found")
+    if camp["gm_id"] != user["id"] and user.get("role") != "admin":
+        raise HTTPException(403, "GM/admin only.")
+
+    # Confirm both sections are well-formed against the schema.
+    valid_sections = set()
+    for pillar, meta in CREATION_TREE_SCHEMA["pillars"].items():
+        for branch in meta["branches"]:
+            valid_sections.add(f"{pillar}.{branch}")
+    for sec in (body.src_section, body.tgt_section):
+        if sec not in valid_sections:
+            raise HTTPException(422, f"Unknown section: {sec}")
+
+    src_doc = {
+        "id": new_id(), "campaign_id": cid,
+        "name": body.src_name.strip(), "title": body.src_name.strip(),
+        "node_kind": _section_to_kind(body.src_section),
+        "type": _section_to_kind(body.src_section),
+        "summary": body.src_summary.strip(),
+        "content": body.src_summary.strip(),
+        "creation_tree": {"section": body.src_section,
+                          "color": body.color,
+                          "via_bridge": body.tgt_section},
+        "tags": ["bridge-sown"], "fields": {}, "visibility": "gm",
+        "revealed_to": [], "author_id": user["id"],
+        "author_name": user.get("name"),
+        "created_at": now_iso(), "updated_at": now_iso(),
+    }
+    tgt_doc = {
+        "id": new_id(), "campaign_id": cid,
+        "name": body.tgt_name.strip(), "title": body.tgt_name.strip(),
+        "node_kind": _section_to_kind(body.tgt_section),
+        "type": _section_to_kind(body.tgt_section),
+        "summary": body.tgt_summary.strip(),
+        "content": body.tgt_summary.strip(),
+        "creation_tree": {"section": body.tgt_section,
+                          "color": body.color,
+                          "via_bridge": body.src_section},
+        "tags": ["bridge-sown"], "fields": {}, "visibility": "gm",
+        "revealed_to": [], "author_id": user["id"],
+        "author_name": user.get("name"),
+        "created_at": now_iso(), "updated_at": now_iso(),
+    }
+    await db.nodes.insert_many([dict(src_doc), dict(tgt_doc)])
+
+    edge = {
+        "id": new_id(), "campaign_id": cid,
+        "source_id": src_doc["id"], "target_id": tgt_doc["id"],
+        "relationship_type": body.relationship.strip(),
+        "color": body.color, "weight": 6, "bidirectional": False,
+        "notes": f"Bridge: {body.src_section} ⤳ {body.tgt_section}",
+        "created_by": user.get("name"),
+        "created_at": now_iso(),
+    }
+    await db.codex_edges.insert_one(dict(edge))
+    src_doc.pop("_id", None)
+    tgt_doc.pop("_id", None)
+    edge.pop("_id", None)
+    return {"ok": True, "src_node": src_doc, "tgt_node": tgt_doc, "edge": edge}

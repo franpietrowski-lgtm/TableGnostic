@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { api, useAuth, formatApiErrorDetail } from "../lib/api";
-import { ArrowRight, UserPlus2, LogIn, Users, Clock3, Scroll, Sparkles } from "lucide-react";
+import { ArrowRight, UserPlus2, LogIn, Users, Clock3, Scroll, Sparkles, Lock } from "lucide-react";
 
 export default function Invite() {
   const { token } = useParams();
@@ -11,6 +11,8 @@ export default function Invite() {
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
+  // V6.25.17 — campaign-level password input.
+  const [password, setPassword] = useState("");
 
   useEffect(() => {
     api.get(`/invites/${token}`).then((r) => setInfo(r.data))
@@ -20,8 +22,10 @@ export default function Invite() {
   const accept = async () => {
     if (!user) { nav(`/auth?mode=register&redirect=${encodeURIComponent(`/invite/${token}`)}`); return; }
     setBusy(true);
+    setErr("");
     try {
-      const { data } = await api.post(`/invites/${token}/accept`);
+      const body = info?.password_required ? { password } : {};
+      const { data } = await api.post(`/invites/${token}/accept`, body);
       setDone(true);
       setTimeout(() => nav(`/app/campaigns/${data.campaign_id}`), 1200);
     } catch (e) { setErr(formatApiErrorDetail(e.response?.data?.detail) || e.message); }
@@ -79,10 +83,32 @@ export default function Invite() {
           ) : info.full ? (
             <div className="text-center text-ember font-body italic">This table is full. Wait for a seat to open or ask the GM to expand the table.</div>
           ) : user ? (
-            <button onClick={accept} disabled={busy} className="btn btn-primary w-full py-3" data-testid="invite-accept-btn">
-              {busy ? "…" : <><UserPlus2 className="w-4 h-4"/> Take this seat</>}
-              <ArrowRight className="w-4 h-4"/>
-            </button>
+            <div className="space-y-2">
+              {info.password_required && (
+                <div className="card-mystic p-3 border border-arcane/40"
+                     data-testid="invite-password-prompt">
+                  <div className="text-[10px] uppercase tracking-widest text-arcane flex items-center gap-1">
+                    <Lock className="w-3 h-3"/> Password required
+                  </div>
+                  <input type="password" autoFocus
+                         className="input mt-2 w-full font-mono text-xs"
+                         placeholder="Enter the campaign password"
+                         value={password}
+                         onChange={(e) => setPassword(e.target.value)}
+                         onKeyDown={(e) => { if (e.key === "Enter") accept(); }}
+                         data-testid="invite-password-input"/>
+                </div>
+              )}
+              <button onClick={accept}
+                      disabled={busy || (info.password_required && !password)}
+                      className="btn btn-primary w-full py-3"
+                      data-testid="invite-accept-btn">
+                {busy ? "…" : <><UserPlus2 className="w-4 h-4"/> Take this seat</>}
+                <ArrowRight className="w-4 h-4"/>
+              </button>
+              {err && <div className="text-ember text-xs text-center"
+                            data-testid="invite-error">{err}</div>}
+            </div>
           ) : (
             <div className="space-y-2">
               <button onClick={() => nav(`/auth?mode=register&redirect=${encodeURIComponent(`/invite/${token}`)}`)}

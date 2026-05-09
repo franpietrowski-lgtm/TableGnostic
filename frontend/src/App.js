@@ -9,7 +9,9 @@ import Auth from "./components/Auth";
 import Shell from "./components/Shell";
 import Dashboard from "./components/Dashboard";
 import Invite from "./components/Invite";
+import ShareLink from "./components/ShareLink";
 import Reset from "./components/Reset";
+import TakedownsLog from "./components/TakedownsLog";
 
 // Lazy-load the heavy route components so initial bundle stays lean and
 // the Dashboard paints sooner. Each chunk is ~50–200KB minified.
@@ -26,12 +28,17 @@ const DirectorConsole = lazy(() => import("./components/DirectorConsole"));
 const HowToGuide      = lazy(() => import("./components/HowToGuide"));
 const CanonRegistry   = lazy(() => import("./components/CanonRegistry"));
 const Marketplace     = lazy(() => import("./components/Marketplace"));
+const ConceptForge    = lazy(() => import("./components/ConceptForge"));
 
 function Protected({ children }) {
   const { user, loading } = useAuth();
-  // Hold the SUMMONING screen for a beat so the flicker actually reads
-  // as a ritual instead of a flash. ~5 s minimum.
-  const stillSummoning = useMinDelay(loading || user === null, 5000);
+  // V6.25.33 — Reduced from 5000ms → 600ms. The longer cinematic delay
+  // was masking a deep-link bug where direct page.goto('/app/...') with
+  // a valid tg_token in localStorage appeared to "redirect to /" because
+  // headless browsers / tests gave up before the 5s SUMMONING completed.
+  // 600ms still hides flicker on instant cached responses without
+  // blocking real navigation.
+  const stillSummoning = useMinDelay(loading || user === null, 600);
   if (stillSummoning) return <LoadingScreen />;
   if (!user) return <Navigate to="/auth" replace />;
   return children;
@@ -75,7 +82,9 @@ export default function App() {
           <Route path="/discover/:slug" element={<DiscoverShowcase />} />
           <Route path="/auth" element={<Auth />} />
           <Route path="/invite/:token" element={<Invite />} />
+          <Route path="/share/:token" element={<ShareLink />} />
           <Route path="/reset" element={<Reset />} />
+          <Route path="/legal/takedowns" element={<TakedownsLog />} />
           <Route element={<Protected><Shell /></Protected>}>
             <Route path="/app" element={<Dashboard />} />
             <Route path="/app/campaigns" element={<Suspense fallback={<RouteFallback/>}><Campaigns /></Suspense>} />
@@ -92,6 +101,7 @@ export default function App() {
             <Route path="/app/help" element={<Suspense fallback={<RouteFallback/>}><HowToGuide /></Suspense>} />
             <Route path="/app/canon" element={<Suspense fallback={<RouteFallback/>}><CanonRegistry /></Suspense>} />
             <Route path="/app/marketplace" element={<Suspense fallback={<RouteFallback/>}><Marketplace /></Suspense>} />
+            <Route path="/app/concept-forge" element={<Suspense fallback={<RouteFallback/>}><ConceptForge /></Suspense>} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

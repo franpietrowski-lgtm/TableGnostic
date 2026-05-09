@@ -254,34 +254,55 @@ async def seed_to_codex(cid: str, user: dict = Depends(get_current_user)):
         if not title.strip():
             return
         existing_id = entity.get("linked_node_id")
+        content = "\n\n".join([line for line in content_lines if line])
         if existing_id:
             existing = await db.nodes.find_one({"id": existing_id, "campaign_id": cid}, {"_id": 0})
             if existing:
                 # Refresh content but keep visibility & metadata.
+                # V6.25.19 — also refresh `name` + `node_kind` +
+                # creation_tree.section so the World Tree picks the
+                # node up even if it predated the classifier.
+                from core.codex_classifier import codexify_node
+                refreshed = codexify_node(
+                    name=title, content=content,
+                    summary=content[:400],
+                    tags=existing.get("tags") or ["epic-campaign", node_type],
+                    hint=node_type,
+                )
                 await db.nodes.update_one(
                     {"id": existing_id},
                     {"$set": {
-                        "title": title,
-                        "content": "\n\n".join([line for line in content_lines if line]),
+                        "name": refreshed["name"],
+                        "title": refreshed["title"],
+                        "type": refreshed["type"],
+                        "node_kind": refreshed["node_kind"],
+                        "creation_tree": refreshed.get(
+                            "creation_tree", existing.get("creation_tree")),
+                        "content": refreshed["content"],
+                        "summary": refreshed["summary"],
                         "updated_at": now_iso(),
                     }}
                 )
                 return
+        # V6.25.19 — codexify so the row carries name + title + type +
+        # node_kind + creation_tree.section consistently.
+        from core.codex_classifier import codexify_node
+        body = codexify_node(
+            name=title, content=content, summary=content[:400],
+            tags=["epic-campaign", node_type], hint=node_type,
+        )
         new_node = {
+            **body,
             "id": new_id(),
             "campaign_id": cid,
-            "title": title,
-            "type": node_type,
-            "content": "\n\n".join([line for line in content_lines if line]),
-            "tags": ["epic-campaign", node_type],
             "visibility": "gm_only",
             "revealed_to": [],
-            "fields": {"source": "epic_campaign"},
             "author_id": user["id"],
             "author_name": user.get("name") or user.get("email"),
             "created_at": now_iso(),
             "updated_at": now_iso(),
         }
+        new_node.setdefault("fields", {}).setdefault("source", "epic_campaign")
         await db.nodes.insert_one(dict(new_node))
         entity["linked_node_id"] = new_node["id"]
         created += 1

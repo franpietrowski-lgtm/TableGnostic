@@ -22,7 +22,9 @@ export default function Auth() {
       else await register(form.email, form.password, form.name, form.role);
       nav(sp.get("redirect") || "/app");
     } catch (e) {
-      setErr(formatApiErrorDetail(e.response?.data?.detail) || e.message);
+      // V6.25.31 — pass the full error object so the formatter can
+      // distinguish 401 / 423 / network errors with a proper message.
+      setErr(formatApiErrorDetail(e.response?.data?.detail, e));
     } finally { setBusy(false); }
   };
 

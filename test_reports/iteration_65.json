@@ -1,0 +1,55 @@
+{
+  "summary": "V6.25.26 verification — P0 React crash on the Dashboard Reference (Cypher) page is FIXED, descriptors render cleanly with title/sub. All 13 V6.25.26 backend tests PASS (9 materials/encounters/roll-table-material + 4 marketplace-share + PDF export), plus 21 V6.25.25 regression tests still GREEN (34/34 total). Frontend Reference page Cypher tab confirmed end-to-end: CypherReferencePanel mounts, all 7 sub-tabs render, 14 descriptors load with genre chips, no console/page errors. Atelier deep-dive UI nav (Workshop crafting panel, Table Tools relocation, lazy-suspense) could NOT be verified in the browser run because the /app/campaigns/{cid}/atelier route bounced back to the landing in this session — main agent should self-verify via campaign card → Atelier subtab navigation.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "Atelier deep-dive (Workshop crafting service panel + Table Tools relocation + lazy-suspense)",
+        "issue": "Direct nav to /app/campaigns/{cid}/atelier returned to the landing page in this automation run — could not click Workshop / Table Tools / References subtabs. Auth was valid (Reference Cypher tab worked in same session, materials/encounters/marketplace API calls all 200/422/409 as expected). Likely a route-guard or initial-load redirect when the campaign was just created via API and not via UI flow.",
+        "affected_selectors": ["[data-testid='crafting-service-panel']", "[data-testid='crafting-add-raw|refined|assembled']", "[data-testid='reference-also-to-codex']", "button:has-text('Workshop')", "button:has-text('Table Tools')"]
+      }
+    ],
+    "design_issues": [
+      {
+        "screen": "Dashboard Reference page (/app/reference)",
+        "issues": ["?system=cypher query-string parameter is NOT honored on initial render — page always defaults to BESM 4E and requires a click on the CYPHER SYSTEM tab. Likely systemId state is initialised from a constant, ignoring URLSearchParams. Minor UX gap, not a blocker."]
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_v62526_materials_encounters.py",
+    "/app/backend/tests/test_v62526_marketplace_pdf.py",
+    "/app/backend/tests/test_v62525_roll_tables.py",
+    "/app/backend/tests/test_v62525_flavor_converter_lib_codex.py",
+    "/app/test_reports/pytest/iter65_v62526_full.xml"
+  ],
+  "action_items": [
+    "Main agent: self-verify Atelier UI surface area by opening a fresh besm-4e campaign through the UI (Campaigns list → click card → Atelier tab), then click Workshop subtab and confirm crafting-service-panel + 3 add buttons render; click Table Tools subtab and confirm both AtelierWorkshop AND ReferenceEditor render side-by-side; click References subtab and confirm 'References moved' notice + 'Open Table Tools →' button.",
+    "Optional: honor ?system=<id> query string on Dashboard Reference page so deep-links from elsewhere in the app land on the correct system tab without needing a manual click.",
+    "Optional: investigate why direct navigation to /app/campaigns/{cid}/atelier (where {cid} was just created via REST) bounces to landing in incognito-style automation — may be a same-tab race between campaign-load and atelier-mount."
+  ],
+  "critical_code_review_comments": [
+    "Reference.jsx descriptor fix is correct — `title={typeof d === 'string' ? d : d.name}` and the `sub={Array.isArray(d.genres) ? d.genres.join(' · ') : ...}` guard handle both legacy string descriptors and the new {name, genres} objects safely.",
+    "marketplace-share endpoint correctly enforces (a) license_attestation=true required (422), (b) paywall + price_cents>0 required (422), (c) one-listing-per-archive (409). Snapshot stripping of mongo `_id` and audit fields keeps re-forks clean.",
+    "Encounters Library /run + /complete + /clone state machine is solid (status transitions ready → running → completed; cloning sets cloned_from_id and appends ' template' suffix).",
+    "PDF export still streams real %PDF bytes (>500 bytes, content-type application/pdf) with materials + encounters + sessions present — appendix wiring is live.",
+    "test_v62526_materials_encounters.py uses the 'wrong' BASE_URL fallback shape (allows http://localhost:8001) — fine for local dev but noisy if env var ever drops in CI; consider `os.environ['REACT_APP_BACKEND_URL']` to fail fast as the system prompt mandates."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_v62526_marketplace_pdf.py (NEW — 4 supplementary tests for marketplace-share + clone-genesis-archive + PDF export valid stream)"
+  ],
+  "success_rate": {
+    "backend": "100% (34/34 V6.25.25 + V6.25.26 tests pass)",
+    "frontend": "~60% (P0 Reference Cypher crash fix verified end-to-end; Atelier subtab relocation + crafting panel + lazy-split NOT verified in browser due to navigation issue — backend support for those flows is fully green)"
+  },
+  "test_credentials": "GMFran (admin/GM): franpietrowski@gmail.com / PieGod08!! — confirmed working via REST + UI login.",
+  "seed_data_creation": "Each test creates and deletes its own campaign (V62526 mat-enc / V62526 mkt-pdf / V62526 mkt-target / V62526 pdf / V62526 UI). No persistent test data left behind.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "All 13 V6.25.26 backend tests live in tests/test_v62526_materials_encounters.py (9) + tests/test_v62526_marketplace_pdf.py (4). Run with `cd /app/backend && pytest tests/test_v62526_*.py -v`. The Reference Cypher P0 fix is at /app/frontend/src/components/Reference.jsx line ~498-505 (descriptors map). For Atelier UI verification: log in via UI (Sign In button → email/password → Begin), open the Campaigns list, click an existing besm-4e campaign card, then click the Atelier nav tab — DO NOT navigate to /app/campaigns/{cid}/atelier directly with a freshly-API-created campaign as the route may bounce. data-testids to look for: crafting-service-panel, crafting-add-raw, crafting-add-refined, crafting-add-assembled, reference-also-to-codex, encounters-library, roll-entry-src-material-0.",
+  "rca of the issue": "P0 RCA — Cypher /reference?system=descriptors objects (shape {name, genres: [...]}) were being rendered directly inside <Card title={d}/> which threw 'Objects are not valid as a React child (found: object with keys {name, genres})'. Fix in Reference.jsx renders d.name as the title and joins d.genres as the sub-text (with string-fallback for legacy entries). Verified live: 14 fantasy descriptors (Brash, Charming, Clever, Doomed, Graceful, Impulsive, Intelligent, Mystical, Mysterious, Resilient, Stealthy, Swift, Tough, Vicious) all render with genre chips, no console errors."
+}

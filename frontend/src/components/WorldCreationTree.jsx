@@ -12,8 +12,10 @@
  */
 import React, { useEffect, useMemo, useState, useCallback } from "react";
 import { api, formatApiErrorDetail } from "../lib/api";
-import { Plus, Trash2, X, Sparkles, GitBranch, Link2, List, Network } from "lucide-react";
+import { Plus, Trash2, X, Sparkles, GitBranch, Link2, List, Network, Layers } from "lucide-react";
 import WorldTreeGraph from "./WorldTreeGraph";
+import WorldTreeLattice from "./WorldTreeLattice";
+import ClassifierConfidencePanel from "./ClassifierConfidencePanel";
 
 const PILLAR_COLORS = {
   Population: "#9CC4FF",
@@ -25,7 +27,7 @@ export default function WorldCreationTree({ campId, isGm }) {
   const [data, setData] = useState(null);
   const [myths, setMyths] = useState([]);
   const [codexLinks, setCodexLinks] = useState([]);
-  const [viewMode, setViewMode] = useState("pillars"); // "pillars" | "graph"
+  const [viewMode, setViewMode] = useState("lattice"); // "lattice" | "pillars" | "graph"
   const [err, setErr] = useState("");
   const [linkModal, setLinkModal] = useState(null); // { source, target } or full edge
 
@@ -87,8 +89,13 @@ export default function WorldCreationTree({ campId, isGm }) {
             {data.schema.root.blurb} {data.schema.logic_notes.join(" ")}
           </p>
         </div>
-        {/* V6.21 Cut D V2 — view-mode toggle. */}
-        <div className="flex gap-1" data-testid="wct-view-mode">
+        {/* V6.21 Cut D V2 + V6.25.14 — view-mode toggle (lattice default). */}
+        <div className="flex gap-1 flex-wrap" data-testid="wct-view-mode">
+          <button onClick={() => setViewMode("lattice")}
+                  className={`btn text-xs ${viewMode === "lattice" ? "btn-primary" : "btn-ghost"}`}
+                  data-testid="wct-view-lattice">
+            <Layers className="w-3 h-3"/> Lattice
+          </button>
           <button onClick={() => setViewMode("pillars")}
                   className={`btn text-xs ${viewMode === "pillars" ? "btn-primary" : "btn-ghost"}`}
                   data-testid="wct-view-pillars">
@@ -121,6 +128,28 @@ export default function WorldCreationTree({ campId, isGm }) {
                              detail: { node_id: n.id, campaign_id: campId },
                            }));
                          }}/>
+      ) : viewMode === "lattice" ? (
+        /* V6.25.14 — staggered lattice with clickable cross-pillar bridges. */
+        <>
+          {(data.unplaced?.length || 0) > 0 && (
+            <UnplacedTray campId={campId} unplaced={data.unplaced}
+                           schema={data.schema}
+                           isGm={isGm} onChanged={refresh}/>
+          )}
+          <WorldTreeLattice
+            campId={campId}
+            schema={data.schema}
+            populated={data.populated || {}}
+            bridgePrompts={data.bridge_prompts || {}}
+            isGm={isGm}
+            onChanged={refresh}/>
+          {/* V6.25.21 — Classifier Confidence audit. GM-only. */}
+          <ClassifierConfidencePanel
+            campId={campId}
+            schema={data.schema}
+            isGm={isGm}
+            onChanged={refresh}/>
+        </>
       ) : (
         <>
         {/* V6.22 — Unplaced codex tray. Shows auto-classified legacy
@@ -215,6 +244,9 @@ function UnplacedTray({ campId, unplaced, schema, isGm, onChanged }) {
   const [pinning, setPinning] = useState({});  // { nodeId: section }
   const [busy, setBusy] = useState({});
   const [err, setErr] = useState("");
+  // V6.25.19 — bulk auto-classify state.
+  const [autoBusy, setAutoBusy] = useState(false);
+  const [autoResult, setAutoResult] = useState(null);
 
   // Build the pillar.branch option list from the schema so GMs can
   // dock into ANY canonical section (not just the classifier guesses).
@@ -245,16 +277,64 @@ function UnplacedTray({ campId, unplaced, schema, isGm, onChanged }) {
     }
   };
 
+  // V6.25.19 — bulk-classify every unplaced node by name / content /
+  // tag heuristics. Idempotent backend; safe to run repeatedly.
+  const autoClassify = async () => {
+    setAutoBusy(true); setErr(""); setAutoResult(null);
+    try {
+      const { data } = await api.post(
+        `/campaigns/${campId}/codex/auto-classify`);
+      setAutoResult(data);
+      onChanged && onChanged();
+    } catch (e) {
+      setErr(formatApiErrorDetail(e.response?.data?.detail) || e.message);
+    } finally {
+      setAutoBusy(false);
+    }
+  };
+
   if (unplaced.length === 0) return null;
 
   return (
     <div className="card-mystic p-3" data-testid="wct-unplaced-tray">
-      <div className="flex items-baseline justify-between">
+      <div className="flex items-baseline justify-between flex-wrap gap-2">
         <div className="label-ref">Unclassified codex entries</div>
-        <span className="text-[10px] text-mist italic">
-          {unplaced.length} unplaced — type didn't match a pillar.
-        </span>
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] text-mist italic">
+            {unplaced.length} unplaced — type didn't match a pillar.
+          </span>
+          {isGm && (
+            <button onClick={autoClassify}
+                    disabled={autoBusy}
+                    className="btn btn-primary text-[10px]"
+                    data-testid="wct-auto-classify-btn"
+                    title="Run the canonical concept classifier on every
+unplaced node — name / content / tag heuristics route them to a
+Pillar.Branch when there's a strong signal.">
+              {autoBusy
+                ? <Sparkles className="w-3 h-3 animate-pulse"/>
+                : <Sparkles className="w-3 h-3"/>}
+              Auto-classify
+            </button>
+          )}
+        </div>
       </div>
+      {autoResult && (
+        <div className="text-[10px] mt-1 italic"
+             data-testid="wct-auto-classify-result">
+          {autoResult.classified > 0 ? (
+            <span className="text-gold-bright">
+              Classified {autoResult.classified} node{autoResult.classified === 1 ? "" : "s"};
+            </span>
+          ) : (
+            <span className="text-mist">No new placements;</span>
+          )}
+          {" "}
+          <span className="text-mist">
+            {autoResult.still_unplaced} still need a manual pin.
+          </span>
+        </div>
+      )}
       <div className="text-[10px] text-mist/80 italic mt-0.5 mb-2">
         Pick a pillar.branch and pin so the World Tree reflects your
         canon. Already-classified entries appear with a subtle "auto"

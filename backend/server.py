@@ -47,6 +47,7 @@ from routes import canon_registry as canon_registry_routes
 from routes import search as search_routes
 from routes import conversion as conversion_routes
 from routes import advancement as advancement_routes
+from routes import materials_queue as materials_queue_routes
 from routes import atelier_workshop as atelier_workshop_routes
 from routes import world_creation as world_creation_routes
 from routes import consent_flow as consent_flow_routes
@@ -105,6 +106,7 @@ app.include_router(ingest_routes.router)
 app.include_router(pdf_export_routes.router)
 app.include_router(xp_approval_routes.router)
 app.include_router(reference_editor_routes.router)
+app.include_router(materials_queue_routes.router)
 app.include_router(cards_routes.router)
 app.include_router(demo_seed_routes.router)
 app.include_router(director_routes.router)

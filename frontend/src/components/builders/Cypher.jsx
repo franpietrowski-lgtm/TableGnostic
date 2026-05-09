@@ -368,6 +368,17 @@ export function CypherBuilder({ campaign, ref_, charId }) {
         </div>
       </div>
 
+      {/* V6.25.24 — Cycle B-3: Tier-Progression Sidebar + per-tier ability picker. */}
+      <CypherTierProgression
+        type={c.type}
+        tier={c.tier}
+        abilitiesPicked={c.abilities || []}
+        onPick={(name, on) => {
+          const cur = new Set(c.abilities || []);
+          on ? cur.add(name) : cur.delete(name);
+          setC({ abilities: Array.from(cur) });
+        }}/>
+
       {/* V6.23 — ReferencePicker for cyphers (SRD cyphers + artifacts).
           Replaces the prior FreeList so players see effect/level/form
           inline. Type/Focus Abilities stays a FreeList — no SRD list
@@ -391,11 +402,243 @@ export function CypherBuilder({ campaign, ref_, charId }) {
 
       {err && <div className="text-ember text-sm mt-3">{err}</div>}
 
-      <div className="mt-6 flex gap-2">
+      <div className="mt-6 flex gap-2 flex-wrap">
         <button onClick={save} className="btn btn-primary" data-testid="cypher-save-btn">
           <Save className="w-4 h-4"/> Save
         </button>
+        <CypherToBesmButton sentence={sentence} type={c.type}
+                             descriptor={c.descriptor} focus={c.focus}
+                             tier={c.tier}/>
         <Link to={`/app/campaigns/${ch.campaign_id}`} className="btn btn-ghost">Cancel</Link>
+      </div>
+    </div>
+  );
+}
+
+
+/**
+ * V6.25.25 — Cypher → BESM 4E conversion preview button.
+ * Calls /api/cypher/besm-conversion and surfaces a modal with the
+ * recommended type block + descriptor tweak + focus power-pack +
+ * suggested stats + estimated CP cost + balancing notes.
+ */
+function CypherToBesmButton({ sentence, type, descriptor, focus, tier }) {
+  const [open, setOpen] = useState(false);
+  const [data, setData] = useState(null);
+  const [err, setErr] = useState("");
+  const load = async () => {
+    setOpen(true); setErr(""); setData(null);
+    try {
+      const r = await api.get("/cypher/besm-conversion", {
+        params: { type: type || "warrior", descriptor: descriptor || "",
+                  focus: focus || "", tier: tier || 1 },
+      });
+      setData(r.data);
+    } catch (e) {
+      setErr(formatApiErrorDetail(e.response?.data?.detail) || e.message);
+    }
+  };
+  return (
+    <>
+      <button type="button" onClick={load} className="btn btn-ghost"
+              data-testid="cypher-to-besm-btn"
+              title="Preview a BESM 4E rebuild of this Cypher character — type/descriptor/focus → BESM attributes + estimated CP.">
+        <Sparkles className="w-3 h-3"/> Convert to BESM
+      </button>
+      {open && (
+        <div className="fixed inset-0 z-[200] bg-void/80 flex items-center justify-center p-4"
+             onClick={() => setOpen(false)}
+             data-testid="cypher-to-besm-modal">
+          <div className="card-mystic p-5 max-w-3xl w-full max-h-[90vh] overflow-y-auto space-y-3"
+               onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-baseline justify-between border-b border-gold/10 pb-2">
+              <div>
+                <div className="h-arcane text-sm">BESM 4E rebuild preview</div>
+                <div className="text-[10px] text-mist italic">"{sentence}"</div>
+              </div>
+              <div className="text-[10px] text-arcane-light tabular-nums">
+                est. CP {data?.estimated_cp_cost ?? "…"}
+              </div>
+            </div>
+            {err && <div className="text-ember text-xs">{err}</div>}
+            {!data && !err && (
+              <div className="text-mist italic text-xs">Computing conversion…</div>
+            )}
+            {data && (
+              <div className="space-y-3">
+                <div>
+                  <div className="label-ref">Type block — {type}</div>
+                  <div className="text-[11px] text-mist mb-1">
+                    Primary: <span className="text-parchment">{data.type_block.primary_stat}</span>
+                  </div>
+                  <ul className="text-[11px] space-y-0.5">
+                    {data.type_block.attributes.map((a, i) => (
+                      <li key={i} data-testid={`cypher-besm-type-attr-${i}`}>
+                        <span className="text-parchment">{a.name}</span>
+                        <span className="text-arcane-light"> ×{a.level} @ {a.cost_per_level}/lvl</span>
+                        <span className="text-mist"> = {a.level * a.cost_per_level} CP</span>
+                        {a.note && <span className="text-mist italic"> · {a.note}</span>}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                {data.descriptor_tweak?.add_attribute && (
+                  <div>
+                    <div className="label-ref">Descriptor tweak — {descriptor}</div>
+                    <div className="text-[11px]">
+                      + <span className="text-parchment">{data.descriptor_tweak.add_attribute.name}</span>
+                      {" ×"}{data.descriptor_tweak.add_attribute.level}
+                      {" — "}<span className="italic text-mist">{data.descriptor_tweak.blurb}</span>
+                    </div>
+                  </div>
+                )}
+                {data.descriptor_tweak?.add_defect && (
+                  <div>
+                    <div className="label-ref">Descriptor tweak — {descriptor}</div>
+                    <div className="text-[11px]">
+                      Defect: <span className="text-parchment">{data.descriptor_tweak.add_defect.name}</span>
+                      {" rank "}{data.descriptor_tweak.add_defect.rank}
+                      {" — "}<span className="italic text-mist">{data.descriptor_tweak.blurb}</span>
+                    </div>
+                  </div>
+                )}
+                <div>
+                  <div className="label-ref">Focus power-pack — {focus}</div>
+                  <div className="text-[11px] text-arcane-light mb-1">
+                    {data.focus_block.power_pack}
+                  </div>
+                  <ul className="text-[11px] space-y-0.5">
+                    {(data.focus_block.attributes || []).map((a, i) => (
+                      <li key={i}>
+                        <span className="text-parchment">{a.name}</span>
+                        <span className="text-arcane-light"> ×{a.level} @ {a.cost_per_level}/lvl</span>
+                        <span className="text-mist"> = {a.level * a.cost_per_level} CP</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <div>
+                  <div className="label-ref">Recommended stats</div>
+                  <div className="text-[11px] tabular-nums">
+                    BODY {data.stats_recommended.body} ·
+                    MIND {data.stats_recommended.mind} ·
+                    SOUL {data.stats_recommended.soul}
+                  </div>
+                </div>
+                <div className="border-t border-gold/10 pt-2">
+                  <div className="label-ref">Balancing notes</div>
+                  <ul className="text-[10px] text-mist italic list-disc pl-5 space-y-0.5">
+                    {(data.balancing_notes || []).map((n, i) => <li key={i}>{n}</li>)}
+                  </ul>
+                </div>
+              </div>
+            )}
+            <div className="flex justify-end border-t border-gold/10 pt-3">
+              <button onClick={() => setOpen(false)} className="btn btn-ghost text-xs">Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+
+/**
+ * V6.25.24 (Cycle B-3) — Tier-progression sidebar + per-tier ability picker.
+ * Calls `/api/cypher/tier-helper?type=<type>&tier=<tier>` for the unlocked
+ * roster, renders abilities grouped by tier band with picker chips, and
+ * surfaces the 4 advancement-step (4 XP each) breakdown for the current tier.
+ */
+function CypherTierProgression({ type, tier, abilitiesPicked, onPick }) {
+  const [data, setData] = useState(null);
+  const [err, setErr] = useState("");
+  const typeKey = (type || "warrior").toLowerCase();
+
+  useEffect(() => {
+    let alive = true;
+    api.get(`/cypher/tier-helper?type=${encodeURIComponent(typeKey)}&tier=${tier || 1}`)
+      .then((r) => alive && setData(r.data))
+      .catch((e) => alive && setErr(formatApiErrorDetail(e.response?.data?.detail) || e.message));
+    return () => { alive = false; };
+  }, [typeKey, tier]);
+
+  if (err) {
+    return (
+      <div className="card-mystic p-4 mt-4 text-ember text-xs"
+           data-testid="cypher-tier-progression-error">{err}</div>
+    );
+  }
+  if (!data) {
+    return (
+      <div className="card-mystic p-4 mt-4 text-mist text-xs italic"
+           data-testid="cypher-tier-progression-loading">Loading tier progression…</div>
+    );
+  }
+
+  // Group abilities by tier band so the picker shows clearly which were
+  // unlocked at which tier (the tier-helper response already tags each row).
+  const byTier = {};
+  (data.abilities_unlocked || []).forEach((a) => {
+    (byTier[a.tier] = byTier[a.tier] || []).push(a);
+  });
+  const tiers = Object.keys(byTier).map((n) => +n).sort();
+  const pickedSet = new Set(abilitiesPicked);
+  const tierBlurb = data.tier?.blurb;
+
+  return (
+    <div className="card-mystic p-5 mt-4 space-y-3"
+         data-testid="cypher-tier-progression">
+      <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-gold/10 pb-2">
+        <div>
+          <div className="h-arcane text-sm">Tier {data.tier?.tier} Progression</div>
+          <div className="text-[10px] text-mist italic">{tierBlurb}</div>
+        </div>
+        <div className="text-[10px] tabular-nums">
+          <span className="text-mist">max effort </span>
+          <span className="text-gold-bright">{data.tier?.max_effort}</span>
+          <span className="text-mist"> · {pickedSet.size} picked / {data.abilities_unlocked?.length || 0} unlocked</span>
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        {tiers.map((tn) => (
+          <div key={tn} data-testid={`cypher-tier-band-${tn}`}>
+            <div className="text-[11px] text-arcane-light font-display">
+              Tier {tn} abilities ({byTier[tn].length})
+            </div>
+            <div className="flex flex-wrap gap-1 mt-1">
+              {byTier[tn].map((a) => {
+                const on = pickedSet.has(a.name);
+                return (
+                  <button key={a.name} type="button"
+                          onClick={() => onPick(a.name, !on)}
+                          className={`tag text-[10px] ${on
+                            ? "border-gold text-gold-bright bg-gold/15"
+                            : "text-parchment hover:border-gold/40"}`}
+                          data-testid={`cypher-ability-${a.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`}>
+                    {a.name}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="border-t border-gold/10 pt-3">
+        <div className="text-[11px] text-arcane-light font-display mb-1">
+          Tier advancement · {data.tier_advancement_xp_total} XP total (4 steps × 4 XP)
+        </div>
+        <ul className="text-[10px] text-mist space-y-0.5">
+          {(data.advancement_steps_per_tier || []).map((s) => (
+            <li key={s.key} data-testid={`cypher-adv-step-${s.key}`}>
+              <span className="text-parchment">{s.name}</span>
+              <span className="text-arcane-light"> ({s.xp_cost} XP)</span>
+              {" — "}<span className="italic">{s.effect}</span>
+            </li>
+          ))}
+        </ul>
       </div>
     </div>
   );

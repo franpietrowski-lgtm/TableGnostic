@@ -59,12 +59,20 @@ STAT_COST_PER_POINT = 2  # BESM 4E p.21 — fixed for Body/Mind/Soul
 STAT_BASE = 4  # standard adult human baseline
 
 
-def _besm_points_breakdown(ch: Dict[str, Any]) -> Dict[str, Any]:
+def _besm_points_breakdown(ch: Dict[str, Any],
+                            overrides: Optional[Dict[tuple, float]] = None) -> Dict[str, Any]:
     """Sum the paid Character-Point cost for a BESM 4E sheet (also
     the BESM-style point-buy layer of an Anime 5E hybrid sheet).
 
     Returns a structured dict that the UI can render row-by-row.
+
+    `overrides` (V6.25.35) is an optional `{(kind, name_lower): override_cost}`
+    map sourced from the campaign's `cost_overrides` collection. When
+    a row's name matches an override, that value REPLACES the row's
+    canon `cost_per_level` (or `points_per_rank` for defects). Level /
+    effective level / mechanics stay untouched — only the price changes.
     """
+    overrides = overrides or {}
     lines: List[Dict[str, Any]] = []
 
     # ── Core stats — Body/Mind/Soul × 2 CP each above baseline.
@@ -96,7 +104,15 @@ def _besm_points_breakdown(ch: Dict[str, Any]) -> Dict[str, Any]:
     warnings: List[str] = []
     for a in (ch.get("attributes") or []):
         lvl = int(a.get("level") or 1)
-        cpl = float(a.get("cost_per_level") or 0)
+        # V6.25.35 — apply campaign cost-override if present.
+        cpl_canon = float(a.get("cost_per_level") or 0)
+        a_name = (a.get("name") or "").strip().lower()
+        ov_key = ("attribute", a_name)
+        if ov_key in overrides:
+            cpl = float(overrides[ov_key])
+            a = {**a, "cost_per_level": cpl, "_cpl_override": cpl_canon}
+        else:
+            cpl = cpl_canon
 
         # Sum enhancement + limiter value deltas.
         def _mods_sum(items, legacy_sign):
@@ -145,36 +161,80 @@ def _besm_points_breakdown(ch: Dict[str, Any]) -> Dict[str, Any]:
             for d in (a.get("defects") or [])
         )
         paid = max(0, int(round(gross)) - int(round(refund)))
-        attr_total += paid
+
+        # V6.25.11 — BESM 4E Item half-cost rule (Core p.135).
+        # Item Attributes are CONTAINERS. The raw point total of the
+        # Attribute (self cost + all nested `item_contents` costs) is
+        # halved and rounded UP to the nearest integer (see Assault
+        # Mecha example, p.219 — 130 pt raw → 65 pt Item).
+        is_item = (a.get("name") == "Item")
+        contents_cost = 0
+        contents_lines = []
+        for child in (a.get("item_contents") or []):
+            c_lvl = int(child.get("level") or 1)
+            c_cpl = float(child.get("cost_per_level") or 0)
+            c_ref = sum(float(d.get("points_per_rank") or 0) * int(d.get("rank") or 0)
+                         for d in (child.get("defects") or []))
+            c_paid = max(0, int(round(c_cpl * c_lvl)) - int(round(c_ref)))
+            contents_cost += c_paid
+            contents_lines.append({
+                "kind": "attribute_contents",
+                "name": child.get("display_name") or child.get("name"),
+                "level": c_lvl, "cost_per_level": c_cpl, "points": c_paid,
+            })
+        pre_half = paid + contents_cost
+        if is_item:
+            from math import ceil
+            half_paid = int(ceil(pre_half / 2))
+            item_note = (
+                f"Item (half-cost): raw {pre_half} → ceil({pre_half}/2) = {half_paid} pts (p.135)"
+            )
+        else:
+            half_paid = paid + contents_cost
+            item_note = None
+        attr_total += half_paid
         lines.append({
             "kind": "attribute",
             "name": a.get("display_name") or a.get("name"),
             "level": lvl, "effective_level": eff_lvl,
             "cost_per_level": cpl,
+            "cost_per_level_canon": a.get("_cpl_override"),
+            "override_applied": "_cpl_override" in a,
             "enhancement_delta": enh_delta,
             "limiter_delta": lim_delta,
             "gross": int(round(gross)), "item_defect_refund": int(round(refund)),
-            "points": paid,
+            "points": half_paid,
+            "item_raw_cost": pre_half if is_item else None,
+            "is_item_container": is_item,
             "note": (
                 f"{cpl}×{lvl}"
                 + (f" ±{net_delta} mods" if net_delta else "")
                 + (f" − {int(round(refund))} item-defect refund" if refund else "")
+                + (f"  · {item_note}" if item_note else "")
+                + (f"  · GM override (canon was {a.get('_cpl_override')})" if "_cpl_override" in a else "")
             ),
         })
+        lines.extend(contents_lines)
 
     # ── Skill Groups (cost_per_level × level).
     skill_total = 0
     for s in (ch.get("skills") or []):
         lvl = int(s.get("level") or 1)
-        cpl = int(s.get("cost_per_level") or 0)
+        cpl_canon = int(s.get("cost_per_level") or 0)
+        s_name = (s.get("group") or s.get("name") or "").strip().lower()
+        ov_key = ("skill_group", s_name)
+        override_applied = ov_key in overrides
+        cpl = int(overrides[ov_key]) if override_applied else cpl_canon
         cost = cpl * lvl
         skill_total += cost
         lines.append({
             "kind": "skill",
             "name": s.get("display_name") or s.get("group"),
             "level": lvl, "cost_per_level": cpl,
+            "cost_per_level_canon": cpl_canon if override_applied else None,
+            "override_applied": override_applied,
             "points": cost,
-            "note": f"{cpl}×{lvl}",
+            "note": f"{cpl}×{lvl}" + (f"  · GM override (canon was {cpl_canon})" if override_applied else ""),
         })
 
     # ── Power Packs (narrative bundles; usually 0-cost but may carry
@@ -213,14 +273,26 @@ def _besm_points_breakdown(ch: Dict[str, Any]) -> Dict[str, Any]:
     # ── Defects (character-level only — refund back to the pool).
     defect_refund = 0
     for d in (ch.get("defects") or []):
-        refund = int(d.get("points_per_rank") or 0) * int(d.get("rank") or 0)
+        ppr_canon = int(d.get("points_per_rank") or 0)
+        d_name = (d.get("name") or "").strip().lower()
+        ov_key = ("defect", d_name)
+        override_applied = ov_key in overrides
+        # An override on a defect lets the GM dampen / amplify the
+        # refund. Negative values mean the player is *paying* for a
+        # narrative defect (a "bought-in flaw").
+        ppr = int(overrides[ov_key]) if override_applied else ppr_canon
+        refund = ppr * int(d.get("rank") or 0)
         defect_refund += refund
         lines.append({
             "kind": "defect",
             "name": d.get("display_name") or d.get("name"),
             "level": int(d.get("rank") or 0),
             "points": -refund,
-            "note": f"{d.get('points_per_rank')}×{d.get('rank')} refund",
+            "points_per_rank": ppr,
+            "points_per_rank_canon": ppr_canon if override_applied else None,
+            "override_applied": override_applied,
+            "note": f"{ppr}×{d.get('rank')} refund"
+                    + (f"  · GM override (canon was {ppr_canon})" if override_applied else ""),
         })
 
     spent = stat_total + attr_total + skill_total + pack_total + bundle_total - defect_refund
@@ -237,29 +309,65 @@ def _besm_points_breakdown(ch: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def _anime5e_point_buy_breakdown(folio: Dict[str, Any]) -> Dict[str, Any]:
-    """Sum the BESM-style point-buy layer on an Anime 5E hybrid sheet."""
+def _anime5e_point_buy_breakdown(folio: Dict[str, Any],
+                                  overrides: Optional[Dict[tuple, float]] = None) -> Dict[str, Any]:
+    """Sum the BESM-style point-buy layer on an Anime 5E hybrid sheet.
+
+    `overrides` (V6.25.35) supports the same {(kind, name_lower): cost}
+    contract as `_besm_points_breakdown`. For Anime 5E we look at both
+    `("point_buy_attribute", n)` and the more general `("attribute", n)`
+    so a GM who set up a single override doesn't have to duplicate it.
+    """
+    overrides = overrides or {}
     state = (folio or {}).get("anime5e_state") or {}
     buys = state.get("point_buys") or []
     lines: List[Dict[str, Any]] = []
     total = 0
     for b in buys:
         lvl = int(b.get("level") or 1)
-        cpl = float(b.get("cost_per_level") or 0)
+        cpl_canon = float(b.get("cost_per_level") or 0)
+        b_name = (b.get("name") or "").strip().lower()
+        ov = overrides.get(("point_buy_attribute", b_name)) \
+             or overrides.get(("attribute", b_name))
+        cpl = float(ov) if ov is not None else cpl_canon
         cost = int(cpl * lvl)
         total += cost
         lines.append({
             "kind": "point_buy",
             "name": b.get("name"),
             "level": lvl, "cost_per_level": cpl,
+            "cost_per_level_canon": cpl_canon if ov is not None else None,
+            "override_applied": ov is not None,
             "points": cost,
-            "note": f"{cpl}×{lvl}",
+            "note": f"{cpl}×{lvl}"
+                    + (f"  · GM override (canon was {cpl_canon})" if ov is not None else ""),
         })
     budget = int(state.get("point_budget") or 0)
     return {"total_spent": total, "budget": budget, "lines": lines}
 
 
-def _validate_character(ch: Dict[str, Any]) -> Dict[str, Any]:
+async def _load_cost_overrides(campaign_id: str) -> Dict[tuple, float]:
+    """V6.25.35 — Load per-campaign cost overrides into a tuple-keyed dict
+    so breakdown helpers can look up `(kind, name_lower)` in O(1). Empty
+    when the campaign has no overrides defined."""
+    rows = await db.cost_overrides.find(
+        {"campaign_id": campaign_id}, {"_id": 0}
+    ).to_list(500)
+    out: Dict[tuple, float] = {}
+    for r in rows:
+        kind = (r.get("kind") or "").strip().lower()
+        name = (r.get("name") or "").strip().lower()
+        if not kind or not name:
+            continue
+        try:
+            out[(kind, name)] = float(r.get("override_cost") or 0)
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
+def _validate_character(ch: Dict[str, Any],
+                         overrides: Optional[Dict[tuple, float]] = None) -> Dict[str, Any]:
     """System-aware rules validator.
 
     Returns:
@@ -289,7 +397,7 @@ def _validate_character(ch: Dict[str, Any]) -> Dict[str, Any]:
     total_points = int(ch.get("total_points") or 0)
 
     if sys_id == "besm-4e":
-        breakdown = _besm_points_breakdown(ch)
+        breakdown = _besm_points_breakdown(ch, overrides=overrides)
         spent = breakdown["total_spent"]
         # Propagate modifier warnings from the breakdown helper.
         warnings.extend(breakdown.get("modifier_warnings") or [])
@@ -317,7 +425,7 @@ def _validate_character(ch: Dict[str, Any]) -> Dict[str, Any]:
         # budget. D&D chassis compliance is class/level self-consistent —
         # we can't cleanly validate that without the full SRD state, so
         # we report a soft "chassis ok" note.
-        pb = _anime5e_point_buy_breakdown(folio)
+        pb = _anime5e_point_buy_breakdown(folio, overrides=overrides)
         budget = pb["budget"] or total_points or 0
         if budget > 0 and pb["total_spent"] > budget:
             issues.append(
@@ -407,7 +515,8 @@ async def validate_character(cid: str, user: dict = Depends(get_current_user)):
     )
     if not allowed:
         raise HTTPException(403, "Not a table member.")
-    v = _validate_character(ch)
+    overrides = await _load_cost_overrides(camp["id"])
+    v = _validate_character(ch, overrides=overrides)
     approval = ch.get("approval") or {}
     house_rules_active = bool((camp.get("house_rules") or "").strip())
     v.update({
@@ -448,7 +557,8 @@ async def app_validate_character(cid: str, user: dict = Depends(get_current_user
     )
     if not allowed:
         raise HTTPException(403, "Only the owner or GM may run app-validation.")
-    v = _validate_character(ch)
+    overrides = await _load_cost_overrides(camp["id"])
+    v = _validate_character(ch, overrides=overrides)
     approval = dict(ch.get("approval") or {})
     approval["app_validated"] = bool(v["passes_rules"])
     approval["app_validated_at"] = now_iso()
@@ -493,7 +603,8 @@ async def gm_approve_for_play(cid: str, body: ApprovalIn,
     if body.approved:
         # Re-run validator so the stamped approval can't go stale by
         # the time the GM clicks the button.
-        v = _validate_character(ch)
+        overrides = await _load_cost_overrides(camp["id"])
+        v = _validate_character(ch, overrides=overrides)
         approval["last_breakdown"] = v["breakdown"]
         approval["issues"] = v.get("issues") or []
         approval["warnings"] = v.get("warnings") or []
@@ -643,7 +754,8 @@ async def simulate_import(cid: str, body: SimulateImportIn,
     if not allowed:
         raise HTTPException(403, "Not a table member.")
 
-    current = _validate_character(ch)
+    overrides = await _load_cost_overrides(camp["id"])
+    current = _validate_character(ch, overrides=overrides)
     current_spent = current["breakdown"].get("total_spent") or 0
     current_cap = current.get("total_points") or int(ch.get("total_points") or 0)
 

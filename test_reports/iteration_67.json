@@ -1,0 +1,30 @@
+{
+  "summary": "V6.25.28 D&D 5E full canonical SRD seeding — backend and frontend verified end-to-end. 7 new V6.25.28 tests pass; full V6.25.25→.28 regression 45/45 pass. Frontend renders all 8 new SystemReferenceView sections with correct testids, quickref nav links present, and BESM 4E + Cypher pages have no regressions.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_v62528_dnd5e_canon_seed.py",
+    "/app/test_reports/pytest/iter67_v62528.xml",
+    "/app/test_reports/pytest/iter67_regression.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Reference.jsx is 781 lines — within the 700-line guideline ceiling; consider splitting SystemReferenceView and Section helpers into a `reference/` subfolder if more sections are added in V6.25.29+.",
+    "BESM 4E reference page does not expose a `system-ref-quickref-besm-4e` testid because it uses a bespoke renderer rather than SystemReferenceView. This is pre-existing behaviour and not a V6.25.28 regression, but worth normalising in a future cleanup pass for testid symmetry."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (45/45)", "frontend": "100% (8/8 sections, 8/8 quickref links, 0 BESM leaks, Cypher panel intact)"},
+  "test_credentials": "GMFran admin: franpietrowski@gmail.com / PieGod08!! (worked)",
+  "seed_data_creation": "test_reference_editor_accepts_new_kinds creates and cleans up a row per new kind (subclass / magic_item / monster / language / tool) on a D&D 5E campaign owned by GMFran. Self-cleaning.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Reference page lives at /app/reference (route is `/app/reference`, not `/reference`). System-tab buttons do NOT have `data-testid=system-tab-{id}` attributes — use `page.get_by_role('button', name='D&D 5E')` (or 'BESM 4E', 'Anime 5E', 'Cypher System'). All new V6.25.28 section testids on the dnd-5e tab are kebab-case from title: feats, subclasses, magic-items, monsters, languages, tools, damage-types, schools-of-magic. Quickref slug for 'Schools of Magic' in the nav is `schools` (just the word `schools`, not `schools-of-magic`).",
+  "rca of the issue": "N/A — no issues found. Verified counts: feats=42 cards, monsters=62 cards rendered on the dnd-5e tab, matching PRD spec."
+}

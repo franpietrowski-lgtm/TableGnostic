@@ -3,6 +3,7 @@ import { useNavigate, useParams, Link } from "react-router-dom";
 import { api, formatApiErrorDetail } from "../lib/api";
 import { Plus, X, Save, Trash2, BookOpen } from "lucide-react";
 import SystemBuilderLoader from "./SystemCharacterBuilders";
+import CpBalanceWidget from "./CpBalanceWidget";
 
 // Systems that have a dedicated builder shape — anything else falls through
 // to the BESM-shape (point-buy) builder below.
@@ -44,7 +45,99 @@ export default function CharacterBuilder() {
         setCh(existing);
         campaignId = existing.campaign_id;
       } else {
-        setCh(emptyChar(campaignIdFromUrl));
+        // V6.25.33 — When the URL carries a ?seed=<encoded JSON> query
+        // (set by the Concept Forge "Pick this & Open Builder" button),
+        // pre-fill the empty char draft with the picked candidate's
+        // stats / attributes / skills / defects so the player lands on
+        // a partially-built character instead of a blank slate.
+        const params = new URLSearchParams(window.location.search);
+        const seedParam = params.get("seed");
+        let seed = null;
+        if (seedParam) {
+          try { seed = JSON.parse(decodeURIComponent(seedParam)); } catch (_e) { /* ignore */ }
+        }
+        const base = emptyChar(campaignIdFromUrl);
+        if (seed) {
+          base.name    = seed.title || base.name;
+          base.concept = seed.summary || seed.rationale || base.concept;
+          base.stats   = {
+            body: +seed?.stats?.body || base.stats.body,
+            mind: +seed?.stats?.mind || base.stats.mind,
+            soul: +seed?.stats?.soul || base.stats.soul,
+          };
+          base.attributes = (seed.attributes || []).map((a) => ({
+            name: a.name || "Unnamed", level: +a.level || 1,
+            cost_per_level: 0, enhancements: [], limiters: [],
+            note: a.note || "From Concept Forge",
+            from_concept_draft: params.get("from_draft") || true,
+          }));
+          base.skills = (seed.skills || []).map((s) => ({
+            group: s.name || "Unnamed", level: +s.level || 1,
+            cost_per_level: 0, components: [],
+            note: s.note || "From Concept Forge",
+            from_concept_draft: params.get("from_draft") || true,
+          }));
+          base.defects = (seed.defects || []).map((d) => ({
+            name: d.name || "Unnamed", rank: +d.rank || 1,
+            points_per_rank: 1, category: "Concept",
+            note: d.note || "From Concept Forge",
+            from_concept_draft: params.get("from_draft") || true,
+          }));
+          base.folio = {
+            ...base.folio,
+            from_concept_draft_id:   params.get("from_draft") || "",
+            concept_seed_summary:    seed.summary || "",
+            concept_seed_rationale:  seed.rationale || "",
+            // V6.25.34 — Forge V2 outputs identity / folio fields directly.
+            physical_description:    seed.appearance || base.folio.physical_description,
+            history_events:          (seed.history || []).map((s) => (typeof s === "string" ? { event: s } : s)),
+            goals:                   (seed.goals || []).map((s) => (typeof s === "string" ? { goal: s } : s)),
+            // Use folio.dreams as a free-form journal entry list since the
+            // schema's "journal" already handles arbitrary text rows.
+            personality:             seed.personality_knots || base.folio.personality,
+            motivations:             (seed.dreams || []).join(" · ") || base.folio.motivations,
+            occupation:              seed.class || base.folio.occupation,
+            gender_species_age:      seed.race || base.folio.gender_species_age,
+          };
+          // V6.25.34 — Inventory pre-fill: items + weapons (incl. weapon-items).
+          // The InventoryPanel reads `folio.inventory` (array of rows).
+          const seedInventory = [
+            ...(seed.items || []).map((it) => ({
+              id: `seed-item-${Math.random().toString(36).slice(2, 8)}`,
+              name: it.name || "Unnamed item",
+              category: it.category || "Carry",
+              kind: "item",
+              note: it.note || "From Concept Forge",
+              from_concept_draft: params.get("from_draft") || true,
+            })),
+            ...(seed.weapons || []).map((w) => ({
+              id: `seed-weapon-${Math.random().toString(36).slice(2, 8)}`,
+              name: w.name || "Unnamed weapon",
+              category: w.class || "Weapon",
+              kind: w.is_weapon_item ? "weapon-item" : "weapon",
+              damage_mod: +w.damage_mod || 0,
+              rank: +w.rank || 1,
+              range_m: w.range_m ?? null,
+              note: w.note || "From Concept Forge",
+              from_concept_draft: params.get("from_draft") || true,
+            })),
+          ];
+          if (seedInventory.length > 0) {
+            base.folio.inventory = [...(base.folio.inventory || []), ...seedInventory];
+          }
+          // V6.25.34 — Power Packs pre-fill (BESM signature bundles).
+          if ((seed.power_packs || []).length > 0) {
+            base.power_packs = (seed.power_packs || []).map((p) => ({
+              name: p.name || "Power Pack",
+              effects: p.effects || [],
+              defect: p.defect || "",
+              total_cp: +p.total_cp || 0,
+              narrative: p.narrative || "",
+              from_concept_draft: params.get("from_draft") || true,
+            }));
+          }
+        }
+        setCh(base);
       }
       const [cu, camp, refs] = await Promise.all([
         api.get(`/campaigns/${campaignId}/custom`).then((x) => x.data).catch(() => []),
@@ -77,9 +170,13 @@ export default function CharacterBuilder() {
   const maxAttrRank = (campaign && campaign.max_per_attribute_rank) || 0;
 
   useEffect(() => {
-    if (ch && ref) setCh((c) => ({ ...c, total_points: effectiveCap }));
+    // V6.25.27 — only auto-set total_points to the campaign cap on a
+    // BRAND-NEW character (no charId). Editing an existing character
+    // must respect the primer-set total stored in the DB; otherwise
+    // the CP Bank in the builder shows 90 while /validate keeps 84.
+    if (ch && ref && !charId) setCh((c) => ({ ...c, total_points: effectiveCap }));
   // eslint-disable-next-line
-  }, [effectiveCap]);
+  }, [effectiveCap, charId]);
 
   const spent = useMemo(() => {
     if (!ch) return { stat_cost: 0, attribute_cost: 0, skill_cost: 0, defect_points: 0, total_spent: 0 };
@@ -88,11 +185,20 @@ export default function CharacterBuilder() {
     // change the *effective Level* at which the Attribute functions
     // (Limiters raise it, Enhancements lower it). Cost is base × level only,
     // minus any nested Item/Weapon defect refunds (floored at 0).
+    // V6.25.27 — apply p.135 Item half-cost when attribute name is "Item"
+    // (and "Weapon" / "Companion" container variants in V4.1) so the
+    // builder's live preview agrees with the Rules Audit on save.
+    const isHalfCostContainer = (n) =>
+      ["item", "weapon", "companion"].includes((n || "").toLowerCase());
     const attribute_cost = ch.attributes.reduce((s, a) => {
       const lvl = Math.max(1, a.level || 1);
-      const subtotal = (a.cost_per_level || 0) * lvl;
+      const raw = (a.cost_per_level || 0) * lvl;
       const itemDefRefund = (a.defects || []).reduce((x, d) => x + (d.points_per_rank || 0) * (d.rank || 0), 0);
-      return s + Math.max(0, subtotal - itemDefRefund);
+      const net = Math.max(0, raw - itemDefRefund);
+      // p.135: container attributes (Item / Weapon / Companion) charge
+      // ceil(raw / 2); ceil so partial points round in the GM's favour.
+      const cost = isHalfCostContainer(a.name) ? Math.ceil(net / 2) : net;
+      return s + cost;
     }, 0);
     const skill_cost = ch.skills.reduce((s, k) => s + (k.cost_per_level || 0) * (k.level || 0), 0);
     const defect_points = ch.defects.reduce((s, d) => s + (d.points_per_rank || 0) * (d.rank || 0), 0);
@@ -288,6 +394,15 @@ export default function CharacterBuilder() {
         </div>
       )}
 
+      {/* V6.25.27 — CP Bank widget. Edit-window only (per spec).
+          Reads /validate so it agrees with Rules Audit + History. */}
+      {charId && (
+        <CpBalanceWidget
+          character={ch}
+          system={campaign?.system_id || "besm-4e"}
+          isOwnerOrGm={true}/>
+      )}
+
       <div className="mt-6 flex items-start justify-between flex-wrap gap-4">
         <div>
           <div className="label-ref mb-1">Character Forge · BESM 4E</div>
@@ -427,8 +542,11 @@ export default function CharacterBuilder() {
               and classes (authored in the Campaign's Custom Rules tab)
               pre-fill stat adjustments + attributes + skills + defects
               so the player starts from a canonical base and extends from
-              there within the CP budget. */}
-          <BesmTemplatePicker customs={customs} ch={ch} setCh={setCh}/>
+              there within the CP budget.
+              V6.25.32 — Now also exposes the BESM 4E book canon races
+              (RACE_TEMPLATES, p.35-41) and class archetypes
+              (CLASS_TEMPLATES, p.142-153) from `/api/besm/reference`. */}
+          <BesmTemplatePicker customs={customs} ref={ref} ch={ch} setCh={setCh}/>
 
           <div className="divider-sigil" />
           <div className="label-ref">Derived · ch.8 p.168 BESM 4E</div>
@@ -888,6 +1006,15 @@ function AttributeRow({ idx, a, reference, onUpdate, onRemove, maxRank = 0 }) {
   // V4.1 BESM 4E: cost is base × level (Enh/Lim do NOT change cost).
   // V6.25.8 — Effective Level now sums rank-weighted limiters & enhancements:
   // effLvl = level + Σlimiter ranks − Σenhancement ranks (floored at 1).
+  // V6.25.31 — IMPORTANT: per BESM 4E core + Extras, some
+  // Enhancements/Limiters are weighted (×2 or ×3 ranks per application —
+  // e.g. "Backlash" is +1 rank per application but "Item Specialist"
+  // counts as +2 ranks; "Detectable" is −1 rank but "Always On" is −2
+  // ranks). The rank field on each modifier captures this directly,
+  // so the math here stays correct as long as the Reference Editor
+  // entries set rank > 1 where the rulebook calls for it. The "1 rank
+  // per application" assumption was implicit copy in older UI strings;
+  // the underlying engine has always honoured rank-weighting.
   const subtotal = (a.cost_per_level || 0) * a.level;
   const itemDefectRefund = (a.defects || []).reduce((s, d) => s + (d.points_per_rank || 0) * (d.rank || 0), 0);
   const cost = Math.max(0, subtotal - itemDefectRefund);
@@ -1237,12 +1364,65 @@ function SkillRow({ idx, s, onUpdate, onRemove }) {
  * button that merges the template's stat_adjustments + components into
  * the character's working draft. Rows added by a template are tagged
  * with `_from_template` so they can be cleanly removed later.
+ *
+ * V6.25.32 — Also reads the canonical BESM 4E book templates
+ * (`ref.race_templates`, `ref.class_templates`) and normalises them
+ * into the same shape so the player gets a single drop-down with
+ * "BESM Canon · Races", "BESM Canon · Classes", "Campaign · Races",
+ * "Campaign · Classes" optgroups. Canonical IDs are deterministic
+ * (`canon-race-<slug>` / `canon-class-<slug>`) so re-applying or
+ * removing them works across reloads.
  */
-function BesmTemplatePicker({ customs, ch, setCh }) {
+
+// Convert a canonical RACE_TEMPLATES / CLASS_TEMPLATES row (which
+// uses `bundle: [{kind, name, level/rank, note}]`) into the same
+// shape `customs` rows use (`effects: {total_cp, stat_adjustments,
+// components: [...]}`). The `kind=stat` rows roll up into
+// `stat_adjustments`; everything else becomes a `component`.
+function _canonToCustomShape(row, kind) {
+  const slug = (row.name || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "");
+  const bundle = row.bundle || [];
+  const stat_adjustments = { body: 0, mind: 0, soul: 0 };
+  const components = [];
+  for (const b of bundle) {
+    if (b.kind === "stat") {
+      const k = (b.name || "").toLowerCase();
+      if (k === "body" || k === "mind" || k === "soul") {
+        stat_adjustments[k] = (stat_adjustments[k] || 0) + (+b.level || 0);
+      }
+    } else if (b.kind === "skill_group" || b.kind === "skill") {
+      components.push({ kind: "skill", name: b.name, level: +b.level || 1, note: b.note || "" });
+    } else if (b.kind === "attribute") {
+      components.push({ kind: "attribute", name: b.name, level: +b.level || 1, note: b.note || "" });
+    } else if (b.kind === "defect") {
+      components.push({ kind: "defect", name: b.name, rank: +b.rank || 1, note: b.note || "" });
+    }
+  }
+  return {
+    id: `canon-${kind}-${slug}`,
+    name: row.name,
+    kind,
+    description_note: `${row.summary || ""}${row.page ? ` (BESM 4E p.${row.page})` : ""}`.trim(),
+    effects: {
+      total_cp: +row.cp_cost || 0,
+      stat_adjustments,
+      components,
+    },
+    _canonical: true,
+  };
+}
+
+function BesmTemplatePicker({ customs, ref, ch, setCh }) {
   const [sel, setSel] = React.useState("");
-  const templates = (customs || []).filter(
+  const customTemplates = (customs || []).filter(
     (c) => (c.kind === "race" || c.kind === "class")
       && c.effects && (c.effects.components || c.effects.stat_adjustments));
+  const canonRaces = (ref?.race_templates || []).map((r) => _canonToCustomShape(r, "race"));
+  const canonClasses = (ref?.class_templates || []).map((r) => _canonToCustomShape(r, "class"));
+  const templates = [...canonRaces, ...canonClasses, ...customTemplates];
   if (templates.length === 0) return null;
   const chosen = templates.find((t) => t.id === sel);
   // V6.25.3 — applied templates persist via `folio.applied_templates`
@@ -1402,22 +1582,36 @@ function BesmTemplatePicker({ customs, ch, setCh }) {
   return (
     <div className="mt-3 border border-gold/20 rounded-sm p-3 bg-void/30"
          data-testid="besm-template-picker">
-      <div className="label-ref mb-2">Campaign Race / Class Templates</div>
+      <div className="label-ref mb-2">Race / Class Templates · BESM Canon + Campaign Homebrew</div>
       <div className="flex gap-2 items-end flex-wrap">
         <div className="flex-1 min-w-[240px]">
           <label className="label-ref block mb-1 text-[9px]">Template</label>
           <select className="select" value={sel} onChange={(e) => setSel(e.target.value)}
                   data-testid="besm-template-select">
             <option value="">— pick a race or class —</option>
-            <optgroup label="Races">
-              {templates.filter((t) => t.kind === "race").map((t) => (
+            <optgroup label="BESM 4E Canon · Races">
+              {templates.filter((t) => t._canonical && t.kind === "race").map((t) => (
                 <option key={t.id} value={t.id}>
                   {t.name} · {(t.effects?.total_cp ?? 0)} CP
                 </option>
               ))}
             </optgroup>
-            <optgroup label="Classes">
-              {templates.filter((t) => t.kind === "class").map((t) => (
+            <optgroup label="BESM 4E Canon · Classes">
+              {templates.filter((t) => t._canonical && t.kind === "class").map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name} · {(t.effects?.total_cp ?? 0)} CP
+                </option>
+              ))}
+            </optgroup>
+            <optgroup label="Campaign Custom · Races">
+              {templates.filter((t) => !t._canonical && t.kind === "race").map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name} · {(t.effects?.total_cp ?? 0)} CP
+                </option>
+              ))}
+            </optgroup>
+            <optgroup label="Campaign Custom · Classes">
+              {templates.filter((t) => !t._canonical && t.kind === "class").map((t) => (
                 <option key={t.id} value={t.id}>
                   {t.name} · {(t.effects?.total_cp ?? 0)} CP
                 </option>

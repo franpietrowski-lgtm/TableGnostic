@@ -247,7 +247,10 @@ async def export_character_sheet_pdf(
     if not allowed:
         raise HTTPException(403, "Not a table member.")
     data = _build_mobile_sheet(ch, camp)
-    safe_name = (ch.get("name") or "character").replace("/", "-").replace(" ", "_")
+    raw_name = (ch.get("name") or "character").replace("/", "-").replace(" ", "_")
+    safe_name = "".join(
+        c if ord(c) < 128 and c not in '"\\' else "_" for c in raw_name
+    ).strip("_") or "character"
     return StreamingResponse(
         io.BytesIO(data),
         media_type="application/pdf",

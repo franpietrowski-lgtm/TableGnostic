@@ -105,6 +105,30 @@ export default function MacroBuilder({
   const skills  = (character?.skills || []).filter((s) => s?.group || s?.name);
   const defects = (character?.defects || []).filter((d) => d?.name);
 
+  // V6.25.11 — Refinery state. Holds the parsed unresolved tokens
+  // pending user disambiguation. Each item: {idx, raw, kind, ?tn}.
+  // `idx` is the character offset of the bare token in `formula`.
+  const [refinery, setRefinery] = useState([]);
+  const refine = () => setRefinery(_parseUnresolved(formula));
+  const resolveRefineryPick = (slot, name) => {
+    // Replace the bare token at `slot.idx` with `{kind:Name}` (or
+    // `{stat:Name}` + a TN-suffix recorded for the GM's table-side
+    // adjudication; the dice engine ignores the TN comment).
+    const newFormula = (() => {
+      const f = formula;
+      const before = f.slice(0, slot.idx);
+      const after = f.slice(slot.idx + slot.raw.length);
+      const tnSuffix = slot.tn ? ` (TN ${slot.tn})` : "";
+      return before + `{${slot.kind}:${name}}${tnSuffix}` + after;
+    })();
+    setFormula(newFormula);
+    // V6.25.12 — Re-parse from the MUTATED formula so the remaining
+    // slots' character offsets are correct. The previous `filter`
+    // approach kept stale `.idx` values that pointed into the OLD
+    // string, corrupting subsequent picks (see iteration_61 RCA).
+    setRefinery(_parseUnresolved(newFormula));
+  };
+
   return createPortal(
     <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-0 sm:p-4
                        bg-void/90 backdrop-blur-sm overflow-y-auto"
@@ -162,7 +186,13 @@ export default function MacroBuilder({
         <div className="border border-gold/20 rounded-sm p-3 mb-3 bg-void/40">
           <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
             <label className="label-ref">Formula</label>
-            <div className="flex gap-1">
+            <div className="flex gap-1 flex-wrap">
+              <button type="button" onClick={refine}
+                      className="btn btn-ghost text-[10px] border border-gold/30 hover:border-gold-bright"
+                      title="Parse free-form tokens like `attribute`, `skill`, `stat:15` and surface dropdown pickers."
+                      data-testid="macro-builder-refine">
+                ⚗ Refinery
+              </button>
               <button type="button" onClick={previewRoll} className="btn btn-ghost text-[10px]"
                       data-testid="macro-builder-preview">
                 <Eye className="w-3 h-3"/> Preview
@@ -174,17 +204,54 @@ export default function MacroBuilder({
             </div>
           </div>
           <input className="input font-mono text-sm" value={formula}
-                 placeholder="e.g.  2d6 + {attr:Weapon} + {skill:Combat}"
+                 placeholder="2d6+attribute+skill+stat:15  ← type plain words; click Refinery to pick"
                  onChange={(e) => setFormula(e.target.value)}
                  data-testid="macro-builder-formula"/>
           <div className="text-[10px] text-mist mt-1.5 font-mono break-all"
                data-testid="macro-builder-preview-line">
             <span className="text-mist/60 not-italic">live →</span> {live || "—"}
           </div>
+          <div className="text-[10px] text-mist/60 mt-1 italic">
+            Free-form tip: type <span className="text-gold-bright">attribute</span>, <span className="text-gold-bright">skill</span>, <span className="text-gold-bright">defect</span>, <span className="text-gold-bright">stat</span>, or <span className="text-gold-bright">derived</span> as bare words. Add <span className="text-gold-bright">:N</span> after a stat (e.g. <span className="text-gold-bright">stat:15</span>) to record a Target Number for the GM. Hit <span className="text-gold-bright">Refinery</span> and the dropdowns will pin to your character sheet.
+          </div>
           {preview && (
             <div className="mt-2 text-[11px] text-gold-bright"
                  data-testid="macro-builder-preview-result">
               At fire-time, this resolves to: <span className="font-mono">{preview.expanded}</span>
+            </div>
+          )}
+
+          {/* V6.25.11 — Refinery: dropdowns for unresolved bare tokens. */}
+          {refinery.length > 0 && (
+            <div className="mt-3 border-t border-gold/15 pt-3 space-y-2"
+                 data-testid="macro-refinery-panel">
+              <div className="label-ref">Refinery — pick the right entry from your sheet</div>
+              {refinery.map((slot, i) => (
+                <div key={`${slot.idx}-${i}`}
+                     className="flex flex-wrap items-center gap-2 text-xs"
+                     data-testid={`macro-refinery-slot-${slot.kind}-${slot.idx}`}>
+                  <span className="text-mist/70">
+                    @{slot.idx}: <code className="text-gold-bright">{slot.raw}</code> →
+                  </span>
+                  <select className="select select-sm"
+                           defaultValue=""
+                           onChange={(e) => e.target.value && resolveRefineryPick(slot, e.target.value)}
+                           data-testid={`macro-refinery-pick-${slot.kind}-${slot.idx}`}>
+                    <option value="" disabled>Pick {slot.kind}…</option>
+                    {(slot.kind === "attr" ? attrs.map((a) => a.name)
+                      : slot.kind === "skill" ? skills.map((s) => s.group || s.name)
+                      : slot.kind === "def" ? defects.map((d) => d.name)
+                      : slot.kind === "stat" ? stats
+                      : slot.kind === "derived" ? derived
+                      : []).map((opt) => (
+                        <option key={opt} value={opt}>{opt}</option>
+                    ))}
+                  </select>
+                  {slot.tn && (
+                    <span className="text-[10px] text-arcane">vs TN {slot.tn}</span>
+                  )}
+                </div>
+              ))}
             </div>
           )}
         </div>
@@ -502,4 +569,67 @@ function _expandClientSide(formula, ch) {
     });
   out = out.replace(/\+\+/g, "+").replace(/\+-/g, "-").replace(/--/g, "+");
   return out;
+}
+
+/**
+ * V6.25.11 — Refinery parser.
+ *
+ * Walks a free-form formula and returns a queue of UNRESOLVED bare-word
+ * tokens that should be promoted to typed `{kind:Name}` references via
+ * a character-sheet-aware dropdown.
+ *
+ * Recognised bare words (case-insensitive, NOT inside `{}` typed tokens):
+ *   • attribute / attr        →  kind: "attr"
+ *   • skill                   →  kind: "skill"
+ *   • defect / def            →  kind: "def"
+ *   • stat[:N]                →  kind: "stat"   (N = optional Target Number)
+ *   • derived                 →  kind: "derived"
+ *
+ * Already-typed tokens like `{attr:Weapon}` are left alone — they're
+ * already specific.
+ *
+ * Example: `2d6+attribute+stat:15` returns:
+ *   [
+ *     { idx: 4,  raw: "attribute", kind: "attr" },
+ *     { idx: 14, raw: "stat:15",   kind: "stat",  tn: 15 },
+ *   ]
+ *
+ * The UI then renders one dropdown per slot, and `resolveRefineryPick`
+ * substitutes the bare token with its typed form in place.
+ */
+function _parseUnresolved(formula) {
+  if (!formula) return [];
+  // Mask already-typed `{kind:name}` regions so we don't double-parse.
+  const typedRanges = [];
+  const typedRe = /\{[^}]+\}/g;
+  let tm;
+  while ((tm = typedRe.exec(formula))) {
+    typedRanges.push([tm.index, tm.index + tm[0].length]);
+  }
+  const inTyped = (i) => typedRanges.some(([a, b]) => i >= a && i < b);
+
+  const slots = [];
+  // attr / attribute  ·  skill  ·  defect / def  ·  derived
+  const wordRe = /\b(attribute|attr|skill|defect|def|derived)\b(?!\s*:)/gi;
+  let m;
+  while ((m = wordRe.exec(formula))) {
+    if (inTyped(m.index)) continue;
+    const w = m[1].toLowerCase();
+    const kind =
+      w === "attribute" || w === "attr" ? "attr"
+      : w === "skill"                    ? "skill"
+      : w === "defect" || w === "def"   ? "def"
+      :                                    "derived";
+    slots.push({ idx: m.index, raw: m[0], kind });
+  }
+  // stat with optional :N — e.g. `stat`, `stat:15`.
+  const statRe = /\bstat(?::(\d+))?\b/gi;
+  let sm;
+  while ((sm = statRe.exec(formula))) {
+    if (inTyped(sm.index)) continue;
+    const tn = sm[1] ? parseInt(sm[1], 10) : null;
+    slots.push({ idx: sm.index, raw: sm[0], kind: "stat", tn });
+  }
+  // Sort by appearance order; user picks top-down.
+  return slots.sort((a, b) => a.idx - b.idx);
 }

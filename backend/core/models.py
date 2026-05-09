@@ -222,6 +222,13 @@ class CharacterAttribute(BaseModel):
     cost_modifier: Optional[int] = None
     # V6.25.3 — applied BESM race / class template provenance.
     from_template_id: Optional[str] = None
+    # V6.25.11 — BESM 4E Item container rule (p.135). Item Attributes
+    # can hold nested sub-attributes (a Mecha's Flight, Weapons, Armour,
+    # etc.) whose cost contributes to the raw point total BEFORE the
+    # Item half-cost halving is applied. See Assault Mecha p.219 — 130
+    # pt raw → 65 pt Item purchase. Each child is itself a CharacterAttribute
+    # shape; nesting is capped at one level to avoid halving recursion.
+    item_contents: List[Any] = []
 
 
 class CharacterSkillComponent(BaseModel):

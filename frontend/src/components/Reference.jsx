@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { api } from "../lib/api";
+import CypherReferencePanel from "./CypherReferencePanel";
 import { BookOpen, Search, Sparkles } from "lucide-react";
 import { InstructionsPanel } from "./ReferenceEditor";
 
@@ -26,8 +27,15 @@ export default function Reference() {
   const [tab, setTab] = useState("attributes");
   const [systemId, setSystemId] = useState("besm-4e");
   const [systemRef, setSystemRef] = useState(null);
+  const [besmCustomLib, setBesmCustomLib] = useState(null);
 
   useEffect(() => { api.get("/besm/reference").then((r) => setRef(r.data)); }, []);
+  useEffect(() => {
+    if (systemId !== "besm-4e") return;
+    api.get(`/reference/library?system_id=besm-4e`)
+      .then((r) => setBesmCustomLib(r.data))
+      .catch(() => setBesmCustomLib({ rows: [], total: 0, campaign_count: 0 }));
+  }, [systemId]);
   useEffect(() => {
     if (systemId === "besm-4e") { setSystemRef(null); return; }
     api.get(`/systems/${systemId}/reference`)
@@ -68,6 +76,9 @@ export default function Reference() {
   }, [ref, ql]);
 
   if (!ref) return <div className="p-10 text-mist">Opening the tome…</div>;
+
+  // V6.25.25 — Custom (yours) library aggregator (only for BESM tab; the
+  // SystemReferenceView mounts its own for non-BESM systems).
 
   const TAB_GROUPS = [
     {
@@ -221,8 +232,14 @@ export default function Reference() {
           <div className="text-sm text-parchment/95 font-body leading-relaxed">
             <strong>Cost = base × assigned Level</strong> (fixed). Enhancements
             and Limiters do <em>not</em> change point cost — they shift{" "}
-            <strong>effective Level</strong>: <code className="text-gold">+1 per Limiter</code>,{" "}
-            <code className="text-gold">−1 per Enhancement</code>, floored at 1.
+            <strong>effective Level</strong> by their <em>rank</em>:{" "}
+            <code className="text-gold">+rank per Limiter</code>,{" "}
+            <code className="text-gold">−rank per Enhancement</code>, floored at 1.
+            Most modifiers are rank&nbsp;1, but the BESM 4E core + Extras call
+            out heavier applications (e.g. <em>Item Specialist</em> at rank 2,
+            <em> Always On</em> at rank 2, <em>Restriction Severe</em> at rank 3).
+            Enter the rank the rulebook prescribes when authoring a custom row;
+            stacking compounds linearly.
             Stack Limiters for narrow but powerful Attributes; stack Enhancements
             for broad-but-cheap utility ones.
           </div>
@@ -342,6 +359,12 @@ export default function Reference() {
           </div>
         </div>
       )}
+
+      {besmCustomLib && (
+        <div className="mt-6" data-testid="besm-custom-library-mount">
+          <CustomLibrarySection lib={besmCustomLib} systemId="besm-4e"/>
+        </div>
+      )}
       </>
       )}
     </div>
@@ -357,12 +380,23 @@ export default function Reference() {
  *   - scaffold       (no content yet)
  */
 function SystemReferenceView({ ref_, systemId, q }) {
+  const [customLib, setCustomLib] = useState(null);
+  useEffect(() => {
+    if (!systemId) return;
+    api.get(`/reference/library?system_id=${systemId}`)
+      .then((r) => setCustomLib(r.data))
+      .catch(() => setCustomLib({ rows: [], total: 0, campaign_count: 0 }));
+  }, [systemId]);
+
   if (!ref_) return <div className="text-mist mt-6">Loading {systemId} reference…</div>;
   if (ref_.kind === "scaffold") {
     return (
       <div className="card-mystic p-6 mt-6" data-testid="system-ref-scaffold">
         <div className="label-ref mb-2">Coming Soon</div>
         <div className="text-sm text-parchment/90">{ref_.rule_note}</div>
+        {customLib && customLib.total > 0 && (
+          <CustomLibrarySection lib={customLib} systemId={systemId}/>
+        )}
       </div>
     );
   }
@@ -388,6 +422,14 @@ function SystemReferenceView({ ref_, systemId, q }) {
   if (has(ref_.cyphers)) sectionList.push({ slug: "cyphers", label: "Cyphers" });
   if (has(ref_.artifacts)) sectionList.push({ slug: "artifacts", label: "Artifacts" });
   if (has(ref_.skills)) sectionList.push({ slug: "skills", label: "Skills" });
+  if (has(ref_.feats)) sectionList.push({ slug: "feats", label: "Feats" });
+  if (has(ref_.subclasses)) sectionList.push({ slug: "subclasses", label: "Subclasses" });
+  if (has(ref_.magic_items)) sectionList.push({ slug: "magic-items", label: "Magic Items" });
+  if (has(ref_.monsters)) sectionList.push({ slug: "monsters", label: "Monsters" });
+  if (has(ref_.languages)) sectionList.push({ slug: "languages", label: "Languages" });
+  if (has(ref_.tools)) sectionList.push({ slug: "tools", label: "Tools" });
+  if (has(ref_.damage_types)) sectionList.push({ slug: "damage-types", label: "Damage Types" });
+  if (has(ref_.schools)) sectionList.push({ slug: "schools", label: "Schools of Magic" });
   if (has(ref_.conditions)) sectionList.push({ slug: "conditions", label: "Conditions" });
   if (has(ref_.actions)) sectionList.push({ slug: "actions", label: "Actions" });
   if (has(ref_.power_levels)) sectionList.push({ slug: "power-levels", label: "Power Levels" });
@@ -412,6 +454,15 @@ function SystemReferenceView({ ref_, systemId, q }) {
       </aside>
 
       <div className="space-y-6 min-w-0">
+      {/* V6.25.26 — When the active system is Cypher, the dashboard
+          embeds the full CypherReferencePanel (genres, sub-tabs,
+          flavors, bestiary, roll-tables) ABOVE the legacy quick-ref
+          cards. The user requested the Cypher system reference live
+          on the dashboard Reference page rather than the Atelier. */}
+      {systemId === "cypher" && (
+        <CypherReferencePanel campId={null} isGm={false}/>
+      )}
+
       <div className="card-mystic p-4">
         <div className="label-ref mb-1">Rule of thumb</div>
         <div className="text-sm text-parchment/90 leading-snug">{ref_.rule_note}</div>
@@ -459,7 +510,11 @@ function SystemReferenceView({ ref_, systemId, q }) {
       {f(ref_.descriptors).length > 0 && (
         <Section title="Descriptors">
           {f(ref_.descriptors).map((d, i) => (
-            <Card key={i} title={d}/>
+            <Card key={i}
+                  title={typeof d === "string" ? d : d.name}
+                  sub={typeof d === "object" && Array.isArray(d.genres)
+                    ? d.genres.join(" · ")
+                    : (typeof d === "object" ? d.role || d.blurb || "" : "")}/>
           ))}
         </Section>
       )}
@@ -530,6 +585,74 @@ function SystemReferenceView({ ref_, systemId, q }) {
           ))}
         </Section>
       )}
+      {f(ref_.feats).length > 0 && (
+        <Section title="Feats">
+          {f(ref_.feats).map((ft, i) => (
+            <Card key={i} title={ft.name}
+                  sub={`${ft.prereq && ft.prereq !== "—" ? `Prereq: ${ft.prereq} · ` : ""}${ft.summary}`}
+                  page={ft.page}/>
+          ))}
+        </Section>
+      )}
+      {f(ref_.subclasses).length > 0 && (
+        <Section title="Subclasses">
+          {f(ref_.subclasses).map((sc, i) => (
+            <Card key={i} title={`${sc.class} · ${sc.name}`}
+                  sub={(sc.key || []).join(" · ")}
+                  page={sc.page}/>
+          ))}
+        </Section>
+      )}
+      {f(ref_.magic_items).length > 0 && (
+        <Section title="Magic Items">
+          {f(ref_.magic_items).map((mi, i) => (
+            <Card key={i} title={mi.name}
+                  sub={`${mi.rarity} · ${mi.type}${mi.attune ? " · attune" : ""} · ${mi.summary}`}
+                  page={mi.page}/>
+          ))}
+        </Section>
+      )}
+      {f(ref_.monsters).length > 0 && (
+        <Section title="Monsters">
+          {f(ref_.monsters).map((m, i) => (
+            <Card key={i} title={`${m.name}${m.cr ? ` · CR ${m.cr}` : ""}`}
+                  sub={`${m.size} ${m.type} · AC ${m.ac} · HP ${m.hp} · ${m.speed} · ${m.atks}`}
+                  page={m.page}/>
+          ))}
+        </Section>
+      )}
+      {f(ref_.languages).length > 0 && (
+        <Section title="Languages">
+          {f(ref_.languages).map((l, i) => (
+            <Card key={i} title={l.name}
+                  sub={`${l.category} · script ${l.script} · spoken by ${l.speakers}`}
+                  page={l.page}/>
+          ))}
+        </Section>
+      )}
+      {f(ref_.tools).length > 0 && (
+        <Section title="Tools">
+          {f(ref_.tools).map((t, i) => (
+            <Card key={i} title={t.name}
+                  sub={`${t.category} · ${t.ability} checks`}
+                  page={t.page}/>
+          ))}
+        </Section>
+      )}
+      {f(ref_.damage_types).length > 0 && (
+        <Section title="Damage Types">
+          {f(ref_.damage_types).map((d, i) => (
+            <Card key={i} title={d.name} page={d.page}/>
+          ))}
+        </Section>
+      )}
+      {f(ref_.schools).length > 0 && (
+        <Section title="Schools of Magic">
+          {f(ref_.schools).map((s, i) => (
+            <Card key={i} title={s.name} sub={s.summary} page={s.page}/>
+          ))}
+        </Section>
+      )}
       {f(ref_.conditions).length > 0 && (
         <Section title="Conditions">
           {f(ref_.conditions).map((c, i) => (
@@ -556,6 +679,79 @@ function SystemReferenceView({ ref_, systemId, q }) {
           <Card title="The Cypher Tax" sub={ref_.gm_intrusion.summary} page={ref_.gm_intrusion.page}/>
         </Section>
       )}
+      {customLib && (
+        <CustomLibrarySection lib={customLib} systemId={systemId}/>
+      )}
+      </div>
+    </div>
+  );
+}
+
+
+/**
+ * V6.25.25 — Custom (yours) reference rows aggregated across every
+ * campaign the caller is involved in for the active system. Surfaces
+ * Reference Editor + House Rules + character-derived custom entries
+ * in ONE place so players + GMs see the full system catalogue.
+ */
+function CustomLibrarySection({ lib, systemId }) {
+  const [kindFilter, setKindFilter] = useState("");
+  if (!lib || lib.total === 0) {
+    return (
+      <div className="card-mystic p-4 border-arcane/30 mt-4"
+           data-testid="custom-library-empty">
+        <div className="label-ref mb-1 text-arcane-light">Custom · Yours</div>
+        <div className="text-[11px] text-mist italic">
+          {lib?.campaign_count === 0
+            ? `No ${systemId} campaigns yet — create one to start authoring custom references.`
+            : "No custom entries authored for this system. Open a campaign's Atelier ▸ References tab to seed your first."}
+        </div>
+      </div>
+    );
+  }
+  const kinds = Array.from(new Set((lib.rows || []).map((r) => r.kind))).sort();
+  const filtered = kindFilter
+    ? lib.rows.filter((r) => r.kind === kindFilter) : lib.rows;
+  return (
+    <div className="card-mystic p-4 border-arcane/30 mt-4"
+         data-testid="custom-library-section">
+      <div className="flex items-baseline justify-between flex-wrap gap-2 mb-2">
+        <div>
+          <div className="label-ref text-arcane-light">Custom · Yours</div>
+          <div className="text-[10px] text-mist italic">
+            {lib.total} entr{lib.total === 1 ? "y" : "ies"} across {lib.campaign_count} campaign
+            {lib.campaign_count === 1 ? "" : "s"} (Reference Editor, House Rules, character-derived)
+          </div>
+        </div>
+        <div className="flex gap-1.5 flex-wrap">
+          <button onClick={() => setKindFilter("")}
+                  className={`btn btn-ghost text-[10px] ${!kindFilter ? "border-arcane/50 text-arcane-light" : ""}`}
+                  data-testid="custom-library-filter-all">All</button>
+          {kinds.map((k) => (
+            <button key={k} onClick={() => setKindFilter(k)}
+                    className={`btn btn-ghost text-[10px] ${kindFilter === k ? "border-arcane/50 text-arcane-light" : ""}`}
+                    data-testid={`custom-library-filter-${k}`}>{k}</button>
+          ))}
+        </div>
+      </div>
+      <div className="grid md:grid-cols-2 gap-2">
+        {filtered.map((r) => (
+          <div key={r.id} className="border border-arcane/20 rounded-sm p-2 bg-void/40"
+               data-testid={`custom-library-row-${r.id}`}>
+            <div className="flex justify-between items-baseline gap-2">
+              <div className="text-sm font-display text-parchment">{r.name}</div>
+              <div className="text-[9px] text-arcane-light uppercase tracking-widest">{r.kind}</div>
+            </div>
+            {r.summary && (
+              <div className="text-[11px] text-parchment/85 italic mt-1 leading-snug">{r.summary}</div>
+            )}
+            <div className="text-[9px] text-mist mt-1 flex items-center gap-2 flex-wrap">
+              <span>from <span className="text-arcane-light">{r.campaign_name}</span></span>
+              {r.book && <span>· {r.book}{r.page ? ` p.${r.page}` : ""}</span>}
+              {r.created_by && <span>· by {r.created_by}</span>}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );

@@ -3,6 +3,7 @@ import secrets
 from typing import Any, Dict
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel as _BaseModel, Field as _Field
 
 from core.cost_engine import resolve_system_id
 from core.db import db, new_id, now_iso, sanitize
@@ -187,6 +188,205 @@ async def regenerate_invite(cid: str, user: dict = Depends(get_current_user)):
     return {"invite_token": new_token}
 
 
+# ─── V6.25.17 — Private campaign access (passwords + share links) ──────
+
+class AccessPasswordIn(_BaseModel):
+    """Set or clear the campaign's join password.
+
+    `password = ""` clears the password (campaign becomes openly joinable
+    with the invite token); a non-empty value bcrypts and stores the
+    hash. The plaintext is never persisted or echoed."""
+    password: str = ""
+
+
+class ShareLinkIn(_BaseModel):
+    label: str = _Field(min_length=1, max_length=80)
+    password: str = ""
+    expires_at: str | None = None  # ISO-8601; None = never expires
+    max_uses: int | None = None    # None = unlimited
+
+
+@router.post("/campaigns/{cid}/access-password")
+async def set_access_password(
+    cid: str, body: AccessPasswordIn,
+    user: dict = Depends(get_current_user),
+):
+    """GM sets / clears the campaign-wide join password."""
+    camp = await db.campaigns.find_one({"id": cid}, {"_id": 0})
+    if not camp:
+        raise HTTPException(404, "Campaign not found")
+    if camp["gm_id"] != user["id"] and user.get("role") != "admin":
+        raise HTTPException(403, "GM/admin only.")
+    upd: Dict[str, Any] = {"updated_at": now_iso()}
+    if body.password:
+        from core.security import hash_password
+        upd["access_password_hash"] = hash_password(body.password)
+        upd["access_password_set"] = True
+    else:
+        upd["access_password_hash"] = None
+        upd["access_password_set"] = False
+    await db.campaigns.update_one({"id": cid}, {"$set": upd})
+    return {"ok": True, "password_set": bool(body.password)}
+
+
+@router.get("/campaigns/{cid}/share-links")
+async def list_share_links(cid: str,
+                            user: dict = Depends(get_current_user)):
+    """GM-only — list the campaign's named share links."""
+    camp = await db.campaigns.find_one({"id": cid}, {"_id": 0})
+    if not camp:
+        raise HTTPException(404, "Campaign not found")
+    if camp["gm_id"] != user["id"] and user.get("role") != "admin":
+        raise HTTPException(403, "GM/admin only.")
+    links = await db.campaign_share_links.find(
+        {"campaign_id": cid}, {"_id": 0, "password_hash": 0},
+    ).sort("created_at", -1).to_list(length=200)
+    return links
+
+
+@router.post("/campaigns/{cid}/share-links")
+async def create_share_link(
+    cid: str, body: ShareLinkIn,
+    user: dict = Depends(get_current_user),
+):
+    """GM-only — create a named share link with optional password,
+    expiry, and max-use cap."""
+    camp = await db.campaigns.find_one({"id": cid}, {"_id": 0})
+    if not camp:
+        raise HTTPException(404, "Campaign not found")
+    if camp["gm_id"] != user["id"] and user.get("role") != "admin":
+        raise HTTPException(403, "GM/admin only.")
+    doc = {
+        "id": new_id(),
+        "campaign_id": cid,
+        "label": body.label.strip(),
+        "token": secrets.token_urlsafe(20),
+        "expires_at": body.expires_at,
+        "max_uses": body.max_uses,
+        "use_count": 0,
+        "created_by": user["id"],
+        "created_at": now_iso(),
+        "password_set": bool(body.password),
+        "password_hash": None,
+    }
+    if body.password:
+        from core.security import hash_password
+        doc["password_hash"] = hash_password(body.password)
+    await db.campaign_share_links.insert_one(dict(doc))
+    doc.pop("_id", None)
+    doc.pop("password_hash", None)
+    return {"ok": True, "share_link": doc}
+
+
+@router.delete("/campaigns/{cid}/share-links/{lid}")
+async def delete_share_link(
+    cid: str, lid: str,
+    user: dict = Depends(get_current_user),
+):
+    camp = await db.campaigns.find_one({"id": cid}, {"_id": 0})
+    if not camp:
+        raise HTTPException(404, "Campaign not found")
+    if camp["gm_id"] != user["id"] and user.get("role") != "admin":
+        raise HTTPException(403, "GM/admin only.")
+    res = await db.campaign_share_links.delete_one(
+        {"id": lid, "campaign_id": cid})
+    return {"ok": True, "deleted": res.deleted_count}
+
+
+@router.get("/share-links/{token}")
+async def get_share_link_public(token: str):
+    """Public read — minimal info for the join page.
+
+    Surfaces label + system + GM + whether a password is required
+    + whether the link is still valid (expiry / max-uses)."""
+    sl = await db.campaign_share_links.find_one({"token": token}, {"_id": 0})
+    if not sl:
+        raise HTTPException(404, "Share link not found or revoked")
+    camp = await db.campaigns.find_one({"id": sl["campaign_id"]}, {"_id": 0})
+    if not camp:
+        raise HTTPException(404, "Campaign not found")
+    expired = False
+    if sl.get("expires_at"):
+        from datetime import datetime, timezone
+        try:
+            expired = datetime.fromisoformat(
+                sl["expires_at"].replace("Z", "+00:00"),
+            ) < datetime.now(timezone.utc)
+        except Exception:
+            expired = False
+    capped = (sl.get("max_uses") is not None
+              and sl.get("use_count", 0) >= sl["max_uses"])
+    return {
+        "campaign_id": camp["id"], "name": camp["name"],
+        "system": camp.get("system_id") or camp.get("system", "BESM 4E"),
+        "gm_name": camp.get("gm_name", ""),
+        "label": sl["label"],
+        "password_required": bool(sl.get("password_set")),
+        "expired": expired, "capped": capped,
+        "valid": not (expired or capped),
+        "seated": len(camp.get("member_ids", [])),
+        "max_players": camp.get("max_players", 6),
+    }
+
+
+class ShareLinkRedeem(_BaseModel):
+    password: str = ""
+
+
+@router.post("/share-links/{token}/redeem")
+async def redeem_share_link(
+    token: str, body: ShareLinkRedeem,
+    user: dict = Depends(get_current_user),
+):
+    """Authenticated player redeems a share link → joins the campaign.
+
+    Validates the password (if set), expiry, and max-use cap before
+    adding the user to `member_ids` and incrementing `use_count`.
+    """
+    sl = await db.campaign_share_links.find_one({"token": token}, {"_id": 0})
+    if not sl:
+        raise HTTPException(404, "Share link not found or revoked")
+    if sl.get("expires_at"):
+        from datetime import datetime, timezone
+        try:
+            if datetime.fromisoformat(
+                sl["expires_at"].replace("Z", "+00:00"),
+            ) < datetime.now(timezone.utc):
+                raise HTTPException(410, "Share link has expired")
+        except HTTPException:
+            raise
+        except Exception:
+            pass
+    if (sl.get("max_uses") is not None
+            and sl.get("use_count", 0) >= sl["max_uses"]):
+        raise HTTPException(410, "Share link is fully redeemed")
+
+    if sl.get("password_set"):
+        from core.security import verify_password
+        if not body.password or not verify_password(
+                body.password, sl.get("password_hash") or ""):
+            raise HTTPException(403, "Incorrect password")
+
+    cid = sl["campaign_id"]
+    camp = await db.campaigns.find_one({"id": cid}, {"_id": 0})
+    if not camp:
+        raise HTTPException(404, "Campaign not found")
+    if user["id"] == camp["gm_id"]:
+        return {"ok": True, "campaign_id": cid, "already": "gm"}
+    if user["id"] in (camp.get("member_ids") or []):
+        return {"ok": True, "campaign_id": cid, "already": True}
+    if len(camp.get("member_ids", [])) >= camp.get("max_players", 6):
+        raise HTTPException(400, "Table full")
+    await db.campaigns.update_one(
+        {"id": cid}, {"$addToSet": {"member_ids": user["id"]}})
+    await db.campaign_share_links.update_one(
+        {"id": sl["id"]},
+        {"$inc": {"use_count": 1},
+         "$set": {"last_used_at": now_iso(),
+                  "last_used_by": user["id"]}})
+    return {"ok": True, "campaign_id": cid}
+
+
 @router.get("/campaigns/{cid}/members")
 async def list_campaign_members(cid: str, user: dict = Depends(get_current_user)):
     """Member list for the @mention autocomplete picker. Returns id, name, and
@@ -238,17 +438,35 @@ async def get_invite(token: str):
         "seated": len(camp.get("member_ids", [])),
         "max_players": camp.get("max_players", 6),
         "full": len(camp.get("member_ids", [])) >= camp.get("max_players", 6),
+        # V6.25.17 — surface campaign-level password gate.
+        "password_required": bool(camp.get("access_password_set")),
     }
 
 
+class AcceptInviteIn(_BaseModel):
+    """V6.25.17 — optional password for password-gated campaigns."""
+    password: str = ""
+
+
 @router.post("/invites/{token}/accept")
-async def accept_invite(token: str, user: dict = Depends(get_current_user)):
+async def accept_invite(
+    token: str,
+    body: AcceptInviteIn | None = None,
+    user: dict = Depends(get_current_user),
+):
     camp = await db.campaigns.find_one({"invite_token": token}, {"_id": 0})
     if not camp:
         raise HTTPException(404, "Invite not found or revoked")
     cid = camp["id"]
     if user["id"] == camp["gm_id"]:
         return {"ok": True, "campaign_id": cid, "already": "gm"}
+    # V6.25.17 — enforce campaign-level password if one is set.
+    if camp.get("access_password_set"):
+        from core.security import verify_password
+        pwd = (body.password if body else "") or ""
+        if not pwd or not verify_password(
+                pwd, camp.get("access_password_hash") or ""):
+            raise HTTPException(403, "Incorrect campaign password")
     if user["id"] in camp.get("member_ids", []):
         return {"ok": True, "campaign_id": cid, "already": True}
     if len(camp.get("member_ids", [])) >= camp.get("max_players", 6):
@@ -484,18 +702,125 @@ async def restore_genesis_archive(cid: str, aid: str,
     return restored
 
 
+@router.post("/campaigns/{cid}/genesis/archives/{aid}/marketplace-share")
+async def share_genesis_archive(cid: str, aid: str,
+                                   access: str = "public",
+                                   price_cents: int = 0,
+                                   summary: str = "",
+                                   license_text: str = "",
+                                   license_attestation: bool = False,
+                                   user: dict = Depends(get_current_user)):
+    """V6.25.26 — Per-archive marketplace share.
+
+    Publishes a Genesis archive snapshot to the Marketplace so other
+    GMs can clone it as a starter for their own campaign. Each archive
+    gets its OWN listing — versions and forks remain linked through
+    `cloned_from_archive_id`. Only the campaign GM can publish.
+    """
+    if access not in ("public", "private", "paywall"):
+        raise HTTPException(422, "access must be public | private | paywall")
+    if access == "paywall" and price_cents <= 0:
+        raise HTTPException(422, "Paywall listings need a positive price_cents.")
+    if not license_attestation:
+        raise HTTPException(422, "License attestation is required to publish.")
+
+    camp = await db.campaigns.find_one({"id": cid}, {"_id": 0})
+    if not camp:
+        raise HTTPException(404, "Campaign not found.")
+    if camp["gm_id"] != user["id"] and user.get("role") != "admin":
+        raise HTTPException(403, "Only the campaign GM may share Genesis archives.")
+    archive = await db.genesis_archives.find_one(
+        {"campaign_id": cid, "archive_id": aid, "kind": "genesis"},
+        {"_id": 0})
+    if not archive:
+        raise HTTPException(404, "Archive not found")
+
+    # Already-shared check — one listing per archive.
+    existing = await db.marketplace_listings.find_one(
+        {"source_kind": "genesis_archive", "source_id": aid}, {"_id": 0})
+    if existing:
+        raise HTTPException(409, "This archive is already on the marketplace.")
+
+    listing = {
+        "id": new_id(),
+        "kind": "genesis_archive",
+        "name": archive.get("logline") or archive.get("title")
+                or f"Genesis archive {aid[:8]}",
+        "summary": (summary or archive.get("logline") or "")[:600],
+        "license_text": license_text[:600],
+        "access": access,
+        "price_cents": int(price_cents),
+        "source_kind": "genesis_archive",
+        "source_id": aid,
+        "source_campaign_id": cid,
+        "system_id": camp.get("system_id"),
+        "author_id": user["id"],
+        "author_name": user.get("name") or user.get("email"),
+        # Snapshot: strip mongo + audit fields so re-fork is clean.
+        "snapshot": {k: v for k, v in archive.items()
+                       if k not in ("archive_id", "archived_at", "archived_by",
+                                       "archived_from", "kind", "_id")},
+        "downloads": 0,
+        "license_attestation_at": now_iso(),
+        "created_at": now_iso(),
+    }
+    await db.marketplace_listings.insert_one(listing)
+    listing.pop("_id", None)
+    return listing
+
+
+@router.post("/marketplace/{lid}/clone-genesis-archive")
+async def clone_genesis_archive_listing(lid: str,
+                                            into_campaign_id: str,
+                                            user: dict = Depends(get_current_user)):
+    """Fork a marketplace Genesis archive into the user's campaign as
+    a new archive entry. Player can apply it via the existing /restore
+    flow once it's in their campaign's archive list."""
+    listing = await db.marketplace_listings.find_one(
+        {"id": lid, "kind": "genesis_archive"}, {"_id": 0})
+    if not listing:
+        raise HTTPException(404, "Listing not found")
+    target = await db.campaigns.find_one({"id": into_campaign_id}, {"_id": 0})
+    if not target:
+        raise HTTPException(404, "Target campaign not found")
+    if target["gm_id"] != user["id"] and user.get("role") != "admin":
+        raise HTTPException(403, "Only the GM of the target campaign may clone archives.")
+    # Append the snapshot as a new archive entry.
+    snap = dict(listing.get("snapshot") or {})
+    snap.update({
+        "campaign_id": into_campaign_id,
+        "archive_id": new_id(),
+        "archived_at": now_iso(),
+        "archived_by": user["id"],
+        "archived_from": "marketplace",
+        "kind": "genesis",
+        "cloned_from_archive_id": listing["source_id"],
+        "cloned_from_listing_id": lid,
+    })
+    await db.genesis_archives.insert_one(snap)
+    await db.marketplace_listings.update_one(
+        {"id": lid}, {"$inc": {"downloads": 1}})
+    snap.pop("_id", None)
+    return {"ok": True, "archive_id": snap["archive_id"]}
+
+
 @router.post("/campaigns/{cid}/genesis/seed-nodes")
 async def seed_nodes_from_genesis(cid: str, user: dict = Depends(get_current_user)):
     """Convert genesis seed_npcs / nemesis / adventures / locations /
     biomes / factions / motives into gm_only knowledge nodes.
 
-    V6.25 — Nemesis sub-fields (motive / resources / weakness) now seed
-    as distinct linked lore / faction / lore nodes instead of being glued
-    into a single monolithic content blob. Discrete seed buckets
-    (locations, biomes, factions, motives) each fan out to one codex
-    node per entry. The World Tree auto-classifier picks them up by
-    `type` on its next fetch.
+    V6.25.19 — every seeded node is normalised through
+    `core.codex_classifier.codexify_node`, so the row carries `name`,
+    `title`, `type`, `node_kind`, `creation_tree.section`, `tags`, and
+    `summary` consistently. The World Tree picks them up immediately
+    without needing the read-side fallback classifier.
+
+    V6.25 — Nemesis sub-fields (motive / resources / weakness) seed
+    as distinct linked lore / faction / lore nodes instead of being
+    glued into a single monolithic content blob.
     """
+    from core.codex_classifier import codexify_node
+
     camp = await db.campaigns.find_one({"id": cid}, {"_id": 0})
     if not camp or camp["gm_id"] != user["id"]:
         raise HTTPException(403, "Only GM can seed")
@@ -506,88 +831,97 @@ async def seed_nodes_from_genesis(cid: str, user: dict = Depends(get_current_use
     now = now_iso()
     author = {"author_id": user["id"], "author_name": user["name"]}
 
-    async def _insert(node: dict) -> str:
-        node.setdefault("id", new_id())
-        node.setdefault("campaign_id", cid)
-        node.setdefault("visibility", "gm_only")
-        node.setdefault("revealed_to", [])
-        node.setdefault("links", [])
-        node.setdefault("tags", [])
-        node.setdefault("created_at", now)
-        node.update(author)
-        await db.nodes.insert_one(node)
-        return node["id"]
+    async def _insert(*, name: str, hint: str, content: str = "",
+                       summary: str = "", tags: list[str] | None = None,
+                       links: list | None = None,
+                       explicit_section: str | None = None) -> str | None:
+        if not (name or "").strip():
+            return None
+        body = codexify_node(
+            name=name, content=content, summary=summary,
+            tags=tags or [], hint=hint,
+            explicit_section=explicit_section,
+        )
+        body.update({
+            "id": new_id(),
+            "campaign_id": cid,
+            "visibility": "gm_only",
+            "revealed_to": [],
+            "links": links or [],
+            "created_at": now,
+            "updated_at": now,
+            **author,
+        })
+        # Provenance — World Tree's bridge-density meter watches this.
+        body.setdefault("fields", {}).setdefault("source", "genesis")
+        await db.nodes.insert_one(dict(body))
+        return body["id"]
 
     # Nemesis → one NPC node + discrete lore/faction sub-nodes for the
     # motive / resources / weakness so the World Tree's Population &
     # History pillars each get a distinct entry.
     nem_id = None
     if g.get("nemesis_name"):
-        nem_id = await _insert({
-            "type": "npc",
-            "title": g["nemesis_name"],
-            "content": f"Nemesis · {g.get('nemesis_type','')}".strip(" ·"),
-            "tags": ["nemesis"],
-        })
+        nem_id = await _insert(
+            name=g["nemesis_name"],
+            hint="npc",
+            summary=f"Nemesis · {g.get('nemesis_type','')}".strip(" ·"),
+            tags=["nemesis"],
+        )
         created += 1
         if g.get("nemesis_motive"):
-            await _insert({
-                "type": "lore",
-                "title": f"{g['nemesis_name']} — Motive",
-                "content": g["nemesis_motive"],
-                "tags": ["nemesis", "motive"],
-                "links": [{"target_id": nem_id, "relationship_type": "drives"}],
-            })
+            await _insert(
+                name=f"{g['nemesis_name']} — Motive",
+                hint="lore", content=g["nemesis_motive"],
+                tags=["nemesis", "motive"],
+                links=[{"target_id": nem_id, "relationship_type": "drives"}],
+            )
             created += 1
         if g.get("nemesis_resources"):
-            await _insert({
-                "type": "faction",
-                "title": f"{g['nemesis_name']} — Resources",
-                "content": g["nemesis_resources"],
-                "tags": ["nemesis", "resources"],
-                "links": [{"target_id": nem_id, "relationship_type": "commands"}],
-            })
+            await _insert(
+                name=f"{g['nemesis_name']} — Resources",
+                hint="faction", content=g["nemesis_resources"],
+                tags=["nemesis", "resources"],
+                links=[{"target_id": nem_id, "relationship_type": "commands"}],
+            )
             created += 1
         if g.get("nemesis_weakness"):
-            await _insert({
-                "type": "lore",
-                "title": f"{g['nemesis_name']} — Weakness",
-                "content": g["nemesis_weakness"],
-                "tags": ["nemesis", "weakness"],
-                "links": [{"target_id": nem_id, "relationship_type": "vulnerable-to"}],
-            })
+            await _insert(
+                name=f"{g['nemesis_name']} — Weakness",
+                hint="lore", content=g["nemesis_weakness"],
+                tags=["nemesis", "weakness"],
+                links=[{"target_id": nem_id, "relationship_type": "vulnerable-to"}],
+            )
             created += 1
 
     # Supporting cast — one npc node per seed entry.
     for npc in g.get("seed_npcs", []) or []:
         if not npc.get("name"):
             continue
-        await _insert({
-            "type": "npc",
-            "title": npc["name"],
-            "content": f"{npc.get('role','')}\n\n{npc.get('note','')}".strip(),
-            "tags": [npc.get("role", "").lower()] if npc.get("role") else [],
-        })
+        await _insert(
+            name=npc["name"], hint="npc",
+            content=f"{npc.get('role','')}\n\n{npc.get('note','')}".strip(),
+            tags=[npc.get("role", "").lower()] if npc.get("role") else [],
+        )
         created += 1
 
     # Adventures — one quest node per entry.
     for adv in g.get("adventures", []) or []:
         if not adv.get("title"):
             continue
-        await _insert({
-            "type": "quest",
-            "title": adv["title"],
-            "content": (f"Hook: {adv.get('hook','')}\n"
-                         f"Stakes: {adv.get('stakes','')}\n"
-                         f"Outcome: {adv.get('outcome','')}"),
-            "tags": [adv.get("kind", "").lower()] if adv.get("kind") else [],
-        })
+        await _insert(
+            name=adv["title"], hint="quest",
+            content=(f"Hook: {adv.get('hook','')}\n"
+                      f"Stakes: {adv.get('stakes','')}\n"
+                      f"Outcome: {adv.get('outcome','')}"),
+            tags=[adv.get("kind", "").lower()] if adv.get("kind") else [],
+        )
         created += 1
 
     # V6.25 — Discrete Genesis buckets → one codex node apiece.
-    for bucket, node_type, tag in (
+    for bucket, kind, tag in (
         ("locations", "location", "location"),
-        ("biomes", "location", "biome"),
+        ("biomes", "biome", "biome"),
         ("factions", "faction", "faction"),
         ("motives", "lore", "motive"),
     ):
@@ -595,12 +929,11 @@ async def seed_nodes_from_genesis(cid: str, user: dict = Depends(get_current_use
             title = (entry.get("name") or entry.get("title") or "").strip()
             if not title:
                 continue
-            await _insert({
-                "type": node_type,
-                "title": title,
-                "content": entry.get("summary") or entry.get("note") or "",
-                "tags": [tag] + [t for t in (entry.get("tags") or []) if t],
-            })
+            await _insert(
+                name=title, hint=kind,
+                content=entry.get("summary") or entry.get("note") or "",
+                tags=[tag] + [t for t in (entry.get("tags") or []) if t],
+            )
             created += 1
 
     return {"ok": True, "nodes_created": created}

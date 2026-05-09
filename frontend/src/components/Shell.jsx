@@ -3,7 +3,7 @@ import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../lib/api";
 import {
   Scroll, LayoutGrid, BookOpen, LogOut, UserCircle2, Compass, Menu, X,
-  User, HelpCircle, Sparkles, Store,
+  User, HelpCircle, Sparkles, Store, Wand2,
 } from "lucide-react";
 import CmdKPalette from "./CmdKPalette";
 import ReferenceAutoLink from "./ReferenceAutoLink";
@@ -37,6 +37,7 @@ const NAV = [
   { to: "/app/campaigns", icon: Scroll, label: "Campaigns", testid: "nav-campaigns" },
   { to: "/app/discover", icon: Compass, label: "Discover", testid: "nav-discover" },
   { to: "/app/reference", icon: BookOpen, label: "Reference", testid: "nav-reference" },
+  { to: "/app/concept-forge", icon: Wand2, label: "Concept Forge", testid: "nav-concept-forge" },
   { to: "/app/canon", icon: Sparkles, label: "Canon", testid: "nav-canon" },
   { to: "/app/marketplace", icon: Store, label: "Market", testid: "nav-marketplace" },
   { to: "/app/help", icon: HelpCircle, label: "How To", testid: "nav-help" },

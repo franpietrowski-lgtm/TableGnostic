@@ -19,9 +19,14 @@ import PendingAdvancementPanel from "./PendingAdvancementPanel";
 import { ConsentCheckbox } from "./ConsentPanel";
 import ClassProgressionPanel from "./ClassProgressionPanel";
 import AppliedTemplatesPanel from "./AppliedTemplatesPanel";
+import ValidationPanel from "./ValidationPanel";
 import QuickRollBar from "./QuickRollBar";
 import MacroBuilder from "./MacroBuilder";
+import MaterialsIntakePanel from "./MaterialsIntakePanel";
 import Anime5eBudgetAudit from "./Anime5eBudgetAudit";
+// V6.25.27 — CpBalanceWidget moved to CharacterBuilder edit window only.
+import InventoryPanel, { EquippedStrip } from "./sheets/InventoryPanel";
+import CypherXPPanel from "./CypherXPPanel";
 
 /**
  * V6.25.10 — Per-row "Add to macro" sprinkle.
@@ -36,7 +41,7 @@ function AddToMacroButton({ token, label, onOpen, hide }) {
   if (hide) return null;
   return (
     <button onClick={() => onOpen(token, label)}
-            className="text-mist/50 hover:text-gold-bright p-0.5 rounded-sm
+            className="touch-target text-mist/50 hover:text-gold-bright p-0.5 rounded-sm
                           hover:bg-gold/10 transition-colors"
             title={`Add ${label} to a macro slot`}
             data-testid={`add-to-macro-${token.replace(/[{}:]/g,"-")}`}>
@@ -277,6 +282,9 @@ export default function CharacterSheet() {
           deep links work. */}
       <SheetTabBar value={sheetTab} onChange={setSheetTab}/>
 
+      {/* V6.25.27 — CP/DP balance widget moved out of the read-only sheet
+          per spec; lives in CharacterBuilder edit window now. */}
+
       {/* ───────── Identity tab ───────── */}
       {sheetTab === "identity" && (
       <div className="mt-3 flex items-start justify-between flex-wrap gap-4"
@@ -374,8 +382,17 @@ export default function CharacterSheet() {
 
       {/* ───────── Mechanics tab ───────── */}
       {sheetTab === "mechanics" && (<>
-      {/* V6.17 — Spell + Cooldown tracker (renders only when sheet has slots/bundles/EP). */}
-      <SpellTracker characterId={ch.id} isOwnerOrGm={canEditMech}/>
+      {/* V6.25.27 — Equipped slots strip at the top of mechanics so the
+          GM/player can read what's in each hand + body slot at a glance.
+          Uses the same inventory rows as the Inventory tab. */}
+      <EquippedStripFor character={ch}/>
+      {/* V6.17 — Spell + Cooldown tracker (renders only when sheet has slots/bundles/EP).
+          V6.25.29 — only render for systems that natively use spell-slot mechanics.
+          Anime 5E + BESM 4E use BESM Power Packs / Bundles for casting; Cypher uses
+          cypher-state pools. SpellTracker is D&D-shaped and would mis-render for them. */}
+      {campaign?.system_id === "dnd-5e" && (
+        <SpellTracker characterId={ch.id} isOwnerOrGm={canEditMech}/>
+      )}
       {/* V6.19 — Class progression (saves/armor/weapons/tools + per-level features timeline).
           V6.25.3 — Suppressed for BESM 4E (no D&D-style class progression);
           BESM uses the AppliedTemplatesPanel instead. */}
@@ -384,6 +401,9 @@ export default function CharacterSheet() {
       )}
       {/* V6.25.3 — Applied BESM race / class templates (no-op when none applied). */}
       <AppliedTemplatesPanel character={ch}/>
+      {/* V6.25.34 — Live validation: duplicate attributes, over-benchmark
+          stats / attrs / defects. Weapons exempt. Dismissals persist. */}
+      <ValidationPanel characterId={ch.id}/>
       {/* V6.25.7 — Quick-Roll Bar for play-by-post macros. */}
       <QuickRollBar character={ch} campaignId={ch.campaign_id}
                      systemId={campaign?.system_id}
@@ -412,6 +432,16 @@ export default function CharacterSheet() {
                                     campaignId={ch.campaign_id}
                                     systemId={campaign?.system_id || "dnd-5e"}/>}
       {cypherState && <CypherSheetView state={cypherState} roll={roll}/>}
+      {cypherState && (
+        <div className="mt-4">
+          <CypherXPPanel campId={ch.campaign_id} character={ch}
+                          isGm={!!campaign?.is_gm}
+                          onChange={(newXp) => {
+                            // Optimistically reflect the new balance on the sheet.
+                            setCh((cur) => cur ? { ...cur, xp_unspent: newXp } : cur);
+                          }}/>
+        </div>
+      )}
       {!dndState && !cypherState && (
       <div className="mt-8 grid lg:grid-cols-3 gap-6">
         {/* Left: Core */}
@@ -874,14 +904,16 @@ export default function CharacterSheet() {
       {sheetTab === "history" && (
         <>
           <CharacterJournal character={ch} onUpdated={load}/>
+          {/* V6.25.12 — Player materials intake → GM approval queue. */}
+          <MaterialsIntakePanel campaignId={ch.campaign_id}/>
           <SheetHistoryPanel character={ch}/>
         </>
       )}
 
-      {/* Inventory tab content — lists items from every system's loadout
-          source (BESM power packs / D&D magic items / Cypher cyphers). */}
+      {/* Inventory tab content — V6.25.27 — uses InventoryPanel
+          (tabs · equip slots · attune · readied · charges). */}
       {sheetTab === "inventory" && (
-        <SheetInventoryPanel character={ch} canEditMech={canEditMech}/>
+        <InventoryPanel character={ch} canEdit={canEditMech} onChanged={load}/>
       )}
 
       {showAdvWizard && (
@@ -929,11 +961,72 @@ function SheetTabBar({ value, onChange }) {
 }
 
 // ────────────────────────────────────────────────────────────────────
-// SheetInventoryPanel — gathers every inventory-adjacent bucket from the
-// character's folio into a single tidy page. Read-only for now; GMs
-// still edit via the builder. Designed to be tolerant of sparse data.
+// EquippedStripFor — V6.25.27 — thin wrapper that computes the same
+// derived+manual inventory rows the Inventory tab uses and renders
+// the EquippedStrip on the Mechanics tab. Lets the GM/player see
+// equipped/attuned/readied at a glance without leaving Mechanics.
 // ────────────────────────────────────────────────────────────────────
-function SheetInventoryPanel({ character, canEditMech }) {
+function EquippedStripFor({ character }) {
+  // Re-import the row-building helper from InventoryPanel by mounting
+  // a tiny wrapper that lets InventoryPanel compute and surface its
+  // EquippedStrip. We inline the same derive logic here to avoid a
+  // second network roundtrip — InventoryPanel exports EquippedStrip
+  // and the deriveRows helper is local to that module, so the
+  // simplest route is to render <EquippedStrip rows={...}/> with rows
+  // computed inline. We rely on the canonical export.
+  const folio = character?.folio || {};
+  const inv = folio.inventory_state || {};
+  const rows = React.useMemo(() => {
+    const list = [];
+    const cat = (n) => {
+      const k = (n || "").toLowerCase();
+      if (k === "weapon") return "weapon";
+      if (k === "shield") return "shield";
+      if (k === "armor" || k === "armour") return "armor";
+      if (k === "item") return "item";
+      if (k === "wealth") return "mundane";
+      if (k === "healing") return "consumable";
+      return null;
+    };
+    for (const a of character?.attributes || []) {
+      const c = cat(a.name); if (!c) continue;
+      list.push({
+        id: `derived:attr:${a.name}:${a.custom_attribute_id || a.name}`,
+        name: a.name === "Item"
+          ? (a.note ? a.note.split("—")[0].trim() || a.note.slice(0, 40) : "Item")
+          : a.name,
+        category: c,
+        handed: a.name === "Weapon" ? 1 : 0,
+        slot_hint: a.name === "Weapon" ? "R-Hand"
+                    : a.name === "Shield" ? "L-Hand"
+                    : a.name === "Armor"  ? "Torso" : null,
+        attune_required: c === "item" || c === "magic",
+        ready_required:  c === "consumable",
+        charges_max: c === "consumable" ? a.level : null,
+      });
+    }
+    for (const it of inv.items || []) list.push(it);
+    const equipped = inv.equipped || {};
+    const attunedIds = new Set(inv.attuned_ids || []);
+    const readiedIds = new Set(inv.readied_ids || []);
+    return list.map((it) => {
+      const slotEntry = Object.entries(equipped).find(([, id]) => id === it.id);
+      return {
+        ...it,
+        equipped_to: slotEntry ? slotEntry[0] : null,
+        attuned: attunedIds.has(it.id),
+        readied: readiedIds.has(it.id),
+      };
+    });
+  }, [character, inv]);
+  return <EquippedStrip rows={rows}/>;
+}
+
+// ────────────────────────────────────────────────────────────────────
+// SheetInventoryPanel (LEGACY — V6.25.27 superseded by InventoryPanel
+// at /sheets/InventoryPanel.jsx). Kept for reference; not mounted.
+// ────────────────────────────────────────────────────────────────────
+function SheetInventoryPanel({ character, canEditMech }) {  // eslint-disable-line no-unused-vars
   const folio = character.folio || {};
   const dnd = folio.dnd_state || {};
   const cypher = folio.cypher_state || {};
@@ -1097,10 +1190,28 @@ function SheetInventoryPanel({ character, canEditMech }) {
 // ────────────────────────────────────────────────────────────────────
 // SheetHistoryPanel — XP ledger from ch.xp_total / ch.xp_unspent +
 // folio.xp_log if present. Read-only summary with timestamps.
+//
+// V6.25.27 — Points-spent now reads `/validate.breakdown.total_spent`
+// (the same number the Rules Audit and CP Bank show) so all three
+// surfaces agree. Falls back to character.spent.total_spent if the
+// audit endpoint fails to keep this panel resilient.
 // ────────────────────────────────────────────────────────────────────
 function SheetHistoryPanel({ character }) {
   const folio = character.folio || {};
   const xpLog = folio.xp_log || [];
+  const [audit, setAudit] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    if (!character?.id) return undefined;
+    api.get(`/characters/${character.id}/validate`)
+       .then((r) => { if (!cancelled) setAudit(r.data); })
+       .catch(() => {});
+    return () => { cancelled = true; };
+  }, [character?.id]);
+  const auditSpent = audit?.breakdown?.total_spent;
+  const fallbackSpent = character.spent?.total_spent ?? 0;
+  const pointsSpent = auditSpent ?? fallbackSpent;
+  const totalPoints = audit?.total_points ?? character.total_points;
   return (
     <div className="space-y-4 mt-4" data-testid="sheet-history">
       <div className="card-mystic p-5 grid sm:grid-cols-3 gap-3" data-testid="sheet-history-xp">
@@ -1112,9 +1223,13 @@ function SheetHistoryPanel({ character }) {
           <div className="label-ref">XP unspent</div>
           <div className="font-display text-2xl text-gold-bright">{Number(character.xp_unspent || 0).toFixed(2)}</div>
         </div>
-        <div className="border border-gold/15 rounded-sm py-3 px-2 text-center">
+        <div className="border border-gold/15 rounded-sm py-3 px-2 text-center"
+             title="Sourced from the Rules Audit (/validate). Item half-cost p.135 already applied.">
           <div className="label-ref">Points spent</div>
-          <div className="font-display text-2xl text-parchment">{character.spent?.total_spent ?? 0}<span className="text-mist text-sm"> / {character.total_points}</span></div>
+          <div className="font-display text-2xl text-parchment"
+               data-testid="sheet-history-points-spent">
+            {pointsSpent}<span className="text-mist text-sm"> / {totalPoints}</span>
+          </div>
         </div>
       </div>
       {xpLog.length > 0 && (

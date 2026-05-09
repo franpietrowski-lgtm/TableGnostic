@@ -216,56 +216,173 @@ LIMITERS = [
     {"name": "Unpredictable", "cost_modifier": -1, "page": 153},
 ]
 
-# V6.25.10 — Weapon-specific Enhancements (BESM Extras Ch.3, Weapon Options).
-# These ride on top of an Item / Weapon Attribute and are gated by the
-# attribute type — they shouldn't appear in the picker for a Force Field
-# or Mind Control Attribute. Each has its own per-rank cost and a few
-# behave non-standard (Burst, Auto-Fire) so they carry a `note` advising
-# the GM how to apply at the table.
+# V6.25.11 — Canonical BESM 4E Weapon Enhancements (Core p.135).
+# Each entry carries its rule-sanctioned rank range (some ranks are
+# fixed, some are open-ended 1+, some are discrete pick-one like
+# Incapacitating 2-or-4). Cost-per-rank defaults to +1 unless the
+# core book specifies otherwise. The `note` is a TableGnostic
+# descriptive pass — NOT rulebook prose.
 WEAPON_ENHANCEMENTS = [
-    {"name": "Burst",        "cost_modifier": 1, "page": 32, "scope": "weapon",
-     "note": "Each rank widens the burst cone by one zone increment."},
-    {"name": "Spread",       "cost_modifier": 1, "page": 32, "scope": "weapon",
-     "note": "Hits multiple adjacent targets at the same range bracket; rank = max targets."},
-    {"name": "Penetrating",  "cost_modifier": 1, "page": 33, "scope": "weapon",
-     "note": "Each rank ignores one tier of armour or barrier."},
-    {"name": "Auto-Fire",    "cost_modifier": 2, "page": 33, "scope": "weapon",
-     "note": "Costs +2/rank — full-auto fire; +1 to-hit per rank, depletes ammo faster."},
-    {"name": "Concealable",  "cost_modifier": 1, "page": 34, "scope": "weapon"},
-    {"name": "Throwable",    "cost_modifier": 1, "page": 34, "scope": "weapon",
-     "note": "Returning property: rank ≥ 2 lets the weapon return to the wielder's hand."},
-    {"name": "Reach",        "cost_modifier": 1, "page": 34, "scope": "weapon",
-     "note": "Each rank extends melee reach by one zone."},
-    {"name": "Flexible",     "cost_modifier": 1, "page": 35, "scope": "weapon",
-     "note": "Whip / chain — bypasses cover; pairs with Reach."},
-    {"name": "Brutal",       "cost_modifier": 1, "page": 35, "scope": "weapon",
-     "note": "Each rank increases knockdown / stagger DC by one tier."},
-    {"name": "Silent",       "cost_modifier": 1, "page": 36, "scope": "weapon"},
+    {"name": "Accurate",        "cost_modifier": 1, "page": 135, "scope": "weapon",
+     "rank_range": [1, 2],
+     "note": "Attacker gains a per-rank bonus to hit with this weapon."},
+    {"name": "Aura",            "cost_modifier": 1, "page": 135, "scope": "weapon",
+     "rank_range": [1, 1],
+     "note": "Weapon glows, pulses, or chills the air — broadcasts its nature."},
+    {"name": "Autofire",        "cost_modifier": 1, "page": 135, "scope": "weapon",
+     "rank_range": [3, 3],
+     "note": "Full-auto: trades ammo for a burst of attacks in a round."},
+    {"name": "Blight",          "cost_modifier": 1, "page": 135, "scope": "weapon",
+     "rank_range": [1, 3],
+     "note": "Each rank seeds one additional decay effect at the target site."},
+    {"name": "Contact",         "cost_modifier": 1, "page": 135, "scope": "weapon",
+     "rank_range": [1, 2],
+     "note": "Each rank lets the weapon function through skin / hide / hull contact."},
+    {"name": "Contagious",      "cost_modifier": 1, "page": 135, "scope": "weapon",
+     "rank_range": [1, 3],
+     "note": "Afflicted targets transmit the effect onward each rank tier."},
+    {"name": "Continuing",      "cost_modifier": 1, "page": 135, "scope": "weapon",
+     "rank_range": [1, None],
+     "note": "Open-ended rank — effect persists for each rank purchased (rounds)."},
+    {"name": "Drain",           "cost_modifier": 1, "page": 135, "scope": "weapon",
+     "rank_range": [1, 3],
+     "note": "Each rank siphons one tier of a target's resource (EP / HP / trait)."},
+    {"name": "Enervation",      "cost_modifier": 1, "page": 135, "scope": "weapon",
+     "rank_range": [1, None],
+     "note": "Open-ended: each rank inflicts one further tier of fatigue penalty."},
+    {"name": "Flare",           "cost_modifier": 1, "page": 135, "scope": "weapon",
+     "rank_range": [1, 3],
+     "note": "Each rank widens the vision-blinding / sensor-flare zone."},
+    {"name": "Flexible",        "cost_modifier": 1, "page": 135, "scope": "weapon",
+     "rank_range": [1, 3],
+     "note": "Each rank extends the weapon's effective reach via whip / chain geometry."},
+    {"name": "Helper",          "cost_modifier": 1, "page": 135, "scope": "weapon",
+     "rank_range": [1, 1],
+     "note": "Grants a combat-allied familiar or smart-assist tied to the weapon."},
+    {"name": "Homing",          "cost_modifier": 1, "page": 135, "scope": "weapon",
+     "rank_range": [1, 2],
+     "note": "Each rank bestows a tracking / guidance system (radar / IR / thermal)."},
+    {"name": "Incapacitating",  "cost_modifier": 1, "page": 135, "scope": "weapon",
+     "rank_range": "2 or 4",
+     "note": "Rank 2 stuns / knocks down on hit; rank 4 KOs outright (pick one)."},
+    {"name": "Inconspicuous",   "cost_modifier": 1, "page": 135, "scope": "weapon",
+     "rank_range": [3, 3],
+     "note": "The weapon's function is not obviously offensive to observers."},
+    {"name": "Incurable",       "cost_modifier": 1, "page": 135, "scope": "weapon",
+     "rank_range": [1, 3],
+     "note": "Each rank resists magical / technological healing of the inflicted wound."},
+    {"name": "Indirect",        "cost_modifier": 1, "page": 135, "scope": "weapon",
+     "rank_range": [1, 1],
+     "note": "Attack routes around cover / line-of-sight obstacles."},
+    {"name": "Insidious",       "cost_modifier": 1, "page": 135, "scope": "weapon",
+     "rank_range": [3, 3],
+     "note": "Victim does not immediately realise they've been struck."},
+    {"name": "Irritant",        "cost_modifier": 1, "page": 135, "scope": "weapon",
+     "rank_range": [1, 3],
+     "note": "Each rank applies a discomfort / distraction tier on hit."},
+    {"name": "Linked",          "cost_modifier": 1, "page": 135, "scope": "weapon",
+     "rank_range": [1, 1],
+     "note": "Weapon chains with another attack (combo / echo shot)."},
+    {"name": "Multidimensional", "cost_modifier": 1, "page": 135, "scope": "weapon",
+     "rank_range": [1, 1],
+     "note": "Weapon crosses dimensional / planar barriers that would block mundane hits."},
+    {"name": "Muscle",          "cost_modifier": 1, "page": 135, "scope": "weapon",
+     "rank_range": [1, 1],
+     "note": "Weapon's damage scales with the wielder's raw Body / Strength."},
+    {"name": "Penetrating",     "cost_modifier": 1, "page": 135, "scope": "weapon",
+     "rank_range": [1, None],
+     "note": "Each rank ignores one tier of armour / AR."},
+    {"name": "Piercing",        "cost_modifier": 1, "page": 135, "scope": "weapon",
+     "rank_range": [1, None],
+     "note": "Each rank drills the attack through additional layers of cover."},
+    {"name": "Psychic",         "cost_modifier": 1, "page": 135, "scope": "weapon",
+     "rank_range": [4, 4],
+     "note": "Fixed rank 4 — weapon bypasses the body and targets the mind directly."},
+    {"name": "Quake",           "cost_modifier": 1, "page": 135, "scope": "weapon",
+     "rank_range": [1, 4],
+     "note": "Each rank expands the seismic / shockwave radius."},
+    {"name": "Reach",           "cost_modifier": 1, "page": 135, "scope": "weapon",
+     "rank_range": [1, 1],
+     "note": "Extends melee reach by one zone (polearms, spears, staves)."},
+    {"name": "Selective",       "cost_modifier": 1, "page": 135, "scope": "weapon",
+     "rank_range": [1, 1],
+     "note": "Wielder chooses who inside the attack zone is affected and who is spared."},
+    {"name": "Spreading",       "cost_modifier": 1, "page": 135, "scope": "weapon",
+     "rank_range": [1, None],
+     "note": "Each rank adds one more target the attack splits to."},
+    {"name": "Stun",            "cost_modifier": 1, "page": 135, "scope": "weapon",
+     "rank_range": [1, 1],
+     "note": "Target must save or be stunned for one round on a solid hit."},
+    {"name": "Tangle",          "cost_modifier": 1, "page": 135, "scope": "weapon",
+     "rank_range": [1, None],
+     "note": "Each rank entangles / restrains the struck target one tier tighter."},
+    {"name": "Targetted",       "cost_modifier": 1, "page": 135, "scope": "weapon",
+     "rank_range": [1, 3],
+     "note": "Each rank lets the wielder target specific body parts / subsystems."},
+    {"name": "Trap",            "cost_modifier": 1, "page": 135, "scope": "weapon",
+     "rank_range": [1, 1],
+     "note": "Weapon lies in wait — triggers on an event you define."},
+    {"name": "Unique",          "cost_modifier": 1, "page": 135, "scope": "weapon",
+     "rank_range": [1, None],
+     "note": "Each rank of Unique is a single-use custom enhancement ratified with the GM."},
+    {"name": "Vampiric",        "cost_modifier": 1, "page": 135, "scope": "weapon",
+     "rank_range": "2 or 4",
+     "note": "Rank 2 = wielder heals HP on hit; rank 4 = wielder also drains EP."},
 ]
 
+# V6.25.11 — Canonical BESM 4E Weapon Limiters (Core p.142).
 WEAPON_LIMITERS = [
-    {"name": "Ammunition",   "cost_modifier": -1, "page": 38, "scope": "weapon",
-     "note": "Limited shots before reload; rank = magazine size tier (1=very few, 5=many)."},
-    {"name": "Loud",         "cost_modifier": -1, "page": 38, "scope": "weapon",
-     "note": "Use is audible far beyond the engagement zone — alerts ambient threats."},
-    {"name": "Recoil",       "cost_modifier": -1, "page": 38, "scope": "weapon",
-     "note": "Each rank imposes one rank of penalty to the next attack action."},
-    {"name": "Slow Reload",  "cost_modifier": -1, "page": 39, "scope": "weapon",
-     "note": "Rank = number of rounds required to reload after empty."},
-    {"name": "Two-Handed",   "cost_modifier": -1, "page": 39, "scope": "weapon"},
-    {"name": "Long Reload",  "cost_modifier": -1, "page": 39, "scope": "weapon",
-     "note": "Reload is an out-of-combat task — not feasible mid-fight without prep."},
-    {"name": "Easily Disarmed", "cost_modifier": -1, "page": 40, "scope": "weapon"},
-    {"name": "Conspicuous",  "cost_modifier": -1, "page": 40, "scope": "weapon",
-     "note": "Cannot be concealed — drawing it broadcasts intent."},
+    {"name": "Alt-Munition",    "cost_modifier": -1, "page": 142, "scope": "weapon",
+     "rank_range": "special",
+     "note": "Weapon requires a special, unusual, or custom-crafted ammo type."},
+    {"name": "Ammo",            "cost_modifier": -1, "page": 142, "scope": "weapon",
+     "rank_range": [1, 4],
+     "note": "Each rank tightens the magazine / shot budget one tier (rank 4 = very limited)."},
+    {"name": "Backblast",       "cost_modifier": -1, "page": 142, "scope": "weapon",
+     "rank_range": [1, 2],
+     "note": "Each rank widens the self-damaging blow-back zone behind the wielder."},
+    {"name": "Exclusive",       "cost_modifier": -1, "page": 142, "scope": "weapon",
+     "rank_range": [1, 3],
+     "note": "Each rank narrows who may effectively wield the weapon."},
+    {"name": "Fieldless",       "cost_modifier": -1, "page": 142, "scope": "weapon",
+     "rank_range": [1, 1],
+     "note": "Weapon doesn't function in specific field / technology states."},
+    {"name": "Hands",           "cost_modifier": -1, "page": 142, "scope": "weapon",
+     "rank_range": [1, 1],
+     "note": "Weapon demands both hands — no shield / off-hand actions."},
+    {"name": "Inaccurate",      "cost_modifier": -1, "page": 142, "scope": "weapon",
+     "rank_range": [1, 2],
+     "note": "Each rank imposes one tier of to-hit penalty."},
+    {"name": "Ingest",          "cost_modifier": -1, "page": 142, "scope": "weapon",
+     "rank_range": [1, 1],
+     "note": "Effect requires the target to swallow / inhale the payload."},
+    {"name": "Non-Penetrating", "cost_modifier": -1, "page": 142, "scope": "weapon",
+     "rank_range": [1, None],
+     "note": "Each rank adds a tier of armour the weapon CANNOT overcome."},
+    {"name": "Stoppable",       "cost_modifier": -1, "page": 142, "scope": "weapon",
+     "rank_range": [1, 4],
+     "note": "Each rank adds one common counter that defeats the weapon outright."},
+    {"name": "Toxic",           "cost_modifier": -1, "page": 142, "scope": "weapon",
+     "rank_range": [1, 2],
+     "note": "Payload also harms the wielder on botched handling / long exposure."},
+    {"name": "Unique",          "cost_modifier": -1, "page": 142, "scope": "weapon",
+     "rank_range": [1, None],
+     "note": "Each rank is a custom weapon-specific limiter agreed with the GM."},
+    {"name": "Unreliable",      "cost_modifier": -1, "page": 142, "scope": "weapon",
+     "rank_range": [1, 3],
+     "note": "Each rank raises the chance of jam / misfire / dud on activation."},
 ]
 
-# V6.25.10 — Item-specific Enhancements (BESM Extras Ch.3, Item Options).
+# V6.25.11 — Item-specific mods retained as a TableGnostic companion
+# pool (not strictly BESM 4E core). Items' half-cost rule lives in the
+# validator — these are FLAVOUR mods applied to the Item attribute on
+# top of its internal build. Useful for signature magical / relic
+# items that have narrative character beyond their mechanical contents.
 ITEM_ENHANCEMENTS = [
     {"name": "Compact",            "cost_modifier": 1, "page": 42, "scope": "item",
-     "note": "Each rank halves the item's apparent volume — easier to conceal & carry."},
+     "note": "Each rank halves apparent volume — easier to conceal & carry."},
     {"name": "Multi-Form",         "cost_modifier": 2, "page": 42, "scope": "item",
-     "note": "Costs +2/rank — item shifts between forms (sword → bag → ring) on command."},
+     "note": "+2/rk — item shifts between forms (sword ⇄ bag ⇄ ring) on command."},
     {"name": "Nigh-Indestructible","cost_modifier": 1, "page": 43, "scope": "item",
      "note": "Each rank survives one tier of damage that would normally destroy it."},
     {"name": "Subtle",             "cost_modifier": 1, "page": 43, "scope": "item",
@@ -273,7 +390,7 @@ ITEM_ENHANCEMENTS = [
     {"name": "Self-Repair",        "cost_modifier": 1, "page": 44, "scope": "item",
      "note": "Item recovers one tier of damage per scene of inactivity."},
     {"name": "Living Item",        "cost_modifier": 2, "page": 44, "scope": "item",
-     "note": "Costs +2/rank — sentient gear with limited communication."},
+     "note": "+2/rk — sentient gear with limited communication."},
     {"name": "Auto-Refining",      "cost_modifier": 1, "page": 44, "scope": "item",
      "note": "Item processes contained materials into useful substances on its own schedule."},
 ]
@@ -319,7 +436,11 @@ POWER_LEVELS = [
 ]
 
 # Knowledge node types (app-level, not BESM-specific)
-NODE_TYPES = ["npc", "location", "item", "event", "quest", "lore", "faction", "creature"]
+NODE_TYPES = ["npc", "location", "item", "event", "quest", "lore", "faction", "creature",
+               # V6.25.11 — Materials intake pipeline. GM-seeded + player-
+               # journalled content for artisan classes, loot tables,
+               # encounter / director-console material-based hooks.
+               "material", "byproduct", "craft_output"]
 
 # BESM Extras — Rule Expansions & Character Options (Dyskami, v1.1.2)
 # This is a separate book; source references use the "BESM Extras" label.
@@ -657,7 +778,7 @@ DEFAULT_SIZE = "Medium"
 # These are advisory, surfaced as warnings in the Customise picker — not hard
 # blocks (the GM Primer can override anything via custom rules).
 ALL_ENHANCEMENTS = [e["name"] for e in ENHANCEMENTS]
-ALL_LIMITERS = [l["name"] for l in LIMITERS]
+ALL_LIMITERS = [lim["name"] for lim in LIMITERS]
 
 ATTRIBUTE_MOD_WHITELIST = {
     # Wealth, Connected, Gear, Item, Companion, Minions are "narrative-shape"
@@ -937,25 +1058,186 @@ COMPANIONS = [
 
 # Race templates — BESM 4E ships these as quick "kits"; users can extend.
 # These cover only the *names + costs + page refs*, no rule prose.
+# V6.25.32 — BESM 4E race templates with FULL bundled attribute / defect
+# rows. Each `bundle` is a list of {kind, name, level, rank?, source} rows
+# the character builder can drop into the sheet wholesale (and the player
+# can edit afterwards). `cp_cost` mirrors the canon catalogue total so the
+# CP Bank stays anchored to the rulebook.
 RACE_TEMPLATES = [
     {"name": "Human (Standard)", "cp_cost": 0,  "page": 35,
-     "summary": "Baseline 0-cost; no template attributes."},
+     "summary": "Baseline 0-cost; no template attributes.",
+     "bundle": []},
     {"name": "Half-Demon",       "cp_cost": 8,  "page": 36,
-     "summary": "+1 Body, Aura of Inhuman Beauty 1, Tough 1; Vow defect 1."},
+     "summary": "+1 Body, Aura of Inhuman Beauty 1, Tough 1; Vow defect 1.",
+     "bundle": [
+        {"kind": "stat",      "name": "Body",                  "level": 1},
+        {"kind": "attribute", "name": "Aura of Inhuman Beauty", "level": 1},
+        {"kind": "attribute", "name": "Tough",                  "level": 1},
+        {"kind": "defect",    "name": "Vow",                    "rank": 1},
+     ]},
     {"name": "Beastfolk",        "cp_cost": 6,  "page": 37,
-     "summary": "Heightened Senses 2, Speed 1, Natural Weapons 1; Marked 1."},
+     "summary": "Heightened Senses 2, Speed 1, Natural Weapons 1; Marked 1.",
+     "bundle": [
+        {"kind": "attribute", "name": "Heightened Senses", "level": 2},
+        {"kind": "attribute", "name": "Speed",             "level": 1},
+        {"kind": "attribute", "name": "Natural Weapons",   "level": 1},
+        {"kind": "defect",    "name": "Marked",            "rank": 1},
+     ]},
     {"name": "Construct",        "cp_cost": 12, "page": 38,
-     "summary": "Tough 2, Heavy Armour 1, Special Defence (Sleep, Poison) 2; Conditional Ownership 1."},
+     "summary": "Tough 2, Heavy Armour 1, Special Defence (Sleep, Poison) 2; Conditional Ownership 1.",
+     "bundle": [
+        {"kind": "attribute", "name": "Tough",            "level": 2},
+        {"kind": "attribute", "name": "Heavy Armour",     "level": 1},
+        {"kind": "attribute", "name": "Special Defence",  "level": 2,
+                                                  "note": "Sleep, Poison"},
+        {"kind": "defect",    "name": "Conditional Ownership", "rank": 1},
+     ]},
     {"name": "Faerie",           "cp_cost": 10, "page": 39,
-     "summary": "Flight 1, Stealth 1, Resilience 1; Marked 1, Vulnerability (Iron) 1."},
+     "summary": "Flight 1, Stealth 1, Resilience 1; Marked 1, Vulnerability (Iron) 1.",
+     "bundle": [
+        {"kind": "attribute", "name": "Flight",     "level": 1},
+        {"kind": "attribute", "name": "Stealth",    "level": 1},
+        {"kind": "attribute", "name": "Resilience", "level": 1},
+        {"kind": "defect",    "name": "Marked",     "rank": 1},
+        {"kind": "defect",    "name": "Vulnerability", "rank": 1, "note": "Iron"},
+     ]},
     {"name": "Spirit (Bodiless)", "cp_cost": 14, "page": 40,
-     "summary": "Insubstantial 1, Special Movement (Phasing), Heightened Awareness; Phys-Imp 1, Restricted Activities 1."},
+     "summary": "Insubstantial 1, Special Movement (Phasing), Heightened Awareness; Phys-Imp 1, Restricted Activities 1.",
+     "bundle": [
+        {"kind": "attribute", "name": "Insubstantial",         "level": 1},
+        {"kind": "attribute", "name": "Special Movement",      "level": 1, "note": "Phasing"},
+        {"kind": "attribute", "name": "Heightened Awareness",  "level": 1},
+        {"kind": "defect",    "name": "Physical Impairment",   "rank": 1},
+        {"kind": "defect",    "name": "Restricted Activities", "rank": 1},
+     ]},
     {"name": "Animal (Sentient)", "cp_cost": 4, "page": 41,
-     "summary": "Heightened Senses 2, Speed 1; Awkward Size, Inept (Social) 1."},
+     "summary": "Heightened Senses 2, Speed 1; Awkward Size, Inept (Social) 1.",
+     "bundle": [
+        {"kind": "attribute", "name": "Heightened Senses", "level": 2},
+        {"kind": "attribute", "name": "Speed",             "level": 1},
+        {"kind": "defect",    "name": "Awkward Size",      "rank": 1},
+        {"kind": "defect",    "name": "Inept",             "rank": 1, "note": "Social"},
+     ]},
     {"name": "Apprentice Artisan (Aurea)", "cp_cost": 4, "page": None,
      "summary": "Custom — Aurean apprentice race-template: Skill Group "
-                "(Crafts) at Lvl 1, Wealth 1; Marked 1 (artisan brand). See Custom Catalogue."},
+                "(Crafts) at Lvl 1, Wealth 1; Marked 1 (artisan brand). See Custom Catalogue.",
+     "bundle": [
+        {"kind": "skill_group", "name": "Crafts",   "level": 1},
+        {"kind": "attribute",   "name": "Wealth",   "level": 1},
+        {"kind": "defect",      "name": "Marked",   "rank": 1, "note": "Artisan brand"},
+     ]},
 ]
+
+
+# V6.25.32 — BESM 4E "class" templates. BESM 4E uses occupations / archetypes
+# rather than D&D-style classes; this catalogue mirrors the GM Toolkit canon
+# archetype list (p.142+) so the builder has a single-click starting bundle
+# for the most common heroic archetypes. Like RACE_TEMPLATES, every row
+# carries a `bundle` of attributes / defects / skills the builder applies
+# wholesale; the player can prune / edit afterwards. Power-level appropriate.
+CLASS_TEMPLATES = [
+    {"name": "Adventurer (Generalist)", "cp_cost": 14, "page": 142,
+     "summary": "Balanced explorer. Skill breadth + survivor backbone.",
+     "bundle": [
+        {"kind": "skill_group", "name": "Athletics",    "level": 1},
+        {"kind": "skill_group", "name": "Stealth",      "level": 1},
+        {"kind": "attribute",   "name": "Tough",         "level": 1},
+        {"kind": "attribute",   "name": "Heightened Awareness", "level": 1},
+     ]},
+    {"name": "Magical Girl (Heroic)", "cp_cost": 18, "page": 143,
+     "summary": "Transformation, signature Power Pack, on-call companion familiar.",
+     "bundle": [
+        {"kind": "attribute", "name": "Alternate Form",       "level": 1, "note": "Magical Transformation"},
+        {"kind": "attribute", "name": "Massive Damage",       "level": 1, "note": "Signature attack"},
+        {"kind": "attribute", "name": "Companion",            "level": 1, "note": "Familiar"},
+        {"kind": "attribute", "name": "Aura of Inhuman Beauty", "level": 1},
+        {"kind": "defect",    "name": "Awkward (Transformation)", "rank": 1},
+     ]},
+    {"name": "Mecha Pilot (Power-Suit Trooper)", "cp_cost": 22, "page": 145,
+     "summary": "Pilot bond + Item-as-Mecha. Item half-cost (p.135) applies.",
+     "bundle": [
+        {"kind": "attribute", "name": "Item",            "level": 6, "note": "Mecha — body, weapons, sensors. Half-cost."},
+        {"kind": "skill_group", "name": "Mechanics",     "level": 1},
+        {"kind": "attribute",   "name": "Heightened Awareness", "level": 1},
+        {"kind": "defect",      "name": "Conditional Ownership", "rank": 1, "note": "Issued mecha"},
+     ]},
+    {"name": "Talespinner (Bardic Caster)", "cp_cost": 16, "page": 146,
+     "summary": "Performance / persuasion + cantrip-tier Power Pack.",
+     "bundle": [
+        {"kind": "skill_group", "name": "Performing Arts", "level": 2},
+        {"kind": "skill_group", "name": "Social",          "level": 1},
+        {"kind": "attribute",   "name": "Power Pack",      "level": 1, "note": "Cantrip-tier"},
+        {"kind": "defect",      "name": "Marked",          "rank": 1, "note": "Reputation precedes"},
+     ]},
+    {"name": "Shadow Operative (Stealth Striker)", "cp_cost": 18, "page": 147,
+     "summary": "Sneak / infiltration / one-strike-kill kit.",
+     "bundle": [
+        {"kind": "skill_group", "name": "Stealth",      "level": 2},
+        {"kind": "skill_group", "name": "Burglary",     "level": 1},
+        {"kind": "attribute",   "name": "Massive Damage", "level": 1, "note": "Sneak attack"},
+        {"kind": "attribute",   "name": "Speed",        "level": 1},
+        {"kind": "defect",      "name": "Owned",        "rank": 1, "note": "Spymaster handler"},
+     ]},
+    {"name": "Sage (Lore Caster)", "cp_cost": 16, "page": 148,
+     "summary": "Pure scholar. Skill-heavy, light combat.",
+     "bundle": [
+        {"kind": "skill_group", "name": "Knowledge",   "level": 3},
+        {"kind": "skill_group", "name": "Languages",   "level": 1},
+        {"kind": "attribute",   "name": "Power Pack",  "level": 2, "note": "Divinations"},
+        {"kind": "defect",      "name": "Frail",       "rank": 1},
+     ]},
+    {"name": "Sworn Blade (Heavy Combatant)", "cp_cost": 20, "page": 149,
+     "summary": "Front-liner; weapon attribute + Tough + signature defect.",
+     "bundle": [
+        {"kind": "attribute", "name": "Weapon",       "level": 6, "note": "Bonded blade. Half-cost (p.135)."},
+        {"kind": "attribute", "name": "Tough",        "level": 2},
+        {"kind": "attribute", "name": "Heavy Armour", "level": 1},
+        {"kind": "defect",    "name": "Vow",          "rank": 2, "note": "Sworn duty"},
+     ]},
+    {"name": "Streetwise Survivor (Roguish)", "cp_cost": 14, "page": 150,
+     "summary": "Urban grit + improvisation. Cheap entry archetype.",
+     "bundle": [
+        {"kind": "skill_group", "name": "Burglary",  "level": 1},
+        {"kind": "skill_group", "name": "Streetwise", "level": 1},
+        {"kind": "attribute",   "name": "Heightened Awareness", "level": 1},
+        {"kind": "defect",      "name": "Wanted",      "rank": 1},
+     ]},
+    {"name": "Tinker (Artisan)", "cp_cost": 16, "page": 151,
+     "summary": "Crafting fulcrum. Pairs with the Crafting Service.",
+     "bundle": [
+        {"kind": "skill_group", "name": "Crafts",     "level": 2},
+        {"kind": "skill_group", "name": "Mechanics",  "level": 1},
+        {"kind": "attribute",   "name": "Wealth",     "level": 1},
+        {"kind": "attribute",   "name": "Item",       "level": 4, "note": "Workshop. Half-cost."},
+        {"kind": "defect",      "name": "Conditional Ownership", "rank": 1, "note": "Workshop tied to a guild"},
+     ]},
+    {"name": "Apothecary (Healer)", "cp_cost": 16, "page": None,
+     "summary": "Aurea-flavoured healer. Healing + Tinctures item-bundle (Eli archetype).",
+     "bundle": [
+        {"kind": "attribute", "name": "Healing",  "level": 3, "note": "Tinctures bottled in cut glass"},
+        {"kind": "attribute", "name": "Item",     "level": 6, "note": "Apothecary bandolier. Half-cost."},
+        {"kind": "skill_group", "name": "Knowledge",  "level": 1, "note": "Herbalism"},
+        {"kind": "skill_group", "name": "Crafts",     "level": 1, "note": "Brewing"},
+        {"kind": "defect",      "name": "Marked",     "rank": 1, "note": "Apothecary brand"},
+     ]},
+    {"name": "Power-Suit Trooper", "cp_cost": 24, "page": 152,
+     "summary": "Heavy-armour-as-Item soldier. Industrial / sci-fi flavour.",
+     "bundle": [
+        {"kind": "attribute", "name": "Item",          "level": 8, "note": "Power-suit. Half-cost."},
+        {"kind": "skill_group", "name": "Military",    "level": 2},
+        {"kind": "skill_group", "name": "Mechanics",   "level": 1},
+        {"kind": "defect",      "name": "Conditional Ownership", "rank": 1, "note": "Government issue"},
+     ]},
+    {"name": "Beast Companion (Animal Hybrid)", "cp_cost": 14, "page": 153,
+     "summary": "Hunter with a bonded beast Companion attribute.",
+     "bundle": [
+        {"kind": "attribute", "name": "Companion",         "level": 4, "note": "Bonded beast. Half-cost."},
+        {"kind": "skill_group", "name": "Animal Training", "level": 1},
+        {"kind": "skill_group", "name": "Survival",        "level": 1},
+        {"kind": "attribute",   "name": "Heightened Senses", "level": 1},
+     ]},
+]
+
 
 # Size modifiers — applied per-creature; SIZE_TEMPLATES already lists them
 # above. This block is the consolidated Combat-effect table players reference

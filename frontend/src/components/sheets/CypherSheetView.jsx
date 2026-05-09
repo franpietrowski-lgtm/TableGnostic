@@ -47,13 +47,26 @@ export default function CypherSheetView({ state, roll }) {
         <div className="label-ref">Stat Pools (current / max) — damage tracker</div>
         <div className="grid grid-cols-3 gap-3 mt-3">
           {["Might", "Speed", "Intellect"].map((k) => {
-            const max = state.pools?.[k] ?? 0;
-            const cur = state.current_pools?.[k] ?? max;
+            // V6.25.29 — accept BOTH shapes:
+            //   1. flat   pools[k] (number) + current_pools[k] + edge[k]
+            //   2. nested pools[k.toLowerCase()] = {max, current, edge}
+            const lk = k.toLowerCase();
+            const nested = state.pools?.[lk];
+            const isNested = nested && typeof nested === "object";
+            const max = isNested
+              ? Number(nested.max ?? 0)
+              : Number(state.pools?.[k] ?? 0);
+            const cur = isNested
+              ? Number(nested.current ?? nested.max ?? 0)
+              : Number(state.current_pools?.[k] ?? max);
+            const edge = isNested
+              ? Number(nested.edge ?? 0)
+              : Number(state.edge?.[k] ?? 0);
             const pct = max > 0 ? Math.max(0, Math.min(100, (cur / max) * 100)) : 0;
             const colour = pct > 66 ? "#3FAA62" : pct > 33 ? "#C8A34A" : "#7A1F2E";
             return (
               <div key={k} className="border border-gold/15 rounded-sm p-3 text-center"
-                   data-testid={`cypher-pool-ring-${k.toLowerCase()}`}>
+                   data-testid={`cypher-pool-ring-${lk}`}>
                 <div className="label-ref text-[9px]">{k}</div>
                 <div className="font-display text-2xl text-gold">
                   <span style={{ color: colour }}>{cur}</span>
@@ -64,14 +77,15 @@ export default function CypherSheetView({ state, roll }) {
                        style={{ width: `${pct}%`, backgroundColor: colour }}/>
                 </div>
                 <div className="text-[10px] font-ui text-mist mt-1">
-                  Edge <span className="text-gold-bright">{state.edge?.[k] ?? 0}</span>
+                  Edge <span className="text-gold-bright">{edge}</span>
                 </div>
               </div>
             );
           })}
         </div>
         <div className="text-[10px] text-mist/70 italic mt-2">
-          Players: spend Pool with the Effort lever above. GMs: edit `current_pools` on the character sheet to mark damage between sessions.
+          Players: spend Pool with the Effort lever above. GMs: edit `current_pools`
+          (or `pools.&lt;name&gt;.current`) on the character sheet to mark damage between sessions.
         </div>
       </div>
 
@@ -208,8 +222,10 @@ export default function CypherSheetView({ state, roll }) {
                          testid="cypher-sheet-abilities"/>
       )}
       {(state.cyphers?.length || 0) > 0 && (
-        <SimpleListCard title="Cyphers Carried" items={state.cyphers}
-                         testid="cypher-sheet-cyphers"/>
+        <SimpleListCard
+          title={`Cyphers Carried (${state.cyphers.length} / ${state.cyphers_max ?? cypherLimit})`}
+          items={state.cyphers}
+          testid="cypher-sheet-cyphers"/>
       )}
       {state.notes && (
         <div className="card-mystic p-6 mt-4">

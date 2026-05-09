@@ -36,6 +36,12 @@ const KIND_LABELS = {
   descriptor: "Descriptors",
   focus: "Foci",
   type: "Types",
+  // V6.25.28 — D&D 5E SRD kinds.
+  subclass: "Subclasses",
+  magic_item: "Magic Items",
+  monster: "Monsters",
+  language: "Languages",
+  tool: "Tools",
 };
 // V6.25 — `custom` kind removed from the Atelier Reference Editor.
 // Custom / House Rules now live exclusively in the Campaign page's
@@ -108,8 +114,9 @@ const SYSTEM_KIND_ORDER = {
                "skill", "attribute", "defect", "enhancement", "limiter",
                "power_pack", "power_bundle", "weapon", "armor", "item",
                "companion"],
-  "dnd-5e": ["class_feature", "race_trait", "background", "spell", "feat",
-             "skill", "weapon", "armor", "item", "companion"],
+  "dnd-5e": ["class_feature", "race_trait", "background", "subclass",
+             "spell", "feat", "skill", "weapon", "armor", "item",
+             "magic_item", "monster", "language", "tool", "companion"],
   "cypher": ["type", "descriptor", "focus", "cypher_ability", "cypher_item",
              "artifact", "skill", "weapon", "armor", "item"],
 };
@@ -174,16 +181,43 @@ export default function ReferenceEditor({ campaignId, isGm, systemId }) {
   const blank = () => ({
     kind: tab, name: "", summary: "", page: "",
     book: systemId || "besm-4e", cost: "", fields: {},
+    also_to_codex: false,
   });
 
   const save = async (row) => {
     setBusy(true); setErr("");
     try {
       const payload = { ...row, page: row.page === "" ? null : Number(row.page) };
+      const alsoCodex = !!row.also_to_codex;
+      delete payload.also_to_codex;  // server schema doesn't expect this
+      let saved;
       if (row.id) {
-        await api.patch(`/campaigns/${campaignId}/reference/${row.id}`, payload);
+        const r = await api.patch(`/campaigns/${campaignId}/reference/${row.id}`, payload);
+        saved = r.data;
       } else {
-        await api.post(`/campaigns/${campaignId}/reference`, payload);
+        const r = await api.post(`/campaigns/${campaignId}/reference`, payload);
+        saved = r.data;
+      }
+      // V6.25.26 — When the GM ticked "also submit to Codex", we mirror
+      // the entry as a codex node. The classifier picks `node_kind` and
+      // World-Tree section automatically from name + summary heuristics.
+      if (alsoCodex && saved && !row.id) {
+        try {
+          await api.post(`/campaigns/${campaignId}/codex-nodes`, {
+            title: saved.name,
+            name: saved.name,
+            summary: saved.summary || "",
+            content: saved.summary || "",
+            type: "concept",
+            visibility: "gm",
+            tags: ["from-reference", saved.kind],
+            fields: { source_reference_id: saved.id, source_kind: saved.kind },
+          });
+        } catch (codexErr) {
+          // Don't fail the whole save — surface it but the reference is saved.
+          setErr("Reference saved, but Codex mirror failed: " +
+                  (formatApiErrorDetail(codexErr.response?.data?.detail) || codexErr.message));
+        }
       }
       setDraft(null);
       await refresh();
@@ -227,12 +261,14 @@ export default function ReferenceEditor({ campaignId, isGm, systemId }) {
                 <BookOpen className="w-3 h-3"/> Import from templates
               </button>
             )}
-            <button onClick={() => setShowAtlas(true)}
-                    className="btn btn-ghost text-xs"
-                    data-testid="reference-open-atlas-btn"
-                    title="Read-only atlas: D&D spells & class abilities translated to BESM Attributes with SRD citations.">
-              <BookOpen className="w-3 h-3"/> Spell Conversion Atlas
-            </button>
+            {systemId === "anime-5e" && (
+              <button onClick={() => setShowAtlas(true)}
+                      className="btn btn-ghost text-xs"
+                      data-testid="reference-open-atlas-btn"
+                      title="Anime 5E only: D&D spells & class abilities translated to BESM/Anime 5E Attributes with SRD citations.">
+                <BookOpen className="w-3 h-3"/> Spell Conversion Atlas
+              </button>
+            )}
             <button onClick={() => setDraft(blank())} className="btn btn-primary text-xs"
                     data-testid="reference-add-btn">
               <Plus className="w-3 h-3"/> Add {String(labelOf(tab)).split(" ")[0]}
@@ -460,6 +496,17 @@ function Row({ row, onChange, onSave, onCancel, busy, systemId, editing, onEdit,
             <PowerBundleEditor row={row} onChange={onChange}/>
           </>
         )}
+        {/* V6.25.12 — BESM 4E Weapon / Item composer.
+            When authoring a `weapon` or `item` reference entry on a BESM
+            campaign, surface the canonical Weapon Enhancements (p.135) /
+            Weapon Limiters (p.142) pools plus the Item flavour pool.
+            User flagged: weapons can also be items (sword) or NOT items
+            (conjured fireball) — so item kind ALWAYS sees item mods, and
+            weapon kind sees weapon mods + an "also an Item?" toggle that
+            additionally reveals item mods + the half-cost rule. */}
+        {isBesm && (row.kind === "weapon" || row.kind === "item") && (
+          <BesmWeaponItemComposer row={row} onChange={onChange}/>
+        )}
         {!isBesm && PLAYABLE_KINDS.has(row.kind) && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 border border-gold/15 rounded-sm p-2 bg-gold/5"
                data-testid="reference-playable-fields">
@@ -488,18 +535,34 @@ function Row({ row, onChange, onSave, onCancel, busy, systemId, editing, onEdit,
           <select className="select" value={row.kind}
                   onChange={(e) => onChange({ ...row, kind: e.target.value })}
                   data-testid="reference-input-kind">
-            {KIND_KEYS.map((k) => {
+            {(SYSTEM_KIND_ORDER[systemId] || KIND_KEYS).map((k) => {
               const sysLabels = SYSTEM_KIND_LABELS[systemId] || SYSTEM_KIND_LABELS["besm-4e"];
               return <option key={k} value={k}>{sysLabels[k] || KIND_LABELS[k]}</option>;
             })}
           </select>
         </div>
-        <div className="flex justify-end gap-2">
-          <button onClick={onCancel} className="btn btn-ghost text-xs">Cancel</button>
-          <button onClick={() => onSave(row)} disabled={busy || !row.name}
-                  className="btn btn-primary text-xs" data-testid="reference-save-btn">
-            <Save className="w-3 h-3"/> Save
-          </button>
+        <div className="flex items-center justify-between gap-3 border-t border-gold/10 pt-2 flex-wrap">
+          <label className="flex items-center gap-2 text-[11px] text-parchment cursor-pointer">
+            <input type="checkbox"
+                    checked={!!row.also_to_codex}
+                    onChange={(e) => onChange({ ...row, also_to_codex: e.target.checked })}
+                    disabled={!!row.id}
+                    data-testid="reference-also-to-codex"/>
+            <span>
+              <b>Also submit to Codex</b>
+              <span className="text-mist italic ml-1">
+                — mirrors this entry as a codex node (auto-classified onto the World Tree).
+                Available on first save only.
+              </span>
+            </span>
+          </label>
+          <div className="flex justify-end gap-2">
+            <button onClick={onCancel} className="btn btn-ghost text-xs">Cancel</button>
+            <button onClick={() => onSave(row)} disabled={busy || !row.name}
+                    className="btn btn-primary text-xs" data-testid="reference-save-btn">
+              <Save className="w-3 h-3"/> Save
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -703,4 +766,306 @@ function Section({ title, children, testid }) {
     </div>
   );
 }
+
+
+/**
+ * BesmWeaponItemComposer — V6.25.12
+ *
+ * Authoring surface for `weapon` and `item` reference entries on BESM
+ * 4E campaigns. Pulls the four canonical mod pools from
+ * `/api/besm/reference` (cached client-side) and lets the GM:
+ *
+ *   • set base level + cost-per-level,
+ *   • toggle Weapon Enhancements / Limiters (p.135 / p.142) with rank
+ *     spinners (1-12) — rank-aware, never changes cost,
+ *   • for `weapon` rows, optionally tick "also an Item" which reveals
+ *     the Item flavour pool AND triggers the half-cost rule on the
+ *     resulting cost preview (BESM 4E p.135 Item rule),
+ *   • for `item` rows, the half-cost rule is always active.
+ *
+ * The composed entry's `fields.enhancements` / `fields.limiters` arrays
+ * are stored in the same shape the character sheet's MacroBuilder /
+ * Customise panels read — `[{name, rank, value}]` — so a published
+ * reference entry round-trips into a character build with the same
+ * mechanical effect.
+ */
+function BesmWeaponItemComposer({ row, onChange }) {
+  const [pools, setPools] = useState(null);
+  useEffect(() => {
+    let live = true;
+    (async () => {
+      try {
+        const { data } = await api.get(`/besm/reference`);
+        if (live) setPools({
+          weapon_enhancements: data.weapon_enhancements || [],
+          weapon_limiters:     data.weapon_limiters || [],
+          item_enhancements:   data.item_enhancements || [],
+          item_limiters:       data.item_limiters || [],
+        });
+      } catch { if (live) setPools({ weapon_enhancements: [], weapon_limiters: [],
+                                       item_enhancements: [], item_limiters: [] }); }
+    })();
+    return () => { live = false; };
+  }, []);
+
+  const f = row.fields || {};
+  const lvl = Number(f.level || 1);
+  const cpl = Number(f.cost_per_level || 1);
+  const isItemKind = row.kind === "item";
+  const alsoItem = isItemKind || !!f.also_an_item;
+  const enhArr = f.enhancements || [];
+  const limArr = f.limiters || [];
+  const contents = Array.isArray(f.item_contents) ? f.item_contents : [];
+
+  const setField = (k, v) => onChange({ ...row, fields: { ...f, [k]: v } });
+  const findIdx = (arr, name) =>
+    arr.findIndex((m) => (m?.name || "").toLowerCase() === name.toLowerCase());
+  const toggle = (which, name) => {
+    const arr = (which === "enhancements" ? enhArr : limArr).slice();
+    const j = findIdx(arr, name);
+    const sign = which === "enhancements" ? -1 : 1;
+    if (j >= 0) arr.splice(j, 1);
+    else arr.push({ name, rank: 1, value: sign });
+    setField(which, arr);
+  };
+  const setRank = (which, name, rk) => {
+    const r = Math.max(1, Math.min(12, +rk || 1));
+    const sign = which === "enhancements" ? -1 : 1;
+    const arr = (which === "enhancements" ? enhArr : limArr).map((m) =>
+      (m?.name || "").toLowerCase() === name.toLowerCase()
+        ? { ...m, name, rank: r, value: sign * r } : m);
+    setField(which, arr);
+  };
+  // Nested item_contents helpers (BESM 4E Mecha pattern, p.219).
+  const addContent = () => setField("item_contents", [
+    ...contents, { name: "", level: 1, cost_per_level: 1, note: "" },
+  ]);
+  const updateContent = (idx, patch) => setField(
+    "item_contents",
+    contents.map((c, i) => (i === idx ? { ...c, ...patch } : c)),
+  );
+  const removeContent = (idx) =>
+    setField("item_contents", contents.filter((_, i) => i !== idx));
+
+  // Live cost preview: gross = lvl × cpl + Σ (child.level × child.cost_per_level).
+  // Item half-cost rule (p.135 / p.219) applies to the COMBINED raw total.
+  const selfGross = lvl * cpl;
+  const childGross = contents.reduce(
+    (s, c) => s + Math.max(1, Number(c.level || 1)) * Math.max(0, Number(c.cost_per_level || 0)),
+    0,
+  );
+  const gross = selfGross + childGross;
+  const finalCost = alsoItem ? Math.ceil(gross / 2) : gross;
+  const sumRanks = (a) => a.reduce((s, m) => s + (m.rank || 1), 0);
+  const enhRanks = sumRanks(enhArr);
+  const limRanks = sumRanks(limArr);
+  const effLvl = Math.max(1, lvl + limRanks - enhRanks);
+
+  const Pool = ({ label, items, kind, color }) => (
+    <div className="mb-2">
+      <div className="label-ref mb-1">{label}</div>
+      <div className="flex flex-wrap gap-1">
+        {(items || []).map((e) => {
+          const idx = findIdx(kind === "enhancements" ? enhArr : limArr, e.name);
+          const selected = idx >= 0;
+          const cur = selected ? (kind === "enhancements" ? enhArr : limArr)[idx] : null;
+          return (
+            <button key={e.name} type="button"
+                    onClick={() => toggle(kind, e.name)}
+                    title={`${e.note || e.name}\np.${e.page} ${e.source?.book || ""} · rank: ${Array.isArray(e.rank_range) ? e.rank_range.join("-") : e.rank_range || "1"}`}
+                    className={`tag ${selected ? color : ""}`}
+                    data-testid={`besm-composer-${kind}-${e.name.replace(/\s+/g,"-")}`}>
+              {e.name}
+              {selected && cur?.rank > 1 && (
+                <span className="text-[10px] ml-1 opacity-80">×{cur.rank}</span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+      {(kind === "enhancements" ? enhArr : limArr).length > 0 && (
+        <div className="mt-2 space-y-1">
+          {(kind === "enhancements" ? enhArr : limArr).map((m, i) => (
+            <div key={`${m.name}-${i}`} className="flex items-center gap-2 text-xs flex-wrap">
+              <span className={`tag ${color}`}>{m.name}</span>
+              <label className="text-[10px] text-mist">×rank</label>
+              <input type="number" min={1} max={12} value={m.rank || 1}
+                      onChange={(e) => setRank(kind, m.name, +e.target.value)}
+                      className="input w-16 text-center select-sm"
+                      data-testid={`besm-composer-rank-${kind}-${m.name.replace(/\s+/g,"-")}`}/>
+              <span className="text-[10px] text-mist/70">
+                ({kind === "enhancements" ? "−" : "+"}{m.rank || 1} eff.lvl)
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
+  return (
+    <div className="border border-gold/20 rounded-sm p-3 bg-void/40 space-y-2"
+         data-testid={`besm-composer-${row.kind}`}>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+        <input className="input" type="number" min={1} max={20} placeholder="Level"
+               value={f.level || ""}
+               onChange={(e) => setField("level", e.target.value === "" ? "" : Number(e.target.value))}
+               data-testid="besm-composer-level"/>
+        <input className="input" type="number" min={0} step="0.5" placeholder="Cost / Level"
+               value={f.cost_per_level || ""}
+               onChange={(e) => setField("cost_per_level", e.target.value === "" ? "" : Number(e.target.value))}
+               data-testid="besm-composer-cpl"/>
+        {row.kind === "weapon" && (
+          <label className="flex items-center gap-2 text-xs text-parchment cursor-pointer
+                              border border-gold/15 rounded-sm px-2 bg-void/60">
+            <input type="checkbox" checked={!!f.also_an_item}
+                    onChange={(e) => setField("also_an_item", e.target.checked)}
+                    data-testid="besm-composer-also-item"/>
+            <span>Also an Item?</span>
+            <span className="text-[9px] text-mist/70 italic">(tick for swords, untick for conjured Fireballs)</span>
+          </label>
+        )}
+      </div>
+
+      {/* Cost preview row. */}
+      <div className="text-[11px] text-mist border-t border-gold/10 pt-2"
+           data-testid="besm-composer-cost-preview">
+        Self: <span className="text-parchment font-display">{selfGross}</span> pts
+        ({lvl} × {cpl})
+        {childGross > 0 && (
+          <>
+            {" "}+ Contents: <span className="text-parchment font-display">{childGross}</span> pts
+          </>
+        )}
+        {(childGross > 0 || alsoItem) && (
+          <>
+            {" "}= Gross: <span className="text-parchment font-display">{gross}</span> pts
+          </>
+        )}
+        {alsoItem && (
+          <>
+            {" "}· <span className="text-arcane">Item half-cost (p.135):</span>{" "}
+            <span className="text-gold-bright font-display">ceil({gross}/2) = {finalCost} pts</span>
+          </>
+        )}
+        {(enhRanks > 0 || limRanks > 0) && (
+          <>
+            {" "}· effective Level: <span className="text-arcane">×{effLvl}</span>
+            <span className="text-mist/70"> (base {lvl} + {limRanks} lim − {enhRanks} enh)</span>
+          </>
+        )}
+      </div>
+
+      {/* Nested Item Contents (Mecha pattern, BESM 4E p.219).
+          Surfaces ONLY when the row is an item OR a weapon-also-item. */}
+      {alsoItem && (
+        <div className="border-t border-gold/10 pt-2"
+             data-testid="besm-composer-item-contents">
+          <div className="flex items-center justify-between mb-1">
+            <div>
+              <div className="label-ref">Item Contents · Mecha pattern (p.219)</div>
+              <div className="text-[10px] text-mist/70 italic">
+                Nested attributes carried INSIDE this item (e.g. a Mecha&apos;s
+                weapon mounts, a bag&apos;s inner attribute pool). Their raw
+                cost feeds the Item half-cost rule above.
+              </div>
+            </div>
+            <button type="button" onClick={addContent}
+                    className="btn btn-ghost text-[11px]"
+                    data-testid="besm-composer-item-content-add">
+              + Add nested attribute
+            </button>
+          </div>
+          {contents.length === 0 && (
+            <div className="text-mist italic text-[11px]">
+              No nested contents. Most items don&apos;t need them — use this
+              for the Mecha pattern (BESM 4E p.219) when the item itself
+              carries other Attributes that pay the half-cost together.
+            </div>
+          )}
+          <div className="space-y-2">
+            {contents.map((c, i) => {
+              const cl = Math.max(1, Number(c.level || 1));
+              const cc = Math.max(0, Number(c.cost_per_level || 0));
+              const cgross = cl * cc;
+              return (
+                <div key={i}
+                     className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center
+                                border border-gold/10 rounded-sm p-2 bg-void/30"
+                     data-testid={`besm-composer-item-content-row-${i}`}>
+                  <input className="input sm:col-span-5"
+                         placeholder="Nested attribute name (e.g. Weapon, Armour, Sensors)"
+                         value={c.name || ""}
+                         onChange={(e) => updateContent(i, { name: e.target.value })}
+                         data-testid={`besm-composer-item-content-name-${i}`}/>
+                  <input className="input sm:col-span-2 text-center"
+                         type="number" min={1} max={20}
+                         placeholder="Lvl"
+                         value={c.level ?? ""}
+                         onChange={(e) => updateContent(i, {
+                           level: e.target.value === "" ? "" : Number(e.target.value),
+                         })}
+                         data-testid={`besm-composer-item-content-level-${i}`}/>
+                  <input className="input sm:col-span-2 text-center"
+                         type="number" min={0} step="0.5"
+                         placeholder="Cost/Lvl"
+                         value={c.cost_per_level ?? ""}
+                         onChange={(e) => updateContent(i, {
+                           cost_per_level: e.target.value === "" ? "" : Number(e.target.value),
+                         })}
+                         data-testid={`besm-composer-item-content-cpl-${i}`}/>
+                  <span className="sm:col-span-2 text-[11px] text-mist/80 text-center">
+                    raw <span className="text-parchment font-display">{cgross}</span> pts
+                  </span>
+                  <button type="button"
+                          onClick={() => removeContent(i)}
+                          className="btn btn-ghost text-[11px] sm:col-span-1"
+                          data-testid={`besm-composer-item-content-remove-${i}`}>
+                    ×
+                  </button>
+                  {(c.note || c.note === "") && (
+                    <input className="input sm:col-span-12"
+                           placeholder="Optional note (e.g. mount slot, charges)"
+                           value={c.note || ""}
+                           onChange={(e) => updateContent(i, { note: e.target.value })}
+                           data-testid={`besm-composer-item-content-note-${i}`}/>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {pools ? (
+        <>
+          <Pool label="Weapon Enhancements · BESM 4E p.135"
+                 items={pools.weapon_enhancements} kind="enhancements"
+                 color="border-gold text-gold-bright bg-gold/15"/>
+          <Pool label="Weapon Limiters · BESM 4E p.142"
+                 items={pools.weapon_limiters} kind="limiters"
+                 color="border-ember text-ember bg-ember/15"/>
+          {alsoItem && (
+            <>
+              <Pool label="Item Enhancements · TableGnostic flavour pool"
+                     items={pools.item_enhancements} kind="enhancements"
+                     color="border-gold text-gold-bright bg-gold/10"/>
+              <Pool label="Item Limiters · TableGnostic flavour pool"
+                     items={pools.item_limiters} kind="limiters"
+                     color="border-ember text-ember bg-ember/10"/>
+            </>
+          )}
+        </>
+      ) : (
+        <div className="text-mist text-[11px] italic">Loading mod pools…</div>
+      )}
+
+      <input className="input" placeholder="Description / GM note (optional)"
+             value={f.description || ""}
+             onChange={(e) => setField("description", e.target.value)}
+             data-testid="besm-composer-description"/>
+    </div>
+  );
+}
+
 

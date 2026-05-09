@@ -994,6 +994,95 @@ def _build_pdf(camp: Dict[str, Any], chapters_data: List[Dict[str, Any]],
                     flow.append(Paragraph(_html_escape(r["summary"]), body))
             flow.append(Spacer(1, 0.1 * inch))
 
+    # ── Encounters Library Appendix (V6.25.26) — major chapter ──
+    # The user requested encounters be a first-class portion of the
+    # export pipeline since they are the actual GM engagement options
+    # that advance the plot.
+    encounters = (extras or {}).get("encounters") or []
+    if encounters:
+        flow.append(PageBreak())
+        flow.append(Paragraph("Appendix · Encounters Library", chapter_title))
+        flow.append(_thin_rule(rule))
+        flow.append(Paragraph(
+            "Bulk-authored encounters available for any session. Status flags "
+            "tell you which ran, which are templates, and which are still drafts.",
+            italic))
+        # Group by status so completed runs stand apart from drafts.
+        by_status = {}
+        for e in encounters:
+            by_status.setdefault(e.get("status", "draft"), []).append(e)
+        for status_label in ("completed", "running", "ready", "template", "draft"):
+            rows = by_status.get(status_label, [])
+            if not rows:
+                continue
+            flow.append(Paragraph(status_label.title(), session_title))
+            for e in rows:
+                cr = f"  <font size='8' color='{p['muted']}'>CR {e['cr_target']}</font>" if e.get("cr_target") else ""
+                etype = f"  <font size='8' color='{p['muted']}'>· {e.get('encounter_type','')}</font>" if e.get("encounter_type") else ""
+                flow.append(Paragraph(
+                    f"<b>{_html_escape(e.get('name','?'))}</b>{cr}{etype}", body_first))
+                if e.get("summary"):
+                    flow.append(Paragraph(_html_escape(e["summary"]), body))
+                if e.get("terrain"):
+                    flow.append(Paragraph(
+                        f"<i>Terrain:</i> {_html_escape(e['terrain'])}", body))
+                if e.get("complications"):
+                    flow.append(Paragraph(
+                        "<i>Complications:</i> " + _html_escape("; ".join(e["complications"])),
+                        body))
+                if e.get("notes"):
+                    flow.append(Paragraph(_html_escape(e["notes"][:600]), body))
+                if e.get("completion_notes"):
+                    flow.append(Paragraph(
+                        f"<i>Resolved:</i> {_html_escape(e['completion_notes'])}", italic))
+            flow.append(Spacer(1, 0.1 * inch))
+
+    # ── Crafting Materials Appendix (V6.25.26) ──
+    materials = (extras or {}).get("materials") or []
+    if materials:
+        flow.append(PageBreak())
+        flow.append(Paragraph("Appendix · Crafting Materials", chapter_title))
+        flow.append(_thin_rule(rule))
+        flow.append(Paragraph(
+            "Raw → Refined → Assembled. Each tier feeds the loot pipeline "
+            "and may be cited as ingredients in subsequent crafts.",
+            italic))
+        for tier_label in ("raw", "refined", "assembled"):
+            rows = [m for m in materials if m.get("tier") == tier_label]
+            if not rows:
+                continue
+            flow.append(Paragraph(f"Materials · {tier_label.title()}", session_title))
+            for m in rows:
+                rarity = f"  <font size='8' color='{p['muted']}'>{m.get('rarity','common')}</font>"
+                flow.append(Paragraph(
+                    f"<b>{_html_escape(m.get('name','?'))}</b>{rarity}", body_first))
+                if m.get("summary"):
+                    flow.append(Paragraph(_html_escape(m["summary"]), body))
+            flow.append(Spacer(1, 0.1 * inch))
+
+    # ── Custom Rules Appendix (V6.25.26) ──
+    custom_rules = (extras or {}).get("custom_rules") or []
+    if custom_rules:
+        flow.append(PageBreak())
+        flow.append(Paragraph("Appendix · House & Custom Rules", chapter_title))
+        flow.append(_thin_rule(rule))
+        flow.append(Paragraph(
+            "GM authoring layered onto the canonical system. Cite these "
+            "during play to resolve any ambiguity over published rules.",
+            italic))
+        # Group by kind for easier scanning.
+        by_kind = {}
+        for r in custom_rules:
+            by_kind.setdefault(r.get("kind", "other"), []).append(r)
+        for kind, rows in sorted(by_kind.items()):
+            flow.append(Paragraph(kind.replace("_", " ").title(), session_title))
+            for r in rows:
+                flow.append(Paragraph(
+                    f"<b>{_html_escape(r.get('name', '?'))}</b>", body_first))
+                if r.get("summary"):
+                    flow.append(Paragraph(_html_escape(r["summary"]), body))
+            flow.append(Spacer(1, 0.1 * inch))
+
     # ── Timeline Appendix (V6.10) — codex pins clustered by session.
     timeline_markers = (extras or {}).get("timeline_markers") or []
     if timeline_markers:
@@ -1545,6 +1634,22 @@ async def export_pdf(cid: str, mode: str = "campaign",
     extras["timeline_markers"] = timeline_markers
     extras["chat_logs_by_session"] = chat_logs_by_session
     extras["sessions_for_timeline"] = sessions
+    # V6.25.26 — Encounters Library + Materials + Custom Rules become
+    # first-class chapters of the chronicle PDF. The user requested
+    # encounters be a major portion of the export pipeline since they
+    # are the actual GM engagement events that move the plot forward.
+    encounters = await db.encounters_library.find(
+        {"campaign_id": cid}, {"_id": 0}
+    ).sort("created_at", 1).to_list(500)
+    materials = await db.materials.find(
+        {"campaign_id": cid}, {"_id": 0}
+    ).sort("tier", 1).to_list(500)
+    custom_rules = await db.campaign_custom_rules.find(
+        {"campaign_id": cid}, {"_id": 0}
+    ).sort("kind", 1).to_list(500)
+    extras["encounters"] = encounters
+    extras["materials"] = materials
+    extras["custom_rules"] = custom_rules
     pdf_bytes = _build_pdf(camp, chapters_data, profile, gm_user, extras)
     # Header values must be latin-1 safe; strip non-ASCII from filename.
     raw_name = (camp.get("name") or "campaign").replace(" ", "_")
