@@ -14,6 +14,15 @@
 
 ## 2. Implemented (cumulative, condensed)
 
+### V6.25.32 — CORS regex fix for production custom domain (2026-02-09)
+
+**CORS — production "Network Error" on `tablegnostic.com`** (`backend/core/config.py`)
+- After redeploying the app, login on `https://tablegnostic.com` failed with a browser "Network Error". Root cause: backend `ALLOW_ORIGIN_REGEX` only matched `*.preview.emergentagent.com` and localhost; the custom production domain was rejected by FastAPI's CORSMiddleware before the request ever reached the auth route.
+- Regex expanded to also match `https://*.emergentagent.com`, `https://*.emergent.host`, and `https://(www.)?tablegnostic.com`.
+- Verified locally: POST `/api/auth/login` with `Origin: https://tablegnostic.com` now returns `access-control-allow-origin: https://tablegnostic.com` and a 200 with both GM and Player personas.
+- **User must redeploy** (Emergent Deploy button) for the production environment to pick up the fix.
+
+
 ### V6.25.30 — Multi-persona auth · Azazel-style PDF · Hero cleanup · How-To overhaul (2026-02-09)
 
 **Auth — multi-persona email** (`backend/routes/auth.py`, `core/startup.py`)
