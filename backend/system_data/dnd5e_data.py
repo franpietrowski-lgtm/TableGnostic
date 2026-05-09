@@ -5,6 +5,14 @@ lore paragraphs, and class/race feature descriptions are deliberately
 absent — GMs and players reference the SRD directly for those.
 """
 
+# V6.25.35 — Patrons / Pacts / Invocations live in a sibling module so
+# Anime 5E can import the same canon roster without duplication.
+from .patrons_pacts import (  # noqa: E402
+    PATRONS as _PATRONS,
+    PACTS as _PACTS,
+    INVOCATIONS as _INVOCATIONS,
+)
+
 BOOK = {
     "title": "D&D 5th Edition System Reference Document",
     "edition": "5.1 (CC-BY 4.0)",
@@ -364,6 +372,10 @@ REFERENCE = {
     "subclasses":     SUBCLASSES,
     "damage_types":   DAMAGE_TYPES,
     "schools":        SCHOOLS,
+    # V6.25.35 — Otherworldly Patrons + Pact Boons + curated Eldritch Invocations.
+    "patrons":        _PATRONS,
+    "pacts":          _PACTS,
+    "invocations":    _INVOCATIONS,
     "modifier_formula": "(score - 10) // 2",
     "proficiency_by_level": [2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6],
     "rule_note": (

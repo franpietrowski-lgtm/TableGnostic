@@ -18,7 +18,7 @@ import { Sparkles, Loader2, Check, X, Send, Trash2, ChevronRight,
          ScrollText, Library, ChevronDown } from "lucide-react";
 import { api, formatApiErrorDetail, useAuth } from "../lib/api";
 
-const SUPPORTED = new Set(["besm-4e", "anime-5e"]);
+const SUPPORTED = new Set(["besm-4e", "anime-5e", "dnd-5e", "cypher"]);
 
 // Multi-field brief shape mirrors the backend's ConceptForgeIn schema.
 const BLANK_BRIEF = {
@@ -474,6 +474,33 @@ function CandidateCard({ c, idx, canCommit, onCommit }) {
             {c.race && c.class && <span className="mx-1.5 text-mist/40">·</span>}
             {c.class && <><span className="text-gold/60 uppercase tracking-widest text-[9px] mr-1">Class</span>{c.class}</>}
             {c.subclass && <span className="text-mist/70"> ({c.subclass})</span>}
+            {c.tier && <span className="text-mist/70"> · Tier {c.tier}</span>}
+            {c.level && <span className="text-mist/70"> · L{c.level}</span>}
+          </div>
+        )}
+        {/* V6.25.35 — Cypher sentence + Genre tag */}
+        {c.sentence && (
+          <div className="text-parchment text-[11px] italic">
+            <span className="text-gold/60 uppercase tracking-widest text-[9px] mr-1">Sentence</span>
+            "{c.sentence}"
+            {c.genre_tag && <span className="text-arcane/80 not-italic"> · {c.genre_tag}</span>}
+          </div>
+        )}
+        {/* V6.25.35 — Cypher pools + edges */}
+        {c.pools && (
+          <div className="text-parchment text-[11px]">
+            <span className="text-gold/60 uppercase tracking-widest text-[9px] mr-1">Pools</span>
+            Might {c.pools.Might} · Speed {c.pools.Speed} · Intellect {c.pools.Intellect}
+            {c.edges && (
+              <span className="text-mist/70"> · edges {c.edges.Might}/{c.edges.Speed}/{c.edges.Intellect} · effort {c.effort}</span>
+            )}
+          </div>
+        )}
+        {/* V6.25.35 — D&D 5E patron + pact */}
+        {(c.patron || c.pact) && (
+          <div className="text-parchment text-[11px]">
+            <span className="text-gold/60 uppercase tracking-widest text-[9px] mr-1">Pact</span>
+            {c.patron || "—"} {c.pact && <>· <span className="text-arcane/80">Pact of the {c.pact}</span></>}
           </div>
         )}
         {c.background && (
@@ -525,6 +552,27 @@ function CandidateCard({ c, idx, canCommit, onCommit }) {
         )}/>
         <Section title="Defects" rows={c.defects} render={(d) => (
           <>— {d.name} <span className="text-mist/70">R{d.rank}</span>{d.note && <span className="text-mist/60"> · {d.note}</span>}</>
+        )}/>
+        <Section title="Cantrips" rows={c.cantrips} render={(s) => (
+          <>— {typeof s === "string" ? s : s.name}</>
+        )}/>
+        <Section title="Spells" rows={c.spells} render={(s) => (
+          <>— {typeof s === "string" ? s : `${s.name}${s.level !== undefined ? ` · L${s.level}` : ""}`}</>
+        )}/>
+        <Section title="Invocations" rows={c.invocations} render={(s) => (
+          <>— {typeof s === "string" ? s : s.name}</>
+        )}/>
+        <Section title="Cyphers" rows={c.cyphers} render={(cy) => (
+          <>— {cy.name} <span className="text-mist/70">L{cy.level}</span>{cy.effect && <div className="ml-4 text-mist/80 italic">{cy.effect}</div>}</>
+        )}/>
+        <Section title="Artifacts" rows={c.artifacts} render={(a) => (
+          <>— <span className="text-gold-bright">{a.name}</span> <span className="text-mist/70">L{a.level}</span>
+            {a.depletion && <span className="text-arcane/80"> · {a.depletion}</span>}
+            {a.effect && <div className="ml-4 text-mist/80 italic">{a.effect}</div>}
+          </>
+        )}/>
+        <Section title="Abilities" rows={c.abilities && Array.isArray(c.abilities) ? c.abilities : null} render={(s) => (
+          <>— {typeof s === "string" ? s : s.name}</>
         )}/>
         <Section title="Items" rows={c.items} render={(it) => (
           <>— {it.name}{it.category && <span className="text-mist/70"> · {it.category}</span>}{it.note && <span className="text-mist/60"> · {it.note}</span>}</>

@@ -1,0 +1,34 @@
+{
+  "summary": "V6.25.35 Phase C+D + GM Table Health badge — backend 10/10 pass, frontend smoke verified. Cost overrides math correct (attribute Tough cpl 4→1: attribute_total 12→3 with override_applied=true / cost_per_level_canon=4 / 'GM override' note; delete restores 12). Skill-group Athletics override→0 zeroes skill_total. Defect Vow ppr→0 zeros refund. /api/systems/dnd-5e/reference returns 8 patrons / 4 pacts / 14 invocations; /api/systems/anime-5e/reference adds 8 demon_heritages incl. all required anime variants. Concept Forge — D&D 5E Warlock concept returns 2 candidates (class=Warlock + subclass + tier 1-4 + level + STR..CHA + cantrips≥1 + spells≥2 + patron + pact in {Tome,Blade,Chain,Talisman} + invocations≥1). Cypher concept returns 2 candidates (sentence 'a {desc} {type} who {focus}' + descriptor + type∈{Warrior,Adept,Explorer,Speaker} + focus + tier 1-6 + pools{Might,Speed,Intellect} + edges + effort + cyphers/artifacts/abilities arrays). Table Health aggregator GET /campaigns/{cid}/validations returns total_warnings + characters_dirty + characters[] for GM, 403 for non-GM persona. Frontend: DirectorConsole header renders [data-testid=table-health-badge] with green 'Table healthy' pill (table-health-clean) on a clean BESM campaign. ConceptForge campaign select now includes both D&D 5E (dnd-5e) and Cypher (cypher) campaigns alongside BESM/Anime.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "TableHealthBadge", "issue": "Clicking the green clean pill did not open the [data-testid=table-health-popover] in the smoke test (no popover element after click). Spec implies popover should open on click in both states. May be intentional (no warnings to list) — please verify; if intentional consider showing 'No warnings' empty state for parity.", "selector": "[data-testid='table-health-badge']", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_v62535_phase_cd.py",
+    "/app/test_reports/pytest/iter73_v62535.xml"
+  ],
+  "action_items": [
+    "(LOW) Confirm whether clicking table-health-badge in 'clean' state should open the popover with an empty/no-warnings state. Currently the popover only appears (per spec) when warnings exist; smoke test couldn't open it on a healthy campaign."
+  ],
+  "critical_code_review_comments": [
+    "character_validation.py: _load_cost_overrides correctly tuple-keys (kind_lower, name_lower); _besm_points_breakdown applies override across attribute / skill_group / defect kinds and stamps override_applied + cost_per_level_canon + 'GM override' note. _anime5e_point_buy_breakdown supports both ('point_buy_attribute',n) and fallback ('attribute',n) — verified manually in code review.",
+    "Concept Forge: _SUPPORTED_SYSTEMS now correctly = {besm-4e, anime-5e, dnd-5e, cypher}. Schema includes patron/pact/invocations for D&D + sentence/descriptor/type/focus/pools/edges/effort/cyphers/artifacts/abilities for Cypher. Stale 400 message 'D&D 5E and Cypher follow in a future iteration' is now unreachable but still present — minor cleanup.",
+    "patrons_pacts.py: 8 patrons + 4 pacts + 14 invocations + 8 demon_heritages — clean module, well-cited.",
+    "Backend tests confirm regression: /api/systems/dnd-5e/reference and /api/systems/anime-5e/reference both expose the new fields with correct counts."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_v62535_phase_cd.py"
+  ],
+  "success_rate": {"backend": "100% (10/10)", "frontend": "~95% (badge renders + Forge campaign list correct; popover-on-clean-click is the only open question)"},
+  "test_credentials": "GM franpietrowski@gmail.com / PieGod08!! ; player persona PieBan18!! used for 403 check.",
+  "seed_data_creation": "Created and deleted 3 TEST_v62535_* characters during pytest; 2 concept-drafts created+deleted on dnd-5e + cypher campaigns.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "V6.25.35 Phase C+D+badge GREEN. Backend regression file: /app/backend/tests/test_v62535_phase_cd.py (10 tests, ~100s wall-clock dominated by 2× Concept Forge LLM calls of ~30s each). DELETE for cost-overrides is by override id (GET list first to find id, then DELETE /cost-overrides/{oid}) — not by kind/name body. Hardcoded campaign ids used: BESM 88c44628d6c44bf596185030d2f6743b, D&D 368d4e21b86641b7a184befff3f9b559, Cypher dac42099dfcf4f7b8deabd1ed043ec00.",
+  "rca of the issue": "n/a — no failures. The only minor: smoke-test could not open the table-health-popover when badge was in clean state. Reproduction: log in as GM, open /app/campaigns/88c44628d6c44bf596185030d2f6743b/director, click the green 'Table healthy' pill — popover did not appear in the DOM within 1s. Likely intentional (empty popover suppressed); verify spec."
+}

@@ -464,6 +464,15 @@ from .anime5e_extended import (  # noqa: E402
     SUBCLASSES, FEATS, TOOLS, LANGUAGES, MAGIC_ITEMS, MONSTERS,
     DAMAGE_TYPES, SCHOOLS, CLASS_FEATURES,
 )
+# V6.25.35 — Otherworldly Patrons + Pacts + Invocations + anime
+# demon-folk heritages. Shared module so D&D 5E + Anime 5E don't
+# duplicate canon.
+from .patrons_pacts import (  # noqa: E402
+    PATRONS as _PATRONS,
+    PACTS as _PACTS,
+    INVOCATIONS as _INVOCATIONS,
+    DEMON_HERITAGES as _DEMON_HERITAGES,
+)
 
 
 REFERENCE = {
@@ -495,6 +504,15 @@ REFERENCE = {
     "damage_types":   DAMAGE_TYPES,
     "schools":        SCHOOLS,
     "class_features": CLASS_FEATURES,
+    # V6.25.35 — Patrons / Pacts / Invocations (Warlock canon shared
+    # with D&D 5E) + anime-specific demon-folk heritages on top of the
+    # SRD heritage roster so the Reference page exposes Tieflings /
+    # Half-Demons / Cursed Bloodlines / Oni-blooded / Hellspawn /
+    # Spirit-Touched without polluting the core HERITAGES list.
+    "patrons":         _PATRONS,
+    "pacts":           _PACTS,
+    "invocations":     _INVOCATIONS,
+    "demon_heritages": _DEMON_HERITAGES,
     "modifier_formula": "(score - 10) // 2",
     "rule_note": (
         "Anime 5E is D&D 5E + an OPTIONAL BESM-style point-buy LAYER. "

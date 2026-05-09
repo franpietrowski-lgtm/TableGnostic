@@ -274,6 +274,10 @@ export default function DirectorConsole() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {/* V6.25.35 — Table Health badge: aggregates ValidationPanel
+              warnings across every PC on this campaign. Click to expand
+              the per-character drill-down. */}
+          <TableHealthBadge cid={cid}/>
           {savedTick && <span className="text-arcane-light text-[10px]">Saved ✓</span>}
           <button onClick={save} disabled={busy} className="btn btn-primary text-xs"
                   data-testid="director-save-btn">
@@ -875,4 +879,103 @@ function pcBlurb(c, sysId) {
   if (cyph) return `T${cyph.tier || 1} · ${cyph.descriptor || "?"} ${cyph.type || "?"}`;
   if (dnd)  return `${dnd.class || "?"} ${dnd.level || 1} · AC ${10 + Math.floor(((dnd.ability_scores?.Dexterity || 10) - 10) / 2)}`;
   return `BESM · ${c.total_points || 0} CP`;
+}
+
+
+
+/**
+ * TableHealthBadge — V6.25.35
+ *
+ * Aggregates ValidationPanel warnings across every PC on the campaign
+ * and surfaces them as a single click-to-expand pill in the Director
+ * header. GMs love a clean table; this signals it at a glance.
+ *
+ *   • Green pill "Table healthy" — zero warnings campaign-wide
+ *   • Amber pill "N warnings" — click expands to a per-character list
+ *
+ * Backend: GET /api/campaigns/{cid}/validations (GM-only).
+ */
+function TableHealthBadge({ cid }) {
+  const [data, setData] = React.useState(null);
+  const [open, setOpen] = React.useState(false);
+  const [err, setErr] = React.useState(false);
+
+  const reload = React.useCallback(async () => {
+    if (!cid) return;
+    try {
+      const r = await api.get(`/campaigns/${cid}/validations`);
+      setData(r.data); setErr(false);
+    } catch (_e) { setErr(true); }
+  }, [cid]);
+
+  React.useEffect(() => { reload(); }, [reload]);
+
+  if (err) return null;
+  if (!data) return null;
+
+  const total = data.total_warnings || 0;
+  const dirty = data.characters_dirty || 0;
+  const healthy = total === 0;
+
+  return (
+    <div className="relative" data-testid="table-health-badge">
+      <button type="button" onClick={() => setOpen(!open)}
+              className={`btn text-[11px] gap-1.5 ${healthy
+                ? "bg-emerald-900/30 text-emerald-300 border-emerald-700/40 hover:bg-emerald-900/50"
+                : "bg-amber-900/30 text-amber-300 border-amber-700/40 hover:bg-amber-900/50"} border`}
+              title="Aggregate warnings across all sheets on this campaign."
+              data-testid="table-health-toggle">
+        {healthy
+          ? <CheckCircle2 className="w-3 h-3"/>
+          : <AlertTriangle className="w-3 h-3"/>}
+        {healthy
+          ? <span data-testid="table-health-clean">Table healthy</span>
+          : <span data-testid="table-health-dirty">{total} warning{total === 1 ? "" : "s"} · {dirty} sheet{dirty === 1 ? "" : "s"}</span>}
+      </button>
+      {open && !healthy && (
+        <div className="absolute right-0 mt-2 w-[440px] z-40 card-mystic p-3 shadow-xl border border-amber-700/40"
+             data-testid="table-health-popover">
+          <div className="flex items-baseline justify-between mb-2">
+            <span className="label-ref text-amber-300">Table Validation</span>
+            <button type="button" onClick={() => setOpen(false)}
+                    className="text-mist hover:text-parchment text-xs"
+                    data-testid="table-health-close">×</button>
+          </div>
+          <div className="text-[10px] text-mist/70 mb-2">
+            benchmarks · stat ≤ {data.benchmarks?.stat_cap} · attr ≤ {data.benchmarks?.attr_cap} · defect rank ≤ {data.benchmarks?.defect_rank_cap}
+          </div>
+          <ul className="space-y-2 max-h-[60vh] overflow-y-auto">
+            {(data.characters || []).map((row) => (
+              <li key={row.character_id} className="border border-amber-700/20 rounded-sm p-2"
+                  data-testid={`table-health-char-${row.character_id}`}>
+                <div className="flex items-center justify-between gap-2 mb-1">
+                  <Link to={`/app/characters/${row.character_id}`}
+                        className="font-display text-parchment text-sm hover:text-gold-bright">
+                    {row.character_name}
+                  </Link>
+                  <span className="tag bg-amber-900/30 text-amber-300 text-[9px]">
+                    {row.warnings.length} issue{row.warnings.length === 1 ? "" : "s"}
+                  </span>
+                </div>
+                <ul className="space-y-0.5">
+                  {row.warnings.slice(0, 4).map((w) => (
+                    <li key={w.signature} className="text-[11px] text-parchment/80 leading-snug">
+                      <span className="text-amber-400/70 uppercase tracking-widest text-[8px] mr-1">
+                        {w.kind.replace(/_/g, " ")}
+                      </span>
+                      {w.target_name}
+                      {typeof w.level === "number" && <span className="text-mist/70"> · {w.level}/{w.cap}</span>}
+                    </li>
+                  ))}
+                  {row.warnings.length > 4 && (
+                    <li className="text-[10px] text-mist italic">+{row.warnings.length - 4} more…</li>
+                  )}
+                </ul>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
 }
