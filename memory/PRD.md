@@ -14,6 +14,27 @@
 
 ## 2. Implemented (cumulative, condensed)
 
+### V6.25.36 — MacroBuilder audit · Voice push-to-talk v1 · Super-admin account (2026-02-09)
+
+**MacroBuilder audit & fixes** (`frontend/src/components/MacroBuilder.jsx`, `backend/routes/channels.py`)
+- Cypher pools (Might / Speed / Intellect) + derived stats (edge_might / edge_speed / edge_intellect / effort / tier) now exposed in SYSTEM_STATS / SYSTEM_DERIVED. Macro `{stat:Might}` / `{derived:edge_intellect}` / `{derived:effort}` / `{derived:tier}` resolve from `folio.cypher_state.pools/edges/effort/tier` on both client preview and backend fire-time.
+- Anime 5E hybrid sheets' BESM-style point-buy rows (`folio.anime5e_state.point_buys`) now visible to the macro resolver alongside `ch.attributes` — `{attr:Combat Mastery}` matches whichever list owns the row.
+
+**Voice Push-to-Talk v1** (`backend/routes/voice_lines.py` NEW, `frontend/src/components/PushToTalkButton.jsx` NEW)
+- New `voice_lines` collection. `POST /api/sessions/{sid}/voice-lines` accepts a multipart audio chunk + character_id + start/end timestamps; transcribes via OpenAI Whisper-1 (Emergent LLM key) and persists. 12MB cap per push, mime allow-list (webm/ogg/mp3/m4a/wav), Whisper failure tolerated (row stored with transcribed=false).
+- GM may PATCH any line's text (correction). Author may DELETE within 60s; GM may DELETE any time.
+- Player must own the character they speak as (admin/GM bypass).
+- PushToTalkButton mounts in SessionView under chat input — hold-to-record (mouse, touch, or Space-bar), pulsing red while recording, transcription progress, 60s soft cap, undo button visible for 60s after upload.
+- **Recap weaves voice lines into the chronicle** as IN-CHARACTER speech alongside chat / dice / encounter ticks. Voice lines are deliberately **not** pushed to player journals — journals stay a player's own POV so the GM can spot lies / sub-plot drift.
+
+**Super-admin / moderator account** (`backend/core/startup.py`)
+- `seed_user("tablegnostic-admin@tablegnostic.com", "LoremasterAurea2026!Forge", "TableGnostic Admin", "admin")` runs on every boot — idempotent, survives across deploys. Use this for app-wide authority + moderation in production. Distinct from any personal user identity.
+
+**Testing — V6.25.36**
+- Backend: 10/10 PASS (`/app/backend/tests/test_v62536_voice_admin_macros.py`) — admin seed login (idempotent), voice lines POST/GET/PATCH/DELETE lifecycle (size cap, mime, owner gate, GM bypass, 60s author-window), Cypher macro tokens, Anime 5E hybrid point-buy macro tokens.
+- Frontend: PushToTalkButton mounted + disabled-when-no-character verified via static review; live nav inconclusive only because of /app deep-link route timing (not a regression).
+
+
 ### V6.25.35 — Cost overrides → live CP math · Concept Forge for D&D 5E + Cypher · Patrons/Pacts/Heritages · GM Table Health badge (2026-02-09)
 
 **Cost overrides wired into live CP math** (`backend/routes/character_validation.py`)
