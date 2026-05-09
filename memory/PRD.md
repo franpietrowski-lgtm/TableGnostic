@@ -14,6 +14,35 @@
 
 ## 2. Implemented (cumulative, condensed)
 
+### V6.25.35 — Cost overrides → live CP math · Concept Forge for D&D 5E + Cypher · Patrons/Pacts/Heritages · GM Table Health badge (2026-02-09)
+
+**Cost overrides wired into live CP math** (`backend/routes/character_validation.py`)
+- New `_load_cost_overrides(campaign_id)` returns a `{(kind, name_lower): override_cost}` dict.
+- `_besm_points_breakdown(ch, overrides=...)` and `_anime5e_point_buy_breakdown(folio, overrides=...)` accept the dict; when a row's name+kind matches an override, the canon `cost_per_level` (or `points_per_rank` for defects) is replaced. Each affected line carries `override_applied: true`, `cost_per_level_canon: <was>`, and a "GM override (canon was X)" note for transparency.
+- `_validate_character` + `/api/characters/{cid}/validate` + `/app-validate` + `/approve-for-play` + the simulate-import route all now load overrides and pass them through. Verified: BESM Tough L3 (canon 4 CP/lvl=12) → override 1 CP/lvl yields attribute_total=3 with the canon value preserved on the line.
+- Anime 5E point-buy supports both `("point_buy_attribute", n)` and a fallback `("attribute", n)` so a single GM entry covers both layers.
+
+**Concept Forge — D&D 5E + Cypher** (`backend/routes/concept_forge.py`, `frontend/src/components/ConceptForge.jsx`)
+- `_SUPPORTED_SYSTEMS` now `{besm-4e, anime-5e, dnd-5e, cypher}`.
+- D&D 5E prompt is **tier-aware** (T1 1-4 / T2 5-10 / T3 11-16 / T4 17-20) and **warlock-aware** — when the brief lands on Warlock, the response includes a canonical Otherworldly Patron, a Pact Boon (Tome / Blade / Chain / Talisman), and 1-2 hallmark Eldritch Invocations alongside spells, cantrips, items, weapons, armor, hit_points.
+- Cypher prompt is **genre-aware** — emits Cypher's signature sentence form ("a {Descriptor} {Type} who {Focus}"), pools{Might/Speed/Intellect}, edges, effort, cyphers[], artifacts[], abilities[], plus a `genre_tag` echoing the campaign's genre (sci-fi / fantasy / horror / post-apoc / superhero).
+- CandidateCard renders the new fields per system without filter/branching — Sections are render-on-data so Cypher campaigns silently hide D&D-only blocks and vice versa.
+
+**Patrons / Pacts / Invocations / Demon-folk Heritages** (`backend/system_data/patrons_pacts.py` NEW)
+- 8 Otherworldly Patrons (Archfey, Fiend, Great Old One, Celestial, Hexblade, Genie, Fathomless, Undead) — each with summary, expanded spell list (10 entries), and 4 feature-level milestones.
+- 4 Pact Boons (Tome / Blade / Chain / Talisman) with summary + page reference.
+- 14 curated Eldritch Invocations covering the most-picked options.
+- 8 Anime 5E **demon-folk heritages** (Tiefling Standard, Half-Demon, Cursed Bloodline, Oni-blooded, Hellspawn, Aasimar, Fallen-Aasimar, Spirit-Touched) — full ability bonuses + traits.
+- Re-exported on both `/api/systems/dnd-5e/reference` (8 patrons / 4 pacts / 14 invocations) and `/api/systems/anime-5e/reference` (same + 8 demon_heritages).
+
+**GM Table Health badge** (`frontend/src/components/DirectorConsole.jsx`)
+- Aggregates ValidationPanel warnings campaign-wide via `GET /api/campaigns/{cid}/validations`. Pill renders in the Director header — green "Table healthy" when zero warnings, amber "N warnings · M sheets" otherwise. Click opens a popover listing per-character warnings with deep-links to each sheet. Healthy state shows a parity "all clean" empty popover.
+
+**Testing — V6.25.35**
+- Backend: 10/10 PASS (`/app/backend/tests/test_v62535_phase_cd.py`) — cost overrides on attribute / skill_group / defect / point_buy, D&D 5E warlock concept (patron + pact + invocations populated), Cypher concept (sentence + pools + cyphers + artifacts), Patrons reference parity, GM-only Table Health aggregator.
+- Frontend: ~95% — TableHealthBadge renders green/amber correctly; ConceptForge campaign list now includes all four systems; CandidateCard shows D&D + Cypher fields. Empty-state popover added post-test for parity.
+
+
 ### V6.25.34 — Concept Forge V2 (multi-field) · Smart Validators (2026-02-09)
 
 **Concept Forge V2** (`backend/routes/concept_forge.py` REWRITTEN, `frontend/src/components/ConceptForge.jsx` REWRITTEN)

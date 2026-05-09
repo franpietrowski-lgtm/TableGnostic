@@ -932,11 +932,13 @@ function TableHealthBadge({ cid }) {
           ? <span data-testid="table-health-clean">Table healthy</span>
           : <span data-testid="table-health-dirty">{total} warning{total === 1 ? "" : "s"} · {dirty} sheet{dirty === 1 ? "" : "s"}</span>}
       </button>
-      {open && !healthy && (
-        <div className="absolute right-0 mt-2 w-[440px] z-40 card-mystic p-3 shadow-xl border border-amber-700/40"
+      {open && (
+        <div className={`absolute right-0 mt-2 w-[440px] z-40 card-mystic p-3 shadow-xl border ${healthy ? "border-emerald-700/40" : "border-amber-700/40"}`}
              data-testid="table-health-popover">
           <div className="flex items-baseline justify-between mb-2">
-            <span className="label-ref text-amber-300">Table Validation</span>
+            <span className={`label-ref ${healthy ? "text-emerald-300" : "text-amber-300"}`}>
+              {healthy ? "Table Validation · all clean" : "Table Validation"}
+            </span>
             <button type="button" onClick={() => setOpen(false)}
                     className="text-mist hover:text-parchment text-xs"
                     data-testid="table-health-close">×</button>
@@ -944,36 +946,43 @@ function TableHealthBadge({ cid }) {
           <div className="text-[10px] text-mist/70 mb-2">
             benchmarks · stat ≤ {data.benchmarks?.stat_cap} · attr ≤ {data.benchmarks?.attr_cap} · defect rank ≤ {data.benchmarks?.defect_rank_cap}
           </div>
-          <ul className="space-y-2 max-h-[60vh] overflow-y-auto">
-            {(data.characters || []).map((row) => (
-              <li key={row.character_id} className="border border-amber-700/20 rounded-sm p-2"
-                  data-testid={`table-health-char-${row.character_id}`}>
-                <div className="flex items-center justify-between gap-2 mb-1">
-                  <Link to={`/app/characters/${row.character_id}`}
-                        className="font-display text-parchment text-sm hover:text-gold-bright">
-                    {row.character_name}
-                  </Link>
-                  <span className="tag bg-amber-900/30 text-amber-300 text-[9px]">
-                    {row.warnings.length} issue{row.warnings.length === 1 ? "" : "s"}
-                  </span>
-                </div>
-                <ul className="space-y-0.5">
-                  {row.warnings.slice(0, 4).map((w) => (
-                    <li key={w.signature} className="text-[11px] text-parchment/80 leading-snug">
-                      <span className="text-amber-400/70 uppercase tracking-widest text-[8px] mr-1">
-                        {w.kind.replace(/_/g, " ")}
-                      </span>
-                      {w.target_name}
-                      {typeof w.level === "number" && <span className="text-mist/70"> · {w.level}/{w.cap}</span>}
-                    </li>
-                  ))}
-                  {row.warnings.length > 4 && (
-                    <li className="text-[10px] text-mist italic">+{row.warnings.length - 4} more…</li>
-                  )}
-                </ul>
-              </li>
-            ))}
-          </ul>
+          {healthy && (
+            <div className="text-[12px] text-mist italic" data-testid="table-health-empty">
+              Every PC sheet at this table passes the validator. Nothing to review.
+            </div>
+          )}
+          {!healthy && (
+            <ul className="space-y-2 max-h-[60vh] overflow-y-auto">
+              {(data.characters || []).map((row) => (
+                <li key={row.character_id} className="border border-amber-700/20 rounded-sm p-2"
+                    data-testid={`table-health-char-${row.character_id}`}>
+                  <div className="flex items-center justify-between gap-2 mb-1">
+                    <Link to={`/app/characters/${row.character_id}`}
+                          className="font-display text-parchment text-sm hover:text-gold-bright">
+                      {row.character_name}
+                    </Link>
+                    <span className="tag bg-amber-900/30 text-amber-300 text-[9px]">
+                      {row.warnings.length} issue{row.warnings.length === 1 ? "" : "s"}
+                    </span>
+                  </div>
+                  <ul className="space-y-0.5">
+                    {row.warnings.slice(0, 4).map((w) => (
+                      <li key={w.signature} className="text-[11px] text-parchment/80 leading-snug">
+                        <span className="text-amber-400/70 uppercase tracking-widest text-[8px] mr-1">
+                          {w.kind.replace(/_/g, " ")}
+                        </span>
+                        {w.target_name}
+                        {typeof w.level === "number" && <span className="text-mist/70"> · {w.level}/{w.cap}</span>}
+                      </li>
+                    ))}
+                    {row.warnings.length > 4 && (
+                      <li className="text-[10px] text-mist italic">+{row.warnings.length - 4} more…</li>
+                    )}
+                  </ul>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
     </div>

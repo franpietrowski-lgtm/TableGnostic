@@ -415,8 +415,8 @@ async def forge_concept_drafts(cid: str, body: ConceptForgeIn,
     if system_id not in _SUPPORTED_SYSTEMS:
         raise HTTPException(
             400,
-            f"Concept Forge currently supports {sorted(_SUPPORTED_SYSTEMS)} only. "
-            "D&D 5E and Cypher follow in a future iteration.",
+            f"Concept Forge supports {sorted(_SUPPORTED_SYSTEMS)} only. "
+            f"Got '{system_id}'.",
         )
     if not body.has_content():
         raise HTTPException(400, "At least one concept field is required.")
