@@ -274,16 +274,37 @@ export default function DndSheetView({ state, folio, roll, characterId, isOwnerO
           );
         }
         const tbl = (isFull ? FULL_TBL : HALF_TBL)[lvl - 1] || [];
+        // V6.25.29 — honour folio.dnd_state.spell_slots overrides when present.
+        // Shape: { "1": {max, used}, "2": {max, used}, … }
+        const overrides = folio?.dnd_state?.spell_slots || {};
+        const slotMax = (i) => {
+          const o = overrides[String(i + 1)];
+          if (o && o.max != null) return Number(o.max);
+          return tbl[i] || 0;
+        };
+        const slotUsed = (i) => {
+          const o = overrides[String(i + 1)];
+          if (o && o.used != null) return Number(o.used);
+          return used[i + 1] || 0;
+        };
         return (
           <div className="card-mystic p-5 mt-4" data-testid="dnd-spell-slots">
             <div className="label-ref mb-2">Spell Slots</div>
             <div className="grid grid-cols-3 sm:grid-cols-9 gap-1">
-              {tbl.map((max, i) => max > 0 ? (
-                <div key={i} className="text-center border border-gold/15 rounded-sm py-1.5">
-                  <div className="text-[9px] text-mist tracking-widest uppercase">{i + 1}{["st","nd","rd","th","th","th","th","th","th"][i]}</div>
-                  <div className="font-display text-base text-gold-bright">{Math.max(0, max - (used[i + 1] || 0))}<span className="text-mist text-xs">/{max}</span></div>
-                </div>
-              ) : null)}
+              {Array.from({ length: 9 }).map((_, i) => {
+                const max = slotMax(i);
+                if (max <= 0) return null;
+                const u = slotUsed(i);
+                return (
+                  <div key={i} className="text-center border border-gold/15 rounded-sm py-1.5"
+                       data-testid={`dnd-slot-${i + 1}`}>
+                    <div className="text-[9px] text-mist tracking-widest uppercase">{i + 1}{["st","nd","rd","th","th","th","th","th","th"][i]}</div>
+                    <div className="font-display text-base text-gold-bright">
+                      {Math.max(0, max - u)}<span className="text-mist text-xs">/{max}</span>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
             <div className="text-[11px] text-mist mt-2">Cantrips known: <b className="text-gold">{cantripsKnown}</b></div>
           </div>

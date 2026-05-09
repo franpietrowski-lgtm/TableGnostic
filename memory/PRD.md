@@ -34,6 +34,17 @@ The user's spec: monsters / creatures / characters / NPCs are all **Entities** i
 
 **Tests** — `test_v62529_encounter_propagation.py` (5/5 NEW): entities endpoint shape + kind filter, casualty vigilization end-to-end, kill_logs aggregation, character-name resolution in tally, legacy query-string completion regression, deceased filter on entities. Combined V6.25.25→.29 = **50/50 pass in 35s**.
 
+**V6.25.29 follow-up fixes (after testing agent walkthrough)**:
+- `EncountersLibrary.jsx` Run/Complete buttons no longer `sessionId`-gated; GMs can resolve encounters from the Director Console for out-of-band sessions. Backend `/run` `session_id` is now Optional.
+- `SpellTracker` is now hidden on the Mechanics tab unless `system_id === "dnd-5e"` — Anime 5E + BESM use BESM Power Packs / Bundles for casting; Cypher uses pool-based effort. Eliminates the design issue the testing agent flagged.
+- `CypherSheetView` pool reader now accepts BOTH the legacy flat shape (`pools.Might` = number, `current_pools`, `edge`) AND the canonical nested shape (`pools.might = {max, current, edge}`). Vex Ashenhart's seeded sheet now renders Might 17/17 edge 1, Speed 15/15 edge 1, Intellect 10/10 edge 0 correctly.
+- `CypherSheetView` cyphers-carried card now shows `N / MAX` count in the title.
+- `DndSheetView` spell-slots panel honours `folio.dnd_state.spell_slots` overrides (`{level: {max, used}}`) when present, falling back to the class-progression table. Lyra Stormblade's seeded Paladin lv 3 with 4 first-level + 2 second-level slots now renders correctly instead of being clobbered by the RAW table. Slot tiles now have `data-testid="dnd-slot-{n}"` for testing.
+
+**Seeded characters for QA** (`test_credentials.md`):
+- Vex Ashenhart (Cypher, id=`7fb9f4341cf741c5a1f16fd42b4764cf`).
+- Lyra Stormblade (D&D 5E, id=`b5d47d9477fc4181983343065554b94c`).
+
 **Future tie-in (per user)** — News Codex feature (sarcastic "mer der hoh bohs" landing-page leaderboard + in-fiction news entries with LLM-summarized session intake). User wants to brainstorm shape before implementation; the kill-tally + casualty-log data model already supports it.
 
 
