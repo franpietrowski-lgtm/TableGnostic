@@ -597,7 +597,8 @@ export default function SessionView() {
       {campaign?.is_gm && session && (
         <div className="mt-6 px-4">
           <EncountersLibrary campId={campaign.id || campaign._id || session.campaign_id}
-                                sessionId={id} isGm={true}/>
+                                sessionId={id} isGm={true}
+                                systemId={campaign?.system_id}/>
         </div>
       )}
 

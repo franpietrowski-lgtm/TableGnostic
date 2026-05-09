@@ -14,6 +14,29 @@
 
 ## 2. Implemented (cumulative, condensed)
 
+### V6.25.29 — Entity-aware Encounter completion + per-system bestiary picker (2026-02-09)
+
+The user's spec: monsters / creatures / characters / NPCs are all **Entities** in TableGnostic. An encounter binds Entities + Locations. When the GM marks an encounter complete, the codex must propagate state — **NPC death = vigil entry on the codex node**; **monster kill = running tally** keyed to the player who scored the killing blow.
+
+**Backend — `routes/encounters_library.py`**
+- New `EncounterCompleteIn` body schema: `{completion_notes, session_id, casualties[], kills[]}`. The legacy `?completion_notes=…` query-string call still works (regression-tested).
+- For each casualty `{node_id, death_reason, witnesses[node_id…], killed_by_character_id}`:
+    * Codex node receives `fields.deceased = True` + `fields.death_log` append (encounter id, encounter name, session id, death reason, witnesses, killed-by character id, recorder + timestamp). This is the "vigilize" semantic.
+- For each kill `{monster_name, monster_ref_id?, count, cr?, system?, killed_by_character_id?}`:
+    * Inserted into NEW Mongo collection `kill_logs`. Per-monster + per-character + grand totals computed by the new aggregation endpoint.
+- NEW `GET /api/campaigns/{cid}/entities[?kind=&include_deceased=]` — returns codex nodes whose `node_kind`/`type` is in `{npc, character, creature, monster, person, faction}`. Player-vs-GM visibility filtering preserved (players only see shared/revealed). `include_deceased=false` filters out vigilized nodes.
+- NEW `GET /api/campaigns/{cid}/kill-tally` — running totals from `kill_logs`. Returns `{grand_total, by_monster[{name, kills}], by_character[{character_id, character_name, kills}], by_monster_by_character{}, log_count}`. Names auto-resolved via `db.characters` lookup. **Feeds the future "mer der hoh bohs" landing-page leaderboard.**
+
+**Frontend**
+- `EncountersLibrary.jsx` accepts new `systemId` prop; `DirectorConsole` and `SessionView` pass it through.
+- `EncounterEditorModal` gains a new **Bestiary picker** powered by `/systems/{systemId}/reference` — shows live monster catalogue (D&D 5E's 62 monsters, Cypher's bestiary, etc.), with name/CR-range search. Click a row to attach the foe to the encounter (count + CR + stats prefilled).
+- New **`EncounterCompleteModal`** replaces the simple `prompt()` for completion. Three sections: (a) free-text resolution notes, (b) NPC casualty checkboxes — toggle to vigilize, then fill in death-reason / witness multi-select / killing-blow character; (c) kill-tally per attached monster — count input + killing-blow character selector.
+
+**Tests** — `test_v62529_encounter_propagation.py` (5/5 NEW): entities endpoint shape + kind filter, casualty vigilization end-to-end, kill_logs aggregation, character-name resolution in tally, legacy query-string completion regression, deceased filter on entities. Combined V6.25.25→.29 = **50/50 pass in 35s**.
+
+**Future tie-in (per user)** — News Codex feature (sarcastic "mer der hoh bohs" landing-page leaderboard + in-fiction news entries with LLM-summarized session intake). User wants to brainstorm shape before implementation; the kill-tally + casualty-log data model already supports it.
+
+
 ### V6.25.28 — D&D 5E full canonical SRD seeding (2026-02-09)
 
 The user's **P2 backlog item**: full SRD-5.1 reference data wired into `/api/systems/dnd-5e/reference` and the dashboard Reference page so a D&D 5E campaign opens with a complete in-app rulebook without needing the SRD PDF.

@@ -467,9 +467,10 @@ export default function DirectorConsole() {
         <RollTableDesigner campId={cid} partyTier={partyTier}/>
       </div>
 
-      {/* V6.25.26 — Encounters Library (anti-railroad: bulk-author + pick from session). */}
+      {/* V6.25.26 — Encounters Library (anti-railroad: bulk-author + pick from session).
+          V6.25.29 — passes systemId so the editor can pull per-system bestiary. */}
       <div className="mt-6">
-        <EncountersLibrary campId={cid} isGm={true}/>
+        <EncountersLibrary campId={cid} isGm={true} systemId={sysId}/>
       </div>
     </div>
   );
