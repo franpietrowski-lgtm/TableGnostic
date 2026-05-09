@@ -2,6 +2,7 @@ import React from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ArrowRight, Play, Sparkles } from "lucide-react";
 import Sigil from "./Sigil";
+import CtaOrbits from "./CtaOrbits";
 
 /**
  * Hero — left copy column, right animated sigil device. Mobile stacks.
@@ -21,7 +22,7 @@ export default function Hero({ user }) {
         <div>
           <div className="label-ref mb-7 flex items-center gap-2" data-testid="hero-eyebrow">
             <Sparkles className="w-3 h-3" />
-            <span>A worldbuilding-first tabletop platform</span>
+            <span>An all-system-aware tabletop platform</span>
           </div>
 
           <h1 className="font-display text-[clamp(2.6rem,7vw,5.6rem)] leading-[0.98] text-parchment uppercase tracking-tight">
@@ -44,35 +45,43 @@ export default function Hero({ user }) {
             characters, notes, and table history in one living campaign space.
           </p>
 
-          <div className="mt-10 flex flex-wrap gap-3">
+          <div className="mt-10 flex flex-wrap items-center gap-4 md:gap-5">
+            {/* Orbit flourish next to the primary CTA — small spinning rune
+                ring that draws the eye toward "Begin the Rite". */}
+            <div className="hidden sm:flex items-center justify-center -mr-1">
+              <CtaOrbits size={88} />
+            </div>
+
             <button
               onClick={() => nav(user ? "/app" : "/auth?mode=register")}
-              className="btn btn-primary px-7 py-3.5 text-sm"
+              className="btn btn-primary px-7 py-3.5 text-sm relative"
               data-testid="hero-cta-take-a-seat"
             >
-              Take a Seat <ArrowRight className="w-4 h-4" />
+              Begin the Rite <ArrowRight className="w-4 h-4" />
             </button>
+
+            {!user && (
+              <Link
+                to="/auth?mode=login"
+                className="btn px-6 py-3.5 text-sm"
+                data-testid="hero-cta-resume-rite"
+              >
+                Resume the Rite
+              </Link>
+            )}
+
             <a
               href="#what"
-              className="btn px-6 py-3.5 text-sm"
+              className="btn btn-ghost px-5 py-3.5 text-sm"
               data-testid="hero-cta-watch-tour"
             >
-              <Play className="w-4 h-4" /> Watch the Table Tour
+              <Play className="w-4 h-4" /> Watch the Tour
             </a>
           </div>
 
-          {!user && (
-            <div className="mt-6 text-xs font-ui text-mist/60">
-              Already have a table?{" "}
-              <Link
-                to="/auth?mode=login"
-                className="text-gold hover:text-gold-bright underline-offset-4 hover:underline"
-                data-testid="hero-tertiary-login"
-              >
-                Open the app →
-              </Link>
-            </div>
-          )}
+          <p className="mt-7 text-[11px] font-ui tracking-[0.32em] uppercase text-gold/65" data-testid="hero-creed">
+            Connection · Imagination · Revelation
+          </p>
 
           <div className="mt-12 divider-sigil max-w-md" />
           <p

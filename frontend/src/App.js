@@ -68,6 +68,7 @@ export default function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Landing />} />
+          <Route path="/discover" element={<Landing />} />
           <Route path="/auth" element={<Auth />} />
           <Route path="/invite/:token" element={<Invite />} />
           <Route path="/reset" element={<Reset />} />

@@ -95,14 +95,14 @@ export default function ContactWaitlist() {
               className="btn btn-primary px-5 py-3 text-sm justify-start"
               data-testid="contact-cta-start-table"
             >
-              Start a Table — free profile <ArrowRight className="w-4 h-4 ml-auto" />
+              Begin the Rite — free profile <ArrowRight className="w-4 h-4 ml-auto" />
             </Link>
             <Link
               to="/auth?mode=login"
               className="btn px-5 py-3 text-sm justify-start"
               data-testid="contact-cta-already-have"
             >
-              I already have a seat <ArrowRight className="w-4 h-4 ml-auto" />
+              Resume the Rite <ArrowRight className="w-4 h-4 ml-auto" />
             </Link>
           </div>
 
@@ -150,7 +150,7 @@ export default function ContactWaitlist() {
                 className="mt-7 btn btn-primary px-5 py-3 text-sm"
                 data-testid="contact-success-cta"
               >
-                Take a seat now <ArrowRight className="w-4 h-4" />
+                Begin the Rite <ArrowRight className="w-4 h-4" />
               </Link>
               <button
                 type="button"

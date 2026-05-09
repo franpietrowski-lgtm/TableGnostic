@@ -68,7 +68,7 @@ export default function LandingNav({ user }) {
                 className="btn btn-primary text-xs"
                 data-testid="nav-take-a-seat-btn"
               >
-                Take a Seat <ArrowRight className="w-3.5 h-3.5" />
+                Begin the Rite <ArrowRight className="w-3.5 h-3.5" />
               </Link>
             </>
           )}

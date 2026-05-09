@@ -2,6 +2,7 @@ import React, { useEffect } from "react";
 import { useAuth } from "../lib/api";
 import LandingNav from "./landing/LandingNav";
 import Hero from "./landing/Hero";
+import Pillars from "./landing/Pillars";
 import SystemTrustStrip from "./landing/SystemTrustStrip";
 import WhatItDoes from "./landing/WhatItDoes";
 import RoleTour from "./landing/RoleTour";
@@ -83,6 +84,7 @@ export default function Landing() {
       <LandingNav user={userResolved} />
       <main>
         <Hero user={userResolved} />
+        <Pillars />
         <SystemTrustStrip />
         <WhatItDoes />
         <RoleTour />

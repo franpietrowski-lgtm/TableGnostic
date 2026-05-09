@@ -54,6 +54,34 @@
 
 ## 2. Implemented (cumulative, condensed)
 
+## V6.25.12 — Landing polish + /discover route + CTA orbital flourish (2026-05-09)
+
+User asked to align the landing with the live rules-forge.emergent.host design and prepare it for the new domain layout (tablegnostic.com root = app, `/discover` = landing).
+
+**🟢 New route**
+- `/discover` → renders `<Landing />` (alongside `/`); both routes work for backward compatibility. (`App.js`)
+
+**🟢 CTA copy aligned to the live app's "rite" voice**
+- Primary CTA across hero, nav, contact, and contact-success: **"Begin the Rite"** → `/auth?mode=register` (the app's signup + role-picking opening).
+- Secondary CTA: **"Resume the Rite"** → `/auth?mode=login`.
+- Tertiary CTA: **"Watch the Tour"** (scrolls to `#what`).
+- Hero eyebrow updated to "An all-system-aware tabletop platform" (matches live).
+- Added creed line **"Connection · Imagination · Revelation"** under the CTA cluster.
+
+**✨ Orbital animation flourish next to "Begin the Rite"**
+- `components/landing/CtaOrbits.jsx` (new) — 88px decorative SVG: 12-tick outer rune ring (CCW spin), dashed mid ring (CW), inner heptagram with subtle scale-pulse, and 3 orbiting glyph dots at 9s/13s/17s rotation periods. Radial halo behind it that breathes (4.5s ease-in-out). Pure CSS animations, no canvas, no JS loop — honors `prefers-reduced-motion`. Renders only on ≥sm viewports so mobile keeps the CTA buttons full-width.
+
+**🟢 4-pillar quick-glance row** (`components/landing/Pillars.jsx` — new)
+- Inserted between Hero and System Trust Strip.
+- Cards: **Guided Worlds · Live Sessions · Character Forge · Knowledge Web** — copy lifted verbatim from the live rules-forge homepage so the message reads identically above the fold.
+- Reuses the existing `card-mystic` lift-on-hover pattern.
+
+**🔍 Verified**
+- Live rules-forge.emergent.host crawled to confirm latest stable copy + version surface (V6.25.10 is still latest internal milestone — no Product Proof update needed).
+- Both `/` and `/discover` return 200 and render the same Landing shell.
+- Screenshot at 1920×900 confirms orbital flourish renders to the left of the Begin-the-Rite CTA, with the gold rune ring + heptagram + orbiting dots visible.
+- Lint clean across all 14 landing/* files.
+
 ### V6.25.10 — Per-row macro sprinkles + BESM Extras item/weapon mods + Mobile Sweep V3 + Apocophea demo (2026-02-08)
 
 User-flagged: (1) per-row "Add to macro" sprinkles, (2) Mobile Sweep V3 (sticky header + touch targets), (3) BESM Extras weapon/item-specific Enhancements + Limiters from core + Extras books, (4) end-to-end demo with Eli's Apocophea AutoMakers Bag, (5) helpful tooltip hints from screenshots, (6) confirm slash-command vs slot-fire equivalence (CONFIRMED — both paths fire identical resolver: slot uses inline `body=/<macro>+mod`; chat uses raw `/<macro> +mod`).
