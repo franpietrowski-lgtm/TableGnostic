@@ -55,26 +55,34 @@ export default function ValidationPanel({ characterId }) {
         </div>
       </div>
       <ul className="space-y-1.5">
-        {data.warnings.map((w) => (
-          <li key={w.signature}
-              className="text-[12px] flex items-start gap-2 border border-arcane/15 rounded-sm p-2"
-              data-testid={`validation-warning-${w.kind}-${w.target_name}`}>
-            <ShieldOff className="w-3 h-3 mt-0.5 text-arcane shrink-0"/>
-            <div className="flex-1 min-w-0">
-              <div className="text-parchment">{w.message}</div>
-              <div className="text-[10px] text-mist/60 mt-0.5">
-                kind: {w.kind} · target: {w.target_name}
-                {typeof w.level === "number" && ` · L/R ${w.level}/${w.cap}`}
+        {data.warnings.map((w) => {
+          // V6.25.34 — Slug the target_name so testids are space-free and
+          // selectors based on `[data-testid*=...]` reliably match every
+          // warning (including duplicates of multi-word attributes like
+          // "Massive Damage" or "Power Pack").
+          const slug = (w.target_name || "")
+            .toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "x";
+          return (
+            <li key={w.signature}
+                className="text-[12px] flex items-start gap-2 border border-arcane/15 rounded-sm p-2"
+                data-testid={`validation-warning-${w.kind}-${slug}`}>
+              <ShieldOff className="w-3 h-3 mt-0.5 text-arcane shrink-0"/>
+              <div className="flex-1 min-w-0">
+                <div className="text-parchment">{w.message}</div>
+                <div className="text-[10px] text-mist/60 mt-0.5">
+                  kind: {w.kind} · target: {w.target_name}
+                  {typeof w.level === "number" && ` · L/R ${w.level}/${w.cap}`}
+                </div>
               </div>
-            </div>
-            <button type="button" onClick={() => dismiss(w.signature)}
-                    className="btn btn-ghost text-[10px] shrink-0"
-                    data-testid={`validation-dismiss-${w.kind}-${w.target_name}`}
-                    title="Dismiss this warning. It returns only if state changes (new duplicate, different over-benchmark level, etc.).">
-              <X className="w-3 h-3"/> Dismiss
-            </button>
-          </li>
-        ))}
+              <button type="button" onClick={() => dismiss(w.signature)}
+                      className="btn btn-ghost text-[10px] shrink-0"
+                      data-testid={`validation-dismiss-${w.kind}-${slug}`}
+                      title="Dismiss this warning. It returns only if state changes (new duplicate, different over-benchmark level, etc.).">
+                <X className="w-3 h-3"/> Dismiss
+              </button>
+            </li>
+          );
+        })}
       </ul>
     </div>
   );

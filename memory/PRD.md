@@ -14,9 +14,35 @@
 
 ## 2. Implemented (cumulative, condensed)
 
-### V6.25.33 — Concept Forge · GM Cost Overrides · Auth deep-link fix (2026-02-09)
+### V6.25.34 — Concept Forge V2 (multi-field) · Smart Validators (2026-02-09)
 
-**Concept Forge** (`backend/routes/concept_forge.py`, `frontend/src/components/ConceptForge.jsx`)
+**Concept Forge V2** (`backend/routes/concept_forge.py` REWRITTEN, `frontend/src/components/ConceptForge.jsx` REWRITTEN)
+- Multi-field BESM-quiz inspired brief replaces the single textarea: `role`, `signature_traits`, `appearance`, `origin`, `carried_gear`, `goals`, `dreams`, `personality_knots`, `history`, plus a free-form `concept_text` catch-all. At-least-one-field validation; primer banner [data-testid='forge-primer-banner'] surfaces CP cap, max attribute rank, power level, genre, era, allow/prohibit counts.
+- **Player Primer respected** — server-side `_format_primer_block()` injects CP budget cap, max attribute rank, allow/prohibit lists, and the verbatim primer text into Claude's user prompt. Snapshot of the primer at forge time persists on the draft for audit (`primer_snapshot`).
+- **Codex entity import** — players tick entity-flavoured nodes (NPC / Character / Creature / Faction / Location / Item / Deity / Patron) from a campaign-scoped picker. Server fetches the cited nodes and includes their summary lines in the prompt as canon material.
+- **Output schema expanded**: each candidate now carries `appearance`, `origin`, `goals[]`, `dreams[]`, `personality_knots`, `history[]`, attributes with explicit `resistance_kind` (stat / attribute / armor / none) and `range_kind` (character / weapon / none) disambiguation, `power_packs[]` (BESM signature bundles with `effects[]` + `defect` + `total_cp` + `narrative`), `items[]`, and `weapons[]` (with `is_weapon_item` flag for half-cost weapon-items per BESM 4E p.135).
+- **CharacterBuilder seeding extended** to flow the picked candidate into folio (physical_description, history_events, goals, motivations, occupation, gender_species_age) + inventory (items + weapons with proper `kind` tags) + power_packs.
+
+**Smart Validators** (`backend/routes/character_validators.py` NEW, `frontend/src/components/ValidationPanel.jsx` NEW)
+- Live scan of any character sheet returns:
+  - `duplicate_attribute` — same attribute name appears more than once (BESM 4E p.96 collapse rule).
+  - `over_benchmark_attr` — attribute level above primer's `max_per_attribute_rank` or the power-level default.
+  - `over_benchmark_stat` — Body / Mind / Soul above the power-level cap.
+  - `over_benchmark_defect` — defect rank above 3.
+- **Weapon exemption**: any row whose name / category / kind contains "weapon" is skipped (Anime-style cinematic balance — GM owns weapon balance).
+- Dismissals persist on `character.folio.dismissed_validations` keyed by stable signature `(kind:name)` for duplicates (sticky) and `(kind:name:level)` for benchmark warnings (re-fires when level changes).
+- New endpoints: `GET /api/characters/{cid}/validations`, `POST .../validations/dismiss`, and `GET /api/campaigns/{cid}/validations` (GM-only campaign-wide aggregate for the Director Console).
+- Panel mounts on the Character Sheet just below `AppliedTemplatesPanel`; renders only when there are active warnings; testid-slugged so multi-word target names like "Massive Damage" produce stable selectors.
+
+**Testing — V6.25.34**
+- Backend: 11/11 PASS (`/app/backend/tests/test_v62534_forge_v2_validators.py`) — multi-field forge, primer respect, codex import end-to-end, validators (duplicates / over-benchmark / weapon exemption / dismissal idempotency / level-bump re-fire / GM-only aggregate).
+- Frontend: 10/10 multi-field testids, primer banner, codex picker, candidate cards with Power Packs / Items / Weapons / Goals / Dreams / Knots / resistance+range badges, ValidationPanel mounts on dirty sheets and hides on clean.
+- V6.25.33 regression: 13/13 PASS (2 cross-persona cases legitimately skipped).
+
+
+### V6.25.33 — Concept Forge V1 · GM Cost Overrides · Auth deep-link fix (2026-02-09)
+
+**Concept Forge V1** (`backend/routes/concept_forge.py`, `frontend/src/components/ConceptForge.jsx`)
 - New sidebar entry "Concept Forge" → `/app/concept-forge`. Player or GM types a free-form character concept; Claude Sonnet 4.5 (via emergentintegrations + Emergent LLM key) returns **two mechanically-distinct build candidates** — race / class / stats / attributes / skills / defects / estimated CP / rationale. Drafts go to a per-campaign approval queue (`concept_drafts` collection): `pending` → GM `approved` / `rejected` (with notes) → Player picks an index → `committed`. Commit redirects to `/app/campaigns/{cid}/characters/new?from_draft={id}&seed=<encoded>` and CharacterBuilder pre-fills the empty draft from the picked candidate (name, summary, stats, attributes, skills, defects — each row tagged with `from_concept_draft`). Supported on BESM 4E + Anime 5E only (D&D 5E + Cypher follow-on).
 - Round-trip ~24-28s for the LLM call. JSON-only output enforced by system prompt + fence-strip + regex salvage; 502 on parse failure.
 
@@ -29,6 +55,7 @@
 - `Protected` route's `useMinDelay` cinematic SUMMONING splash reduced from 5000ms → 600ms. Iter69/iter70's reported "redirect to /" was the testing agent giving up before the 5s splash completed; with 600ms the protected route hydrates in ~1.3s (auth/me round-trip + min-delay) and deep-links work end-to-end.
 
 
+### V6.25.32 — Anime 5E reference parity · BESM canonical templates in builder · CORS regex fix (2026-02-09)
 
 **Anime 5E reference parity** (`backend/system_data/anime5e_extended.py` NEW)
 - New module re-exports the SRD 5.1 `LANGUAGES`, `TOOLS`, `FEATS`, `MAGIC_ITEMS`, `MONSTERS`, `SUBCLASSES`, `DAMAGE_TYPES`, `SCHOOLS`, `CLASS_FEATURES` from `dnd5e_extended` (one-way port, CC-BY 4.0) **plus** anime-original additions: 10 anime-class subclasses (2 each for Adept/Champion/Idol/Pilot/Tinker), 8 anime tools (Hacker's Kit, Mecha Diagnostic Rig, Idol Concert Kit, etc.), 5 anime languages (Spirit-Tongue, Mech-Cant, Hex-cant, Earth-tongue, Lyrical Bardic), 15 anime feats (Power Limiter, Transformation Sequence, Mecha-Bond, Tsundere Reflex, Plot Armor, etc.), 15 anime relics (Henshin Pendant, Pilot's Visor, Idol's Microphone, Magical Girl Wand, Catgirl Ear Ribbon, etc.), and 15 anime monsters (Kaiju Lesser/Great, Yokai Tengu/Kitsune-9/Oni, Cyberdemon, Mecha Drone/Trooper/Frame, Vengeful Spirit, Idol Fan Swarm, etc.).
@@ -43,17 +70,6 @@
 - Regex expanded to also match `https://*.emergentagent.com`, `https://*.emergent.host`, and `https://(www.)?tablegnostic.com`.
 - Verified locally: POST `/api/auth/login` with `Origin: https://tablegnostic.com` now returns `access-control-allow-origin: https://tablegnostic.com` and a 200 with both GM and Player personas.
 - **User must redeploy** (Emergent Deploy button) for the production environment to pick up the fix.
-
-
-### V6.25.32 — Anime 5E reference parity · BESM canonical templates in builder · CORS regex fix (2026-02-09)
-
-**Anime 5E reference parity** (`backend/system_data/anime5e_extended.py` NEW, `anime5e_data.py` REFERENCE updated)
-- New module re-exports SRD 5.1 `LANGUAGES`, `TOOLS`, `FEATS`, `MAGIC_ITEMS`, `MONSTERS`, `SUBCLASSES`, `DAMAGE_TYPES`, `SCHOOLS`, `CLASS_FEATURES` from `dnd5e_extended` (one-way port, CC-BY 4.0) **plus anime-original additions**: 10 anime-class subclasses (2 each for Adept/Champion/Idol/Pilot/Tinker), 8 anime tools, 5 anime languages, 15 anime feats (Power Limiter, Transformation Sequence, Tsundere Reflex, Plot Armor, …), 15 anime relics (Henshin Pendant, Idol's Microphone, Magical Girl Wand, …), 15 anime monsters (Kaiju Lesser/Great, Yokai Tengu/Kitsune-9/Oni, Cyberdemon, Mecha Frame, …).
-- `/api/systems/anime-5e/reference` now returns 22 subclasses · 57 feats · 35 tools · 21 languages · 76 magic_items · 77 monsters · 13 damage_types · 8 schools. Frontend `Reference.jsx` is data-driven so all sections render automatically.
-
-**BESM canonical Race / Class templates wired into builder** (`frontend/src/components/CharacterBuilder.jsx`)
-- New `_canonToCustomShape()` helper normalises `RACE_TEMPLATES` (8) + `CLASS_TEMPLATES` (12) from `/api/besm/reference` into the same `{id, name, kind, effects:{total_cp, stat_adjustments, components}}` shape used by campaign-custom homebrew.
-- `BesmTemplatePicker` now renders **four optgroups**: BESM 4E Canon · Races / Classes + Campaign Custom · Races / Classes. Apply / Remove / Backfill / per-row provenance (`from_template_id`) all inherit from the existing flow; `AppliedTemplatesPanel` renders canonical applied templates without modification (deterministic IDs `canon-race-<slug>` / `canon-class-<slug>`).
 
 
 ### V6.25.30 — Multi-persona auth · Azazel-style PDF · Hero cleanup · How-To overhaul (2026-02-09)
