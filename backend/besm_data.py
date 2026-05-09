@@ -1058,25 +1058,186 @@ COMPANIONS = [
 
 # Race templates — BESM 4E ships these as quick "kits"; users can extend.
 # These cover only the *names + costs + page refs*, no rule prose.
+# V6.25.32 — BESM 4E race templates with FULL bundled attribute / defect
+# rows. Each `bundle` is a list of {kind, name, level, rank?, source} rows
+# the character builder can drop into the sheet wholesale (and the player
+# can edit afterwards). `cp_cost` mirrors the canon catalogue total so the
+# CP Bank stays anchored to the rulebook.
 RACE_TEMPLATES = [
     {"name": "Human (Standard)", "cp_cost": 0,  "page": 35,
-     "summary": "Baseline 0-cost; no template attributes."},
+     "summary": "Baseline 0-cost; no template attributes.",
+     "bundle": []},
     {"name": "Half-Demon",       "cp_cost": 8,  "page": 36,
-     "summary": "+1 Body, Aura of Inhuman Beauty 1, Tough 1; Vow defect 1."},
+     "summary": "+1 Body, Aura of Inhuman Beauty 1, Tough 1; Vow defect 1.",
+     "bundle": [
+        {"kind": "stat",      "name": "Body",                  "level": 1},
+        {"kind": "attribute", "name": "Aura of Inhuman Beauty", "level": 1},
+        {"kind": "attribute", "name": "Tough",                  "level": 1},
+        {"kind": "defect",    "name": "Vow",                    "rank": 1},
+     ]},
     {"name": "Beastfolk",        "cp_cost": 6,  "page": 37,
-     "summary": "Heightened Senses 2, Speed 1, Natural Weapons 1; Marked 1."},
+     "summary": "Heightened Senses 2, Speed 1, Natural Weapons 1; Marked 1.",
+     "bundle": [
+        {"kind": "attribute", "name": "Heightened Senses", "level": 2},
+        {"kind": "attribute", "name": "Speed",             "level": 1},
+        {"kind": "attribute", "name": "Natural Weapons",   "level": 1},
+        {"kind": "defect",    "name": "Marked",            "rank": 1},
+     ]},
     {"name": "Construct",        "cp_cost": 12, "page": 38,
-     "summary": "Tough 2, Heavy Armour 1, Special Defence (Sleep, Poison) 2; Conditional Ownership 1."},
+     "summary": "Tough 2, Heavy Armour 1, Special Defence (Sleep, Poison) 2; Conditional Ownership 1.",
+     "bundle": [
+        {"kind": "attribute", "name": "Tough",            "level": 2},
+        {"kind": "attribute", "name": "Heavy Armour",     "level": 1},
+        {"kind": "attribute", "name": "Special Defence",  "level": 2,
+                                                  "note": "Sleep, Poison"},
+        {"kind": "defect",    "name": "Conditional Ownership", "rank": 1},
+     ]},
     {"name": "Faerie",           "cp_cost": 10, "page": 39,
-     "summary": "Flight 1, Stealth 1, Resilience 1; Marked 1, Vulnerability (Iron) 1."},
+     "summary": "Flight 1, Stealth 1, Resilience 1; Marked 1, Vulnerability (Iron) 1.",
+     "bundle": [
+        {"kind": "attribute", "name": "Flight",     "level": 1},
+        {"kind": "attribute", "name": "Stealth",    "level": 1},
+        {"kind": "attribute", "name": "Resilience", "level": 1},
+        {"kind": "defect",    "name": "Marked",     "rank": 1},
+        {"kind": "defect",    "name": "Vulnerability", "rank": 1, "note": "Iron"},
+     ]},
     {"name": "Spirit (Bodiless)", "cp_cost": 14, "page": 40,
-     "summary": "Insubstantial 1, Special Movement (Phasing), Heightened Awareness; Phys-Imp 1, Restricted Activities 1."},
+     "summary": "Insubstantial 1, Special Movement (Phasing), Heightened Awareness; Phys-Imp 1, Restricted Activities 1.",
+     "bundle": [
+        {"kind": "attribute", "name": "Insubstantial",         "level": 1},
+        {"kind": "attribute", "name": "Special Movement",      "level": 1, "note": "Phasing"},
+        {"kind": "attribute", "name": "Heightened Awareness",  "level": 1},
+        {"kind": "defect",    "name": "Physical Impairment",   "rank": 1},
+        {"kind": "defect",    "name": "Restricted Activities", "rank": 1},
+     ]},
     {"name": "Animal (Sentient)", "cp_cost": 4, "page": 41,
-     "summary": "Heightened Senses 2, Speed 1; Awkward Size, Inept (Social) 1."},
+     "summary": "Heightened Senses 2, Speed 1; Awkward Size, Inept (Social) 1.",
+     "bundle": [
+        {"kind": "attribute", "name": "Heightened Senses", "level": 2},
+        {"kind": "attribute", "name": "Speed",             "level": 1},
+        {"kind": "defect",    "name": "Awkward Size",      "rank": 1},
+        {"kind": "defect",    "name": "Inept",             "rank": 1, "note": "Social"},
+     ]},
     {"name": "Apprentice Artisan (Aurea)", "cp_cost": 4, "page": None,
      "summary": "Custom — Aurean apprentice race-template: Skill Group "
-                "(Crafts) at Lvl 1, Wealth 1; Marked 1 (artisan brand). See Custom Catalogue."},
+                "(Crafts) at Lvl 1, Wealth 1; Marked 1 (artisan brand). See Custom Catalogue.",
+     "bundle": [
+        {"kind": "skill_group", "name": "Crafts",   "level": 1},
+        {"kind": "attribute",   "name": "Wealth",   "level": 1},
+        {"kind": "defect",      "name": "Marked",   "rank": 1, "note": "Artisan brand"},
+     ]},
 ]
+
+
+# V6.25.32 — BESM 4E "class" templates. BESM 4E uses occupations / archetypes
+# rather than D&D-style classes; this catalogue mirrors the GM Toolkit canon
+# archetype list (p.142+) so the builder has a single-click starting bundle
+# for the most common heroic archetypes. Like RACE_TEMPLATES, every row
+# carries a `bundle` of attributes / defects / skills the builder applies
+# wholesale; the player can prune / edit afterwards. Power-level appropriate.
+CLASS_TEMPLATES = [
+    {"name": "Adventurer (Generalist)", "cp_cost": 14, "page": 142,
+     "summary": "Balanced explorer. Skill breadth + survivor backbone.",
+     "bundle": [
+        {"kind": "skill_group", "name": "Athletics",    "level": 1},
+        {"kind": "skill_group", "name": "Stealth",      "level": 1},
+        {"kind": "attribute",   "name": "Tough",         "level": 1},
+        {"kind": "attribute",   "name": "Heightened Awareness", "level": 1},
+     ]},
+    {"name": "Magical Girl (Heroic)", "cp_cost": 18, "page": 143,
+     "summary": "Transformation, signature Power Pack, on-call companion familiar.",
+     "bundle": [
+        {"kind": "attribute", "name": "Alternate Form",       "level": 1, "note": "Magical Transformation"},
+        {"kind": "attribute", "name": "Massive Damage",       "level": 1, "note": "Signature attack"},
+        {"kind": "attribute", "name": "Companion",            "level": 1, "note": "Familiar"},
+        {"kind": "attribute", "name": "Aura of Inhuman Beauty", "level": 1},
+        {"kind": "defect",    "name": "Awkward (Transformation)", "rank": 1},
+     ]},
+    {"name": "Mecha Pilot (Power-Suit Trooper)", "cp_cost": 22, "page": 145,
+     "summary": "Pilot bond + Item-as-Mecha. Item half-cost (p.135) applies.",
+     "bundle": [
+        {"kind": "attribute", "name": "Item",            "level": 6, "note": "Mecha — body, weapons, sensors. Half-cost."},
+        {"kind": "skill_group", "name": "Mechanics",     "level": 1},
+        {"kind": "attribute",   "name": "Heightened Awareness", "level": 1},
+        {"kind": "defect",      "name": "Conditional Ownership", "rank": 1, "note": "Issued mecha"},
+     ]},
+    {"name": "Talespinner (Bardic Caster)", "cp_cost": 16, "page": 146,
+     "summary": "Performance / persuasion + cantrip-tier Power Pack.",
+     "bundle": [
+        {"kind": "skill_group", "name": "Performing Arts", "level": 2},
+        {"kind": "skill_group", "name": "Social",          "level": 1},
+        {"kind": "attribute",   "name": "Power Pack",      "level": 1, "note": "Cantrip-tier"},
+        {"kind": "defect",      "name": "Marked",          "rank": 1, "note": "Reputation precedes"},
+     ]},
+    {"name": "Shadow Operative (Stealth Striker)", "cp_cost": 18, "page": 147,
+     "summary": "Sneak / infiltration / one-strike-kill kit.",
+     "bundle": [
+        {"kind": "skill_group", "name": "Stealth",      "level": 2},
+        {"kind": "skill_group", "name": "Burglary",     "level": 1},
+        {"kind": "attribute",   "name": "Massive Damage", "level": 1, "note": "Sneak attack"},
+        {"kind": "attribute",   "name": "Speed",        "level": 1},
+        {"kind": "defect",      "name": "Owned",        "rank": 1, "note": "Spymaster handler"},
+     ]},
+    {"name": "Sage (Lore Caster)", "cp_cost": 16, "page": 148,
+     "summary": "Pure scholar. Skill-heavy, light combat.",
+     "bundle": [
+        {"kind": "skill_group", "name": "Knowledge",   "level": 3},
+        {"kind": "skill_group", "name": "Languages",   "level": 1},
+        {"kind": "attribute",   "name": "Power Pack",  "level": 2, "note": "Divinations"},
+        {"kind": "defect",      "name": "Frail",       "rank": 1},
+     ]},
+    {"name": "Sworn Blade (Heavy Combatant)", "cp_cost": 20, "page": 149,
+     "summary": "Front-liner; weapon attribute + Tough + signature defect.",
+     "bundle": [
+        {"kind": "attribute", "name": "Weapon",       "level": 6, "note": "Bonded blade. Half-cost (p.135)."},
+        {"kind": "attribute", "name": "Tough",        "level": 2},
+        {"kind": "attribute", "name": "Heavy Armour", "level": 1},
+        {"kind": "defect",    "name": "Vow",          "rank": 2, "note": "Sworn duty"},
+     ]},
+    {"name": "Streetwise Survivor (Roguish)", "cp_cost": 14, "page": 150,
+     "summary": "Urban grit + improvisation. Cheap entry archetype.",
+     "bundle": [
+        {"kind": "skill_group", "name": "Burglary",  "level": 1},
+        {"kind": "skill_group", "name": "Streetwise", "level": 1},
+        {"kind": "attribute",   "name": "Heightened Awareness", "level": 1},
+        {"kind": "defect",      "name": "Wanted",      "rank": 1},
+     ]},
+    {"name": "Tinker (Artisan)", "cp_cost": 16, "page": 151,
+     "summary": "Crafting fulcrum. Pairs with the Crafting Service.",
+     "bundle": [
+        {"kind": "skill_group", "name": "Crafts",     "level": 2},
+        {"kind": "skill_group", "name": "Mechanics",  "level": 1},
+        {"kind": "attribute",   "name": "Wealth",     "level": 1},
+        {"kind": "attribute",   "name": "Item",       "level": 4, "note": "Workshop. Half-cost."},
+        {"kind": "defect",      "name": "Conditional Ownership", "rank": 1, "note": "Workshop tied to a guild"},
+     ]},
+    {"name": "Apothecary (Healer)", "cp_cost": 16, "page": None,
+     "summary": "Aurea-flavoured healer. Healing + Tinctures item-bundle (Eli archetype).",
+     "bundle": [
+        {"kind": "attribute", "name": "Healing",  "level": 3, "note": "Tinctures bottled in cut glass"},
+        {"kind": "attribute", "name": "Item",     "level": 6, "note": "Apothecary bandolier. Half-cost."},
+        {"kind": "skill_group", "name": "Knowledge",  "level": 1, "note": "Herbalism"},
+        {"kind": "skill_group", "name": "Crafts",     "level": 1, "note": "Brewing"},
+        {"kind": "defect",      "name": "Marked",     "rank": 1, "note": "Apothecary brand"},
+     ]},
+    {"name": "Power-Suit Trooper", "cp_cost": 24, "page": 152,
+     "summary": "Heavy-armour-as-Item soldier. Industrial / sci-fi flavour.",
+     "bundle": [
+        {"kind": "attribute", "name": "Item",          "level": 8, "note": "Power-suit. Half-cost."},
+        {"kind": "skill_group", "name": "Military",    "level": 2},
+        {"kind": "skill_group", "name": "Mechanics",   "level": 1},
+        {"kind": "defect",      "name": "Conditional Ownership", "rank": 1, "note": "Government issue"},
+     ]},
+    {"name": "Beast Companion (Animal Hybrid)", "cp_cost": 14, "page": 153,
+     "summary": "Hunter with a bonded beast Companion attribute.",
+     "bundle": [
+        {"kind": "attribute", "name": "Companion",         "level": 4, "note": "Bonded beast. Half-cost."},
+        {"kind": "skill_group", "name": "Animal Training", "level": 1},
+        {"kind": "skill_group", "name": "Survival",        "level": 1},
+        {"kind": "attribute",   "name": "Heightened Senses", "level": 1},
+     ]},
+]
+
 
 # Size modifiers — applied per-creature; SIZE_TEMPLATES already lists them
 # above. This block is the consolidated Combat-effect table players reference

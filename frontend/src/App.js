@@ -9,6 +9,7 @@ import Dashboard from "./components/Dashboard";
 import Invite from "./components/Invite";
 import ShareLink from "./components/ShareLink";
 import Reset from "./components/Reset";
+import TakedownsLog from "./components/TakedownsLog";
 
 // Lazy-load the heavy route components so initial bundle stays lean and
 // the Dashboard paints sooner. Each chunk is ~50–200KB minified.
@@ -73,6 +74,7 @@ export default function App() {
           <Route path="/invite/:token" element={<Invite />} />
           <Route path="/share/:token" element={<ShareLink />} />
           <Route path="/reset" element={<Reset />} />
+          <Route path="/legal/takedowns" element={<TakedownsLog />} />
           <Route element={<Protected><Shell /></Protected>}>
             <Route path="/app" element={<Dashboard />} />
             <Route path="/app/campaigns" element={<Suspense fallback={<RouteFallback/>}><Campaigns /></Suspense>} />

@@ -16,7 +16,7 @@
  */
 import React, { useEffect, useState, useMemo } from "react";
 import { api } from "../lib/api";
-import { Search, Download, Sparkles, X, Filter, Globe, Lock, DollarSign, Bell, BellPlus } from "lucide-react";
+import { Search, Download, Sparkles, X, Filter, Globe, Lock, DollarSign, Bell, BellPlus, ShieldAlert, Undo2 } from "lucide-react";
 
 const SYSTEM_LABELS = {
   "besm-4e": "BESM 4E",
@@ -55,6 +55,14 @@ export default function Marketplace() {
   const [digest, setDigest] = useState({ buckets: [], total_new: 0 });
   const [showDigest, setShowDigest] = useState(false);
   const [subs, setSubs] = useState([]);
+  // V6.25.31 — admin takedown UI.
+  const [me, setMe] = useState(null);
+  const [showRemoved, setShowRemoved] = useState(false);
+  const [takedownFor, setTakedownFor] = useState(null);
+  useEffect(() => {
+    api.get("/auth/me").then((r) => setMe(r.data)).catch(() => setMe(null));
+  }, []);
+  const isAdmin = me?.role === "admin";
 
   const fetchRows = async () => {
     setBusy(true); setErr("");
@@ -64,6 +72,7 @@ export default function Marketplace() {
       if (filter.system) params.set("system", filter.system);
       if (filter.q) params.set("q", filter.q);
       if (filter.access) params.set("access", filter.access);
+      if (isAdmin && showRemoved) params.set("show_removed", "true");
       params.set("skip", skip);
       const { data } = await api.get(`/marketplace?${params.toString()}`);
       setRows(data.rows || []);
@@ -73,7 +82,9 @@ export default function Marketplace() {
     } finally { setBusy(false); }
   };
 
-  useEffect(() => { fetchRows(); /* eslint-disable-line */ }, [filter.kind, filter.system, filter.access, skip]);
+  useEffect(() => { fetchRows(); /* eslint-disable-line */ },
+                  [filter.kind, filter.system, filter.access, skip,
+                    showRemoved, isAdmin]);
   useEffect(() => {
     api.get("/campaigns").then((r) => setCampaigns(
       (r.data || []).filter((c) => c.is_gm))).catch(() => setCampaigns([]));
@@ -196,6 +207,30 @@ export default function Marketplace() {
         </div>
       )}
 
+      {/* V6.25.31 — Admin takedown review queue toggle. */}
+      {isAdmin && (
+        <div className="mb-3 flex items-center justify-end gap-2 text-xs"
+             data-testid="marketplace-admin-row">
+          <ShieldAlert className="w-3 h-3 text-ember"/>
+          <span className="text-ember tracking-widest uppercase font-ui">Admin</span>
+          <button onClick={() => { setShowRemoved(false); setSkip(0); }}
+                  className={`px-2 py-1 rounded-sm border ${!showRemoved
+                    ? "bg-gold/15 text-gold-bright border-gold"
+                    : "border-gold/20 text-mist hover:bg-gold/5"}`}
+                  data-testid="admin-tab-live">Live</button>
+          <button onClick={() => { setShowRemoved(true); setSkip(0); }}
+                  className={`px-2 py-1 rounded-sm border ${showRemoved
+                    ? "bg-ember/15 text-ember border-ember"
+                    : "border-ember/30 text-mist hover:bg-ember/5"}`}
+                  data-testid="admin-tab-removed">Removed</button>
+          <a href="/legal/takedowns" target="_blank" rel="noreferrer"
+             className="text-mist/70 underline hover:text-gold-bright"
+             data-testid="admin-tab-audit">
+            Audit log →
+          </a>
+        </div>
+      )}
+
       {err && <div className="card-mystic p-3 mb-3 border-ember/40 text-ember text-sm" data-testid="marketplace-error">{err}</div>}
       {!busy && rows.length === 0 && (
         <div className="card-mystic p-8 text-center" data-testid="marketplace-empty">
@@ -214,7 +249,13 @@ export default function Marketplace() {
         {rows.map((r) => <ListingCard key={r.id} row={r}
                                        onOpen={() => setDetail(r)}
                                        onAfter={fetchRows}
-                                       campaigns={campaigns}/>)}
+                                       campaigns={campaigns}
+                                       isAdmin={isAdmin}
+                                       onTakedown={() => setTakedownFor(r)}
+                                       onRestore={async () => {
+                                         await api.post(`/marketplace/${r.id}/restore`);
+                                         fetchRows();
+                                       }}/>)}
       </div>
 
       {total > rows.length + skip && (
@@ -230,6 +271,15 @@ export default function Marketplace() {
         <ListingDetailModal listing={detail} campaigns={campaigns}
                               onClose={() => setDetail(null)}
                               onAfter={fetchRows}/>
+      )}
+
+      {takedownFor && (
+        <TakedownModal listing={takedownFor}
+                          onClose={() => setTakedownFor(null)}
+                          onDone={async () => {
+                            setTakedownFor(null);
+                            await fetchRows();
+                          }}/>
       )}
 
       {showDigest && (
@@ -304,11 +354,14 @@ export default function Marketplace() {
 }
 
 
-function ListingCard({ row, onOpen, onAfter, campaigns }) {
+function ListingCard({ row, onOpen, onAfter, campaigns,
+                         isAdmin, onTakedown, onRestore }) {
   const a = ACCESS_BADGE[row.access] || ACCESS_BADGE.public;
   const Icon = a.icon;
+  const removed = !!row.removed;
   return (
-    <div className="card-mystic p-4 flex flex-col gap-2 min-h-[180px]"
+    <div className={`card-mystic p-4 flex flex-col gap-2 min-h-[180px] ${
+                        removed ? "opacity-60 border-ember/40" : ""}`}
          data-testid={`marketplace-listing-${row.id}`}>
       <div className="flex items-start justify-between gap-2">
         <span className="tag flex-shrink-0">{KIND_LABELS[row.kind] || row.kind}</span>
@@ -316,6 +369,24 @@ function ListingCard({ row, onOpen, onAfter, campaigns }) {
           <Icon className="w-3 h-3"/> {a.label}
         </span>
       </div>
+      {removed && (
+        <div className="border border-ember/40 rounded-sm p-1.5 bg-ember/5"
+             data-testid={`marketplace-listing-removed-${row.id}`}>
+          <div className="text-[10px] uppercase tracking-widest text-ember font-ui flex items-center gap-1">
+            <ShieldAlert className="w-3 h-3"/> Removed by admin
+            {row.takedown_policy && (
+              <span className="text-mist normal-case tracking-normal">
+                · {row.takedown_policy}
+              </span>
+            )}
+          </div>
+          {row.takedown_reason && (
+            <div className="text-[10px] text-mist italic line-clamp-2 mt-0.5">
+              {row.takedown_reason}
+            </div>
+          )}
+        </div>
+      )}
       <button onClick={onOpen}
               className="text-left font-display text-lg text-parchment hover:text-gold-bright transition-colors leading-tight"
               data-testid={`marketplace-listing-name-${row.id}`}>
@@ -330,8 +401,26 @@ function ListingCard({ row, onOpen, onAfter, campaigns }) {
           <Download className="w-3 h-3"/> {row.downloads}
         </span>
       </div>
-      <div className="flex justify-end gap-2">
-        <CloneButton listing={row} campaigns={campaigns} onAfter={onAfter}/>
+      <div className="flex justify-end gap-2 flex-wrap">
+        {isAdmin && !removed && (
+          <button onClick={onTakedown}
+                  className="btn btn-ghost text-[10px] text-ember"
+                  data-testid={`marketplace-takedown-${row.id}`}
+                  title="Admin: remove this listing for policy / IP violation.">
+            <ShieldAlert className="w-3 h-3"/> Takedown
+          </button>
+        )}
+        {isAdmin && removed && (
+          <button onClick={onRestore}
+                  className="btn btn-ghost text-[10px] text-gold-bright"
+                  data-testid={`marketplace-restore-${row.id}`}
+                  title="Admin: restore this listing.">
+            <Undo2 className="w-3 h-3"/> Restore
+          </button>
+        )}
+        {!removed && (
+          <CloneButton listing={row} campaigns={campaigns} onAfter={onAfter}/>
+        )}
       </div>
     </div>
   );
@@ -502,6 +591,93 @@ function ListingDetailModal({ listing, campaigns, onClose, onAfter }) {
         <div className="mt-5 flex justify-end">
           <CloneButton listing={listing} campaigns={campaigns} onAfter={onAfter}
                         label="Clone into campaign…"/>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+
+
+// ────────────────────────────────────────────────────────────────────
+// V6.25.31 — Admin Takedown modal.
+// Captures the policy bucket + plain-English reason so the public
+// audit log at /api/legal/takedowns can render it for transparency.
+// ────────────────────────────────────────────────────────────────────
+const TAKEDOWN_POLICIES = [
+  { id: "piracy",                  label: "Piracy / unauthorised reproduction" },
+  { id: "lore-export",             label: "System lore export beyond CC/SRD" },
+  { id: "artwork",                 label: "Artwork copyright violation" },
+  { id: "system-creator-rules",    label: "System creator's licensing rules" },
+  { id: "community-rules",         label: "Community / app TOS violation" },
+  { id: "other",                   label: "Other (specify in reason)" },
+];
+
+function TakedownModal({ listing, onClose, onDone }) {
+  const [policy, setPolicy] = useState("piracy");
+  const [reason, setReason] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const submit = async () => {
+    if (reason.trim().length < 4) {
+      setErr("A short reason is required (visible in the public audit log).");
+      return;
+    }
+    setBusy(true); setErr("");
+    try {
+      await api.post(`/marketplace/${listing.id}/takedown`,
+                       { policy, reason: reason.trim() });
+      if (onDone) await onDone();
+    } catch (e) {
+      setErr(e.response?.data?.detail || e.message);
+    } finally { setBusy(false); }
+  };
+  return (
+    <div className="fixed inset-0 z-50 bg-void/85 flex items-center justify-center p-4"
+         onClick={onClose}
+         data-testid="marketplace-takedown-modal">
+      <div className="card-mystic p-5 w-full max-w-md space-y-3"
+           onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="label-ref text-ember flex items-center gap-1">
+              <ShieldAlert className="w-3 h-3"/> Admin takedown
+            </div>
+            <div className="font-display text-lg text-parchment mt-1">
+              {listing.name}
+            </div>
+          </div>
+          <button onClick={onClose} className="touch-target text-mist hover:text-parchment">
+            <X className="w-4 h-4"/>
+          </button>
+        </div>
+        <div>
+          <div className="label-ref">Policy bucket</div>
+          <select className="select w-full mt-1" value={policy}
+                  onChange={(e) => setPolicy(e.target.value)}
+                  data-testid="takedown-policy">
+            {TAKEDOWN_POLICIES.map((p) => (
+              <option key={p.id} value={p.id}>{p.label}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <div className="label-ref">Reason</div>
+          <textarea className="input w-full text-sm mt-1" rows={4}
+                     value={reason} onChange={(e) => setReason(e.target.value)}
+                     placeholder="Plain-English statement of the violation. Visible to the listing owner and on the public audit log at /legal/takedowns."
+                     data-testid="takedown-reason"/>
+        </div>
+        {err && <div className="text-ember text-xs"
+                       data-testid="takedown-error">{err}</div>}
+        <div className="flex justify-end gap-2 pt-1">
+          <button onClick={onClose} className="btn btn-ghost text-xs">Cancel</button>
+          <button onClick={submit} disabled={busy}
+                  className="btn btn-primary text-xs"
+                  data-testid="takedown-submit">
+            {busy ? "Removing…" : "Remove listing"}
+          </button>
         </div>
       </div>
     </div>

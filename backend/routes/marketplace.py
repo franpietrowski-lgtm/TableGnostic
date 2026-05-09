@@ -170,18 +170,40 @@ async def browse_marketplace(
         description="Case-insensitive substring search on name + summary."),
     access: Optional[str] = Query(None,
         description="Filter access tier: 'public', 'paywall'."),
+    show_removed: bool = Query(False,
+        description="ADMIN ONLY — include rows the admin has taken down."),
     limit: int = Query(40, ge=1, le=100),
     skip: int = Query(0, ge=0),
 ):
     """Paginated browse. Authenticated users see all `public` listings
     plus their own `private` listings. `paywall` shows up so users can
-    discover it (clone endpoint guards the price)."""
+    discover it (clone endpoint guards the price).
+
+    V6.25.31 — admin takedowns: rows with `removed: true` are filtered
+    out for everyone except the listing author (so they can see it was
+    taken down) and admins (who can flip `?show_removed=true` to see
+    the removed-row review queue).
+    """
+    is_admin = user.get("role") == "admin"
     where: Dict[str, Any] = {
         "$or": [
             {"access": {"$in": ["public", "paywall"]}},
             {"source_owner_id": user["id"]},
         ],
     }
+    # ─── V6.25.31 takedown filter ─────────────────────────────────
+    if not (is_admin and show_removed):
+        # Default: hide removed rows for everyone except the row's
+        # original author (who can still see their tombstoned listing).
+        where["$and"] = where.pop("$and", []) + [
+            {"$or": [
+                {"removed": {"$ne": True}},
+                {"source_owner_id": user["id"]},
+            ]}
+        ]
+    elif show_removed:
+        # Admin review-queue mode — only show removed rows.
+        where["removed"] = True
     if kind:
         where["kind"] = kind
     if system:
@@ -209,7 +231,115 @@ async def get_listing(lid: str, user: dict = Depends(get_current_user)):
         raise HTTPException(404, "Listing not found")
     if listing["access"] == "private" and listing["source_owner_id"] != user["id"]:
         raise HTTPException(403, "Listing is private")
+    # V6.25.31 — admin takedowns: removed rows return a tombstone for
+    # everyone EXCEPT the original author and admins (so the author
+    # sees the takedown reason; admin can still review).
+    if listing.get("removed"):
+        is_admin = user.get("role") == "admin"
+        is_owner = listing.get("source_owner_id") == user["id"]
+        if not (is_admin or is_owner):
+            raise HTTPException(410, "Listing has been removed by an administrator.")
     return listing
+
+
+# ─── V6.25.31 — Admin takedown / restore + public audit log ────────────
+class TakedownIn(BaseModel):
+    """Admin-issued takedown reason. Visible to the listing author and
+    on the public `/api/legal/takedowns` audit log so IP-rights
+    enforcement is transparent."""
+    reason: str = Field(..., min_length=4, max_length=600,
+                          description="Plain-English policy reason.")
+    policy: str = Field(default="other", max_length=64,
+                          description="Tag: 'piracy', 'lore-export', 'artwork', "
+                                       "'system-creator-rules', 'community-rules', 'other'.")
+
+
+@router.post("/marketplace/{lid}/takedown")
+async def takedown_listing(lid: str, body: TakedownIn,
+                              user: dict = Depends(get_current_user)):
+    """ADMIN-ONLY — flag a marketplace listing as removed.
+    Persists `removed`, `takedown_reason`, `takedown_policy`,
+    `takedown_by_id`, `takedown_by_name`, `takedown_at`. Writes a row
+    to `takedown_audit` so the public legal log can render it."""
+    if user.get("role") != "admin":
+        raise HTTPException(403, "Admins only.")
+    listing = await db.marketplace_listings.find_one({"id": lid}, {"_id": 0})
+    if not listing:
+        raise HTTPException(404, "Listing not found")
+    now = now_iso()
+    await db.marketplace_listings.update_one(
+        {"id": lid},
+        {"$set": {
+            "removed": True,
+            "takedown_reason": body.reason,
+            "takedown_policy": body.policy,
+            "takedown_by_id": user["id"],
+            "takedown_by_name": user.get("name") or user.get("email"),
+            "takedown_at": now,
+        }},
+    )
+    await db.takedown_audit.insert_one({
+        "id": new_id(),
+        "kind": "marketplace_listing",
+        "target_id": lid,
+        "target_name": listing.get("name"),
+        "target_owner_id": listing.get("source_owner_id"),
+        "reason": body.reason,
+        "policy": body.policy,
+        "by_id": user["id"],
+        "by_name": user.get("name") or user.get("email"),
+        "at": now,
+    })
+    return {"ok": True, "id": lid, "removed_at": now}
+
+
+@router.post("/marketplace/{lid}/restore")
+async def restore_listing(lid: str, user: dict = Depends(get_current_user)):
+    """ADMIN-ONLY — reverse a takedown. Restoration is also audited
+    so the public legal log shows reversals (e.g. counter-notice
+    accepted)."""
+    if user.get("role") != "admin":
+        raise HTTPException(403, "Admins only.")
+    listing = await db.marketplace_listings.find_one({"id": lid}, {"_id": 0})
+    if not listing:
+        raise HTTPException(404, "Listing not found")
+    if not listing.get("removed"):
+        raise HTTPException(400, "Listing is not currently removed.")
+    now = now_iso()
+    await db.marketplace_listings.update_one(
+        {"id": lid},
+        {"$set": {"removed": False, "restored_at": now,
+                    "restored_by_id": user["id"]},
+         "$unset": {"takedown_reason": "", "takedown_policy": "",
+                     "takedown_by_id": "", "takedown_by_name": "",
+                     "takedown_at": ""}},
+    )
+    await db.takedown_audit.insert_one({
+        "id": new_id(),
+        "kind": "marketplace_listing",
+        "action": "restore",
+        "target_id": lid,
+        "target_name": listing.get("name"),
+        "target_owner_id": listing.get("source_owner_id"),
+        "reason": "Counter-notice accepted / admin reversal.",
+        "by_id": user["id"],
+        "by_name": user.get("name") or user.get("email"),
+        "at": now,
+    })
+    return {"ok": True, "id": lid, "restored_at": now}
+
+
+@router.get("/legal/takedowns")
+async def list_takedowns(limit: int = Query(100, ge=1, le=500),
+                            skip: int = Query(0, ge=0)):
+    """PUBLIC — IP-rights transparency log. Lists every takedown the
+    admin has issued (and any restorations). No auth required: this is
+    the public-facing audit trail."""
+    cursor = db.takedown_audit.find({}, {"_id": 0}).sort("at", -1) \
+        .skip(skip).limit(limit)
+    rows = [r async for r in cursor]
+    total = await db.takedown_audit.count_documents({})
+    return {"total": total, "rows": rows, "limit": limit, "skip": skip}
 
 
 # ─── Clone ──────────────────────────────────────────────────────────────

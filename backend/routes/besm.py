@@ -4,10 +4,10 @@ from fastapi import APIRouter, HTTPException, Response
 from besm_data import (
     ACTIONS, ARMOUR, ATTRIBUTES, AUREA_CUSTOM_ATTRIBUTES, AUREA_CUSTOM_BOOK,
     AUREA_CUSTOM_POWER_PACKS, AUREA_CUSTOM_SKILLS, AUREA_RULE_NOTE,
-    BOOK, BOOK_EXTRAS, COMPANIONS, CORE_STATS, DEFECTS, DEFAULT_SYSTEM_ID,
-    DERIVED_VALUES, ENHANCEMENTS, EXTRAS_RULES, GAME_SYSTEMS,
-    GENERIC_BLURBS, ITEMS_GEAR, ITEM_ENHANCEMENTS, ITEM_LIMITERS,
-    LIMITERS, NODE_TYPES, POWER_LEVELS,
+    BOOK, BOOK_EXTRAS, CLASS_TEMPLATES, COMPANIONS, CORE_STATS, DEFECTS,
+    DEFAULT_SYSTEM_ID, DERIVED_VALUES, ENHANCEMENTS, EXTRAS_RULES,
+    GAME_SYSTEMS, GENERIC_BLURBS, ITEMS_GEAR, ITEM_ENHANCEMENTS,
+    ITEM_LIMITERS, LIMITERS, NODE_TYPES, POWER_LEVELS,
     RACE_TEMPLATES, SIZE_MODIFIERS, SIZE_TEMPLATES, SKILL_GROUPS,
     TARGET_NUMBERS, WEAPONS, WEAPON_ENHANCEMENTS, WEAPON_LIMITERS,
     attribute_blurb, attribute_whitelist,
@@ -71,6 +71,10 @@ async def besm_reference():
         "actions": with_source(ACTIONS),
         "companions": with_source(COMPANIONS),
         "race_templates": with_source(RACE_TEMPLATES),
+        # V6.25.32 — BESM 4E class / archetype templates with bundled
+        # attribute / defect / skill rows. Builder applies wholesale,
+        # GM-primer can scope which are available per genre/setting.
+        "class_templates": with_source(CLASS_TEMPLATES),
         "size_modifiers": with_source(SIZE_MODIFIERS),
         "weapons": with_source(WEAPONS),
         "items_gear": with_source(ITEMS_GEAR),
