@@ -14,9 +14,17 @@
 
 ## 2. Implemented (cumulative, condensed)
 
-### V6.25.32 — CORS regex fix for production custom domain (2026-02-09)
+### V6.25.32 — Anime 5E reference parity · BESM canonical templates in builder · CORS regex fix (2026-02-09)
 
-**CORS — production "Network Error" on `tablegnostic.com`** (`backend/core/config.py`)
+**Anime 5E reference parity** (`backend/system_data/anime5e_extended.py` NEW)
+- New module re-exports the SRD 5.1 `LANGUAGES`, `TOOLS`, `FEATS`, `MAGIC_ITEMS`, `MONSTERS`, `SUBCLASSES`, `DAMAGE_TYPES`, `SCHOOLS`, `CLASS_FEATURES` from `dnd5e_extended` (one-way port, CC-BY 4.0) **plus** anime-original additions: 10 anime-class subclasses (2 each for Adept/Champion/Idol/Pilot/Tinker), 8 anime tools (Hacker's Kit, Mecha Diagnostic Rig, Idol Concert Kit, etc.), 5 anime languages (Spirit-Tongue, Mech-Cant, Hex-cant, Earth-tongue, Lyrical Bardic), 15 anime feats (Power Limiter, Transformation Sequence, Mecha-Bond, Tsundere Reflex, Plot Armor, etc.), 15 anime relics (Henshin Pendant, Pilot's Visor, Idol's Microphone, Magical Girl Wand, Catgirl Ear Ribbon, etc.), and 15 anime monsters (Kaiju Lesser/Great, Yokai Tengu/Kitsune-9/Oni, Cyberdemon, Mecha Drone/Trooper/Frame, Vengeful Spirit, Idol Fan Swarm, etc.).
+- `anime5e_data.py::REFERENCE` now exposes `subclasses` (22), `feats` (57), `tools` (35), `languages` (21), `magic_items` (76), `monsters` (77), `damage_types` (13), `schools` (8), `class_features`. Anime 5E Reference page reaches feature-parity with D&D 5E; no frontend change needed (`Reference.jsx::SystemReferenceView` is data-driven).
+
+**BESM canonical Race / Class templates wired into builder** (`frontend/src/components/CharacterBuilder.jsx`)
+- New `_canonToCustomShape()` helper normalises `RACE_TEMPLATES` (8 rows) and `CLASS_TEMPLATES` (12 rows) from `/api/besm/reference` into the same `{id, name, kind, effects:{total_cp, stat_adjustments, components}}` shape used by campaign-custom homebrew. Canonical IDs are deterministic (`canon-race-<slug>` / `canon-class-<slug>`).
+- `BesmTemplatePicker` now renders **four optgroups**: BESM 4E Canon · Races, BESM 4E Canon · Classes, Campaign Custom · Races, Campaign Custom · Classes. Picker label updated to "Race / Class Templates · BESM Canon + Campaign Homebrew". Apply / Remove / Backfill / per-row provenance (`from_template_id`) all inherit from the existing custom-template flow — read-only `AppliedTemplatesPanel` on the character sheet renders canonical applied templates without modification.
+
+**CORS regex — production "Network Error" on `tablegnostic.com`** (`backend/core/config.py`)
 - After redeploying the app, login on `https://tablegnostic.com` failed with a browser "Network Error". Root cause: backend `ALLOW_ORIGIN_REGEX` only matched `*.preview.emergentagent.com` and localhost; the custom production domain was rejected by FastAPI's CORSMiddleware before the request ever reached the auth route.
 - Regex expanded to also match `https://*.emergentagent.com`, `https://*.emergent.host`, and `https://(www.)?tablegnostic.com`.
 - Verified locally: POST `/api/auth/login` with `Origin: https://tablegnostic.com` now returns `access-control-allow-origin: https://tablegnostic.com` and a 200 with both GM and Player personas.
