@@ -1,22 +1,22 @@
 /**
- * AppliedTemplatesPanel — V6.25.3
+ * AppliedTemplatesPanel — V6.25.39
  *
  * Inline character-sheet block on the Mechanics tab. Shows which BESM
  * race / class templates the character has applied (read from
  * `folio.applied_templates`) plus a per-row breakdown of which
- * attributes / skills / defects were contributed by which template
- * (read from each row's `from_template_id`).
+ * attributes / skills / defects were contributed by which template.
  *
- * Read-only — the picker on the character builder is the authoring
- * surface. This panel is the "memory" so players + GMs can see at a
- * glance what's baked into the sheet.
+ * V6.25.39 — Always renders for BESM/Anime-5E sheets even when no
+ * templates are applied yet. Shows a "Pick a Race / Class →" deep link
+ * so players can discover the feature instead of finding an empty card.
  */
 import React from "react";
+import { Link } from "react-router-dom";
+import { Users, GraduationCap, ArrowRight } from "lucide-react";
 
 export default function AppliedTemplatesPanel({ character }) {
   const folio = character?.folio || {};
   const applied = folio.applied_templates || [];
-  if (applied.length === 0) return null;
 
   const rowsFor = (tid) => {
     const a = (character.attributes || []).filter((x) => x.from_template_id === tid);
@@ -25,10 +25,47 @@ export default function AppliedTemplatesPanel({ character }) {
     return { attributes: a, skills: s, defects: d };
   };
 
+  // Empty-state — render a discoverable placeholder so players can find
+  // the race/class picker. Linked directly into the Character Builder's
+  // Templates tab.
+  if (applied.length === 0) {
+    return (
+      <div className="card-mystic p-4 mt-4" data-testid="applied-templates-panel-empty">
+        <div className="flex items-baseline justify-between mb-2 flex-wrap gap-2">
+          <div className="label-ref flex items-center gap-2">
+            <Users className="w-3.5 h-3.5 text-gold/60"/>
+            Race / Class Templates
+          </div>
+          <div className="text-[10px] text-mist italic">
+            Optional — speeds Session 0.
+          </div>
+        </div>
+        <div className="text-sm text-mist mb-3">
+          No race or class template applied yet. Templates pre-build a
+          mechanic bundle (stat adjustments, signature attributes, skills,
+          and defects) so a player can spin up a recognisable archetype
+          in one click — Apocophea, Lithomorph, Ferralith, Faunamimic, or
+          a class chassis like Healer, Monk-Smith, Techgnostic-Wright.
+        </div>
+        {character?.campaign_id && (
+          <Link to={`/app/campaigns/${character.campaign_id}/characters/${character.id}/edit?tab=templates`}
+                className="btn btn-primary text-xs"
+                data-testid="applied-templates-pick-cta">
+            <GraduationCap className="w-3.5 h-3.5"/> Pick a Race / Class
+            <ArrowRight className="w-3 h-3"/>
+          </Link>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="card-mystic p-4 mt-4" data-testid="applied-templates-panel">
       <div className="flex items-baseline justify-between mb-2 flex-wrap gap-2">
-        <div className="label-ref">Race / Class Templates</div>
+        <div className="label-ref flex items-center gap-2">
+          <Users className="w-3.5 h-3.5 text-gold/60"/>
+          Race / Class Templates
+        </div>
         <div className="text-[10px] text-mist italic">
           Pre-built mechanic bundles applied at character creation. Optional —
           they only exist to speed Session 0.

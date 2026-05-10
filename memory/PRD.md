@@ -14,6 +14,40 @@
 
 ## 2. Implemented (cumulative, condensed)
 
+### V6.25.39 — Evereantha canonical seed · Admin moderation · BESM templates · Two-handed equipping · HTML ingest (2026-02-09)
+
+**Critical finding — Emergent LLM key budget exceeded** ($5.00 cap reached). This is the actual cause of the user's reported "error/failure/something went wrong" messages from the Knowledge Web mechanic ingestion AND Atelier Workshop one-shot scaffold. Concept Forge / News auto-draft / LLM recaps will all silently fail until the budget is topped up via Profile → Universal Key → Add Balance.
+
+**Evereantha — The Maiden Adventure (CANONICAL SETTING)**
+- Transferred ownership of the existing campaign (`af461ae004…`) from GMFran → super-admin (`tablegnostic-admin@tablegnostic.com`). Previous GM retained as seated member. Script: `backend/scripts/v62539_transfer_evereantha.py`.
+- Seeded the campaign bible (the user's HTML/PDF — "Evereantha The Rites Of All Campaign Bible EXPANDED") deterministically (zero LLM cost): **80 codex nodes** created → 27 lore, 25 quest (Acts I-V + module beats), 15 location, 7 item, 6 NPC. Tagged `evereantha-bible-seed`. Script: `backend/scripts/v62539_seed_evereantha_manual.py` (idempotent — re-runs wipe + re-seed cleanly).
+
+**Knowledge Web / Atelier Workshop — HTML ingestion fix** (`backend/routes/ingest.py`)
+- Added `_html_to_text` parser (BeautifulSoup with regex fallback). Promotes `<h1>`/`<h2>`/`<h3>` to `## SECTION` markers so the existing intake template splitter still fires. New `_HTML_TYPES` accepted; supported extensions now include `.html`, `.htm`, `.xhtml`.
+- Verified: 68,233 chars extracted from the 102KB Evereantha bible HTML via `POST /api/campaigns/{cid}/ingest-preview`. (Full LLM ingest call still blocked by LLM-key budget — fix above is functional once budget restored.)
+- Dependency added: `beautifulsoup4==4.14.3`, `soupsieve==2.8.3` (frozen into `requirements.txt`).
+
+**BESM character sheet — Race / Class Templates panel always renders** (`frontend/src/components/AppliedTemplatesPanel.jsx`)
+- User reported the panel was invisible for characters without an applied template. Fixed: panel now always renders. When no template is applied, shows discoverable empty-state with explanation and "Pick a Race / Class →" CTA deep-linking to the character builder's Templates tab. Lists supported races (Apocophea / Lithomorph / Ferralith / Faunamimic) and classes (Healer / Monk-Smith / Techgnostic-Wright) in the empty-state copy.
+
+**Two-handed weapon equipping logic** (`frontend/src/components/sheets/InventoryPanel.jsx`)
+- The two-handed claim logic already existed but only fired for **manual** items. BESM auto-derived weapons (from a `Weapon ×N` attribute) defaulted to one-handed with no UI override.
+- Added per-item `handed_overrides` state on `inventory_state` so players/GMs can flip any equippable weapon row between 1-H and 2-H without touching the underlying attribute. Toggle button (`inv-toggle-handed-{id}`) appears next to Equip on L/R-Hand items.
+- Two-handed weapons still claim both L-Hand + R-Hand. Toggling 1-H → 2-H on a currently-equipped weapon auto-unequips it so the slot claim re-evaluates (player must re-equip and accept any slot-conflict block).
+
+**Admin Moderation Console** (`backend/routes/admin_mod.py`, `frontend/src/components/AdminConsole.jsx`)
+- New page at `/app/admin` (visible only to `user.role === "admin"`). Surfaced in the main shell sidebar with `<Shield/>` icon.
+- Tabs: **All Campaigns** (list every campaign; force-unpublish from /discover; cascade force-delete with confirmation) · **Public Showcases** (one-click force unpublish) · **Marketplace** (take-down / reinstate listings) · **Flag Queue** (review queue with filter: open/actioned/dismissed/all; dismiss or action) · **Audit Log** (every moderation action recorded with actor, target, reason, timestamp).
+- New `POST /api/flags` (any authenticated user) — files a flag against any content kind. Per user pref, flags do **NOT** auto-hide content; content stays visible until admin acts.
+- Cascade delete on a campaign also wipes: characters / nodes / sessions / chat_logs / voice_lines / news_articles / news_issues / news_kills.
+- `db.admin_actions` collection records every action (`action`, `target_kind`, `target_id`, `actor_id`, `actor_email`, `reason`, `at`). Read-only from `GET /api/admin/audit`.
+
+**Testing — V6.25.39**
+- Backend: `tests/test_v62539_admin_mod.py` 7/7 PASS — admin gates / flag-flow lifecycle / audit-trail records / force-unpublish + restore. **35/35 PASS combined regression** (`test_v62539_admin_mod.py` 7 + `test_v62538_news.py` 8 + `test_v62536_voice_admin_macros.py` 10 + `test_iter61_leads.py` 10).
+- Frontend smoke: `/app/admin` renders for super-admin with all 5 tabs visible, sidebar shows the Admin link only for `role==admin`, 8 campaigns + 1 showcase listed.
+- Manual verification: HTML ingest-preview now works on the Evereantha bible; 80 codex nodes successfully seeded into the campaign.
+
+
 ### V6.25.38 — TableGnostic Gazette · Public Discover toggle UI · Newspaper leaderboards (2026-02-09)
 
 **GM-side Public Showcase publish UI** (`frontend/src/components/CampaignDetail.jsx`)

@@ -138,10 +138,22 @@ function buildRows(character, invState) {
   const equipped = invState?.equipped || {};
   const attunedIds = new Set(invState?.attuned_ids || []);
   const readiedIds = new Set(invState?.readied_ids || []);
+  // V6.25.39 — Per-item `handed` overrides for derived rows so the user
+  // can mark a phoenix-staff "Weapon ×3" attribute as two-handed even
+  // though the auto-deriver defaults to one-handed. Stored on
+  // `inventory_state.handed_overrides = { [itemId]: 0|1|2 }`.
+  const handedOverrides = invState?.handed_overrides || {};
   return all.map((it) => {
     const slotEntry = Object.entries(equipped).find(([, id]) => id === it.id);
+    // Apply handed override if present (allows GM/player to flip a
+    // derived 1-H weapon → 2-H for things like longbows, staves,
+    // greatswords baked from a single BESM `Weapon ×N` attribute).
+    const effectiveHanded = handedOverrides[it.id] !== undefined
+      ? Number(handedOverrides[it.id])
+      : it.handed;
     return {
       ...it,
+      handed: effectiveHanded,
       equipped_to: slotEntry ? slotEntry[0] : null,
       attuned: attunedIds.has(it.id),
       readied: readiedIds.has(it.id),
@@ -238,6 +250,33 @@ export default function InventoryPanel({ character, canEdit, onChanged }) {
     return persist({ ...invState, readied_ids: [...set] });
   };
 
+  // V6.25.39 — Toggle one-handed ↔ two-handed for the current weapon.
+  // For derived rows (auto-built from BESM Weapon attributes), persists
+  // to `handed_overrides` so the player can mark "Eli's phoenix staff"
+  // two-handed without touching the underlying attribute. For manual
+  // rows, mutates the item's `handed` directly. When flipping a
+  // currently-equipped weapon, also un-equips it so the player must
+  // re-equip and see the new slot-claim block.
+  const toggleHanded = async (item) => {
+    const nextH = item.handed === 2 ? 1 : 2;
+    let newState = { ...invState };
+    if (item._readonly) {
+      const overrides = { ...(invState.handed_overrides || {}) };
+      overrides[item.id] = nextH;
+      newState.handed_overrides = overrides;
+    } else {
+      newState.items = (invState.items || []).map((x) =>
+        x.id === item.id ? { ...x, handed: nextH } : x);
+    }
+    // If currently equipped, un-equip so the slot claim re-evaluates.
+    if (item.equipped_to) {
+      const eq = { ...(invState.equipped || {}) };
+      Object.keys(eq).forEach((s) => { if (eq[s] === item.id) eq[s] = null; });
+      newState.equipped = eq;
+    }
+    return persist(newState);
+  };
+
   const adjustCharges = async (item, delta) => {
     if (item._readonly) return;
     const items = (invState.items || []).map((x) => {
@@ -313,6 +352,7 @@ export default function InventoryPanel({ character, canEdit, onChanged }) {
                           onAttune={() => toggleAttune(r)}
                           onReady={() => toggleReadied(r)}
                           onCharges={(d) => adjustCharges(r, d)}
+                          onHanded={() => toggleHanded(r)}
                           onEdit={() => !r._readonly && setEditingId(r.id)}
                           onDelete={() => !r._readonly && removeItem(r.id)} />
           ))}
@@ -391,7 +431,7 @@ export function EquippedStrip({ rows }) {
 
 // ── InventoryRow ───────────────────────────────────────────────────
 function InventoryRow({ item, canEdit, onEquip, onAttune, onReady,
-                         onCharges, onEdit, onDelete, busy }) {
+                         onCharges, onEdit, onDelete, onHanded, busy }) {
   const i = item;
   const equippable = !!i.slot_hint;
   return (
@@ -450,6 +490,12 @@ function InventoryRow({ item, canEdit, onEquip, onAttune, onReady,
                   label={i.equipped_to ? `Eq · ${i.equipped_to}` : "Equip"}
                   onClick={onEquip}
                   testid={`inv-equip-${i.id}`} />
+        )}
+        {equippable && canEdit && i.slot_hint && ["L-Hand", "R-Hand"].includes(i.slot_hint) && (
+          <Toggle on={i.handed === 2}
+                  label={i.handed === 2 ? "2-H" : "1-H"}
+                  onClick={onHanded}
+                  testid={`inv-toggle-handed-${i.id}`}/>
         )}
         {i.attune_required && canEdit && (
           <Toggle on={i.attuned}

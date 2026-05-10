@@ -61,6 +61,52 @@ _TEXT_TYPES = {"text/plain", "text/markdown", "text/x-markdown"}
 _DOCX_TYPES = {"application/vnd.openxmlformats-officedocument.wordprocessingml.document"}
 _PDF_TYPES = {"application/pdf"}
 _RTF_TYPES = {"application/rtf", "text/rtf"}
+_HTML_TYPES = {"text/html", "application/xhtml+xml"}
+
+
+def _html_to_text(data: bytes) -> str:
+    """Strip HTML to plain text, preserving paragraph breaks and headings.
+
+    Uses BeautifulSoup if available; falls back to a regex strip so the
+    ingestion never hard-fails on a missing dep. We deliberately keep
+    `## SECTION` markers when an HTML element looks like a section
+    heading (h1/h2/h3) so the existing Intake Template splitter still
+    fires for HTML uploads.
+    """
+    try:
+        from bs4 import BeautifulSoup  # pip: beautifulsoup4
+        soup = BeautifulSoup(data, "html.parser")
+        for tag in soup(["script", "style", "noscript", "iframe"]):
+            tag.decompose()
+        # Promote h1/h2/h3 to "## SECTION" markers for the section splitter.
+        for h in soup.find_all(["h1", "h2", "h3"]):
+            txt = h.get_text(" ", strip=True)
+            if txt:
+                h.replace_with(soup.new_string(f"\n\n## {txt}\n\n"))
+        # Block-level newlines.
+        for br in soup.find_all(["br"]):
+            br.replace_with(soup.new_string("\n"))
+        for blk in soup.find_all(["p", "div", "li", "tr", "section", "article"]):
+            blk.append(soup.new_string("\n"))
+        text = soup.get_text("\n", strip=False)
+    except Exception:
+        # Last-resort regex strip — drops tags, decodes named entities.
+        import html as _h
+        raw = data.decode("utf-8", errors="ignore")
+        raw = re.sub(r"<script[\s\S]*?</script>", " ", raw, flags=re.IGNORECASE)
+        raw = re.sub(r"<style[\s\S]*?</style>", " ", raw, flags=re.IGNORECASE)
+        # Promote headings to `## ` markers.
+        raw = re.sub(r"<h[1-3][^>]*>([\s\S]*?)</h[1-3]>",
+                     lambda m: f"\n\n## {re.sub('<[^>]+>', '', m.group(1)).strip()}\n\n",
+                     raw, flags=re.IGNORECASE)
+        raw = re.sub(r"<br\s*/?>", "\n", raw, flags=re.IGNORECASE)
+        raw = re.sub(r"</(p|div|li|tr|section|article)>", "\n", raw, flags=re.IGNORECASE)
+        text = re.sub(r"<[^>]+>", " ", raw)
+        text = _h.unescape(text)
+    # Collapse runs of whitespace while preserving paragraph breaks.
+    text = re.sub(r"[ \t]+", " ", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
 
 
 def _parse_to_text(filename: str, content_type: str, data: bytes) -> str:
@@ -94,10 +140,16 @@ def _parse_to_text(filename: str, content_type: str, data: bytes) -> str:
             return rtf_to_text(data.decode("latin-1", errors="ignore")).strip()
         except Exception as e:
             raise HTTPException(400, f"Could not parse RTF: {e}")
+    # HTML / XHTML — V6.25.39
+    if ct in _HTML_TYPES or ext in ("html", "htm", "xhtml"):
+        try:
+            return _html_to_text(data)
+        except Exception as e:
+            raise HTTPException(400, f"Could not parse HTML: {e}")
     # MD / TXT
     if ct in _TEXT_TYPES or ext in ("md", "txt", "markdown"):
         return data.decode("utf-8", errors="ignore").strip()
-    raise HTTPException(400, f"Unsupported file type '{ct}' / .{ext}. Use PDF / MD / TXT / RTF / DOCX.")
+    raise HTTPException(400, f"Unsupported file type '{ct}' / .{ext}. Use PDF / MD / TXT / RTF / DOCX / HTML.")
 
 
 def _truncate_for_llm(text: str, hard_cap_chars: int = 240_000) -> str:

@@ -3,7 +3,7 @@ import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../lib/api";
 import {
   Scroll, LayoutGrid, BookOpen, LogOut, UserCircle2, Compass, Menu, X,
-  User, HelpCircle, Sparkles, Store, Wand2,
+  User, HelpCircle, Sparkles, Store, Wand2, Shield,
 } from "lucide-react";
 import CmdKPalette from "./CmdKPalette";
 import ReferenceAutoLink from "./ReferenceAutoLink";
@@ -44,6 +44,11 @@ const NAV = [
   { to: "/app/account", icon: User, label: "Account", testid: "nav-account" },
 ];
 
+// V6.25.39 — Surfaced only when `user.role === "admin"`.
+const ADMIN_NAV = [
+  { to: "/app/admin", icon: Shield, label: "Admin", testid: "nav-admin" },
+];
+
 export default function Shell() {
   const { user, logout } = useAuth();
   const nav = useNavigate();
@@ -75,6 +80,16 @@ export default function Shell() {
               <Icon className="w-4 h-4" /> {label}
             </NavLink>
           ))}
+          {user?.role === "admin" && (
+            <>
+              <div className="my-2 border-t border-gold/15"/>
+              {ADMIN_NAV.map(({ to, icon: Icon, label, testid }) => (
+                <NavLink key={to} to={to} className={sideLink} data-testid={testid}>
+                  <Icon className="w-4 h-4" /> {label}
+                </NavLink>
+              ))}
+            </>
+          )}
         </nav>
         <div className="p-4 border-t border-gold/10">
           <div className="flex items-center gap-3 mb-3">
@@ -145,6 +160,17 @@ export default function Shell() {
                   <Icon className="w-4 h-4" /> {label}
                 </NavLink>
               ))}
+              {user?.role === "admin" && (
+                <>
+                  <div className="my-2 border-t border-gold/15"/>
+                  {ADMIN_NAV.map(({ to, icon: Icon, label, testid }) => (
+                    <NavLink key={to} to={to} className={sideLink}
+                             onClick={() => setDrawer(false)} data-testid={`drawer-${testid}`}>
+                      <Icon className="w-4 h-4" /> {label}
+                    </NavLink>
+                  ))}
+                </>
+              )}
             </nav>
             <div className="border-t border-gold/10 pt-4">
               <div className="flex items-center gap-2 mb-3 text-sm text-parchment font-ui">
