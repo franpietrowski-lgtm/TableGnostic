@@ -172,11 +172,15 @@ async def approve_change_request(cid: str, rid: str,
             applied["matched"] = r.matched_count
             applied["modified"] = r.modified_count
     elif req["kind"] == "inventory" and isinstance(req.get("proposed_value"), dict):
+        # V6.25.41 — Inventory diffs are stamped on `characters.folio.inventory_state`.
+        # The proposed_value already carries the merged folio dict (the
+        # folio PATCH route packages it that way), so we just write it
+        # through with a guard against forbidden fields.
         clean = {k: v for k, v in req["proposed_value"].items()
-                 if k not in {"_id", "id", "owner_id", "campaign_id"}}
+                 if k not in {"_id", "id", "owner_id", "campaign_id", "system_id"}}
         clean["updated_at"] = now_iso()
-        r = await db.inventory_states.update_one(
-            {"character_id": req["target_id"]},
+        r = await db.characters.update_one(
+            {"id": req["target_id"]},
             {"$set": clean},
         )
         applied["matched"] = r.matched_count

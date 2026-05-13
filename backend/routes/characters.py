@@ -9,6 +9,7 @@ from typing import Dict, Any
 
 from core.bus import broadcast
 from routes.ecosystem import _pulse_tick
+from routes.change_requests import enforce_or_queue
 from core.cost_engine import calc_derived, calc_spent_points, effective_level
 from core.db import db, new_id, now_iso, sanitize
 from core.models import CharacterIn, JournalEntryIn
@@ -131,6 +132,22 @@ async def update_character(ch_id: str, body: CharacterIn,
     update = body.model_dump()
     # V6.23 — server-side DP overspend gate.
     _enforce_anime5e_dp_gate(update, camp, user)
+    # V6.25.41 — Strict permission gating. When `gm_approval_required`
+    # is on and the caller isn't GM/admin, route the diff into the
+    # change-requests queue instead of writing directly. Returns 202
+    # with the queued change_request so the client can show a
+    # "Submitted for GM approval" toast.
+    queued = await enforce_or_queue(
+        camp, user, "character", ch_id, update,
+        summary=f"Character update — {update.get('name', ch.get('name'))}",
+    )
+    if queued is not None:
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            status_code=202,
+            content={"queued": True, "change_request": queued,
+                      "message": "Submitted to the GM approval queue."},
+        )
     update["id"] = ch_id
     update["owner_id"] = ch["owner_id"]
     update["owner_name"] = ch["owner_name"]
@@ -189,6 +206,23 @@ async def patch_folio_state(ch_id: str, body: FolioStatePatch,
     bucket = folio.get(body.bucket) or {}
     bucket.update(body.patch)
     folio[body.bucket] = bucket
+    # V6.25.41 — Auto-queue inventory_state writes from a player when
+    # `gm_approval_required` is on. Other folio buckets (spells prepared,
+    # recovery toggles, trick uses) stay direct since they're "during-
+    # play" state, not mechanic edits.
+    if body.bucket == "inventory_state":
+        queued = await enforce_or_queue(
+            camp, user, "inventory", ch_id,
+            {"folio": folio},
+            summary=f"Inventory update — {ch.get('name')}",
+        )
+        if queued is not None:
+            from fastapi.responses import JSONResponse
+            return JSONResponse(
+                status_code=202,
+                content={"queued": True, "change_request": queued,
+                          "message": "Submitted to the GM approval queue."},
+            )
     await db.characters.update_one(
         {"id": ch_id},
         {"$set": {"folio": folio, "updated_at": now_iso()}},
