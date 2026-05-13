@@ -14,6 +14,27 @@
 
 ## 2. Implemented (cumulative, condensed)
 
+### V6.25.42 — Auto-queue character/inventory edits + resilient LLM re-ingest (2026-02-13)
+
+**Auto-queue intercept wired into character writes** (`backend/routes/characters.py`)
+- `PUT /api/characters/{ch_id}` and `PATCH /api/characters/{ch_id}/folio` now call `enforce_or_queue()` automatically when a campaign has `gm_approval_required=true`. Player edits return **HTTP 202** plus a row in `change_requests` (status `pending`); GM/admin always write through; gate-off campaigns also write through.
+- **Non-inventory folio buckets** (e.g. `dnd_state`, `cypher_state`) always pass through — only inventory mutations are gated.
+- Verified: **22/22 backend tests green** (5 unit + 17 live e2e via testing agent against external preview URL — see `/app/test_reports/iteration_75.json`).
+
+**Resilient LLM re-ingest** (`backend/scripts/v62542_llm_reingest_evereantha.py`)
+- Wrapped `_call_claude_section` in `_call_claude_section_retry` — exponential backoff (6s → 12s → 24s → 48s, 4 attempts) handles transient LiteLLM 502/BadGateway. Persistent BadRequest chunks (Claude rejects content) are now logged and skipped without crashing the run.
+- Chunk size reduced 6000 → **4200 chars** + **2.5s inter-chunk cooldown** to dodge proxy rate-limits.
+- Script is idempotent (wipes prior `evereantha-bible-llm-seed` rows before re-running). Verified: 5/6 first chunks succeeded with retries vs. ~1/14 on the prior 6k-char run.
+
+**Verified routes via live e2e (testing agent iter 75)**
+- `/api/public/stats`, `/api/public/roadmap`, `/api/public/featured` — clean JSON, no `_id` leakage.
+- `/api/seo/sitemap.xml` — valid XML, content-type `application/xml`, includes `/discover`.
+- `/api/seo/og/{slug}.svg` — SVG for known slug, deterministic 404 for unknown.
+- `/api/convert/preview-cost-balance` — returns `source_budget / target_budget / delta / within_tolerance`. *(Note: actual route name is `/api/convert/preview-cost-balance`, not `/api/conversion/preview` as some docs say.)*
+- `/api/admin/flags`, `/audit`, `/showcases`, `/roadmap` — 200 for admin, 403 for non-admin.
+
+
+
 ### V6.25.41 — SEO infra · Cypher↔BESM cost-balance · Player→GM approval queue (2026-02-13)
 
 LLM key budget restored ✓ — verified with a live Claude probe.
