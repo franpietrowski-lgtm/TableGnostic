@@ -14,6 +14,28 @@
 
 ## 2. Implemented (cumulative, condensed)
 
+### V6.25.50 — Push-based vitals · Conditions quickbar · Recap auto-vitals (2026-02-13)
+
+**Push-based vitals broadcasts** (`backend/core/vitals_broadcast.py`)
+- New shared helper `broadcast_character_vitals(character_id, fresh_character=None)` — best-effort fire-and-forget WS push of `map:vitals` event keyed by character to every open session whose map references that character. Silent on errors (vitals are a refresh nicety; never block the spend/damage path).
+- Wired into `channels.py` (BESM bundle spend, 30s-window undo) and `advancement.py` (Anime 5E EP cast, long-rest spell restore). Every HP/EP mutation now pushes the new percentages instantly.
+- Frontend `Battlemap.jsx` subscribes to `map:vitals` over the session WS bus and merges incoming payloads into the local vitals state. Polling fallback dropped from **6s → 30s** heartbeat (catches up newly-joined clients + self-heals missed WS messages).
+
+**Conditions quickbar in the Battlemap sidebar** (`BattlemapSidebar.jsx`)
+- New "Conditions" section between Markers and Atlas pins (GM only). 8 curated quick chips (Stunned · Poisoned · Burning · Bleeding · Prone · Restrained · Charmed · Frightened) with severity-coded borders (amber=moderate, rose=severe). `more…/less` toggle reveals the full system catalogue (BESM 34, D&D 30, Anime 33, Cypher 36).
+- Click a chip → armed banner shows with duration input (default 2 rounds) + cancel ×. Then click any PC roster row → the `+` spawn button morphs into a rose **Apply** affordance (testid `battlemap-apply-condition-{cid}`) and POSTs `/api/effects` with `target_character_id` so the status badge instantly appears on the token's status ring.
+- Catalogue is system-aware: lazy-loaded from `/api/besm/reference` for BESM 4E or `/api/systems/{sid}/reference` for the rest.
+
+**Recap Auto-Vitals endpoint** (`GET /api/sessions/{sid}/recap/auto-vitals`)
+- Returns a recap-ready snapshot of every linked PC token: `{character_id, name, hp_pct, hp_current, hp_max, ep_pct, ep_current, ep_max, status[], narrative}` plus a one-line `summary` string ending with a period.
+- `narrative` field is pre-formatted for direct LLM splice: e.g. `"Eli ended Round 5 at 22% HP and 60% EP — bleeding, stunned."`. Reads the session's `current_round` so the recap voice always matches the actual combat clock; falls back to "left the scene" outside of combat.
+- Markers without `character_id` are skipped; member-only auth gate; empty-map returns `{pcs: [], summary: "No PCs on the map this session."}`.
+
+**Verified**: testing agent iteration 83 — **4/4 new backend tests pass** (`test_v62550_vitals_push_and_recap.py`) **+ 27/27 regression** across V6.25.46-49. Live UI confirmed: Bleeding chip → Eli roster click → BLEEDING badge rendered on the on-map token (no manual refresh).
+
+**Cleanup debt**: `core/vitals_broadcast.py:_pc_vitals_for` and `routes/battlemap.py:_pc_vitals_for` are duplicate helpers. Track for consolidation — minor drift risk if the heuristic evolves on one side.
+
+
 ### V6.25.49 — Reference conditions catalogue · PATCH /map/tokens/{tid} · deeper landing stats (2026-02-13)
 
 **Reference — universal status conditions catalogue** (`backend/system_data/status_conditions.py`)
