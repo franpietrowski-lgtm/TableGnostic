@@ -14,6 +14,36 @@
 
 ## 2. Implemented (cumulative, condensed)
 
+### V6.25.48 — Battlemap right-sidebar overhaul + auto-fill vitals + atlas → map link (2026-02-13)
+
+**P0 — Right-sidebar control panel** (`frontend/components/BattlemapSidebar.jsx`)
+- 5 stacked sections: View controls (snap-to-grid toggle, zoom +/−/reset with readout) · Roster (every published PC, live HP/EP %, click-to-spawn button per PC) · Markers palette (8 curated icons: door/trap/treasure/chest/stairs/portal/ladder/note) · Atlas pins (P2, GM-only, only renders when the campaign has pins) · Legend (colour-code reference).
+- Spawn-pc-{cid} buttons are one-shot per session: once placed they flip to ✓ and become `disabled`. Re-placement requires removing the token first.
+- Marker-palette buttons arm a `pendingPlacement` intent; next canvas click drops the marker at the clicked cell (snap-to-grid honoured) and clears the intent.
+- Atlas pins arm a placement that carries `atlas_node_id` + tooltip from the codex location node, so the marker stays linked to its lore source. (P2)
+
+**P0 — Token visual upgrade** (`frontend/components/Battlemap.jsx`)
+- New round-token visuals: PCs render initials, markers render their lucide icon. Both wear up to 4 status chips (manual + live /api/effects).
+- "Invisible when full" SVG arcs around each PC token — red HP arc (top half), cyan EP arc (bottom half). Opacity scales from 0.45 (>66%) → 0.7 (33-66%) → 0.95 (<33%) so a healthy table is calm and a wounded one screams.
+- Initiative-order pip — gold badge top-left when `initiative_order` is set; complements the existing active-actor gold ring + pulse.
+- Rich hover tooltip: name · HP cur/max · EP cur/max · ACTIVE · status names. Markers tooltip with marker type + custom note.
+
+**P0 — Misc** — snap-to-grid toggle (default ON, half-cell rounding on drop), zoom buttons (replaces ctrl-wheel-only), pending-placement banner above canvas, real-time updates already in place via the existing session WS bus.
+
+**P1 — Auto-fill HP/EP rings from character sheet** (`backend/routes/battlemap.py:_pc_vitals_for` + `GET /api/sessions/{sid}/map/vitals`)
+- Polled every 6s from the Battlemap; computes hp_pct/ep_pct/hp_current/hp_max/ep_current/ep_max per linked character.
+- System-aware: BESM 4E reads `derived.health_points` (max) and `folio.health_points` (live current, mutated by routes/channels.py bundle spend). Anime 5E falls through to `folio.anime5e_state.ep_current/ep_max`. D&D 5E falls through to `folio.dnd5e_state.hp_current/hp_max`. Falls back to 100% when nothing's recorded — graceful, never errors.
+
+**P2 — Atlas codex → Battlemap pin** (TokenIn schema + sidebar)
+- TokenIn gains 7 new optional fields (`kind`, `marker_type`, `ep_pct`, `initiative_order`, `atlas_node_id`, `tooltip`, `locked`). All round-trip through GET /map.
+- Sidebar lazy-loads `GET /api/writer/atlas/{campaign_id}` — already-pinned codex locations show as one-click drops with their lore description as the marker tooltip. Once dropped on a map the row disables to prevent duplicate spawns.
+- Marker tokens are never line-of-sight occluded (treasure under a wall is still a treasure; GM uses fog if they want it hidden).
+
+**Verified**: testing agent iteration 81 — **6/6 backend tests pass** (3 in `test_v62548_battlemap_sidebar.py` + 3 in agent-added `test_v62548_battlemap_supplemental.py`); **frontend: 100% of required testids present** (verified live on session 5cab71abc10b4307b6d8a905be53dd3b — marker placement banner, PC spawn one-shot, zoom controls, snap toggle all working). Landing page free of ESLint "Compiled with problems" shadowbox overlay. Report: `/app/test_reports/iteration_81.json`.
+
+**Code-review note (non-blocking)**: POST `/api/sessions/{sid}/map/tokens` is still the create-AND-update path (id-in-body upsert). Consider a dedicated `PATCH /map/tokens/{tid}` if other routes start mutating individual tokens.
+
+
 ### V6.25.47 — Remaining 4 Writer Tools promoted to real CRUD (2026-02-13)
 
 **Shared CRUD scaffold** (`frontend/components/writers/CrudListTool.jsx` + `WRITER_THEME` bundle)

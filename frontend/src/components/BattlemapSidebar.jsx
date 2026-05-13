@@ -92,6 +92,7 @@ export default function BattlemapSidebar({
         </div>
         <div className="flex items-center gap-1.5">
           <button type="button" onClick={onToggleSnap}
+                  aria-pressed={snapToGrid}
                   className={`btn btn-ghost text-[10px] flex-1 ${snapToGrid ? "border-gold/60 text-gold-bright" : ""}`}
                   data-testid="battlemap-snap-toggle"
                   title={snapToGrid ? "Snap-to-grid ON (drag rounds to half-cell)"

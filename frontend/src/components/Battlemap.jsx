@@ -768,11 +768,11 @@ export default function Battlemap({
 
       {/* V6.25.48 — pending placement banner */}
       {pendingPlacement && isGm && (
-        <div className="mb-2 px-3 py-1.5 rounded-sm border border-gold/60 bg-gold/10 text-[10px] font-ui uppercase tracking-widest text-gold-bright flex items-center justify-between"
+        <div className="mb-2 px-3 py-1.5 rounded-sm border border-gold/60 bg-gold/10 text-[10px] font-ui uppercase tracking-widest text-gold-bright flex items-center justify-between gap-2"
              data-testid="battlemap-placement-banner">
           <span>Click canvas to drop · {pendingPlacement.label}</span>
           <button type="button" onClick={() => setPendingPlacement(null)}
-                  className="btn btn-ghost text-[10px] px-2 py-0"
+                  className="btn btn-ghost text-[10px] px-2 py-0 ml-3"
                   data-testid="battlemap-placement-cancel">
             cancel
           </button>
