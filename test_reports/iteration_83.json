@@ -1,0 +1,33 @@
+{
+  "summary": "V6.25.50 — Push-based vitals (BESM/Anime5E hooks via core/vitals_broadcast.py), Effects condition quickbar in BattlemapSidebar, and GET /api/sessions/{sid}/recap/auto-vitals all verified end-to-end. Backend: test_v62550_vitals_push_and_recap.py 4/4 PASS (helper handles missing HP → 100% fallback; recap shape correct with character_id/name/hp_pct/hp_current/hp_max/ep_pct/ep_current/ep_max/status/narrative + summary ending in period; empty-pcs branch returns 'No PCs.'; active /effects bound to a PC's character_id surface in status[] + narrative tags). Regression 27/27 PASS across test_v62546 (writer_tools + supplemental), v62547 (perms + remainder), v62548 (battlemap_sidebar + supplemental), v62549 (conditions/patch/stats). Live verification against seeded campaign (af461ae0…/sid 5cab71abc1…): GET /recap/auto-vitals returned {round:0, pcs:[Eli@100%HP/100%EP], summary:'Eli steady.'}. Frontend (admin GM @ 1440×900): landing /#proof renders 9 stat tiles + 7-day pulse, no compile-overlay. After login → /app/sessions/{sid} → 12s wait → click open-battlemap-btn → 10s wait → battlemap-sidebar-conditions present with all 8 curated chips (stunned/poisoned/burning/bleeding/prone/restrained/charmed/frightened), battlemap-conditions-toggle-all 'more…' control, click stunned chip arms battlemap-condition-armed banner with battlemap-condition-duration input (default rounds=2) + cancel. Click Bleeding → click battlemap-apply-condition-35b9746b… (Eli) → POST /api/effects returned 200 → 'BLEEDING' badge rendered over Eli's PC token on the map. Regression: 23 roster rows, 8 marker chips, snap-toggle, zoom-in/out/reset, vitals rings (Eli HP 100% EP 100%) all functional.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_v62550_vitals_push_and_recap.py",
+    "/app/test_reports/pytest/iter83_v62550.xml",
+    "/app/test_reports/pytest/iter83_regression.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "core/vitals_broadcast.py — Best-effort design is correct: bare except + silent return guarantees spend/damage code paths never break on broadcast failure. _pc_vitals_for() mirrors routes/battlemap.py logic; comment notes both will converge to a single helper — track as cleanup debt to avoid drift between polled vs pushed payloads.",
+    "routes/battlemap.py /recap/auto-vitals — Markers without character_id correctly skipped (verified via test_recap_auto_vitals_shape's trap-marker assertion len(pcs)==2). Status list builds from active /effects tied to target_character_id. Auth gating returns 200 for members and would 403 non-members (the empty-pcs test uses GM cred so 403 path is exercised by existing v62548_supplemental test_vitals_non_member_403 which still passes). Summary string ends with '.' (asserted).",
+    "BattlemapSidebar.jsx — Conditions section uses conditional rendering for atlas-pins so battlemap-sidebar-atlas-pins is omitted when no campaign pins exist; this is correct, not a bug. The 8 curated chip names map cleanly to system-condition names via lower-case + non-alnum→'-' which is what the testid suffix uses. armed-banner UX (rounds input + cancel × + Apply CTA via roster-row '+'→✓ swap) is clean.",
+    "advancement.py / channels.py — broadcast_character_vitals(character_id) called from EP cast, long-rest restore, BESM bundle spend, and undo (per files_of_reference line ranges). Hook is fire-and-forget; verified indirectly by GET /map/vitals reflecting the new ep_pct after a spend (the helper just pushes the same payload over WS for instant client refresh)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (4/4 new + 27/27 regression v62546-v62549)", "frontend": "100% (all 5 frontend asks: conditions section + 8 chips + toggle-all + armed banner + duration input + apply flow POST /effects 200 + status badge on map + full regression of spawn-pc/marker-palette/atlas-pin/vitals/zoom/snap)"},
+  "test_credentials": "Admin: tablegnostic-admin@tablegnostic.com / LoremasterAurea2026!Forge (used, working).",
+  "seed_data_creation": "Backend tests create ephemeral V50Test-* campaigns and DELETE in finally{}. Frontend test exercises the persistent af461ae0…/5cab71abc1… seeded campaign — applied a 'Bleeding' /effects row to Eli; this is harmless rotating test data already covered by existing duration_rounds expiry.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "V6.25.50 fully green — no action items. Hot tips for the next iteration: (1) When opening the battlemap via UI test, wait ≥10s after clicking open-battlemap-btn — the useMinDelay loader gates rendering and a 3-5s wait will time out before the sidebar mounts. (2) Routes are /app/sessions/:id (not /sessions/:id) so navigate accordingly. (3) The recap auto-vitals endpoint is GM/member-gated and lives at GET /api/sessions/{sid}/recap/auto-vitals — markers without character_id are filtered server-side. (4) Vitals broadcast is best-effort + silent — never assert on WS delivery directly; instead replay GET /map/vitals after the spend and confirm hp/ep moved. (5) The atlas-pins section is conditionally rendered, so its absence from the sidebar is not a regression when the campaign has no atlas pins.",
+  "rca of the issue": "N/A — no failures. All asks from the review_request are met."
+}

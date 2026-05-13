@@ -444,3 +444,115 @@ async def get_pc_vitals(sid: str, user: dict = Depends(get_current_user)):
         {"id": {"$in": char_ids}}, {"_id": 0},
     ).to_list(200)
     return {"vitals": {c["id"]: _pc_vitals_for(c) for c in chars}}
+
+
+# ───────────────────── V6.25.50 — recap auto-vitals ─────────────────────
+# Cross-pollinates Battlemap vitals into the LLM Voice-Recap pipeline.
+# When the GM runs an auto-recap, the recap prompt can pull this
+# snapshot to anchor lines like "Eli ended Round 5 at 22% HP" instead
+# of guessing or omitting combat state. Read-only; no mutation.
+
+@router.get("/sessions/{sid}/recap/auto-vitals")
+async def recap_auto_vitals(sid: str,
+                              user: dict = Depends(get_current_user)):
+    """Return a recap-ready snapshot of every linked PC token's
+    current vitals. Includes a `narrative` list of pre-formatted
+    one-liners the LLM can splice directly into the recap prompt
+    without any further processing.
+
+    Shape:
+        {
+          "session_id": "...",
+          "round": 5,                          # may be 0 if no combat
+          "pcs": [
+            {
+              "character_id": "...",
+              "name": "Eli",
+              "hp_pct": 22, "hp_current": 11, "hp_max": 50,
+              "ep_pct": 60, "ep_current": 24, "ep_max": 40,
+              "status": ["Bleeding", "Spotlit"],
+              "narrative": "Eli ended Round 5 at 22% HP and 60% EP — bleeding, spotlit."
+            }, ...
+          ],
+          "summary": "Eli at 22% HP; Aurora untouched; Calenwë spent."
+        }
+
+    Members-only — read-gated to anyone seated at the table.
+    """
+    sess, camp = await _load_session_with_camp(sid)
+    if not _is_member(user, camp):
+        raise HTTPException(403, "Not seated at this table")
+    state = await _get_or_init_map(sid)
+
+    # Pull the current initiative round (set by the dice/initiative
+    # endpoints). Falls back to 0 if no combat is currently running.
+    round_no = int((sess or {}).get("current_round") or 0)
+
+    # Walk the tokens that are bound to a character — markers and
+    # unbound NPCs don't carry vitals.
+    char_ids = list({t.get("character_id") for t in state.get("tokens", [])
+                     if t.get("character_id") and t.get("kind", "pc") != "marker"})
+    if not char_ids:
+        return {"session_id": sid, "round": round_no,
+                "pcs": [], "summary": "No PCs on the map this session."}
+
+    chars = await db.characters.find(
+        {"id": {"$in": char_ids}}, {"_id": 0},
+    ).to_list(200)
+    by_id = {c["id"]: c for c in chars}
+
+    # Live status effects bound to those characters (manual + applied).
+    eff_rows = await db.effects.find(
+        {"session_id": sid, "active": True,
+         "target_character_id": {"$in": char_ids}},
+        {"_id": 0, "target_character_id": 1, "name": 1},
+    ).to_list(500)
+    by_char_status: dict = {}
+    for e in eff_rows:
+        by_char_status.setdefault(e["target_character_id"], []).append(e["name"])
+
+    out_pcs = []
+    short_lines = []
+    for tok in state.get("tokens", []):
+        cid = tok.get("character_id")
+        if not cid or cid not in by_id:
+            continue
+        ch = by_id[cid]
+        v = _pc_vitals_for(ch)
+        status = sorted(set((tok.get("status") or []) + by_char_status.get(cid, [])))
+        name = ch.get("name") or tok.get("label") or "Unnamed"
+
+        # Build the narrative line for the LLM. Use natural ranges so
+        # the recap doesn't sound clinical ("at 22% HP" reads better
+        # than "with 11/50 HP" in a recap voice).
+        round_clause = f"ended Round {round_no}" if round_no > 0 else "left the scene"
+        status_clause = (" — " + ", ".join(s.lower() for s in status)) if status else ""
+        narrative = (f"{name} {round_clause} at {v['hp_pct']}% HP "
+                     f"and {v['ep_pct']}% EP{status_clause}.")
+
+        out_pcs.append({
+            "character_id": cid,
+            "name": name,
+            "hp_pct": v["hp_pct"], "hp_current": v["hp_current"], "hp_max": v["hp_max"],
+            "ep_pct": v["ep_pct"], "ep_current": v["ep_current"], "ep_max": v["ep_max"],
+            "status": status,
+            "narrative": narrative,
+        })
+
+        # Compact one-liner for the summary string.
+        if v["hp_pct"] <= 30:
+            short_lines.append(f"{name} bloodied ({v['hp_pct']}% HP)")
+        elif v["hp_pct"] <= 60:
+            short_lines.append(f"{name} hurting ({v['hp_pct']}% HP)")
+        elif v["ep_pct"] <= 25:
+            short_lines.append(f"{name} drained ({v['ep_pct']}% EP)")
+        else:
+            short_lines.append(f"{name} steady")
+
+    summary = "; ".join(short_lines) + "."
+    return {
+        "session_id": sid,
+        "round": round_no,
+        "pcs": out_pcs,
+        "summary": summary,
+    }

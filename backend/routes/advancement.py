@@ -21,6 +21,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from core.db import db, new_id, now_iso
+from core.vitals_broadcast import broadcast_character_vitals  # V6.25.50
 from core.security import get_current_user
 from system_data.anime5e_reference_seed import SEED_ENTRIES as ANIME5E_SEED
 from routes.character_validation import anime5e_xp_to_cp
@@ -1198,6 +1199,8 @@ async def cast_spell(cid: str, body: SpellCastIn,
         anime["ep_current"] = max(0, cur - max(0, int(body.amount or 0)))
         folio["anime5e_state"] = anime
         await db.characters.update_one({"id": cid}, {"$set": {"folio": folio, "updated_at": now_iso()}})
+        # V6.25.50 — push the new EP to every open battlemap.
+        await broadcast_character_vitals(cid, fresh_character={**ch, "folio": folio})
     else:
         raise HTTPException(400, f"Unknown cast kind: {body.kind}")
 
@@ -1253,6 +1256,8 @@ async def restore_spells(cid: str, body: SpellRestoreIn,
         {"id": cid},
         {"$set": {"folio": folio, "power_bundles": bundles, "updated_at": now_iso()}},
     )
+    # V6.25.50 — rest restored EP; push the new ring values.
+    await broadcast_character_vitals(cid, fresh_character={**ch, "folio": folio})
     fresh = await db.characters.find_one({"id": cid}, {"_id": 0})
     return _build_spell_tracker_state(fresh)
 

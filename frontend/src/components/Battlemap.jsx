@@ -200,11 +200,13 @@ export default function Battlemap({
     return () => { mounted = false; };
   }, [sessionId]);
 
-  // ─── P1 — poll PC vitals every 6s ───
-  // Backend computes HP%/EP% per linked character from
-  // /api/sessions/{sid}/map/vitals. Cheap (1 query per second-bucket
-  // of seated PCs) and avoids wiring HP broadcasts through every
-  // spend / damage code path.
+  // ─── P1 — vitals refresh ───
+  // V6.25.48 added a 6s poll of GET /map/vitals.
+  // V6.25.50 — backend now PUSHES `map:vitals` over the session WS
+  // (channels.py BESM spend + advancement.py Anime 5E EP cast + undo
+  // + rest restore). Polling becomes a 30s heartbeat so newly-joined
+  // clients catch up without waiting on a mutation event, and so a
+  // missed WS message can self-heal.
   useEffect(() => {
     if (!sessionId) return;
     let mounted = true;
@@ -215,7 +217,7 @@ export default function Battlemap({
       } catch { /* swallow — sidebar handles empty */ }
     };
     tick();
-    const h = setInterval(tick, 6000);
+    const h = setInterval(tick, 30000);
     return () => { mounted = false; clearInterval(h); };
   }, [sessionId]);
 
@@ -266,8 +268,15 @@ export default function Battlemap({
       else if (type === "effect_remove") {
         setEffects((prev) => prev.filter((e) => e.id !== data.id));
       }
+      // V6.25.50 — push-based vitals update. Channel spend / damage
+      // routes broadcast {[character_id]: {hp_pct, ep_pct, ...}} and
+      // we merge into the local vitals map so token rings update
+      // instantly without waiting for the next 30s poll.
+      else if (type === "map:vitals") {
+        setVitals((prev) => ({ ...(prev || {}), ...(data || {}) }));
+      }
     });
-    return () => { try { off && off(); } catch {} };
+    return () => { try { off && off(); } catch { /* */ } };
   }, [subscribe]);
 
   // Active uid (initiative top of order) → matching character → token highlight
@@ -1078,6 +1087,8 @@ export default function Battlemap({
           onZoomOut={zoomOut}
           onZoomReset={zoomReset}
           campaignId={campaign?.id}
+          systemId={campaign?.system_id}
+          sessionId={sessionId}
         />
       )}
     </div>

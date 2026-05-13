@@ -24,7 +24,7 @@
  */
 import React, { useEffect, useState, useMemo } from "react";
 import {
-  Plus, ZoomIn, ZoomOut, Crosshair, Magnet, MapPin,
+  Plus, ZoomIn, ZoomOut, Crosshair, Magnet, MapPin, ShieldAlert,
   DoorOpen, Skull, Gem, Box, ArrowUpDown, Sparkle, Footprints, StickyNote,
 } from "lucide-react";
 import { api } from "../lib/api";
@@ -46,10 +46,22 @@ export default function BattlemapSidebar({
   onSpawnPc, onSpawnMarker, onSpawnAtlasPin,
   snapToGrid, onToggleSnap,
   zoom, onZoomIn, onZoomOut, onZoomReset,
-  campaignId,
+  campaignId, systemId, sessionId,
 }) {
   const [atlasPins, setAtlasPins] = useState([]);
   const [atlasLoaded, setAtlasLoaded] = useState(false);
+  // V6.25.50 — system-aware conditions quickbar.
+  // The GM clicks a condition chip → arms it. The next click on a
+  // roster row applies the condition to that PC via POST /effects
+  // (target_character_id wires it into both the map ring + the
+  // character status surface). Defaults to a curated short list so
+  // the sidebar isn't overwhelmed; "more…" reveals the full catalogue.
+  const [conditions, setConditions] = useState([]);
+  const [conditionsLoaded, setConditionsLoaded] = useState(false);
+  const [pendingCondition, setPendingCondition] = useState(null);  // catalogue entry
+  const [showAllConditions, setShowAllConditions] = useState(false);
+  const [conditionDuration, setConditionDuration] = useState(2);
+  const [conditionErr, setConditionErr] = useState("");
 
   // Lazy-load atlas pins once. Keep silent on permission errors —
   // sidebar still works without atlas access.
@@ -62,6 +74,53 @@ export default function BattlemapSidebar({
       })
       .catch(() => { setAtlasLoaded(true); });
   }, [campaignId, atlasLoaded]);
+
+  // V6.25.50 — lazy-load the system's condition catalogue. We hit
+  // the BESM reference for BESM 4E, the generic per-system endpoint
+  // for everything else. Silent fail = sidebar omits the quickbar.
+  useEffect(() => {
+    if (!systemId || conditionsLoaded || !isGm) return;
+    const path = systemId === "besm-4e"
+      ? "/besm/reference"
+      : `/systems/${systemId}/reference`;
+    api.get(path)
+      .then((r) => {
+        setConditions((r.data && r.data.conditions) || []);
+        setConditionsLoaded(true);
+      })
+      .catch(() => { setConditionsLoaded(true); });
+  }, [systemId, conditionsLoaded, isGm]);
+
+  // Curated short list of "common combat" conditions for the
+  // quickbar; the full catalogue is one click away.
+  const QUICK_CONDITION_NAMES = [
+    "Stunned", "Poisoned", "Burning", "Bleeding",
+    "Prone", "Restrained", "Charmed", "Frightened",
+  ];
+  const visibleConditions = useMemo(() => {
+    if (showAllConditions) return conditions;
+    return conditions.filter((c) => QUICK_CONDITION_NAMES.includes(c.name));
+  }, [conditions, showAllConditions]);
+
+  // Apply the currently-armed condition to a PC. POST /effects with
+  // target_character_id ties it to the on-map status ring.
+  const applyConditionTo = async (character) => {
+    if (!pendingCondition || !sessionId) return;
+    setConditionErr("");
+    try {
+      await api.post("/effects", {
+        session_id: sessionId,
+        target_name: character.name,
+        target_character_id: character.id,
+        name: pendingCondition.name,
+        duration_rounds: Math.max(1, Number(conditionDuration) || 1),
+        note: pendingCondition.effect || "",
+      });
+      setPendingCondition(null);
+    } catch (e) {
+      setConditionErr(e?.response?.data?.detail || "Failed to apply.");
+    }
+  };
 
   const spawnedCharIds = useMemo(
     () => new Set(tokens.filter((t) => t.kind !== "marker" && t.character_id)
@@ -165,12 +224,21 @@ export default function BattlemapSidebar({
                 </div>
                 {isGm && (
                   <button type="button"
-                          onClick={() => onSpawnPc(c)}
-                          disabled={alreadyOnMap}
-                          className={`btn ${alreadyOnMap ? "btn-ghost opacity-40 cursor-not-allowed" : "btn-primary"} text-[10px] px-2 py-0.5`}
-                          data-testid={`battlemap-spawn-pc-${c.id}`}
-                          title={alreadyOnMap ? "Already on the map" : "Click then click on canvas to drop"}>
-                    {alreadyOnMap ? "✓" : <Plus className="w-3 h-3"/>}
+                          onClick={() => pendingCondition
+                            ? applyConditionTo(c)
+                            : onSpawnPc(c)}
+                          disabled={pendingCondition ? false : alreadyOnMap}
+                          className={`btn ${pendingCondition ? "btn-ghost border-rose-400/60 text-rose-300"
+                                          : (alreadyOnMap ? "btn-ghost opacity-40 cursor-not-allowed" : "btn-primary")} text-[10px] px-2 py-0.5`}
+                          data-testid={pendingCondition
+                            ? `battlemap-apply-condition-${c.id}`
+                            : `battlemap-spawn-pc-${c.id}`}
+                          title={pendingCondition
+                            ? `Apply ${pendingCondition.name} (${conditionDuration} rounds)`
+                            : (alreadyOnMap ? "Already on the map" : "Click then click on canvas to drop")}>
+                    {pendingCondition
+                      ? <ShieldAlert className="w-3 h-3"/>
+                      : (alreadyOnMap ? "✓" : <Plus className="w-3 h-3"/>)}
                   </button>
                 )}
               </div>
@@ -212,6 +280,75 @@ export default function BattlemapSidebar({
               );
             })}
           </div>
+        </section>
+      )}
+
+      {/* ── 3.5 Conditions quickbar (GM only) — V6.25.50 ── */}
+      {isGm && conditions.length > 0 && (
+        <section data-testid="battlemap-sidebar-conditions">
+          <div className="label-ref text-[10px] uppercase tracking-widest text-mist/70 mb-1 flex justify-between items-center">
+            <span>Conditions</span>
+            {pendingCondition ? (
+              <span className="text-rose-300 animate-pulse"
+                    data-testid="battlemap-condition-pending">
+                Tap a PC to apply
+              </span>
+            ) : (
+              <button type="button"
+                      onClick={() => setShowAllConditions((v) => !v)}
+                      className="btn btn-ghost text-[10px] px-1 py-0"
+                      data-testid="battlemap-conditions-toggle-all">
+                {showAllConditions ? "less" : "more…"}
+              </button>
+            )}
+          </div>
+          {pendingCondition && (
+            <div className="mb-2 px-2 py-1 rounded-sm border border-rose-400/60 bg-rose-900/20 flex items-center gap-2"
+                 data-testid="battlemap-condition-armed">
+              <ShieldAlert className="w-3 h-3 text-rose-300 shrink-0"/>
+              <span className="text-[10px] text-rose-200 flex-1 truncate"
+                    title={pendingCondition.effect}>{pendingCondition.name}</span>
+              <label className="text-[9px] text-mist/70 flex items-center gap-1">
+                rounds
+                <input type="number" min="1" max="99"
+                       value={conditionDuration}
+                       onChange={(e) => setConditionDuration(Number(e.target.value || 1))}
+                       className="input text-[10px] w-10 px-1 py-0"
+                       data-testid="battlemap-condition-duration"/>
+              </label>
+              <button type="button"
+                      onClick={() => setPendingCondition(null)}
+                      className="btn btn-ghost text-[10px] px-1 py-0"
+                      data-testid="battlemap-condition-cancel">
+                ×
+              </button>
+            </div>
+          )}
+          <div className="grid grid-cols-4 gap-1">
+            {visibleConditions.map((c) => {
+              const armed = pendingCondition?.name === c.name;
+              const sev = (c.severity || "").toLowerCase();
+              const sevColor = sev === "severe" ? "border-rose-500/60 text-rose-300"
+                              : sev === "moderate" ? "border-amber-500/60 text-amber-300"
+                              : "border-mist/20 text-mist/80";
+              return (
+                <button type="button"
+                        key={c.name}
+                        onClick={() => setPendingCondition(armed ? null : c)}
+                        className={`p-1 rounded-sm border text-[9px] truncate
+                                   ${armed ? "border-rose-400 bg-rose-900/30 text-rose-200"
+                                           : `bg-ink/40 hover:border-rose-400/60 ${sevColor}`}`}
+                        title={`${c.severity ? "[" + c.severity.toUpperCase() + "] " : ""}${(c.tags || []).join(" · ")} — ${c.effect || ""}`}
+                        data-testid={`battlemap-condition-${c.name.toLowerCase().replace(/[^a-z0-9]/g, "-")}`}>
+                  {c.name}
+                </button>
+              );
+            })}
+          </div>
+          {conditionErr && (
+            <div className="text-[10px] text-rose-300 mt-1"
+                 data-testid="battlemap-condition-error">{conditionErr}</div>
+          )}
         </section>
       )}
 

@@ -34,6 +34,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from core.bus import broadcast
+from core.vitals_broadcast import broadcast_character_vitals  # V6.25.50
 from core.db import db, new_id, now_iso, sanitize
 from core.security import get_current_user
 
@@ -669,6 +670,10 @@ async def _deduct_for_post(camp_id: str, user: dict, mode: str,
         folio["bundle_charges"] = bundle_charges
         await db.characters.update_one({"id": char["id"]},
             {"$set": {"folio": folio, "updated_at": now_iso()}})
+        # V6.25.50 — push the new HP/EP to every open battlemap that
+        # has this character on its tokens list.
+        await broadcast_character_vitals(char["id"],
+            fresh_character={**char, "folio": folio})
         return {"applied": True, "character_id": char["id"],
                 "character_name": char["name"], "mode": "bundle",
                 "payload": {"source_id": src, **applied_payload}}
@@ -715,6 +720,9 @@ async def _undo_deduct(msg: dict, user: dict) -> dict:
 
     await db.characters.update_one({"id": char["id"]},
         {"$set": {"folio": folio, "updated_at": now_iso()}})
+    # V6.25.50 — refresh battlemap rings after the undo restores HP/EP.
+    await broadcast_character_vitals(char["id"],
+        fresh_character={**char, "folio": folio})
     new_meta = {**(msg.get("slash_meta") or {}),
                 "deduct": {**deduct, "undone": True,
                            "undone_at": now_iso()}}
