@@ -88,8 +88,10 @@ export default function StManuscriptTool({ campId }) {
     if (!selected) return;
     setBusy(true); setErr("");
     try {
+      // V6.25.47 — `kind` is immutable on PATCH; the backend rejects
+      // any send that includes it (extra="forbid"). Only mutable
+      // fields ride the wire here.
       await api.patch(`/writer/manuscript/${campId}/${selected.id}`, {
-        kind: selected.kind,
         title: title.trim() || "Untitled",
         body_md: body,
         status,

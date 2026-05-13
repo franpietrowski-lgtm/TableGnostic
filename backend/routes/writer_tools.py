@@ -140,16 +140,18 @@ async def atlas_create_pin(cid: str, body: AtlasPinIn,
             raise HTTPException(400, "node_id must reference a location node "
                                      "in this campaign.")
         # Place the pin on the existing node.
+        # V6.25.47 — fixed clobber bug from iter79 review: only mutate
+        # `content` when a non-empty `description` was supplied. A
+        # re-position click should NOT erase existing lore.
         fields = dict(node.get("fields") or {})
         fields["map_x"] = body.map_x
         fields["map_y"] = body.map_y
         if body.location_type and not fields.get("location_type"):
             fields["location_type"] = body.location_type
-        await db.nodes.update_one(
-            {"id": node["id"]},
-            {"$set": {"fields": fields,
-                      "content": body.description or node.get("content") or ""}},
-        )
+        set_payload: dict = {"fields": fields}
+        if body.description is not None and body.description.strip():
+            set_payload["content"] = body.description
+        await db.nodes.update_one({"id": node["id"]}, {"$set": set_payload})
         return {"node_id": node["id"], "pinned": True}
     # No node_id → mint a fresh location node anchored at this pin.
     new_node = {
@@ -341,17 +343,33 @@ async def manuscript_create(cid: str, body: ManuscriptSectionIn,
     return doc
 
 
+class ManuscriptSectionPatchIn(BaseModel):
+    """PATCH-only payload. `kind` and `parent_id` are deliberately
+    OMITTED — those are immutable post-create. `extra="forbid"` makes
+    Pydantic reject any send that includes them (or any other unknown
+    field) with a 422, instead of silently dropping (V6.25.47 — was
+    silent-drop per iter79 code-review note)."""
+    model_config = {"extra": "forbid"}
+    title: Optional[str] = Field(None, max_length=200)
+    body_md: Optional[str] = Field(None, max_length=200_000)
+    order: Optional[conint(ge=0, le=10_000)] = None
+    status: Optional[str] = Field(None, max_length=30)
+    tension: Optional[conint(ge=0, le=5)] = None
+
+
 @router.patch("/manuscript/{cid}/{sid}")
-async def manuscript_patch(cid: str, sid: str, body: ManuscriptSectionIn,
+async def manuscript_patch(cid: str, sid: str, body: ManuscriptSectionPatchIn,
                            user: dict = Depends(get_current_user)):
+    """Patch a section. `kind` and `parent_id` are immutable — to
+    change them, delete and recreate. V6.25.47 — strict accept: the
+    PatchIn model omits both fields so any client send is a 422 from
+    Pydantic; route just trusts the model.
+    """
     await _require_write(user, cid)
     upd = {k: v for k, v in body.model_dump().items() if v is not None}
     if "body_md" in upd:
         upd["word_count"] = len(upd["body_md"].split())
     upd["updated_at"] = now_iso()
-    # Never mutate parent or kind on patch — that requires a delete + recreate.
-    upd.pop("parent_id", None)
-    upd.pop("kind", None)
     r = await db.manuscript_sections.update_one(
         {"id": sid, "campaign_id": cid}, {"$set": upd},
     )
@@ -380,3 +398,219 @@ async def manuscript_delete(cid: str, sid: str,
         {"campaign_id": cid, "id": {"$in": descendants}},
     )
     return {"deleted": r.deleted_count}
+
+
+# ======================================================================
+# CULTURES — Worldbuilder
+# ======================================================================
+
+class CultureIn(BaseModel):
+    model_config = {"extra": "forbid"}
+    name: str = Field(..., max_length=160)
+    summary: Optional[str] = Field(None, max_length=4000)
+    naming_conventions: Optional[str] = Field(None, max_length=2000)
+    etiquette_quirks: Optional[str] = Field(None, max_length=2000)
+    language_seed: Optional[str] = Field(None, max_length=2000)
+    holidays: Optional[str] = Field(None, max_length=2000)
+    diaspora_notes: Optional[str] = Field(None, max_length=2000)
+
+
+@router.get("/cultures/{cid}")
+async def cultures_list(cid: str, user: dict = Depends(get_current_user)):
+    camp = await _camp_or_404(cid)
+    if not _can_read(user, camp):
+        raise HTTPException(403, "Not a member of this campaign.")
+    rows = await db.cultures.find({"campaign_id": cid}, {"_id": 0}).sort("created_at", 1).to_list(500)
+    return {"cultures": rows, "writable": _can_write(user, camp)}
+
+
+@router.post("/cultures/{cid}")
+async def cultures_create(cid: str, body: CultureIn, user: dict = Depends(get_current_user)):
+    await _require_write(user, cid)
+    doc = {"id": new_id(), "campaign_id": cid, **body.model_dump(), "created_at": now_iso()}
+    await db.cultures.insert_one(dict(doc))
+    doc.pop("_id", None)
+    return doc
+
+
+@router.patch("/cultures/{cid}/{rid}")
+async def cultures_patch(cid: str, rid: str, body: CultureIn, user: dict = Depends(get_current_user)):
+    await _require_write(user, cid)
+    upd = {k: v for k, v in body.model_dump().items() if v is not None}
+    upd["updated_at"] = now_iso()
+    await db.cultures.update_one({"id": rid, "campaign_id": cid}, {"$set": upd})
+    return await db.cultures.find_one({"id": rid}, {"_id": 0}) or {}
+
+
+@router.delete("/cultures/{cid}/{rid}")
+async def cultures_delete(cid: str, rid: str, user: dict = Depends(get_current_user)):
+    await _require_write(user, cid)
+    r = await db.cultures.delete_one({"id": rid, "campaign_id": cid})
+    return {"deleted": r.deleted_count}
+
+
+# ======================================================================
+# COSMOLOGY — Worldbuilder
+# ======================================================================
+
+COSMOLOGY_KINDS = {"planar_layer", "calendar_month", "cosmic_event",
+                   "omen", "celestial_body"}
+
+
+class CosmologyEntryIn(BaseModel):
+    model_config = {"extra": "forbid"}
+    kind: str = Field(..., max_length=30)
+    name: str = Field(..., max_length=160)
+    summary: Optional[str] = Field(None, max_length=4000)
+    bleed_through_rules: Optional[str] = Field(None, max_length=2000)
+    when_date: Optional[str] = Field(None, max_length=120)
+    order: Optional[conint(ge=0, le=10_000)] = None
+
+
+@router.get("/cosmology/{cid}")
+async def cosmology_list(cid: str, user: dict = Depends(get_current_user)):
+    camp = await _camp_or_404(cid)
+    if not _can_read(user, camp):
+        raise HTTPException(403, "Not a member of this campaign.")
+    rows = await db.cosmology_entries.find({"campaign_id": cid}, {"_id": 0}).sort([("kind", 1), ("order", 1), ("created_at", 1)]).to_list(1000)
+    return {"entries": rows, "writable": _can_write(user, camp)}
+
+
+@router.post("/cosmology/{cid}")
+async def cosmology_create(cid: str, body: CosmologyEntryIn, user: dict = Depends(get_current_user)):
+    await _require_write(user, cid)
+    if body.kind not in COSMOLOGY_KINDS:
+        raise HTTPException(400, f"kind must be one of {sorted(COSMOLOGY_KINDS)}")
+    doc = {"id": new_id(), "campaign_id": cid, **body.model_dump(), "created_at": now_iso()}
+    if doc.get("order") is None:
+        last = await db.cosmology_entries.find_one(
+            {"campaign_id": cid, "kind": body.kind},
+            {"_id": 0, "order": 1}, sort=[("order", -1)],
+        )
+        doc["order"] = ((last or {}).get("order") or 0) + 10
+    await db.cosmology_entries.insert_one(dict(doc))
+    doc.pop("_id", None)
+    return doc
+
+
+@router.patch("/cosmology/{cid}/{rid}")
+async def cosmology_patch(cid: str, rid: str, body: CosmologyEntryIn, user: dict = Depends(get_current_user)):
+    await _require_write(user, cid)
+    if body.kind not in COSMOLOGY_KINDS:
+        raise HTTPException(400, f"kind must be one of {sorted(COSMOLOGY_KINDS)}")
+    upd = {k: v for k, v in body.model_dump().items() if v is not None}
+    upd["updated_at"] = now_iso()
+    await db.cosmology_entries.update_one({"id": rid, "campaign_id": cid}, {"$set": upd})
+    return await db.cosmology_entries.find_one({"id": rid}, {"_id": 0}) or {}
+
+
+@router.delete("/cosmology/{cid}/{rid}")
+async def cosmology_delete(cid: str, rid: str, user: dict = Depends(get_current_user)):
+    await _require_write(user, cid)
+    r = await db.cosmology_entries.delete_one({"id": rid, "campaign_id": cid})
+    return {"deleted": r.deleted_count}
+
+
+# ======================================================================
+# POV BIBLES — Storyteller
+# ======================================================================
+
+class PovBibleIn(BaseModel):
+    model_config = {"extra": "forbid"}
+    name: str = Field(..., max_length=160)
+    linked_character_id: Optional[str] = Field(None, max_length=64)
+    voice_quirks: Optional[str] = Field(None, max_length=4000)
+    vocab_fingerprint: Optional[str] = Field(None, max_length=2000)
+    gait: Optional[str] = Field(None, max_length=1000)
+    want: Optional[str] = Field(None, max_length=2000)
+    need: Optional[str] = Field(None, max_length=2000)
+    wound: Optional[str] = Field(None, max_length=2000)
+    revelations_timeline: Optional[str] = Field(None, max_length=4000)
+
+
+@router.get("/pov-bibles/{cid}")
+async def pov_list(cid: str, user: dict = Depends(get_current_user)):
+    camp = await _camp_or_404(cid)
+    if not _can_read(user, camp):
+        raise HTTPException(403, "Not a member of this campaign.")
+    rows = await db.pov_bibles.find({"campaign_id": cid}, {"_id": 0}).sort("created_at", 1).to_list(500)
+    return {"bibles": rows, "writable": _can_write(user, camp)}
+
+
+@router.post("/pov-bibles/{cid}")
+async def pov_create(cid: str, body: PovBibleIn, user: dict = Depends(get_current_user)):
+    await _require_write(user, cid)
+    doc = {"id": new_id(), "campaign_id": cid, **body.model_dump(), "created_at": now_iso()}
+    await db.pov_bibles.insert_one(dict(doc))
+    doc.pop("_id", None)
+    return doc
+
+
+@router.patch("/pov-bibles/{cid}/{rid}")
+async def pov_patch(cid: str, rid: str, body: PovBibleIn, user: dict = Depends(get_current_user)):
+    await _require_write(user, cid)
+    upd = {k: v for k, v in body.model_dump().items() if v is not None}
+    upd["updated_at"] = now_iso()
+    await db.pov_bibles.update_one({"id": rid, "campaign_id": cid}, {"$set": upd})
+    return await db.pov_bibles.find_one({"id": rid}, {"_id": 0}) or {}
+
+
+@router.delete("/pov-bibles/{cid}/{rid}")
+async def pov_delete(cid: str, rid: str, user: dict = Depends(get_current_user)):
+    await _require_write(user, cid)
+    r = await db.pov_bibles.delete_one({"id": rid, "campaign_id": cid})
+    return {"deleted": r.deleted_count}
+
+
+# ======================================================================
+# THEMES & MOTIFS — Storyteller
+# ======================================================================
+
+class ThemeMotifIn(BaseModel):
+    model_config = {"extra": "forbid"}
+    kind: str = Field(..., max_length=20)   # theme | motif
+    name: str = Field(..., max_length=160)
+    intent: Optional[str] = Field(None, max_length=2000)
+    counter_statement: Optional[str] = Field(None, max_length=2000)
+    cadence: Optional[str] = Field(None, max_length=80)
+    first_occurrence_section_id: Optional[str] = Field(None, max_length=64)
+    related_section_ids: Optional[List[str]] = None
+
+
+@router.get("/themes/{cid}")
+async def themes_list(cid: str, user: dict = Depends(get_current_user)):
+    camp = await _camp_or_404(cid)
+    if not _can_read(user, camp):
+        raise HTTPException(403, "Not a member of this campaign.")
+    rows = await db.themes_motifs.find({"campaign_id": cid}, {"_id": 0}).sort([("kind", 1), ("created_at", 1)]).to_list(500)
+    return {"items": rows, "writable": _can_write(user, camp)}
+
+
+@router.post("/themes/{cid}")
+async def themes_create(cid: str, body: ThemeMotifIn, user: dict = Depends(get_current_user)):
+    await _require_write(user, cid)
+    if body.kind not in {"theme", "motif"}:
+        raise HTTPException(400, "kind must be theme|motif")
+    doc = {"id": new_id(), "campaign_id": cid, **body.model_dump(), "created_at": now_iso()}
+    await db.themes_motifs.insert_one(dict(doc))
+    doc.pop("_id", None)
+    return doc
+
+
+@router.patch("/themes/{cid}/{rid}")
+async def themes_patch(cid: str, rid: str, body: ThemeMotifIn, user: dict = Depends(get_current_user)):
+    await _require_write(user, cid)
+    if body.kind not in {"theme", "motif"}:
+        raise HTTPException(400, "kind must be theme|motif")
+    upd = {k: v for k, v in body.model_dump().items() if v is not None}
+    upd["updated_at"] = now_iso()
+    await db.themes_motifs.update_one({"id": rid, "campaign_id": cid}, {"$set": upd})
+    return await db.themes_motifs.find_one({"id": rid}, {"_id": 0}) or {}
+
+
+@router.delete("/themes/{cid}/{rid}")
+async def themes_delete(cid: str, rid: str, user: dict = Depends(get_current_user)):
+    await _require_write(user, cid)
+    r = await db.themes_motifs.delete_one({"id": rid, "campaign_id": cid})
+    return {"deleted": r.deleted_count}
+

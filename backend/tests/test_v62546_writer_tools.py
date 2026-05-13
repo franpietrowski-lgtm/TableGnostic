@@ -187,14 +187,23 @@ def test_manuscript_tree_crud():
                           timeout=10)
         assert r.status_code == 400
 
-        # 6. PATCH body_md updates word_count
+        # 6. PATCH body_md updates word_count. V6.25.47 — `kind` and
+        # `parent_id` are now immutable on PATCH (Pydantic model omits
+        # them entirely) — clients that send them get 422.
         r = requests.patch(f"{API}/writer/manuscript/{cid}/{sc_id}",
                            headers=_h(admin),
-                           json={"kind": "scene", "title": "The road at dusk",
+                           json={"title": "The road at dusk",
                                  "body_md": "one two three four five six seven eight"},
                            timeout=10)
         assert r.status_code == 200
         assert r.json()["word_count"] == 8
+
+        # 6b. Sending `kind` on PATCH is now rejected with 422.
+        r = requests.patch(f"{API}/writer/manuscript/{cid}/{sc_id}",
+                           headers=_h(admin),
+                           json={"kind": "chapter", "title": "x"},
+                           timeout=10)
+        assert r.status_code == 422, r.text
 
         # 7. Tree shows all 3 with total wordcount = 8
         r = requests.get(f"{API}/writer/manuscript/{cid}", headers=_h(admin),

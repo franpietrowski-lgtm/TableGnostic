@@ -56,8 +56,9 @@ export default function StOutlineTool({ campId }) {
     setBusy(true); setErr("");
     try {
       const cur = (data?.sections || []).find((r) => r.id === sid);
+      // V6.25.47 — drop `kind` from patch payload (immutable post-create).
       await api.patch(`/writer/manuscript/${campId}/${sid}`, {
-        kind: cur.kind, title: cur.title, ...patchObj,
+        title: cur.title, ...patchObj,
       });
       await refresh();
     } catch (e) {
