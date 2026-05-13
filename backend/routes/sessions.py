@@ -220,6 +220,16 @@ async def post_chat(body: ChatIn, user: dict = Depends(get_current_user)):
         "kind": body.kind, "user_id": user["id"], "user_name": user["name"],
         "created_at": now_iso(),
     }
+    # V6.25.43 — tag chat with active scene so the recap engine can
+    # group messages per scene without a join.
+    try:
+        from routes.scenes import attach_active_scene
+        sc = await attach_active_scene(body.session_id)
+        if sc:
+            doc["scene_id"] = sc["id"]
+            doc["scene_slug"] = sc.get("slug")
+    except Exception as e:
+        print(f"[chat:scene-attach] {e}")
     await db.chat_logs.insert_one(doc)
     await broadcast(body.session_id, {"type": "chat", "data": sanitize(doc)})
     return sanitize(doc)

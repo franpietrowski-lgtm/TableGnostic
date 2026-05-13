@@ -149,8 +149,104 @@ async def create_voice_line(
         "transcribed":   bool(text),
         "created_at":    now_iso(),
     }
+
+    # V6.25.43 — tag with the active scene (if any) and auto-forward the
+    # transcription to the session chat + the GM-configured target thread.
+    try:
+        from routes.scenes import attach_active_scene
+        from core.bus import broadcast as _broadcast
+        scene = await attach_active_scene(sid)
+        scene_id = (scene or {}).get("id")
+        target_thread_id = ((scene or {}).get("target_thread_id")
+                            or s.get("default_target_thread_id"))
+        if scene_id:
+            doc["scene_id"] = scene_id
+            doc["scene_slug"] = scene.get("slug")
+    except Exception as e:
+        print(f"[voice_lines:scene-attach] {e}")
+        scene = None
+        scene_id = None
+        target_thread_id = None
+
     await db.voice_lines.insert_one(dict(doc))
     doc.pop("_id", None)
+
+    # ---- Auto-forward to session chat ----------------------------
+    # Players want PTT lines visible inline. Format:
+    #   Character "Name": "transcription"
+    if text:
+        chat_msg = {
+            "id": new_id(),
+            "session_id": sid,
+            "user_id": user["id"],
+            "user_name": user.get("name", "Unknown"),
+            "kind": "voice",  # downstream renderers can style PTT
+            "character_id": character_id,
+            "character_name": char.get("name") or "Unnamed",
+            "message": f'Character "{char.get("name") or "Unnamed"}": "{text}"',
+            "voice_line_id": doc["id"],
+            "scene_id": scene_id,
+            "scene_slug": (scene or {}).get("slug"),
+            "created_at": now_iso(),
+        }
+        try:
+            await db.chat_logs.insert_one(dict(chat_msg))
+            chat_msg.pop("_id", None)
+            await _broadcast(sid, {"type": "chat", "data": chat_msg})
+        except Exception as e:
+            print(f"[voice_lines:chat-mirror] {e}")
+            chat_msg = None
+
+        # ---- Mirror to the configured target thread ----------------
+        if target_thread_id and chat_msg:
+            try:
+                thread_msg = {
+                    "id": new_id(),
+                    "channel_id": None,  # filled below from the thread record
+                    "thread_id": target_thread_id,
+                    "author_id": user["id"],
+                    "author_name": user.get("name", "Unknown"),
+                    "body": f'**{char.get("name") or "Unnamed"}** _(PTT, {(scene or {}).get("slug") or "no-scene"})_:\n\n"{text}"',
+                    "kind": "voice-mirror",
+                    "voice_line_id": doc["id"],
+                    "scene_id": scene_id,
+                    "session_id": sid,
+                    "created_at": now_iso(),
+                    "reactions": [],
+                    "pinned": False,
+                    "edited_at": None,
+                }
+                # Resolve channel_id from thread record (channels.py uses
+                # thread_id → threads table → channel_id chain).
+                th = await db.threads.find_one({"id": target_thread_id},
+                                               {"_id": 0, "channel_id": 1})
+                if th:
+                    thread_msg["channel_id"] = th.get("channel_id")
+                await db.channel_msgs.insert_one(dict(thread_msg))
+                thread_msg.pop("_id", None)
+                await _broadcast(
+                    f"campaign:{s['campaign_id']}:channels",
+                    {"type": "channel:msg", "data": thread_msg},
+                )
+            except Exception as e:
+                print(f"[voice_lines:thread-mirror] {e}")
+
+        # ---- Patch scene participant + ids -------------------------
+        if scene_id:
+            try:
+                upd = {
+                    "$addToSet": {"participant_character_ids": character_id},
+                    "$push": {"voice_line_ids": doc["id"]},
+                }
+                if chat_msg:
+                    # Can't have two $push keys for the same array; this
+                    # array (chat_message_ids) is separate from voice_line_ids
+                    # so we're safe.
+                    upd["$push"]["chat_message_ids"] = chat_msg["id"]
+                await db.scenes.update_one({"id": scene_id}, upd)
+            except Exception as e:
+                print(f"[voice_lines:scene-patch] {e}")
+
     return {"voice_line": doc}
 
 

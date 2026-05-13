@@ -238,10 +238,40 @@ export default function AVSeats({ subscribe, send, sessionTitle, characters = []
       // is null at this moment. The useEffect below handles attachment
       // once the element is in the DOM (fixes "black square" bug).
       setJoined(true);
-      // dial existing peers we're the offerer for
+
+      // V6.25.43 — audio fix: if we received offers from peers BEFORE
+      // joining voice (listen-only state), those PCs have no local
+      // tracks attached, so we transmit silence. Iterate every existing
+      // PC, add our local tracks, then renegotiate via createOffer.
+      // Without this, late-joiners are muted to the table even though
+      // their mic indicator says "on".
+      const tracks = stream.getTracks();
+      for (const [peerConnId, pc] of Object.entries(pcsRef.current)) {
+        try {
+          const existingSenders = pc.getSenders().map((sn) => sn.track?.kind);
+          tracks.forEach((t) => {
+            if (!existingSenders.includes(t.kind)) {
+              pc.addTrack(t, stream);
+            }
+          });
+          // Renegotiate — let the offerer side push a new offer with
+          // the freshly-added tracks. shouldOffer is deterministic so
+          // both sides agree on who pushes.
+          if (meRef.current && shouldOffer(meRef.current.conn_id, peerConnId)) {
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            send({ type: "webrtc:offer", to: peerConnId, data: { sdp: offer } });
+          }
+        } catch (e) {
+          console.warn("late-join renegotiate failed", peerConnId, e);
+        }
+      }
+
+      // dial existing peers we're the offerer for (and for which we
+      // didn't already have a PC above).
       const myId = meRef.current?.conn_id;
       Object.values(peers).forEach((p) => {
-        if (myId && shouldOffer(myId, p.conn_id)) {
+        if (myId && !pcsRef.current[p.conn_id] && shouldOffer(myId, p.conn_id)) {
           dialPeer(p.conn_id, p.name);
         }
       });
@@ -524,6 +554,16 @@ export default function AVSeats({ subscribe, send, sessionTitle, characters = []
 function PeerTile({ peer, characterName, tokenColor, isActive, enlarged, onToggleEnlarge }) {
   const ref = useRef(null);
   const audioRef = useRef(null);
+  // V6.25.43 — per-peer volume (0..1). Persisted in localStorage so the
+  // GM doesn't need to re-balance the call every session. Defaults loud.
+  const storageKey = `av-vol-${peer.conn_id}`;
+  const [volume, setVolume] = useState(() => {
+    try {
+      const v = parseFloat(localStorage.getItem(storageKey));
+      return Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 1;
+    } catch { return 1; }
+  });
+  const [audioBlocked, setAudioBlocked] = useState(false);
   useEffect(() => {
     const v = ref.current;
     const a = audioRef.current;
@@ -535,16 +575,31 @@ function PeerTile({ peer, characterName, tokenColor, isActive, enlarged, onToggl
     // hears no sound": display:none halts media in Chromium and WebKit;
     // a separately-attached <audio> is immune.
     if (a && a.srcObject !== stream) a.srcObject = stream;
+    if (a) a.volume = volume;
     // Defeat autoplay quirks once the user has already gestured (Join voice).
     // Without this, some Chromium builds + Safari hold the element on the
     // first frame and present a black tile until a manual click.
     if (stream) {
       v?.play?.().catch(() => {});
-      a?.play?.().catch(() => {});
+      a?.play?.()
+        .then(() => setAudioBlocked(false))
+        .catch(() => setAudioBlocked(true));
     }
-  }, [peer.stream, peer.camOn]);
+  }, [peer.stream, peer.camOn, volume]);
+
+  // Persist volume on change.
+  useEffect(() => {
+    try { localStorage.setItem(storageKey, String(volume)); } catch {}
+  }, [storageKey, volume]);
+
+  const enableAudio = () => {
+    audioRef.current?.play?.()
+      .then(() => setAudioBlocked(false))
+      .catch(() => {});
+  };
+
   return (
-    <>
+    <div className="flex flex-col items-stretch gap-1">
       <Tile
         name={characterName || peer.name}
         speakerName={characterName ? peer.name : undefined}
@@ -560,12 +615,37 @@ function PeerTile({ peer, characterName, tokenColor, isActive, enlarged, onToggl
         onToggleEnlarge={onToggleEnlarge}
         testId={`av-tile-${peer.conn_id}`}
       />
+      {/* V6.25.43 — per-peer volume slider. Hidden until the peer is
+          actually streaming so it doesn't clutter empty seats. */}
+      {peer.stream && (
+        <div className="flex items-center gap-1 px-1"
+             data-testid={`av-volume-row-${peer.conn_id}`}>
+          <span className="text-[9px] text-mist/70 uppercase tracking-wider w-3">
+            {volume === 0 ? "M" : "♪"}
+          </span>
+          <input
+            type="range" min={0} max={1} step={0.02}
+            value={volume}
+            onChange={(e) => setVolume(parseFloat(e.target.value))}
+            className="w-full h-1 accent-gold"
+            title={`Volume for ${characterName || peer.name}`}
+            data-testid={`av-volume-${peer.conn_id}`}
+          />
+        </div>
+      )}
+      {audioBlocked && peer.stream && (
+        <button type="button" onClick={enableAudio}
+                className="text-[9px] uppercase tracking-wider text-ember underline px-1"
+                data-testid={`av-audio-unblock-${peer.conn_id}`}>
+          Tap to enable audio
+        </button>
+      )}
       {/* Dedicated audio sink — the <video> in Tile can be hidden via
           visibility:hidden when cam is off; this <audio> always plays.
           Lives outside the tile so layout doesn't matter. */}
       <audio ref={audioRef} autoPlay playsInline
              data-testid={`av-audio-${peer.conn_id}`}/>
-    </>
+    </div>
   );
 }
 

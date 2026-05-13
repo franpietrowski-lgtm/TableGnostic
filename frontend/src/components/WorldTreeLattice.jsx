@@ -135,15 +135,46 @@ export default function WorldTreeLattice({
       </div>
 
       <div ref={containerRef} className="relative">
-        {/* SVG overlay (desktop only) — rendered behind the cards. */}
+        {/* SVG overlay (desktop only) — rendered behind the cards.
+            V6.25.43 — replaced straight dashed lines with organic
+            curved Bezier branches and a soft glow so the lattice
+            actually reads as the World Tree it represents (tree
+            limbs reaching between pillars), not a wireframe grid. */}
         <svg
           className="absolute inset-0 pointer-events-none hidden md:block"
           width={bounds.width} height={bounds.height}
           style={{ overflow: "visible", zIndex: 1 }}
           data-testid="lattice-bridges-svg">
+          <defs>
+            {Object.entries(BRIDGE_COLOR).map(([k, hex]) => (
+              <filter key={`glow-${k}`} id={`branch-glow-${k}`}
+                      x="-50%" y="-50%" width="200%" height="200%">
+                <feGaussianBlur stdDeviation="2.2" result="b"/>
+                <feMerge>
+                  <feMergeNode in="b"/>
+                  <feMergeNode in="SourceGraphic"/>
+                </feMerge>
+              </filter>
+            ))}
+          </defs>
           {bridgePositions.map((b) => {
             const stroke = BRIDGE_COLOR[b.srcPillar] || "#9CC4FF";
             const isHover = hoverBridge === b.i;
+            // ---- organic curve ----
+            // Quadratic Bezier with the control point pushed perpendicular
+            // to the segment by ~28% of its length. Stable curl direction
+            // so siblings don't visually cross (sign keyed off bridge id).
+            const mx = (b.x1 + b.x2) / 2;
+            const my = (b.y1 + b.y2) / 2;
+            const dx = b.x2 - b.x1;
+            const dy = b.y2 - b.y1;
+            const len = Math.max(1, Math.hypot(dx, dy));
+            const nx = -dy / len;
+            const ny = dx / len;
+            const curl = (b.i % 2 === 0 ? 1 : -1) * len * 0.28;
+            const cx = mx + nx * curl;
+            const cy = my + ny * curl;
+            const d = `M ${b.x1},${b.y1} Q ${cx},${cy} ${b.x2},${b.y2}`;
             return (
               <g key={b.i}
                  className="pointer-events-auto cursor-pointer"
@@ -151,22 +182,38 @@ export default function WorldTreeLattice({
                  onMouseEnter={() => setHoverBridge(b.i)}
                  onMouseLeave={() => setHoverBridge(null)}
                  data-testid={`lattice-bridge-${b.src}-${b.tgt}`.replace(/[\s.]+/g, "-")}>
-                <line x1={b.x1} y1={b.y1} x2={b.x2} y2={b.y2}
+                {/* Outer soft glow halo — feels like leaf-light catching the branch. */}
+                <path d={d} fill="none"
                       stroke={stroke}
-                      strokeWidth={isHover ? 2.4 : 1.4}
-                      strokeDasharray="5 4"
-                      opacity={isHover ? 0.95 : 0.55}/>
+                      strokeWidth={isHover ? 8 : 5}
+                      strokeOpacity={isHover ? 0.18 : 0.10}
+                      strokeLinecap="round"/>
+                {/* Inner solid branch line — variable width on hover. */}
+                <path d={d} fill="none"
+                      stroke={stroke}
+                      strokeWidth={isHover ? 2.6 : 1.6}
+                      strokeOpacity={isHover ? 0.95 : 0.7}
+                      strokeLinecap="round"
+                      filter={isHover ? `url(#branch-glow-${b.srcPillar})` : undefined}/>
+                {/* Tiny terminus nodes so each branch reads as anchored. */}
+                <circle cx={b.x1} cy={b.y1} r={isHover ? 3 : 2}
+                        fill={stroke}
+                        fillOpacity={isHover ? 0.95 : 0.7}/>
+                <circle cx={b.x2} cy={b.y2} r={isHover ? 3 : 2}
+                        fill={stroke}
+                        fillOpacity={isHover ? 0.95 : 0.7}/>
                 {/* Mid-line label — only rendered on hover so it
-                    doesn't crowd the lattice at rest. */}
+                    doesn't crowd the lattice at rest. Placed on the
+                    control point so it floats along the curve. */}
                 {isHover && (
                   <g>
                     <rect
-                      x={(b.x1 + b.x2) / 2 - 56}
-                      y={(b.y1 + b.y2) / 2 - 10}
+                      x={cx - 56}
+                      y={cy - 10}
                       width={112} height={20}
                       rx={4} fill="#0c0a14" stroke={stroke} strokeOpacity={0.6}/>
-                    <text x={(b.x1 + b.x2) / 2}
-                          y={(b.y1 + b.y2) / 2 + 4}
+                    <text x={cx}
+                          y={cy + 4}
                           textAnchor="middle"
                           fontSize="10" fill={stroke}
                           style={{ fontFamily: "ui-sans-serif" }}>

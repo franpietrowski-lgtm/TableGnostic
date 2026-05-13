@@ -156,6 +156,8 @@ app.include_router(admin_mod_routes.router)
 app.include_router(dynamic_public_routes.router)
 app.include_router(seo_routes.router)
 app.include_router(change_requests_routes.router)
+from routes import scenes as scenes_routes
+app.include_router(scenes_routes.router)
 
 # Static-file mount: serve uploaded battlemap images from disk so GMs can
 # drop in renders from Inkarnate / DungeonCraft / Talespire / RPGEngine

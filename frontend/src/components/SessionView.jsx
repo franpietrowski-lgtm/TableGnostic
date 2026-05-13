@@ -8,6 +8,7 @@ import Battlemap from "./Battlemap";
 import XPAwardPanel from "./XPAwardPanel";
 import MacroBar from "./MacroBar";
 import PushToTalkButton from "./PushToTalkButton";
+import SceneSwitcher from "./SceneSwitcher";
 import EncounterDesigner from "./EncounterDesigner";
 import QuickCastDock from "./QuickCastDock";
 import EncountersLibrary from "./EncountersLibrary";
@@ -478,7 +479,14 @@ export default function SessionView() {
         </form>
         {/* V6.25.36 — Push-to-talk for in-character speech. Audio is
             transcribed by Whisper and folded into the recap chronicle
-            (NOT into player journals — those stay a player's own POV). */}
+            (NOT into player journals — those stay a player's own POV).
+            V6.25.43 — wrapped above with the Scene Switcher so the GM
+            can segment a session into named beats and PTT auto-mirrors
+            into the active scene's target thread. */}
+        <SceneSwitcher sessionId={id}
+                       campaignId={campaign?.id || session?.campaign_id}
+                       isGm={!!campaign?.is_gm || campaign?.gm_id === user?.id}
+                       subscribe={wsSubscribe}/>
         <div className="flex items-center justify-between gap-2 mt-2">
           <PushToTalkButton sessionId={id}
                             characterId={characterId}

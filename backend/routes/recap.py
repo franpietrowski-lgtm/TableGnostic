@@ -49,6 +49,10 @@ async def generate_recap(sid: str, body: RecapIn,
     voice = await db.voice_lines.find(
         {"session_id": sid, "transcribed": True}, {"_id": 0}
     ).sort("started_at", 1).to_list(400)
+    # V6.25.43 — pull scenes so the recap engine can segment by scene.
+    scenes = await db.scenes.find(
+        {"session_id": sid}, {"_id": 0},
+    ).sort("scene_no", 1).to_list(200)
     chars = await db.characters.find(
         {"campaign_id": s["campaign_id"]},
         {"_id": 0, "name": 1, "concept": 1},
@@ -57,32 +61,68 @@ async def generate_recap(sid: str, body: RecapIn,
     if not chat:
         raise HTTPException(400, "No chat history yet to recap")
 
-    transcript_lines = []
-    for m in chat[-200:]:
-        kind = m.get("kind", "chat")
-        prefix = "[SYSTEM]" if kind == "system" else f"[{kind.upper()}]"
-        transcript_lines.append(f"{prefix} {m.get('user_name','?')}: {m.get('message','')}")
-    dice_summary = []
-    for d in dice[-60:]:
-        r = d.get("result", {})
-        label = d.get("label") or d.get("notation", "")
-        dice_summary.append(f"  • {d.get('user_name','?')} rolled {d.get('notation','?')} = {r.get('total','?')} ({label})")
+    # ----- Per-scene segmentation -----------------------------------
+    # Build a map scene_id -> {meta, chat[], voice[], dice[]}. Anything
+    # without a scene_id falls under the synthetic "pre-scene" bucket.
+    buckets: dict = {None: {"meta": None, "chat": [], "voice": [], "dice": []}}
+    for sc in scenes:
+        buckets[sc["id"]] = {"meta": sc, "chat": [], "voice": [], "dice": []}
+    for m in chat:
+        b = buckets.get(m.get("scene_id")) or buckets[None]
+        b["chat"].append(m)
+    for v in voice:
+        b = buckets.get(v.get("scene_id")) or buckets[None]
+        b["voice"].append(v)
+    for d in dice:
+        b = buckets.get(d.get("scene_id")) or buckets[None]
+        b["dice"].append(d)
+
+    def _bucket_block(label: str, b: dict) -> str:
+        lines = [f"\n### {label}"]
+        meta = b.get("meta") or {}
+        if meta.get("location_label"):
+            lines.append(f"_Location: {meta['location_label']}"
+                         + (f" — {meta.get('location_description','')[:300]}"
+                            if meta.get('location_description') else "")
+                         + "_")
+        if meta.get("participant_character_ids"):
+            lines.append(f"_Participants: {len(meta['participant_character_ids'])} character(s)_")
+        if meta.get("gm_narration"):
+            for n in meta["gm_narration"][:20]:
+                lines.append(f"  ◆ GM narration: {n.get('text','')}")
+        for m in b["chat"][-120:]:
+            kind = m.get("kind", "chat")
+            prefix = "[SYSTEM]" if kind == "system" else f"[{kind.upper()}]"
+            lines.append(f"{prefix} {m.get('user_name','?')}: {m.get('message','')}")
+        for v in b["voice"][-60:]:
+            t = (v.get("text") or "").strip()
+            if t:
+                lines.append(f"  • {v.get('character_name','?')} (in-character): \"{t}\"")
+        for d in b["dice"][-30:]:
+            r = d.get("result", {})
+            lbl = d.get("label") or d.get("notation", "")
+            lines.append(f"  • {d.get('user_name','?')} rolled "
+                         f"{d.get('notation','?')} = {r.get('total','?')} ({lbl})")
+        return "\n".join(lines)
+
+    segmented_blocks = []
+    # Render pre-scene first only if it has anything.
+    pre = buckets[None]
+    if pre["chat"] or pre["voice"] or pre["dice"]:
+        segmented_blocks.append(_bucket_block("Pre-scene / Unscoped", pre))
+    for sc in scenes:
+        b = buckets[sc["id"]]
+        segmented_blocks.append(_bucket_block(
+            f"{sc.get('name')} (`{sc.get('slug')}`)", b,
+        ))
+    segmented_text = "\n".join(segmented_blocks) or "(no transcript)"
 
     char_lines = "\n".join(f"  • {c['name']} — {c.get('concept','')}" for c in chars[:20]) or "  (none)"
-    transcript = "\n".join(transcript_lines[-180:])
-    dice_block = "\n".join(dice_summary[-40:]) or "  (none)"
-    # V6.25.36 — In-character speech lines from push-to-talk. We mark
-    # them as IN-CHARACTER so the LLM treats them as the character
-    # speaking (not the player narrating).
-    voice_block = "\n".join(
-        f"  • [{v.get('started_at','?')}] {v.get('character_name','?')} (in-character): \"{v.get('text','').strip()}\""
-        for v in voice[-80:] if (v.get("text") or "").strip()
-    ) or "  (none)"
 
     style_instruction = {
-        "narrative": "Write a flowing narrative recap (~180–240 words) in third-person past tense. Capture the emotional beats, the pivotal rolls, and any unanswered questions. Skip dice mechanics that didn't matter.",
-        "bullet": "Write a tight bulleted recap. Group by: What happened · Who acted · What changed · Open threads. Keep each bullet to one line.",
-        "in-character": "Write the recap as a journal entry from one of the player characters' perspective (pick whoever was most active). First-person, evocative, ~200 words.",
+        "narrative": "Write a flowing narrative recap (~180–240 words per scene) in third-person past tense. PRESERVE the scene structure — open each scene with its slug header, then the prose. Capture emotional beats, pivotal rolls, and any unanswered questions. Skip dice mechanics that didn't matter.",
+        "bullet": "Write a tight bulleted recap, grouped per scene. For each scene emit a header line with its slug, then bullets: What happened · Who acted · What changed · Open threads.",
+        "in-character": "Write the recap as a journal entry from one of the player characters' perspective (pick whoever was most active). First-person, evocative, ~150 words per scene. Use the scene slug as a date-stamp.",
     }[body.style]
 
     system_prompt = (
@@ -90,15 +130,14 @@ async def generate_recap(sid: str, body: RecapIn,
         f"({camp.get('system','BESM 4E')}, {camp.get('power_level','Heroic')} tier). "
         f"Tone: {camp.get('tone') or 'unspecified'}. Genre: {camp.get('genre') or 'unspecified'}. "
         f"Your job: turn raw session logs into a recap the table will love rereading. "
+        f"The session is segmented into SCENES — preserve that segmentation in your output. "
         f"Never invent details that aren't in the transcript. Honour the players. {style_instruction}"
     )
     user_prompt = (
         f"Session: \"{s.get('title','Untitled session')}\" (round {s.get('round',0)}).\n\n"
         f"Characters at the table:\n{char_lines}\n\n"
-        f"Transcript:\n{transcript}\n\n"
-        f"Notable dice:\n{dice_block}\n\n"
-        f"In-character voice lines (push-to-talk; the CHARACTER spoke, not the player):\n{voice_block}\n\n"
-        f"Now write the recap."
+        f"Scene-segmented transcript (the # SCENE headers below MUST be preserved as section dividers in your recap):\n{segmented_text}\n\n"
+        f"Now write the recap, scene by scene."
     )
 
     try:

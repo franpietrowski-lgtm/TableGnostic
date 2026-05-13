@@ -167,8 +167,10 @@ export default function AtelierTab({ campId, camp }) {
         </div>
       </div>
 
-      {/* V6.8 — Sub-tab strip. Genesis / Epic / Timeline / References /
-          Workshop are now distinct authoring surfaces. */}
+      {/* V6.8 — Sub-tab strip. Genesis / Epic / Timeline / Workshop are
+          distinct authoring surfaces. V6.25.43 — removed redundant
+          "References" sub-tab (it just redirected to Table Tools and
+          the main Reference page). */}
       <div className="flex flex-wrap gap-1 border-b border-gold/15 pb-2"
            data-testid="atelier-subtabs">
         {[
@@ -178,7 +180,6 @@ export default function AtelierTab({ campId, camp }) {
           ["genesis",    "Genesis (7 Phases)"],
           ["epic",       "Epic Campaign"],
           ["timeline",   "Timeline"],
-          ["references", "References"],
         ].map(([k, label]) => (
           <button key={k} onClick={() => setSubtab(k)}
                   className={`text-[11px] px-3 py-1.5 rounded-sm font-ui uppercase tracking-widest transition-colors ${subtab === k ? "bg-gold/15 text-gold-bright border border-gold/30" : "text-mist hover:bg-gold/5"}`}
@@ -218,27 +219,6 @@ export default function AtelierTab({ campId, camp }) {
       )}
 
       <Suspense fallback={<SubtabFallback/>}>
-      {subtab === "references" && (
-        <div data-testid="atelier-references-pane" className="space-y-4">
-          <div className="card-mystic p-4 border-arcane/30"
-               data-testid="atelier-references-relocation-notice">
-            <div className="label-ref text-arcane-light mb-1">References moved</div>
-            <div className="text-[11px] text-mist leading-snug">
-              The Reference Tables editor now lives on <b>Atelier ▸ Table Tools</b>,
-              where it sits next to your other GM authoring tools. The full system
-              reference catalogue (Cypher, BESM, Anime 5E, etc.) lives on the main
-              <b> Reference</b> page (toolbar ▸ Reference). World narrative goes in
-              the <b>Codex</b>; system rules &amp; mechanics go in <b>References</b>.
-            </div>
-            <button onClick={() => setSubtab("table-tools")}
-                    className="btn btn-primary text-xs mt-3"
-                    data-testid="atelier-references-jump-to-tabletools">
-              Open Table Tools →
-            </button>
-          </div>
-        </div>
-      )}
-
       {subtab === "table-tools" && (
         <div data-testid="atelier-table-tools-pane" className="space-y-6">
           <AtelierWorkshop campId={campId}/>
@@ -268,7 +248,7 @@ export default function AtelierTab({ campId, camp }) {
 
       <div className="text-[11px] text-mist/60 italic px-1" data-testid="atelier-ref-moved-note">
         Looking for the campaign Reference tables and the GM Quickstart instructions?
-        Switch to the <button onClick={() => setSubtab("references")} className="text-gold-bright underline">References</button> sub-tab above, or open <Link to={`/app/campaigns/${campId}/genesis`} className="text-gold-bright underline">Genesis</Link> for the full 7-phase plot designer.
+        Switch to the <button onClick={() => setSubtab("table-tools")} className="text-gold-bright underline">Table Tools</button> sub-tab above, or open <Link to={`/app/campaigns/${campId}/genesis`} className="text-gold-bright underline">Genesis</Link> for the full 7-phase plot designer.
       </div>
 
       {/* ---------- Session 0 ---------- */}

@@ -1,0 +1,33 @@
+{
+  "summary": "V6.25.43 backend-only testing — Scene Switcher + regression. 25/25 tests passed against live preview backend. Scene lifecycle (create/auto-close/close-with-confirm-guard/no-retcons), slug format `scene{N}-session{N}_{campaign-slug}`, GM-only RBAC, chat scene-tagging while active, default-thread admin-only setter, and chat-without-active-scene have no scene_id — all verified. Regression V6.25.41 auto-queue (5) and V6.25.42 e2e (17) all green.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_v62543_scenes.py",
+    "/app/backend/tests/test_v62543_scenes_supplemental.py",
+    "/app/backend/tests/test_v62541_auto_queue.py",
+    "/app/backend/tests/test_v62542_e2e_live.py",
+    "/app/test_reports/pytest/iter76_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Frontend UI presence checks (atelier-subtab-references removed, scene-switcher visible for GM, av-volume-{id} slider, lattice-bridges-svg has <path>) were SKIPPED per testing_type=backend only — main agent should verify these via UI or follow-up frontend testing iteration.",
+    "Background reseed script (PID 523, v62543_evereantha_reseed.py) was left running as instructed; it writes only to campaign af461ae0... and did not interfere with ephemeral test campaigns."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_v62543_scenes_supplemental.py (NEW — extras: scenes list endpoint + chat-without-active-scene)"
+  ],
+  "success_rate": {"backend": "100% (25/25)", "frontend": "skipped"},
+  "test_credentials": "Admin tablegnostic-admin@tablegnostic.com / LoremasterAurea2026!Forge and Player albanaszak@ymail.com / AuroraTest123! both verified working on live preview backend.",
+  "seed_data_creation": "Each test creates ephemeral campaign+session prefixed SceneTestCampaign-/SceneSupCampaign- and deletes them in finally block. No persistent test pollution.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All V6.25.43 backend surfaces (scenes lifecycle, slug shape, confirm guard, no-retcons, chat scene tagging both with and without active scene, default-thread, list endpoint) covered. For frontend coverage in next iteration: verify (1) AtelierTab has no `data-testid=atelier-subtab-references` but still has `atelier-subtab-table-tools` + `atelier-subtab-genesis`; (2) SceneSwitcher visible to GM with scene-start-btn opening scene-start-modal containing scene-start-name/location/thread + scene-start-modal-confirm; (3) AVSeats per-peer `av-volume-{conn_id}` slider rendered when peer has stream; (4) WorldTreeLattice `lattice-bridges-svg` contains <path> elements (Bezier curves) instead of <line>."
+}
