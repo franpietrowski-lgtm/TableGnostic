@@ -17,6 +17,14 @@ import {
   Map as MapIcon, Sparkles, Globe2, Library, Compass,
   PenTool, Feather, ListTree, Target,
 } from "lucide-react";
+// V6.25.46 — real authoring tools replacing the scaffold placeholders
+// for Atlas, Magic Architect, Manuscript, and Outline. The remaining
+// 4 (Cultures, Cosmology, POV Bibles, Themes) stay scaffolded with
+// "coming next ship" honest labels until their backend lands.
+import WbAtlasTool from "./WbAtlasTool";
+import WbMagicArchitectTool from "./WbMagicArchitectTool";
+import StManuscriptTool from "./StManuscriptTool";
+import StOutlineTool from "./StOutlineTool";
 
 const ROLE_THEME = {
   worldbuilder: {
@@ -30,6 +38,34 @@ const ROLE_THEME = {
     ring: "border-rose-800/30",
   },
 };
+
+/**
+ * V6.25.46 — Campaign-picker stub.
+ *
+ * The real-tool surfaces (Atlas, Magic Architect, Manuscript, Outline)
+ * are campaign-scoped — they need to know WHICH campaign's data to
+ * load. When mounted as a standalone `/app/wb/atlas` (no campaign
+ * context), we route the user to pick a campaign first. When mounted
+ * inside the Atelier (`campId` prop set), they render directly.
+ */
+function PickCampaignFirst({ label, testid }) {
+  return (
+    <div className="p-8 max-w-xl mx-auto card-mystic" data-testid={testid}>
+      <div className="label-ref text-gold-bright mb-2">{label}</div>
+      <div className="text-mist leading-relaxed">
+        This authoring tool is campaign-scoped. Open one of your
+        campaigns and switch to <b>Atelier ▸ Worldbuilder Studio</b> (or
+        <b> Storyteller Workshop</b>) to use it. Standalone access from
+        the writer-role nav is coming in a future drop.
+      </div>
+      <a href="/app/campaigns"
+         className="btn btn-primary text-xs mt-4 inline-flex items-center gap-1"
+         data-testid={`${testid}-pick-campaign`}>
+        Open Campaigns →
+      </a>
+    </div>
+  );
+}
 
 function ScaffoldPage({ role, title, icon: Icon, blurb, bullets, testid }) {
   const t = ROLE_THEME[role];
@@ -53,7 +89,8 @@ function ScaffoldPage({ role, title, icon: Icon, blurb, bullets, testid }) {
           ))}
         </div>
         <div className={`mt-6 text-[11px] uppercase tracking-widest ${t.accent} italic`}>
-          Authoring tools land in the next ship. The role + nav swap is live now so you can plan your workflow.
+          Coming in V6.25.47 — Atlas, Magic Architect, Manuscript, and Outline
+          shipped real tools first. The role + nav swap is live now.
         </div>
       </div>
     </div>
@@ -62,28 +99,17 @@ function ScaffoldPage({ role, title, icon: Icon, blurb, bullets, testid }) {
 
 /* ---------- Worldbuilder pages ---------- */
 
-export function WbAtlas() {
-  return <ScaffoldPage role="worldbuilder" title="World Atlas" icon={MapIcon}
-    testid="wb-atlas-page"
-    blurb="Continents, regions, biomes, and the politics that bend them. Pin your map, tag each region with culture / climate / hostility, and watch the codex graph mirror your geography."
-    bullets={[
-      "Continent → region → settlement hierarchy with quick navigation.",
-      "Biome / climate tags drive auto-suggested flora & fauna prompts.",
-      "Map upload + pinned-location overlay (auto-syncs with codex location nodes).",
-      "Border / trade-route layer toggles for political conflict planning.",
-    ]}/>;
+export function WbAtlas({ campId }) {
+  // V6.25.46 — campId may come from Atelier-embedded usage. For the
+  // standalone /app/wb/atlas route, campId is undefined; the user
+  // must pick which campaign's atlas they want to edit first.
+  if (!campId) return <PickCampaignFirst label="Atlas" testid="wb-atlas-page"/>;
+  return <WbAtlasTool campId={campId}/>;
 }
 
-export function WbMagicArchitect() {
-  return <ScaffoldPage role="worldbuilder" title="Magic-System Architect" icon={Sparkles}
-    testid="wb-magic-architect-page"
-    blurb="Define the rules of magic before you write the spells. Source → channel → cost → consequence. Whose power, what it does, what it takes, what it leaves behind."
-    bullets={[
-      "Primary Sources (your Faces of Aurae / Mortiscure model — weighted, not pantheonic).",
-      "Channels: who or what can invoke each source (race, class, item, environment).",
-      "Costs & limits: per invocation, per day, per soul — pick a paradigm.",
-      "Side-effect ledger: when magic is used, what changes in the world?",
-    ]}/>;
+export function WbMagicArchitect({ campId }) {
+  if (!campId) return <PickCampaignFirst label="Magic Architect" testid="wb-magic-architect-page"/>;
+  return <WbMagicArchitectTool campId={campId}/>;
 }
 
 export function WbCultures() {
@@ -112,28 +138,14 @@ export function WbCosmology() {
 
 /* ---------- Storyteller pages ---------- */
 
-export function StManuscript() {
-  return <ScaffoldPage role="storyteller" title="Manuscript" icon={PenTool}
-    testid="st-manuscript-page"
-    blurb="Chapter / scene / beat in one place. Distraction-free composition mode, word-count goals, and an outline you can collapse without losing the prose under it."
-    bullets={[
-      "Chapters → Scenes → Beats tree with drag-to-reorder.",
-      "Focus-mode editor (markdown + soft-typewriter).",
-      "Daily word-count target with streak tracking.",
-      "Auto-snapshot every save with rollback.",
-    ]}/>;
+export function StManuscript({ campId }) {
+  if (!campId) return <PickCampaignFirst label="Manuscript" testid="st-manuscript-page"/>;
+  return <StManuscriptTool campId={campId}/>;
 }
 
-export function StOutline() {
-  return <ScaffoldPage role="storyteller" title="Outline & Beats" icon={ListTree}
-    testid="st-outline-page"
-    blurb="Pick a structural template (3-act, Hero's Journey, Save the Cat, Story Circle) or freestyle. Drag beats around; the manuscript view updates in lockstep."
-    bullets={[
-      "Pre-loaded structural templates with editable beat list.",
-      "Per-beat status (planned · drafted · revised · cut).",
-      "Tension graph: rate each beat 1–5 to visualise pacing.",
-      "Subplot lanes: parallel threads against the main arc.",
-    ]}/>;
+export function StOutline({ campId }) {
+  if (!campId) return <PickCampaignFirst label="Outline & Beats" testid="st-outline-page"/>;
+  return <StOutlineTool campId={campId}/>;
 }
 
 export function StPovBibles() {

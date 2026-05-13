@@ -3,6 +3,10 @@ import { Link } from "react-router-dom";
 import { api, formatApiErrorDetail } from "../lib/api";
 import { Plus, X, AlertTriangle, CheckCircle2, Save, Layers, ListTree, ScrollText, FileDown } from "lucide-react";
 import IngestPanel from "./IngestPanel";
+import {
+  WbAtlas, WbMagicArchitect, WbCultures, WbCosmology,
+  StManuscript, StOutline, StPovBibles, StThemes,
+} from "./writers/WriterPages";
 
 // V6.25.26 — lazy-split heavy sub-tab panels so the initial Atelier
 // load isn't bottlenecked on Cypher/Crafting/WorldTree code that the
@@ -170,7 +174,10 @@ export default function AtelierTab({ campId, camp }) {
       {/* V6.8 — Sub-tab strip. Genesis / Epic / Timeline / Workshop are
           distinct authoring surfaces. V6.25.43 — removed redundant
           "References" sub-tab (it just redirected to Table Tools and
-          the main Reference page). */}
+          the main Reference page). V6.25.46 — added Worldbuilder Studio
+          and Storyteller Workshop so GMs can use the same writer tools
+          (Atlas, Magic Architect, Manuscript, Outline, etc) from inside
+          the campaign authoring surface, without leaving their primer. */}
       <div className="flex flex-wrap gap-1 border-b border-gold/15 pb-2"
            data-testid="atelier-subtabs">
         {[
@@ -180,6 +187,8 @@ export default function AtelierTab({ campId, camp }) {
           ["genesis",    "Genesis (7 Phases)"],
           ["epic",       "Epic Campaign"],
           ["timeline",   "Timeline"],
+          ["wb-studio",  "Worldbuilder Studio"],
+          ["st-workshop","Storyteller Workshop"],
         ].map(([k, label]) => (
           <button key={k} onClick={() => setSubtab(k)}
                   className={`text-[11px] px-3 py-1.5 rounded-sm font-ui uppercase tracking-widest transition-colors ${subtab === k ? "bg-gold/15 text-gold-bright border border-gold/30" : "text-mist hover:bg-gold/5"}`}
@@ -188,6 +197,113 @@ export default function AtelierTab({ campId, camp }) {
           </button>
         ))}
       </div>
+
+      {/* V6.25.46 — Worldbuilder Studio: full reuse of the writer-role
+          Atlas / Magic Architect / Cultures / Cosmology pages. Same
+          components so any improvement to the worldbuilder workflow
+          ripples to GMs immediately. campId is passed through so each
+          tool can scope to the current campaign. */}
+      {subtab === "wb-studio" && (
+        <div data-testid="atelier-wb-studio-pane" className="space-y-3">
+          <div className="flex flex-wrap gap-1">
+            {[
+              ["wb-atlas",     "Atlas"],
+              ["wb-magic",     "Magic Architect"],
+              ["wb-cultures",  "Cultures"],
+              ["wb-cosmology", "Cosmology"],
+            ].map(([k, label]) => (
+              <button key={k} onClick={() => setSubtab(k)}
+                      className="text-[11px] px-3 py-1.5 rounded-sm font-ui uppercase tracking-widest transition-colors text-emerald-300 border border-emerald-700/30 hover:bg-emerald-900/15"
+                      data-testid={`atelier-wbsub-${k}`}>
+                {label} →
+              </button>
+            ))}
+          </div>
+          <div className="text-[11px] text-mist/70 italic">
+            Worldbuilder tools embedded in your campaign Atelier. Same components the standalone Worldbuilder role uses — work in either place, the data lives on this campaign.
+          </div>
+        </div>
+      )}
+      {subtab === "wb-atlas" && (
+        <Suspense fallback={<SubtabFallback/>}>
+          <div data-testid="atelier-wb-atlas-pane">
+            <WbAtlas campId={campId}/>
+          </div>
+        </Suspense>
+      )}
+      {subtab === "wb-magic" && (
+        <Suspense fallback={<SubtabFallback/>}>
+          <div data-testid="atelier-wb-magic-pane">
+            <WbMagicArchitect campId={campId}/>
+          </div>
+        </Suspense>
+      )}
+      {subtab === "wb-cultures" && (
+        <Suspense fallback={<SubtabFallback/>}>
+          <div data-testid="atelier-wb-cultures-pane">
+            <WbCultures campId={campId}/>
+          </div>
+        </Suspense>
+      )}
+      {subtab === "wb-cosmology" && (
+        <Suspense fallback={<SubtabFallback/>}>
+          <div data-testid="atelier-wb-cosmology-pane">
+            <WbCosmology campId={campId}/>
+          </div>
+        </Suspense>
+      )}
+
+      {/* V6.25.46 — Storyteller Workshop: full reuse of the Manuscript /
+          Outline / POV Bibles / Themes pages. */}
+      {subtab === "st-workshop" && (
+        <div data-testid="atelier-st-workshop-pane" className="space-y-3">
+          <div className="flex flex-wrap gap-1">
+            {[
+              ["st-manuscript", "Manuscript"],
+              ["st-outline",    "Outline & Beats"],
+              ["st-pov",        "POV Bibles"],
+              ["st-themes",     "Themes & Motifs"],
+            ].map(([k, label]) => (
+              <button key={k} onClick={() => setSubtab(k)}
+                      className="text-[11px] px-3 py-1.5 rounded-sm font-ui uppercase tracking-widest transition-colors text-rose-300 border border-rose-700/30 hover:bg-rose-900/15"
+                      data-testid={`atelier-stsub-${k}`}>
+                {label} →
+              </button>
+            ))}
+          </div>
+          <div className="text-[11px] text-mist/70 italic">
+            Storyteller tools for prose, beats, and theme tracking — campaign-scoped versions of the standalone Storyteller role surfaces.
+          </div>
+        </div>
+      )}
+      {subtab === "st-manuscript" && (
+        <Suspense fallback={<SubtabFallback/>}>
+          <div data-testid="atelier-st-manuscript-pane">
+            <StManuscript campId={campId}/>
+          </div>
+        </Suspense>
+      )}
+      {subtab === "st-outline" && (
+        <Suspense fallback={<SubtabFallback/>}>
+          <div data-testid="atelier-st-outline-pane">
+            <StOutline campId={campId}/>
+          </div>
+        </Suspense>
+      )}
+      {subtab === "st-pov" && (
+        <Suspense fallback={<SubtabFallback/>}>
+          <div data-testid="atelier-st-pov-pane">
+            <StPovBibles campId={campId}/>
+          </div>
+        </Suspense>
+      )}
+      {subtab === "st-themes" && (
+        <Suspense fallback={<SubtabFallback/>}>
+          <div data-testid="atelier-st-themes-pane">
+            <StThemes campId={campId}/>
+          </div>
+        </Suspense>
+      )}
 
       {subtab === "genesis" && (
         <div data-testid="atelier-genesis-pane">
