@@ -16,6 +16,7 @@ import DeltaDropPanel from "./DeltaDropPanel";
 import { SeatApplicationsPanel, ConsentRollPanel } from "./ConsentPanel";
 import PrivateAccessPanel from "./PrivateAccessPanel";
 import CostOverridesPanel from "./CostOverridesPanel";
+import ChangeRequestsPanel, { ApprovalSettingCard } from "./ChangeRequestsPanel";
 import { useAuth } from "../lib/api";
 import { NODE_TYPES, NODE_TEMPLATES, colorForType, labelForType } from "../lib/nodeTemplates";
 
@@ -896,6 +897,8 @@ function InviteTab({ camp, onRefresh }) {
       </div>
       <CanonPublishCard camp={camp} onRefresh={onRefresh}/>
       <DiscoverPublishCard camp={camp} onRefresh={onRefresh}/>
+      <ApprovalSettingCard camp={camp} onRefresh={onRefresh}/>
+      <ChangeRequestsPanel camp={camp}/>
       {/* V6.25.17 — campaign-level password + named share-links. */}
       <PrivateAccessPanel camp={camp} onRefresh={onRefresh}/>
       {/* V6.21 — GM/Player consent flow: seat applications queue +

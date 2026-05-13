@@ -62,24 +62,36 @@ export default function DiscoverShowcase() {
     const prev = document.title;
     if (data?.campaign?.name) {
       document.title = `${data.campaign.name} — TableGnostics Showcase`;
-      const setMeta = (name, content) => {
-        let el = document.querySelector(`meta[name="${name}"]`);
+      const setMeta = (name, content, kind = "name") => {
+        let el = document.querySelector(`meta[${kind}="${name}"]`);
         if (!el) {
           el = document.createElement("meta");
-          el.setAttribute("name", name);
+          el.setAttribute(kind, name);
           document.head.appendChild(el);
         }
         el.setAttribute("content", content);
       };
-      setMeta(
-        "description",
-        (data.campaign.blurb || `${data.campaign.name} — a public TableGnostics campaign showcase.`).slice(0, 220)
-      );
+      const desc = (data.campaign.blurb
+        || `${data.campaign.name} — a public TableGnostics campaign showcase.`).slice(0, 220);
+      const ogImage = `${process.env.REACT_APP_BACKEND_URL}/api/seo/og/${slug}.svg`;
+      const ogUrl = `https://tablegnostic.com/discover/${slug}`;
+      setMeta("description", desc);
+      // V6.25.41 — Open Graph tags so Discord/FB/Twitter/LinkedIn unfurl
+      // every showcase with a proper sigil card.
+      setMeta("og:title", `${data.campaign.name} — TableGnostics`, "property");
+      setMeta("og:description", desc, "property");
+      setMeta("og:image", ogImage, "property");
+      setMeta("og:url", ogUrl, "property");
+      setMeta("og:type", "website", "property");
+      setMeta("twitter:card", "summary_large_image");
+      setMeta("twitter:title", `${data.campaign.name} — TableGnostics`);
+      setMeta("twitter:description", desc);
+      setMeta("twitter:image", ogImage);
     }
     return () => {
       document.title = prev;
     };
-  }, [data]);
+  }, [data, slug]);
 
   if (error) {
     return (

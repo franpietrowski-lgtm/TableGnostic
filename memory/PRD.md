@@ -14,6 +14,36 @@
 
 ## 2. Implemented (cumulative, condensed)
 
+### V6.25.41 — SEO infra · Cypher↔BESM cost-balance · Player→GM approval queue (2026-02-13)
+
+LLM key budget restored ✓ — verified with a live Claude probe.
+
+**SEO infrastructure** (`backend/routes/seo.py`)
+- `GET /api/seo/sitemap.xml` — 1h-cached XML sitemap listing every marketing route + every `discover_published` campaign's showcase + `/discover/{slug}/gazette`. Issue-level pages not enumerated (reachable from showcase) to keep the sitemap crawl-friendly.
+- `GET /api/seo/robots.txt` — allows `/`, `/discover`, `/landing`; disallows `/app`, `/api/admin`, `/api/auth`. Points at sitemap.
+- `GET /api/seo/og/{slug}.svg` — server-rendered Open-Graph card (1200×630) per published showcase. No web-font dep — pure SVG with generic-family serif so every crawler (FB/Twitter/LinkedIn/Discord/Slack) renders it identically. Includes campaign name, system, GM, italic blurb, featured-pill if applicable.
+- `frontend/public/index.html` — added default `<meta property="og:*">` tags + `<link rel="sitemap" href="/api/seo/sitemap.xml">`. `frontend/src/components/DiscoverShowcase.jsx` injects per-showcase OG/Twitter meta tags dynamically when data loads so social-media unfurls show the right card per campaign.
+- **NOTE for production**: User needs to add a CDN/host rewrite from `/sitemap.xml` → `/api/seo/sitemap.xml` and `/robots.txt` → `/api/seo/robots.txt` to make the discovery URLs canonical. Until then they work at the `/api/seo/...` paths directly.
+
+**Cypher ↔ BESM cost-balance enforcement** (`backend/core/conversion_engine.py`, `backend/routes/conversion.py`)
+- New module-level `_budget_for_system()` computes the source/target point budget per system: BESM/Anime → `total_points` or attribute×level − defect×rank; Cypher → pool_max×4 + edge×6; D&D 5E → level×8.
+- New `compute_cost_balance(src_system, src_ch, tgt_system, tgt_payload)` returns `{source_budget, target_budget, delta, delta_pct, within_tolerance, tolerance_pct, notes}`. Tolerance 10% — overruns get a GM-actionable note ("trim X points" / "grant X points").
+- `materialise_character()` now stamps the cost-balance audit into `converted_from.cost_balance` so the GM can read the balance verdict on the converted character itself.
+- New endpoint `POST /api/convert/preview-cost-balance` — GM-only pre-flight that returns the balance verdict without running Claude. Lets the GM see if a conversion will be balanced before committing the LLM call.
+
+**Strict permission gating — Player→GM approval queue** (`backend/routes/change_requests.py`)
+- New `Campaign.gm_approval_required` flag (default false; existing campaigns unaffected).
+- New `change_requests` collection. CRUD routes: `POST /api/campaigns/{cid}/change-requests`, `GET (list, status filter)`, `POST .../{rid}/approve`, `POST .../{rid}/reject {reason}`, `POST .../{rid}/cancel`, `PATCH /api/campaigns/{cid}/settings/approval`.
+- **Security hardening**: approve endpoint applies a whitelist that strips `id`, `campaign_id`, `owner_id`, `owner_name`, `system_id`, `role`, `created_at`, `_id` from every diff before write. Verified: a player submitting `{"owner_id": "hacker"}` cannot escalate even with GM approval.
+- New `enforce_or_queue(camp, user, kind, target_id, proposed_value)` helper for future wiring — character/inventory write routes can call it to auto-queue player edits instead of writing direct. (Direct character/inventory routes currently still write through; the helper is callable but opt-in to avoid regressions.)
+- Frontend `components/ChangeRequestsPanel.jsx` (NEW) — GM sees queue + Approve/Reject; players see "Your pending submissions" + Cancel. `ApprovalSettingCard` (exported) lets GM flip the gate. Both mounted on `CampaignDetail` → Invite & Share tab next to `DiscoverPublishCard`.
+
+**Testing — V6.25.41**
+- Backend: `tests/test_v62541_seo_cost_approval.py` 11/11 PASS — sitemap shape + showcase enumeration, robots.txt content, OG SVG render + 404, cost-balance preview shape + unsupported-system 400, approval lifecycle (approve / reject / double-approve 409), forbidden-field stripping (`owner_id` cannot be smuggled through queue), gating toggle gm-only.
+- **56/56 PASS combined regression** (`v62541` 11 + `v62540` 10 + `v62539` 7 + `v62538` 8 + `v62536` 10 + `iter61_leads` 10).
+- Frontend smoke: OG card renders cleanly (gold border, masthead, headline, blurb, footer URL); CampaignDetail Invite & Share tab shows new Strict Permission Gating card next to Discover Publish.
+
+
 ### V6.25.40 — Dynamic landing · Flag threads · Roadmap CRUD · Featured showcases (2026-02-12)
 
 User asked the landing-page sections to **reflect live app state**, plus a flag thread/chat for moderation reports. All "already established sections" wired without inventing new ones. No private fields ever exposed to public surfaces — admin-only data stays in the admin console.

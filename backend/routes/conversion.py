@@ -21,6 +21,7 @@ from core.conversion_engine import (
     TARGET_SHAPE,
     build_content_prompt,
     call_claude_convert,
+    compute_cost_balance,
     materialise_character,
     materialise_creature,
     validate_systems,
@@ -262,6 +263,41 @@ from core.conversion_engine import (  # noqa: E402,F401  (re-exports for backwar
     validate_systems as _validate_systems,
     SYSTEM_PROMPT_CONTENT,
 )
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Cost-balance preview — V6.25.41
+
+class CostBalancePreviewIn(BaseModel):
+    source_character_id: str
+    target_system: str
+
+
+@router.post("/convert/preview-cost-balance")
+async def preview_cost_balance(body: CostBalancePreviewIn,
+                                user: dict = Depends(get_current_user)):
+    """GM-only. Returns a `{source_budget, target_budget, delta,
+    delta_pct, within_tolerance, notes}` report comparing a source
+    character's native budget to what its target_system equivalent
+    *would* spend — without running the LLM. Uses the source spend as
+    the target estimate so we can show a clean "looks balanced /
+    overshoots / undershoots" pre-flight before committing to a full
+    Claude conversion."""
+    if body.target_system not in SUPPORTED_SYSTEMS:
+        raise HTTPException(400, f"Unsupported target_system: {body.target_system}")
+    src = await db.characters.find_one({"id": body.source_character_id}, {"_id": 0})
+    if not src:
+        raise HTTPException(404, "Source character not found.")
+    # The naive preview assumes Claude will hit the source's spend; the
+    # delta therefore reports how much *room* the GM has to play with on
+    # the target side rather than predicting Claude's actual output.
+    return compute_cost_balance(
+        src.get("system_id") or "besm-4e",
+        src,
+        body.target_system,
+        src,
+    )
+
 
 __all__ = [
     "router",

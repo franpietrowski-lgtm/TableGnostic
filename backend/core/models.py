@@ -147,6 +147,11 @@ class CampaignIn(BaseModel):
     featured_requested: bool = False
     featured_request_note: str = ""
     featured_requested_at: Optional[str] = None
+    # V6.25.41 — Strict permission gating. When True, player edits to
+    # characters / inventory states route into the change-requests queue
+    # instead of writing directly. GM + admin always bypass. Off by
+    # default so existing campaigns keep direct-edit behaviour.
+    gm_approval_required: bool = False
 
 
 class CampaignOut(CampaignIn):

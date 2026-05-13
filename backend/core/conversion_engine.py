@@ -144,6 +144,97 @@ Top-level shape:
 
 
 # ──────────────────────────────────────────────────────────────────────────
+# Cost-balance enforcement — V6.25.41
+#
+# When converting between systems with native point-buy budgets
+# (BESM 4E / Anime 5E point_buys / Cypher Edge+Pool), make sure the
+# *target* spend is within tolerance of the *source* spend so the
+# converted character doesn't suddenly become twice as powerful (or
+# half as powerful). Returns a `{source_budget, target_budget, delta,
+# delta_pct, within_tolerance, notes}` shape that's stamped onto the
+# converted character's `converted_from.cost_balance` field.
+#
+# Tolerance defaults to 10% — anything beyond gets a warning the GM
+# can ignore (it'll still write the character; we just won't pretend
+# the math came out clean).
+
+COST_BALANCE_TOLERANCE_PCT = 10.0
+
+
+def _budget_for_system(system_id: str, character_or_payload: Dict[str, Any]) -> int:
+    """Return the total point budget a character occupies in *its* native
+    system. For Tri-Stat (BESM/Anime point_buys), that's `total_points`.
+    For Cypher, it's the sum of pool maxes + applied edges (a proxy for
+    "tier × build budget"). For D&D 5E, level×4 + ability mods + spells
+    is the closest analogue — we use level×8 as a rough budget so cross-
+    conversion warnings still fire."""
+    sid = (system_id or "").lower()
+    if sid in ("besm-4e", "anime-5e"):
+        if isinstance(character_or_payload.get("total_points"), (int, float)):
+            return int(character_or_payload["total_points"])
+        # Fallback: sum cost_per_level × level for attributes/skills minus
+        # defects × rank. Mirrors core.cost_engine logic.
+        spent = 0
+        for a in character_or_payload.get("attributes") or []:
+            spent += int(a.get("cost_per_level", 0)) * int(a.get("level", 0))
+        for s in character_or_payload.get("skills") or []:
+            spent += int(s.get("cost_per_level", 0)) * int(s.get("level", 0))
+        for d in character_or_payload.get("defects") or []:
+            spent -= int(d.get("points_per_rank", 0)) * int(d.get("rank", 0))
+        return max(0, spent)
+    if sid == "cypher":
+        # Cypher build budget proxy: pool_max sum × 4 + edge_total × 6.
+        # Closely tracks Numenera/Cypher tier progression (T1 ≈ 30 pts).
+        pools = character_or_payload.get("pools") or character_or_payload.get("stat_pools") or {}
+        pool_total = sum(int(pools.get(k, {}).get("max", pools.get(k, 0) or 0))
+                          if isinstance(pools.get(k), dict) else int(pools.get(k, 0) or 0)
+                          for k in ("might", "speed", "intellect"))
+        edges = character_or_payload.get("edges") or {}
+        edge_total = sum(int(edges.get(k, 0) or 0)
+                          for k in ("might", "speed", "intellect"))
+        return pool_total * 4 + edge_total * 6
+    if sid == "dnd-5e":
+        # D&D budget proxy: level × 8 (anchors to milestone XP growth).
+        lvl = int(character_or_payload.get("level", 0) or 0)
+        return lvl * 8
+    return 0
+
+
+def compute_cost_balance(source_system: str, source_ch: Dict[str, Any],
+                          target_system: str, target_payload: Dict[str, Any]) -> Dict[str, Any]:
+    src = _budget_for_system(source_system, source_ch)
+    tgt = _budget_for_system(target_system, target_payload)
+    delta = tgt - src
+    delta_pct = (abs(delta) / src * 100.0) if src > 0 else 0.0
+    within = delta_pct <= COST_BALANCE_TOLERANCE_PCT
+    notes: list = []
+    if not within and src > 0:
+        if delta > 0:
+            notes.append(
+                f"Target overspends source by {delta_pct:.1f}% — "
+                f"converted character may be stronger than original. "
+                f"GM should trim {delta} points worth of mechanic before play."
+            )
+        else:
+            notes.append(
+                f"Target underspends source by {delta_pct:.1f}% — "
+                f"converted character may be weaker. GM may grant "
+                f"{abs(delta)} points of additional mechanic to balance."
+            )
+    return {
+        "source_system": source_system,
+        "target_system": target_system,
+        "source_budget": int(src),
+        "target_budget": int(tgt),
+        "delta": int(delta),
+        "delta_pct": round(delta_pct, 1),
+        "within_tolerance": bool(within),
+        "tolerance_pct": COST_BALANCE_TOLERANCE_PCT,
+        "notes": notes,
+    }
+
+
+# ──────────────────────────────────────────────────────────────────────────
 # Validation + prompt building
 
 def validate_systems(src: str, tgt: str):
@@ -462,6 +553,15 @@ async def materialise_character(target_payload: Dict[str, Any],
         "source_character_id": source_ch.get("id"),
         "source_system": source_ch.get("system_id") or "besm-4e",
         "converted_at": now_iso(),
+        # V6.25.41 — Cost-balance audit so the GM knows whether the
+        # conversion stayed inside the tolerance window or whether they
+        # need to trim / grant points to keep the character fair.
+        "cost_balance": compute_cost_balance(
+            source_ch.get("system_id") or "besm-4e",
+            source_ch,
+            target_system,
+            target_payload,
+        ),
     }
     if target_system == "besm-4e":
         try:
