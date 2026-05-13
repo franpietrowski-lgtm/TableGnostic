@@ -14,6 +14,27 @@
 
 ## 2. Implemented (cumulative, condensed)
 
+### V6.25.47 — Remaining 4 Writer Tools promoted to real CRUD (2026-02-13)
+
+**Shared CRUD scaffold** (`frontend/components/writers/CrudListTool.jsx` + `WRITER_THEME` bundle)
+- One reusable component drives the 4 remaining writer surfaces — fields-array driven, optional kinds-facet grouping, inline edit form, hover delete with `window.confirm()`. Tailwind classes consumed as pre-built bundles (`WRITER_THEME.emerald`, `.rose`) to avoid the JIT-detection-fails-on-`text-${color}-300` trap.
+
+**4 promoted tools** (all wrappers around `CrudListTool`)
+- **Cultures (Worldbuilder)** — `GET/POST/PATCH/DELETE /api/writer/cultures/{cid}`. Flat list. Fields: name, summary, naming_conventions, etiquette_quirks, language_seed, holidays, diaspora_notes.
+- **Cosmology (Worldbuilder)** — `GET/POST/PATCH/DELETE /api/writer/cosmology/{cid}`. Multi-kind ledger with 5 enforced kinds: `planar_layer | calendar_month | cosmic_event | omen | celestial_body` (bad kind → 400 on POST + PATCH). Auto-order per kind (each new kind bucket starts at order=10).
+- **POV Bibles (Storyteller)** — `GET/POST/PATCH/DELETE /api/writer/pov-bibles/{cid}`. Flat list. Fields: voice_quirks, vocab_fingerprint, gait, want/need/wound triangle, revelations_timeline.
+- **Themes & Motifs (Storyteller)** — `GET/POST/PATCH/DELETE /api/writer/themes/{cid}`. Two-kind ledger: `theme | motif`. Fields: intent, counter_statement, cadence.
+- All four POSTs/PATCHes Pydantic-strict (`extra="forbid"` → 422 on unknown fields).
+
+**Fixes / housekeeping**
+- 3 bare `confirm()` calls → `window.confirm()` in StManuscriptTool / WbAtlasTool / WbMagicArchitectTool (no-restricted-globals ESLint rule was blocking CRA compile).
+- LLM re-seed background job relaunched at V6.25.47 startup; resumed from chunk 4 of 21 (19 chunks already persisted from prior run). Continues surviving LiteLLM 502s.
+
+**Verified**: testing agent iteration 80 — **13/13 backend tests pass** (3 V6.25.46 + 4 V6.25.47-remainder + 5 V6.25.46-supplemental + 1 V6.25.47-perms). Frontend: 4/4 new tools + 4/4 regression panes pass with zero compile errors. Report: `/app/test_reports/iteration_80.json`.
+
+**Code-review note (non-blocking)**: PATCH endpoints for cultures/cosmology/pov-bibles/themes reuse the full `*In` schema — clients must resend `name` (and `kind` for cosmology/themes) on every PATCH. Consider dedicated `*PatchIn` models in a future drop for symmetry with manuscript_patch.
+
+
 ### V6.25.46 — Writer real tools · Atelier integration · Chunk-incremental re-seed (2026-02-13)
 
 **(2) Chunk-incremental + resumable LLM re-seed** (`backend/scripts/v62546_evereantha_reseed_incremental.py` + `/usr/local/bin/tg-reseed`)
