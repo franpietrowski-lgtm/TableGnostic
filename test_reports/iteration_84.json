@@ -1,0 +1,32 @@
+{
+  "summary": "V6.25.51 — Pure refactor verification (B/C/D). Backend: full targeted regression 32/32 PASS (test_v62536_voice_admin_macros, v62546_writer_tools, v62547_writer_tools_remainder, v62548_battlemap_sidebar, v62549_conditions_patch_stats, v62550_vitals_push_and_recap). Back-compat imports verified live: `from routes.channels import _expand_macro_tokens` resolves to module `core.macros` (same fn obj as `core.macros.expand_macro_tokens`); `routes.battlemap._pc_vitals_for` is the SAME function object as `core.vitals_broadcast._pc_vitals_for` (single source-of-truth, no duplicate). Live API smoke against seeded session 5cab71abc1...: GET /api/sessions/{sid}/map/vitals → 200 with {Eli: hp_pct:100, ep_pct:100, hp_current:50, hp_max:50, ep_current:65, ep_max:65}; GET /api/sessions/{sid}/recap/auto-vitals → 200 with proper shape (round/pcs/summary, summary ending in '.', narrative includes 'bleeding' tag from active /effect); POST /api/channels/{chid}/messages with `/cast Power Strike for {derived:hp} dmg using {attr:Combat Mastery}` → 200, slash_meta resolved (tokens passed through new core.macros resolver, miss=true is correct content-level behavior, not a macro-grammar failure). Frontend (admin GM @ 1440×900, 0 console errors throughout): landing /#proof renders CLEAN — no Compiled-with-problems overlay. Auth /auth → login → /app/sessions/5cab71abc1... → open-battlemap-btn → wait 12s for useMinDelay: battlemap-shell + battlemap-sidebar + battlemap-canvas all visible; zoom-in/out/reset + snap-toggle all click without error; 23 roster rows; all 8 condition chips visible (Burning/Bleeding/Poisoned/Stunned/Restrained/Prone/Charmed/Frightened) with 'more…' toggle; Eli PC token renders vitals (HP 100% EP 100%) + BLEEDING status badge on map. /app/reference: 5 system buttons (`reference-system-*`); switching D&D 5E / Anime 5E / Cypher / BESM all render SystemReferenceView (now extracted to components/reference/SystemReferenceView.jsx) without error; BESM Conditions sub-tab renders Burning/Immolation/Poisoned/Stunned + severity chips; Custom Library section renders user-authored homebrew rows (TEST_v63 cypher_ability/feat/spell/limiter + SPIKE-HAMMER) with type badges and 'from Evereantha • besm-4e • by GMFran' attribution. Behavior identical to pre-refactor baseline.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/test_reports/pytest/iter84_regression.xml",
+    "/app/backend/tests/test_v62536_voice_admin_macros.py",
+    "/app/backend/tests/test_v62546_writer_tools.py",
+    "/app/backend/tests/test_v62547_writer_tools_remainder.py",
+    "/app/backend/tests/test_v62548_battlemap_sidebar.py",
+    "/app/backend/tests/test_v62549_conditions_patch_stats.py",
+    "/app/backend/tests/test_v62550_vitals_push_and_recap.py"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Back-compat alias in routes/channels.py: `from core.macros import expand_macro_tokens as _expand_macro_tokens` is correct — keeps test_v62536 cross-import working AND avoids stale duplication. Recommend deprecating the alias in v6.26+ once tests migrate to importing from core.macros directly.",
+    "Single source-of-truth for _pc_vitals_for is now `core.vitals_broadcast._pc_vitals_for`; `routes.battlemap` re-exports the same function object (verified `bm_helper is core_helper == True`). This resolves the drift-debt called out in iter83 review.",
+    "useBattlemapState (128 lines) + useBattlemapZoom (114 lines) extraction reduced Battlemap.jsx 1096→916 (~16% reduction). useBattlemapState covers load + WS subscribe + vitals heartbeat + effects→character index — good cohesion. useBattlemapZoom owns zoom/pan/pinch state — also good cohesion. No prop-drilling churn in the host file.",
+    "SystemReferenceView (439 lines) is large but cohesive: it contains the 4-system reference rendering + Section/Card primitives + Custom Library composition. Import path `../CypherReferencePanel` (one dir up from src/components/reference/) is correct and resolves cleanly. Reference.jsx parent dropped to 428 lines.",
+    "core/macros.py (210 lines) is a single-responsibility module containing _expand_macro_tokens (now `expand_macro_tokens` public) with {attr:…}/{derived:…}/{stat:…}/{system}/{pc:…} token grammar. test_v62536::TestMacroResolver::test_cypher_tokens + test_anime5e_point_buys pass against the new location — both go through routes.channels._expand_macro_tokens alias, exercising the import edge.",
+    "No new code smells introduced. ESLint clean (verified via clean compile + 0 console errors on landing/session/reference). All five changed/new FE files render without runtime warnings."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (32/32 targeted regression)", "frontend": "100% (landing clean, battlemap full render + zoom/snap/conditions/vitals/effects, reference 4-system switching + BESM conditions + Custom Library)"},
+  "test_credentials": "Admin: tablegnostic-admin@tablegnostic.com / LoremasterAurea2026!Forge (used, working).",
+  "seed_data_creation": "None. All backend tests use ephemeral V*Test-* campaigns deleted in finally{}. Frontend exercised the persistent af461ae0…/5cab71abc1… seed (read-only validation of pre-existing Bleeding effect on Eli — no new state created).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "V6.25.51 refactor is GREEN end-to-end. Useful constants for next agent: (1) admin login route is /auth (NOT /login). (2) macro test endpoint is POST /api/channels/{chid}/messages with body kind=cast — `/cast …` text — NOT a /say endpoint. (3) routes.channels._expand_macro_tokens is the alias; if you need to assert macro grammar at unit level, import expand_macro_tokens from core.macros directly. (4) _pc_vitals_for is single-instance in core.vitals_broadcast; assertions like `routes.battlemap._pc_vitals_for is core.vitals_broadcast._pc_vitals_for` should remain True — flag any regression that breaks identity. (5) Battlemap useMinDelay loader still gates >7.5s; wait ≥10s before asserting on battlemap-shell/sidebar/canvas. (6) Reference page renders 5 system buttons; BESM is default; Conditions is a sub-tab within each system's nav (button name 'Conditions').",
+  "rca of the issue": "N/A — pure refactor, no behavior changes, all contracts preserved."
+}

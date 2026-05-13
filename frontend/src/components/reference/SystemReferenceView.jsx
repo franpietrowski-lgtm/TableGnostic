@@ -1,0 +1,442 @@
+/**
+ * V6.25.51 — Extracted from Reference.jsx (refactor split).
+ *
+ * Owns:
+ *   • SystemReferenceView    — renders the system-aware data from
+ *                              GET /api/systems/{id}/reference for
+ *                              every non-BESM ruleset (D&D 5E,
+ *                              Anime 5E, Cypher).
+ *   • CustomLibrarySection   — campaign-scoped custom rows the user
+ *                              has authored (Reference Editor +
+ *                              House Rules + character-derived).
+ *   • Section, Card          — tiny presentational primitives.
+ *
+ * The BESM 4E reference still renders inline in Reference.jsx — it
+ * uses its own tab-strip / cost-rule banner and would not benefit
+ * from being shoved into the generic SystemReferenceView shape.
+ */
+import React, { useEffect, useState } from "react";
+import { api } from "../../lib/api";
+import { BookOpen } from "lucide-react";
+// V6.25.51 — Cypher panel renders inside SystemReferenceView for the
+// "cypher" branch; import explicitly now that we're a separate file.
+import CypherReferencePanel from "../CypherReferencePanel";
+
+/**
+ * Renders the system-aware reference data returned by /api/systems/{id}/reference.
+ * Three different shapes supported:
+ *   - dnd-5e         (class-and-slot)
+ *   - anime-5e       (hybrid 5E + Tri-Stat point-buy)
+ *   - cypher         (type-focus-descriptor)
+ *   - scaffold       (no content yet)
+ */
+function SystemReferenceView({ ref_, systemId, q }) {
+  const [customLib, setCustomLib] = useState(null);
+  useEffect(() => {
+    if (!systemId) return;
+    api.get(`/reference/library?system_id=${systemId}`)
+      .then((r) => setCustomLib(r.data))
+      .catch(() => setCustomLib({ rows: [], total: 0, campaign_count: 0 }));
+  }, [systemId]);
+
+  if (!ref_) return <div className="text-mist mt-6">Loading {systemId} reference…</div>;
+  if (ref_.kind === "scaffold") {
+    return (
+      <div className="card-mystic p-6 mt-6" data-testid="system-ref-scaffold">
+        <div className="label-ref mb-2">Coming Soon</div>
+        <div className="text-sm text-parchment/90">{ref_.rule_note}</div>
+        {customLib && customLib.total > 0 && (
+          <CustomLibrarySection lib={customLib} systemId={systemId}/>
+        )}
+      </div>
+    );
+  }
+  const ql = (q || "").toLowerCase();
+  const f = (arr) => (arr || []).filter((x) =>
+    JSON.stringify(x).toLowerCase().includes(ql));
+
+  // V6.19 — Build the quick_ref nav (left rail) by detecting which
+  // sections will actually render. Mirrors BESM's tab-strip cadence so
+  // every system's reference page feels symmetrical.
+  const sectionList = [];
+  const has = (arr) => f(arr).length > 0;
+  if (ref_.abilities || ref_.stat_pools) sectionList.push({ slug: ref_.stat_pools ? "stat-pools" : "abilities", label: ref_.stat_pools ? "Stat Pools" : "Abilities" });
+  if (has(ref_.classes)) sectionList.push({ slug: "classes", label: "Classes" });
+  if (has(ref_.types)) sectionList.push({ slug: "types", label: "Types" });
+  if (has(ref_.foci)) sectionList.push({ slug: "foci", label: "Foci" });
+  if (has(ref_.descriptors)) sectionList.push({ slug: "descriptors", label: "Descriptors" });
+  if (has(ref_.races || ref_.heritages)) sectionList.push({ slug: ref_.races ? "races" : "heritages", label: ref_.races ? "Races" : "Heritages" });
+  if (has(ref_.point_buy_attributes)) sectionList.push({ slug: "point-buy-attributes-tri-stat-mode", label: "Point-Buy Attributes" });
+  if (has(ref_.weapons)) sectionList.push({ slug: "weapons", label: "Weapons" });
+  if (has(ref_.armor)) sectionList.push({ slug: "armor", label: "Armor" });
+  if (has(ref_.spells)) sectionList.push({ slug: "spells-(sample)", label: "Spells" });
+  if (has(ref_.cyphers)) sectionList.push({ slug: "cyphers", label: "Cyphers" });
+  if (has(ref_.artifacts)) sectionList.push({ slug: "artifacts", label: "Artifacts" });
+  if (has(ref_.skills)) sectionList.push({ slug: "skills", label: "Skills" });
+  if (has(ref_.feats)) sectionList.push({ slug: "feats", label: "Feats" });
+  if (has(ref_.subclasses)) sectionList.push({ slug: "subclasses", label: "Subclasses" });
+  if (has(ref_.magic_items)) sectionList.push({ slug: "magic-items", label: "Magic Items" });
+  if (has(ref_.monsters)) sectionList.push({ slug: "monsters", label: "Monsters" });
+  if (has(ref_.languages)) sectionList.push({ slug: "languages", label: "Languages" });
+  if (has(ref_.tools)) sectionList.push({ slug: "tools", label: "Tools" });
+  if (has(ref_.damage_types)) sectionList.push({ slug: "damage-types", label: "Damage Types" });
+  if (has(ref_.schools)) sectionList.push({ slug: "schools", label: "Schools of Magic" });
+  if (has(ref_.conditions)) sectionList.push({ slug: "conditions", label: "Conditions" });
+  if (has(ref_.actions)) sectionList.push({ slug: "actions", label: "Actions" });
+  if (has(ref_.power_levels)) sectionList.push({ slug: "power-levels", label: "Power Levels" });
+  if (ref_.gm_intrusion) sectionList.push({ slug: "gm-intrusion", label: "GM Intrusion" });
+
+  return (
+    <div className="mt-6 grid md:grid-cols-[180px_1fr] gap-6"
+         data-testid={`system-ref-${systemId}`}>
+      {/* V6.19 — Left rail quick_ref. Mirrors BESM tab-group style. */}
+      <aside className="md:sticky md:top-4 self-start"
+             data-testid={`system-ref-quickref-${systemId}`}>
+        <div className="label-ref mb-2">Quick reference</div>
+        <nav className="space-y-0.5">
+          {sectionList.map((s) => (
+            <a key={s.slug} href={`#system-ref-section-${s.slug}`}
+               className="block text-[11px] font-ui px-2 py-1 text-mist hover:text-gold-bright hover:bg-gold/5 rounded-sm transition-colors"
+               data-testid={`quickref-${systemId}-${s.slug}`}>
+              {s.label}
+            </a>
+          ))}
+        </nav>
+      </aside>
+
+      <div className="space-y-6 min-w-0">
+      {/* V6.25.26 — When the active system is Cypher, the dashboard
+          embeds the full CypherReferencePanel (genres, sub-tabs,
+          flavors, bestiary, roll-tables) ABOVE the legacy quick-ref
+          cards. The user requested the Cypher system reference live
+          on the dashboard Reference page rather than the Atelier. */}
+      {systemId === "cypher" && (
+        <CypherReferencePanel campId={null} isGm={false}/>
+      )}
+
+      <div className="card-mystic p-4">
+        <div className="label-ref mb-1">Rule of thumb</div>
+        <div className="text-sm text-parchment/90 leading-snug">{ref_.rule_note}</div>
+        {ref_.book?.title && (
+          <div className="text-[10px] text-mist/70 italic mt-2">
+            Source: {ref_.book.title} · {ref_.book.publisher} · {ref_.book.license}
+          </div>
+        )}
+      </div>
+
+      {/* Common — abilities / pools */}
+      {(ref_.abilities || ref_.stat_pools) && (
+        <Section title={ref_.stat_pools ? "Stat Pools" : "Abilities"}>
+          {(ref_.abilities || ref_.stat_pools).map((a, i) => (
+            <Card key={i} title={a.name} sub={a.abbr || a.blurb_role}/>
+          ))}
+        </Section>
+      )}
+
+      {/* Class-y things */}
+      {f(ref_.classes).length > 0 && (
+        <Section title="Classes">
+          {f(ref_.classes).map((c, i) => (
+            <Card key={i} title={c.name}
+                  sub={`d${c.hit_die} HD · ${c.primary} · saves ${(c.saves || []).join(", ")}${c.casting && c.casting !== "none" ? " · " + c.casting + " caster" : ""}`}
+                  page={c.page}/>
+          ))}
+        </Section>
+      )}
+      {f(ref_.types).length > 0 && (
+        <Section title="Types">
+          {f(ref_.types).map((t, i) => (
+            <Card key={i} title={t.name}
+                  sub={`Intrusion: ${t.intrusion} · Pools ${t.starting_pools} · Edge ${(t.edge_at_1 || []).join(", ")}`}/>
+          ))}
+        </Section>
+      )}
+      {f(ref_.foci).length > 0 && (
+        <Section title="Foci">
+          {f(ref_.foci).map((fc, i) => (
+            <Card key={i} title={fc.name} sub={fc.role}/>
+          ))}
+        </Section>
+      )}
+      {f(ref_.descriptors).length > 0 && (
+        <Section title="Descriptors">
+          {f(ref_.descriptors).map((d, i) => (
+            <Card key={i}
+                  title={typeof d === "string" ? d : d.name}
+                  sub={typeof d === "object" && Array.isArray(d.genres)
+                    ? d.genres.join(" · ")
+                    : (typeof d === "object" ? d.role || d.blurb || "" : "")}/>
+          ))}
+        </Section>
+      )}
+      {f(ref_.races || ref_.heritages).length > 0 && (
+        <Section title={ref_.races ? "Races" : "Heritages"}>
+          {f(ref_.races || ref_.heritages).map((r, i) => (
+            <Card key={i} title={r.name}
+                  sub={`${r.asi} · ${r.size} · ${r.speed ? `speed ${r.speed}ft` : "—"}${r.traits ? " · " + r.traits.join(", ") : ""}`}
+                  page={r.page}/>
+          ))}
+        </Section>
+      )}
+      {f(ref_.point_buy_attributes).length > 0 && (
+        <Section title="Point-Buy Attributes (Tri-Stat mode)">
+          {f(ref_.point_buy_attributes).map((a, i) => (
+            <Card key={i} title={a.name} sub={`${a.cost_per_level} pts/lvl · ${a.blurb_role}`}/>
+          ))}
+        </Section>
+      )}
+
+      {/* Equipment + spells */}
+      {f(ref_.weapons).length > 0 && (
+        <Section title="Weapons">
+          {f(ref_.weapons).map((w, i) => (
+            <Card key={i} title={w.name}
+                  sub={`${w.kind} · ${w.damage}${w.props ? " · " + w.props.join(", ") : ""}`}
+                  page={w.page}/>
+          ))}
+        </Section>
+      )}
+      {f(ref_.armor).length > 0 && (
+        <Section title="Armor">
+          {f(ref_.armor).map((a, i) => (
+            <Card key={i} title={a.name}
+                  sub={`${a.category} · AC ${a.ac} · stealth ${a.stealth}`} page={a.page}/>
+          ))}
+        </Section>
+      )}
+      {f(ref_.spells).length > 0 && (
+        <Section title="Spells (sample)">
+          {f(ref_.spells).map((s, i) => (
+            <Card key={i} title={s.name}
+                  sub={`Level ${s.level} ${s.school} · ${s.dice} · ${s.range}`} page={s.page}/>
+          ))}
+        </Section>
+      )}
+      {f(ref_.cyphers).length > 0 && (
+        <Section title="Cyphers">
+          {f(ref_.cyphers).map((c, i) => (
+            <Card key={i} title={c.name}
+                  sub={`Level ${c.level} · ${c.form} · ${c.effect}`}/>
+          ))}
+        </Section>
+      )}
+      {f(ref_.artifacts).length > 0 && (
+        <Section title="Artifacts">
+          {f(ref_.artifacts).map((a, i) => (
+            <Card key={i} title={a.name}
+                  sub={`Level ${a.level} · ${a.form} · ${a.effect} · Depletion ${a.depletion}`}/>
+          ))}
+        </Section>
+      )}
+      {f(ref_.skills).length > 0 && (
+        <Section title="Skills">
+          {f(ref_.skills).map((s, i) => (
+            <Card key={i} title={typeof s === "string" ? s : s.name}
+                  sub={typeof s === "string" ? "" : `Ability: ${s.ability}`}/>
+          ))}
+        </Section>
+      )}
+      {f(ref_.feats).length > 0 && (
+        <Section title="Feats">
+          {f(ref_.feats).map((ft, i) => (
+            <Card key={i} title={ft.name}
+                  sub={`${ft.prereq && ft.prereq !== "—" ? `Prereq: ${ft.prereq} · ` : ""}${ft.summary}`}
+                  page={ft.page}/>
+          ))}
+        </Section>
+      )}
+      {f(ref_.subclasses).length > 0 && (
+        <Section title="Subclasses">
+          {f(ref_.subclasses).map((sc, i) => (
+            <Card key={i} title={`${sc.class} · ${sc.name}`}
+                  sub={(sc.key || []).join(" · ")}
+                  page={sc.page}/>
+          ))}
+        </Section>
+      )}
+      {f(ref_.magic_items).length > 0 && (
+        <Section title="Magic Items">
+          {f(ref_.magic_items).map((mi, i) => (
+            <Card key={i} title={mi.name}
+                  sub={`${mi.rarity} · ${mi.type}${mi.attune ? " · attune" : ""} · ${mi.summary}`}
+                  page={mi.page}/>
+          ))}
+        </Section>
+      )}
+      {f(ref_.monsters).length > 0 && (
+        <Section title="Monsters">
+          {f(ref_.monsters).map((m, i) => (
+            <Card key={i} title={`${m.name}${m.cr ? ` · CR ${m.cr}` : ""}`}
+                  sub={`${m.size} ${m.type} · AC ${m.ac} · HP ${m.hp} · ${m.speed} · ${m.atks}`}
+                  page={m.page}/>
+          ))}
+        </Section>
+      )}
+      {f(ref_.languages).length > 0 && (
+        <Section title="Languages">
+          {f(ref_.languages).map((l, i) => (
+            <Card key={i} title={l.name}
+                  sub={`${l.category} · script ${l.script} · spoken by ${l.speakers}`}
+                  page={l.page}/>
+          ))}
+        </Section>
+      )}
+      {f(ref_.tools).length > 0 && (
+        <Section title="Tools">
+          {f(ref_.tools).map((t, i) => (
+            <Card key={i} title={t.name}
+                  sub={`${t.category} · ${t.ability} checks`}
+                  page={t.page}/>
+          ))}
+        </Section>
+      )}
+      {f(ref_.damage_types).length > 0 && (
+        <Section title="Damage Types">
+          {f(ref_.damage_types).map((d, i) => (
+            <Card key={i} title={d.name} page={d.page}/>
+          ))}
+        </Section>
+      )}
+      {f(ref_.schools).length > 0 && (
+        <Section title="Schools of Magic">
+          {f(ref_.schools).map((s, i) => (
+            <Card key={i} title={s.name} sub={s.summary} page={s.page}/>
+          ))}
+        </Section>
+      )}
+      {f(ref_.conditions).length > 0 && (
+        <Section title="Conditions">
+          {f(ref_.conditions).map((c, i) => {
+            const sev = c.severity ? String(c.severity).toUpperCase() : "";
+            const tags = (c.tags || []).join(" · ");
+            const sub = `${sev ? `[${sev}]` : ""}${tags ? ` ${tags}` : ""}${c.effect ? ` — ${c.effect}` : ""}`.trim();
+            return <Card key={i} title={c.name} sub={sub}/>;
+          })}
+        </Section>
+      )}
+      {f(ref_.actions).length > 0 && (
+        <Section title="Actions">
+          {f(ref_.actions).map((a, i) => (
+            <Card key={i} title={a.name} sub={`${a.kind} · ${a.summary}`}/>
+          ))}
+        </Section>
+      )}
+      {f(ref_.power_levels).length > 0 && (
+        <Section title="Power Levels">
+          {f(ref_.power_levels).map((p, i) => (
+            <Card key={i} title={p.name} sub={`Level ${p.level_range} · ${p.blurb}`}/>
+          ))}
+        </Section>
+      )}
+      {ref_.gm_intrusion && (
+        <Section title="GM Intrusion">
+          <Card title="The Cypher Tax" sub={ref_.gm_intrusion.summary} page={ref_.gm_intrusion.page}/>
+        </Section>
+      )}
+      {customLib && (
+        <CustomLibrarySection lib={customLib} systemId={systemId}/>
+      )}
+      </div>
+    </div>
+  );
+}
+
+
+/**
+ * V6.25.25 — Custom (yours) reference rows aggregated across every
+ * campaign the caller is involved in for the active system. Surfaces
+ * Reference Editor + House Rules + character-derived custom entries
+ * in ONE place so players + GMs see the full system catalogue.
+ */
+function CustomLibrarySection({ lib, systemId }) {
+  const [kindFilter, setKindFilter] = useState("");
+  if (!lib || lib.total === 0) {
+    return (
+      <div className="card-mystic p-4 border-arcane/30 mt-4"
+           data-testid="custom-library-empty">
+        <div className="label-ref mb-1 text-arcane-light">Custom · Yours</div>
+        <div className="text-[11px] text-mist italic">
+          {lib?.campaign_count === 0
+            ? `No ${systemId} campaigns yet — create one to start authoring custom references.`
+            : "No custom entries authored for this system. Open a campaign's Atelier ▸ References tab to seed your first."}
+        </div>
+      </div>
+    );
+  }
+  const kinds = Array.from(new Set((lib.rows || []).map((r) => r.kind))).sort();
+  const filtered = kindFilter
+    ? lib.rows.filter((r) => r.kind === kindFilter) : lib.rows;
+  return (
+    <div className="card-mystic p-4 border-arcane/30 mt-4"
+         data-testid="custom-library-section">
+      <div className="flex items-baseline justify-between flex-wrap gap-2 mb-2">
+        <div>
+          <div className="label-ref text-arcane-light">Custom · Yours</div>
+          <div className="text-[10px] text-mist italic">
+            {lib.total} entr{lib.total === 1 ? "y" : "ies"} across {lib.campaign_count} campaign
+            {lib.campaign_count === 1 ? "" : "s"} (Reference Editor, House Rules, character-derived)
+          </div>
+        </div>
+        <div className="flex gap-1.5 flex-wrap">
+          <button onClick={() => setKindFilter("")}
+                  className={`btn btn-ghost text-[10px] ${!kindFilter ? "border-arcane/50 text-arcane-light" : ""}`}
+                  data-testid="custom-library-filter-all">All</button>
+          {kinds.map((k) => (
+            <button key={k} onClick={() => setKindFilter(k)}
+                    className={`btn btn-ghost text-[10px] ${kindFilter === k ? "border-arcane/50 text-arcane-light" : ""}`}
+                    data-testid={`custom-library-filter-${k}`}>{k}</button>
+          ))}
+        </div>
+      </div>
+      <div className="grid md:grid-cols-2 gap-2">
+        {filtered.map((r) => (
+          <div key={r.id} className="border border-arcane/20 rounded-sm p-2 bg-void/40"
+               data-testid={`custom-library-row-${r.id}`}>
+            <div className="flex justify-between items-baseline gap-2">
+              <div className="text-sm font-display text-parchment">{r.name}</div>
+              <div className="text-[9px] text-arcane-light uppercase tracking-widest">{r.kind}</div>
+            </div>
+            {r.summary && (
+              <div className="text-[11px] text-parchment/85 italic mt-1 leading-snug">{r.summary}</div>
+            )}
+            <div className="text-[9px] text-mist mt-1 flex items-center gap-2 flex-wrap">
+              <span>from <span className="text-arcane-light">{r.campaign_name}</span></span>
+              {r.book && <span>· {r.book}{r.page ? ` p.${r.page}` : ""}</span>}
+              {r.created_by && <span>· by {r.created_by}</span>}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function Section({ title, children }) {
+  const arr = React.Children.toArray(children);
+  if (arr.length === 0) return null;
+  const slug = title.toLowerCase().replace(/\s+/g, "-");
+  return (
+    <div id={`system-ref-section-${slug}`}
+         data-testid={`system-ref-section-${slug}`}
+         className="scroll-mt-4">
+      <div className="label-ref mb-2">{title}</div>
+      <div className="grid md:grid-cols-2 gap-2">{arr}</div>
+    </div>
+  );
+}
+
+function Card({ title, sub, page }) {
+  return (
+    <div className="card-mystic p-3">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="text-sm text-parchment font-ui">{title}</div>
+        {page && <div className="text-[10px] font-ui uppercase tracking-widest text-gold/70 flex items-center gap-1">
+          <BookOpen className="w-3 h-3"/> p.{page}
+        </div>}
+      </div>
+      {sub && <div className="text-[11px] text-mist mt-1 font-ui">{sub}</div>}
+    </div>
+  );
+}
+
+export { SystemReferenceView, CustomLibrarySection, Section, Card };

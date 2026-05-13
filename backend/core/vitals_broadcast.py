@@ -27,9 +27,14 @@ from core.db import db
 
 
 def _pc_vitals_for(character: dict) -> dict:
-    """Mirrors routes/battlemap.py:_pc_vitals_for — kept in sync so
-    polled and pushed vitals look identical to the client. (Both
-    helpers will eventually call this one once we refactor.)"""
+    """Compute hp_pct / ep_pct (+ raw current/max) for a single
+    character, choosing the right state bucket per system.
+
+    Public to other route modules — same heuristic powers the
+    push-broadcast path AND the GET /map/vitals polling endpoint.
+    Returns 100% defaults when no live values are recorded so the
+    frontend never has to special-case NaN.
+    """
     derived = character.get("derived") or {}
     folio = character.get("folio") or {}
 

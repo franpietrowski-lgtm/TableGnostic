@@ -1,6 +1,8 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { api } from "../lib/api";
 import { useMinDelay } from "../lib/useMinDelay";
+import { useBattlemapState } from "../lib/useBattlemapState";
+import { useBattlemapZoom } from "../lib/useBattlemapZoom";
 import {
   Map as MapIcon, Image as ImageIcon, Eye, EyeOff, Plus, X,
   Hammer, Hand, MousePointer2, Trash2, Ruler, Sparkles, Maximize2, Minimize2,
@@ -40,8 +42,14 @@ export default function Battlemap({
 }) {
   const isGm = !!campaign && (campaign.gm_id === user?.id || user?.role === "admin");
 
-  const [state, setState] = useState(null);   // { grid, image, tokens, walls, fog, ... }
-  const [effects, setEffects] = useState([]); // live /api/effects rows
+  // V6.25.51 — state + realtime extracted to useBattlemapState.
+  const {
+    state, setState,
+    effects, setEffects,
+    vitals, setVitals,
+    effectsByCharacter,
+  } = useBattlemapState({ sessionId, subscribe });
+
   const [mode, setMode] = useState(isGm ? "select" : "select");
   const [draggingId, setDraggingId] = useState(null);
   const [dragPos, setDragPos] = useState(null); // {x, y} grid-cell coords, mid-drag
@@ -54,11 +62,8 @@ export default function Battlemap({
   // increments (default on). `pendingPlacement` holds a `{kind,
   // marker_type|character, color, label, atlas_node_id?}` payload
   // selected from the sidebar — next canvas click spawns it.
-  // `vitals` is a {character_id: {hp_pct, ep_pct, ...}} map polled
-  // from /map/vitals every 6s to auto-fill PC token rings (P1).
   const [snapToGrid, setSnapToGrid] = useState(true);
   const [pendingPlacement, setPendingPlacement] = useState(null);
-  const [vitals, setVitals] = useState({});
   // Mobile detector — strictly viewport-based; mobile users get a
   // view-only experience (no GM tools, locked to select mode). Desktop
   // gets the full editing kit. Tracks resize so a tablet rotation flips
@@ -100,184 +105,13 @@ export default function Battlemap({
   const stillUnrolling = useMinDelay(!state, 5000);
   const canvasRef = useRef(null);
 
-  // V6.25.6 mobile sweep — pinch-zoom + 2-finger pan state. `zoom` is
-  // a uniform scale; `pan` is a translate in canvas-local pixels.
-  // `pinching` is true mid-gesture so we can short-circuit transition.
-  const [zoom, setZoom] = useState(1);
-  const [pan, setPan] = useState({ x: 0, y: 0 });
-  const [pinching, setPinching] = useState(false);
-  const gestureRef = useRef({ startDist: 0, startZoom: 1,
-                                 startCenter: { x: 0, y: 0 },
-                                 startPan: { x: 0, y: 0 },
-                                 panStart: null });
-
-  const clampZoom = (z) => Math.min(4, Math.max(0.4, z));
-
-  const onMapWheel = (e) => {
-    // Only ctrl-wheel zooms — preserves natural scroll otherwise.
-    if (!e.ctrlKey && !e.metaKey) return;
-    e.preventDefault();
-    const delta = -Math.sign(e.deltaY) * 0.12;
-    setZoom((z) => clampZoom(z + delta));
-  };
-
-  const _touchDist = (a, b) => {
-    const dx = a.clientX - b.clientX, dy = a.clientY - b.clientY;
-    return Math.sqrt(dx * dx + dy * dy);
-  };
-  const _touchCenter = (a, b) => ({
-    x: (a.clientX + b.clientX) / 2,
-    y: (a.clientY + b.clientY) / 2,
-  });
-
-  const onMapTouchStart = (e) => {
-    if (e.touches.length === 2) {
-      e.preventDefault();
-      setPinching(true);
-      const [a, b] = e.touches;
-      gestureRef.current = {
-        startDist: _touchDist(a, b),
-        startZoom: zoom,
-        startCenter: _touchCenter(a, b),
-        startPan: { ...pan },
-        panStart: null,
-      };
-    } else if (e.touches.length === 1) {
-      gestureRef.current.panStart = {
-        x: e.touches[0].clientX,
-        y: e.touches[0].clientY,
-        startPan: { ...pan },
-      };
-    }
-  };
-
-  const onMapTouchMove = (e) => {
-    if (e.touches.length === 2 && pinching) {
-      e.preventDefault();
-      const [a, b] = e.touches;
-      const dist = _touchDist(a, b);
-      const center = _touchCenter(a, b);
-      const g = gestureRef.current;
-      if (g.startDist > 0) {
-        const newZoom = clampZoom(g.startZoom * (dist / g.startDist));
-        // Pan to follow the pinch midpoint so zoom feels anchored.
-        setZoom(newZoom);
-        setPan({
-          x: g.startPan.x + (center.x - g.startCenter.x),
-          y: g.startPan.y + (center.y - g.startCenter.y),
-        });
-      }
-    }
-    // Single-finger pan only when zoomed in (otherwise touches drive
-    // the existing measure / move flow).
-    else if (e.touches.length === 1 && zoom > 1.05 && gestureRef.current.panStart) {
-      e.preventDefault();
-      const ps = gestureRef.current.panStart;
-      setPan({
-        x: ps.startPan.x + (e.touches[0].clientX - ps.x),
-        y: ps.startPan.y + (e.touches[0].clientY - ps.y),
-      });
-    }
-  };
-
-  const onMapTouchEnd = (e) => {
-    if (e.touches.length < 2) setPinching(false);
-    if (e.touches.length === 0) gestureRef.current.panStart = null;
-  };
-
-  // ─── load map + effects ───
-  useEffect(() => {
-    if (!sessionId) return;
-    let mounted = true;
-    Promise.all([
-      api.get(`/sessions/${sessionId}/map`),
-      api.get(`/sessions/${sessionId}/effects`).catch(() => ({ data: [] })),
-    ]).then(([mapResp, effResp]) => {
-      if (!mounted) return;
-      setState(mapResp.data);
-      setEffects(effResp.data || []);
-    }).catch(() => {});
-    return () => { mounted = false; };
-  }, [sessionId]);
-
-  // ─── P1 — vitals refresh ───
-  // V6.25.48 added a 6s poll of GET /map/vitals.
-  // V6.25.50 — backend now PUSHES `map:vitals` over the session WS
-  // (channels.py BESM spend + advancement.py Anime 5E EP cast + undo
-  // + rest restore). Polling becomes a 30s heartbeat so newly-joined
-  // clients catch up without waiting on a mutation event, and so a
-  // missed WS message can self-heal.
-  useEffect(() => {
-    if (!sessionId) return;
-    let mounted = true;
-    const tick = async () => {
-      try {
-        const { data } = await api.get(`/sessions/${sessionId}/map/vitals`);
-        if (mounted) setVitals(data?.vitals || {});
-      } catch { /* swallow — sidebar handles empty */ }
-    };
-    tick();
-    const h = setInterval(tick, 30000);
-    return () => { mounted = false; clearInterval(h); };
-  }, [sessionId]);
-
-  useEffect(() => {
-    if (!subscribe) return;
-    const off = subscribe((evt) => {
-      if (!evt || !evt.type) return;
-      const { type, data } = evt;
-      if (type === "map:state") setState(data);
-      else if (type === "map:token") {
-        setState((s) => {
-          if (!s) return s;
-          const tokens = s.tokens.filter((t) => t.id !== data.id);
-          return { ...s, tokens: [...tokens, data] };
-        });
-      }
-      else if (type === "map:token-remove") {
-        setState((s) => s ? { ...s, tokens: s.tokens.filter((t) => t.id !== data.id) } : s);
-      }
-      else if (type === "map:fog") {
-        setState((s) => {
-          if (!s) return s;
-          const cur = new Set(s.fog.map((c) => `${c.x},${c.y}`));
-          (data.hide || []).forEach((c) => cur.add(`${c.x},${c.y}`));
-          (data.reveal || []).forEach((c) => cur.delete(`${c.x},${c.y}`));
-          return { ...s, fog: Array.from(cur).map((k) => {
-            const [x, y] = k.split(",").map(Number);
-            return { x, y };
-          }) };
-        });
-      }
-      else if (type === "map:wall") {
-        setState((s) => {
-          if (!s) return s;
-          let walls = s.walls;
-          if (data.added) walls = [...walls, data.added];
-          if (data.removed) walls = walls.filter((w) => w.id !== data.removed);
-          return { ...s, walls };
-        });
-      }
-      // Live effects → re-derive token status rings.
-      else if (type === "effect") {
-        setEffects((prev) => {
-          const others = prev.filter((e) => e.id !== data.id);
-          return [...others, data];
-        });
-      }
-      else if (type === "effect_remove") {
-        setEffects((prev) => prev.filter((e) => e.id !== data.id));
-      }
-      // V6.25.50 — push-based vitals update. Channel spend / damage
-      // routes broadcast {[character_id]: {hp_pct, ep_pct, ...}} and
-      // we merge into the local vitals map so token rings update
-      // instantly without waiting for the next 30s poll.
-      else if (type === "map:vitals") {
-        setVitals((prev) => ({ ...(prev || {}), ...(data || {}) }));
-      }
-    });
-    return () => { try { off && off(); } catch { /* */ } };
-  }, [subscribe]);
+  // V6.25.51 — zoom / pan / pinch state extracted to useBattlemapZoom.
+  const {
+    zoom, pan, setPan, pinching, clampZoom,
+    onMapWheel, onMapTouchStart, onMapTouchMove, onMapTouchEnd,
+    zoomApi,
+  } = useBattlemapZoom();
+  const { zoomIn, zoomOut, zoomReset } = zoomApi;
 
   // Active uid (initiative top of order) → matching character → token highlight
   const activeUid = (initiative && initiative.length > 0)
@@ -288,18 +122,6 @@ export default function Battlemap({
   const activeCharIds = characters
     .filter((c) => c.owner_id === activeUid)
     .map((c) => c.id);
-
-  // Map character_id → list of effect names so PeerTile rings reflect /effects.
-  const effectsByCharacter = useMemo(() => {
-    const map = {};
-    for (const e of effects) {
-      if (!e.active) continue;
-      const cid = e.target_character_id;
-      if (!cid) continue;
-      (map[cid] = map[cid] || []).push(e.name || e.kind || "FX");
-    }
-    return map;
-  }, [effects]);
 
   // ─── helpers ───
   const cellSize = state?.grid?.size_px || 48;
@@ -616,9 +438,7 @@ export default function Battlemap({
       tooltip: pin.content || pin.fields?.description || null,
     });
   };
-  const zoomIn = () => setZoom((z) => clampZoom(z + 0.25));
-  const zoomOut = () => setZoom((z) => clampZoom(z - 0.25));
-  const zoomReset = () => { setZoom(1); setPan({ x: 0, y: 0 }); };
+  // V6.25.51 — zoomIn/Out/Reset now come from useBattlemapZoom() above.
 
   // ─── render ───
   if (stillUnrolling || !state) return (

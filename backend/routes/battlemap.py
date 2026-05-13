@@ -363,67 +363,10 @@ async def remove_wall(sid: str, wid: str,
 # broadcasts through every spend/damage code path) — cheap because we
 # only look up the characters the map actually references.
 
-def _pc_vitals_for(character: dict) -> dict:
-    """Best-effort HP/EP percentage per system. Returns {hp_pct, ep_pct}.
-
-    BESM 4E stores max HP/EP under `derived.health_points` /
-    `derived.energy_points`; live current values are mutated on
-    `folio.health_points` / `folio.energy_points` by the bundle/spend
-    pipeline (see routes/channels.py). Other systems write to their
-    own state buckets (anime5e_state.ep_current/ep_max, etc.). We
-    inspect each candidate field and fall back to 100% when nothing
-    sensible is recorded — surface gracefully rather than erroring.
-    """
-    derived = character.get("derived") or {}
-    folio = character.get("folio") or {}
-
-    # --- HP ---
-    hp_max = (derived.get("health_points")
-              or folio.get("hp_max")
-              or folio.get("health_points_max")
-              or 0)
-    hp_cur = folio.get("health_points")
-    if hp_cur is None:
-        hp_cur = folio.get("hp_current") or folio.get("hp_now")
-    # D&D 5E state shim — if hp shows up under a system bucket.
-    if hp_cur is None:
-        dnd = folio.get("dnd5e_state") or {}
-        hp_cur = dnd.get("hp_current")
-        if hp_max == 0:
-            hp_max = dnd.get("hp_max") or 0
-
-    # --- EP ---
-    ep_max = (derived.get("energy_points")
-              or folio.get("ep_max")
-              or folio.get("energy_points_max")
-              or 0)
-    ep_cur = folio.get("energy_points")
-    if ep_cur is None:
-        ep_cur = folio.get("ep_current")
-    if ep_cur is None:
-        anime = folio.get("anime5e_state") or {}
-        ep_cur = anime.get("ep_current")
-        if ep_max == 0:
-            ep_max = anime.get("ep_max") or 0
-
-    def _pct(cur, mx):
-        try:
-            mx = int(mx or 0)
-            if mx <= 0:
-                return 100
-            cur = int(cur if cur is not None else mx)
-            return max(0, min(100, int(round(cur / mx * 100))))
-        except (TypeError, ValueError):
-            return 100
-
-    return {
-        "hp_pct": _pct(hp_cur, hp_max),
-        "ep_pct": _pct(ep_cur, ep_max),
-        "hp_current": hp_cur if hp_cur is not None else hp_max,
-        "hp_max": hp_max,
-        "ep_current": ep_cur if ep_cur is not None else ep_max,
-        "ep_max": ep_max,
-    }
+# V6.25.51 — `_pc_vitals_for` consolidated into core/vitals_broadcast.
+# Same heuristic; one source-of-truth so push (vitals_broadcast) and
+# poll (this module) can never drift apart.
+from core.vitals_broadcast import _pc_vitals_for  # noqa: E402
 
 
 @router.get("/sessions/{sid}/map/vitals")
