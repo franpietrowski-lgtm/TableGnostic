@@ -1,0 +1,31 @@
+{
+  "summary": "V6.25.47 — Promotion of 4 remaining writer tools (Cultures, Cosmology, POV Bibles, Themes & Motifs) verified end-to-end. Backend: 13/13 PASS — original 12 (test_v62547_writer_tools_remainder.py 4/4 + test_v62546_writer_tools.py 3/3 + test_v62546_writer_tools_supplemental.py 5/5) plus 1 NEW test_v62547_writer_tools_perms.py covering the explicit ask (non-member 403 read + non-GM 403 write across all 4 new surfaces). Frontend: admin token injected → /app/campaigns/{cid} → Atelier tab → Worldbuilder Studio → Cultures: wb-cultures-page renders, wb-cultures-new opens inline form, Name+summary fill, wb-cultures-form-save → row appears with data-testid wb-cultures-row-{id}. Same green path for wb-cosmology (kind facet wb-cosmology-form-kind verified), st-pov-bibles, st-themes (kind facet st-themes-form-kind verified). Regression: wb-atlas, wb-magic, st-manuscript, st-outline panes all mount cleanly — no 'Compiled with problems' overlay on any pane (confirm()→window.confirm() fix held). Test campaign deleted at end.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_v62547_writer_tools_remainder.py",
+    "/app/backend/tests/test_v62547_writer_tools_perms.py",
+    "/app/backend/tests/test_v62546_writer_tools.py",
+    "/app/backend/tests/test_v62546_writer_tools_supplemental.py",
+    "/app/test_reports/pytest/iter80_full.xml",
+    "/app/test_reports/pytest/iter80_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "CrudListTool.jsx (229 lines) — clean shared scaffold, fields-array driven, group-by-kind facet, window.confirm() correctly used (line 81). Tailwind class-bundle pattern (WRITER_THEME emerald/rose) correctly avoids dynamic class composition. data-testid prefix discipline is consistent.",
+    "writer_tools.py — Cultures/Cosmology/POV/Themes routes use extra='forbid' on Pydantic models (verified by 422 on bogus_field). Cosmology and Themes additionally enforce explicit kind whitelist with 400 on both POST and PATCH (verified). Auto-order-per-kind on cosmology works (each new kind starts at order=10).",
+    "Minor: PATCH endpoints for cultures/cosmology/pov/themes reuse the FULL CreateIn schema (required 'name', required 'kind' for cosmology/themes). Means clients MUST resend name on every PATCH. Functional but inconsistent with manuscript_patch which has a dedicated PatchIn model with all-optional fields. Consider adding *PatchIn variants for symmetry in a future drop; not a regression today (UI sends full payload).",
+    "AtelierTab.jsx wiring (lines 241-306) — each of the 4 new tools mounted under Suspense with explicit data-testid 'atelier-wb-cultures-pane' / 'atelier-wb-cosmology-pane' / 'atelier-st-pov-pane' / 'atelier-st-themes-pane'. Clean and follows the wb-atlas pattern."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_v62547_writer_tools_perms.py (new — 4-surface perm matrix)"
+  ],
+  "success_rate": {"backend": "100% (13/13)", "frontend": "100% (4/4 new tools + 4/4 regression panes)"},
+  "test_credentials": "Admin: tablegnostic-admin@tablegnostic.com / LoremasterAurea2026!Forge (used, working).",
+  "seed_data_creation": "Ephemeral campaigns prefixed WriterToolsTest47-/WTPerm-/FE-iter80-cultures — all DELETE'd in finally blocks or end of run. Ephemeral player users v62547-outsider-* / v62547-member-* not cleaned (no user-delete API, harmless).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "V6.25.47 fully green on backend + frontend. The CrudListTool.jsx shared scaffold pattern is now the canonical idiom for any future flat-list writer tools — pass {basePath, collectionKey, fields[], optional kinds[], theme bundle, testidPrefix}. data-testid contract: '{prefix}-page', '{prefix}-new', '{prefix}-form-{fieldKey}', '{prefix}-form-kind', '{prefix}-form-save', '{prefix}-edit-form', '{prefix}-row-{id}', '{prefix}-edit-{id}', '{prefix}-delete-{id}', '{prefix}-empty', '{prefix}-loading'. Background LLM reseed (PID 975) not touched. Use Authorization: Bearer <access_token> (NOT 'token'). Atelier subtab IDs: atelier-subtab-{wb-studio|st-workshop}, then atelier-{wbsub|stsub}-{wb-cultures|wb-cosmology|st-pov|st-themes}.",
+  "rca of the issue": "N/A — no failures."
+}

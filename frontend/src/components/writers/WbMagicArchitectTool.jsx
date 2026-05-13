@@ -70,7 +70,7 @@ export default function WbMagicArchitectTool({ campId }) {
   };
 
   const remove = async (sid) => {
-    if (!confirm("Delete this magic source?")) return;
+    if (!window.confirm("Delete this magic source?")) return;
     setBusy(true);
     try {
       await api.delete(`/writer/magic/${campId}/${sid}`);

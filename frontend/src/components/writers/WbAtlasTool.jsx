@@ -106,7 +106,7 @@ export default function WbAtlasTool({ campId }) {
   };
 
   const unpin = async (nodeId) => {
-    if (!confirm("Remove this pin from the map? The codex node stays.")) return;
+    if (!window.confirm("Remove this pin from the map? The codex node stays.")) return;
     setBusy(true); setErr("");
     try {
       await api.delete(`/writer/atlas/${campId}/pins/${nodeId}`);

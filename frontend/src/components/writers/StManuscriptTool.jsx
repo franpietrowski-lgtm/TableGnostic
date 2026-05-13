@@ -119,7 +119,7 @@ export default function StManuscriptTool({ campId }) {
   };
 
   const deleteSection = async (sid) => {
-    if (!confirm("Delete this section and all its children?")) return;
+    if (!window.confirm("Delete this section and all its children?")) return;
     setBusy(true); setErr("");
     try {
       await api.delete(`/writer/manuscript/${campId}/${sid}`);

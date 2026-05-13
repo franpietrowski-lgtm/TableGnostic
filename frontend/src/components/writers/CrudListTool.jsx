@@ -8,6 +8,10 @@
  *   • per-record field schema (label + multiline + maxLength)
  *   • optional "kind" facet so multi-kind collections (cosmology,
  *     themes) can be grouped in the UI
+ *   • a `theme` object with pre-built Tailwind class strings — we
+ *     can't compose Tailwind classes dynamically (the JIT compiler
+ *     can't find `text-${color}-300`), so each wrapper hands us the
+ *     full strings up-front.
  *
  * The pattern: GET list → if creating, show inline form → list cards
  * with edit/delete affordances. Same look across all four for cognitive
@@ -18,7 +22,7 @@ import { Plus, Save, X, Trash2 } from "lucide-react";
 import { api } from "../../lib/api";
 
 export function CrudListTool({
-  campId, basePath, collectionKey, themeAccent, icon: Icon,
+  campId, basePath, collectionKey, theme, icon: Icon,
   pageTitle, pageBlurb, fields, kinds, kindLabel,
   testidPrefix,
 }) {
@@ -73,7 +77,8 @@ export function CrudListTool({
   };
 
   const remove = async (rid) => {
-    if (!confirm("Delete this entry?")) return;
+    // eslint-disable-next-line no-alert
+    if (!window.confirm("Delete this entry?")) return;
     setBusy(true);
     try {
       await api.delete(`${basePath}/${campId}/${rid}`);
@@ -96,10 +101,10 @@ export function CrudListTool({
 
   return (
     <div className="p-4 space-y-3" data-testid={`${testidPrefix}-page`}>
-      <div className={`card-mystic p-3 border-${themeAccent}-700/30 flex items-center gap-3`}>
-        <Icon className={`w-5 h-5 text-${themeAccent}-300`}/>
+      <div className={`card-mystic p-3 ${theme.ring} flex items-center gap-3`}>
+        <Icon className={`w-5 h-5 ${theme.accent}`}/>
         <div className="flex-1">
-          <div className={`label-ref text-${themeAccent}-300`}>{pageTitle}</div>
+          <div className={`label-ref ${theme.accent}`}>{pageTitle}</div>
           <div className="text-[11px] text-mist/70 italic">{pageBlurb}</div>
         </div>
         {data.writable && (
@@ -112,11 +117,11 @@ export function CrudListTool({
       </div>
 
       {editId && (
-        <div className={`card-mystic p-4 border-${themeAccent}-500/50 space-y-2`}
+        <div className={`card-mystic p-4 ${theme.ringStrong} space-y-2`}
              data-testid={`${testidPrefix}-edit-form`}>
           <div className="flex items-center gap-2">
-            <Icon className={`w-4 h-4 text-${themeAccent}-300`}/>
-            <span className={`label-ref text-${themeAccent}-300 flex-1`}>
+            <Icon className={`w-4 h-4 ${theme.accent}`}/>
+            <span className={`label-ref ${theme.accent} flex-1`}>
               {editId === "new" ? `New entry` : "Editing"}
             </span>
             <button type="button" onClick={cancel} className="btn btn-ghost text-xs p-1">
@@ -170,18 +175,18 @@ export function CrudListTool({
         items.length > 0 && (
           <div key={k || "all"}>
             {label && (
-              <div className={`label-ref text-${themeAccent}-300 text-[10px] uppercase tracking-widest mb-1 mt-2`}>
+              <div className={`label-ref ${theme.accent} text-[10px] uppercase tracking-widest mb-1 mt-2`}>
                 {label} ({items.length})
               </div>
             )}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {items.map((r) => (
                 <div key={r.id}
-                     className={`card-mystic p-3 border-${themeAccent}-700/30 hover:border-${themeAccent}-500/60 transition`}
+                     className={`card-mystic p-3 ${theme.ring} ${theme.ringHover} transition`}
                      data-testid={`${testidPrefix}-row-${r.id}`}>
                   <div className="flex items-start justify-between gap-2 mb-1">
                     <div className="flex-1">
-                      <div className={`label-ref text-${themeAccent}-300`}>{r.name}</div>
+                      <div className={`label-ref ${theme.accent}`}>{r.name}</div>
                       {r.kind && (
                         <div className="text-[10px] uppercase tracking-widest text-mist/60">{r.kind}</div>
                       )}
@@ -222,3 +227,22 @@ export function CrudListTool({
     </div>
   );
 }
+
+/**
+ * Pre-built Tailwind class bundles. Wrappers pass one of these in as
+ * `theme`. Adding a new accent? Just add a key here.
+ */
+export const WRITER_THEME = {
+  emerald: {
+    accent:     "text-emerald-300",
+    ring:       "border-emerald-700/30",
+    ringStrong: "border-emerald-500/50",
+    ringHover:  "hover:border-emerald-500/60",
+  },
+  rose: {
+    accent:     "text-rose-300",
+    ring:       "border-rose-800/30",
+    ringStrong: "border-rose-500/50",
+    ringHover:  "hover:border-rose-500/60",
+  },
+};
