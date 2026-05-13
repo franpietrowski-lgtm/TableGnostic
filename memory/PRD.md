@@ -14,6 +14,37 @@
 
 ## 2. Implemented (cumulative, condensed)
 
+### V6.25.45 — Catalogue gaps · House Rules consolidation · Worldbuilder + Storyteller roles (2026-02-13)
+
+**e/f. Reference catalogue gaps filled** (`backend/besm_data.py` + `routes/besm.py` + `frontend/components/Reference.jsx`)
+- **6 new BESM 4E class templates** added: Demon Hunter, Idol (Stage Caster), Pet Trainer (Bonded Multitude), Aurae Acolyte, Mortiscure Initiate, Wandering Monk (12 → 18 total). Aurae & Mortiscure classes encode the user's lore distinction — power-source-aligned, not pantheonic.
+- **4 new Equipment Mods Reference tabs** surfaced: Weapon Enhancements (35), Weapon Limiters (13), Item Enhancements (7), Item Limiters (8). Data already existed in `besm_data.py` but had no UI; now formatted with `±N pts/rank · ranks <r> · weapon-/item-only · note`.
+- **Class Templates** is now its own Reference tab in the "Combat & Play" group.
+- **Primer-prohibited visual distinction** added to CharacterBuilder weapon/item enhancement chips: 🔒 lock glyph + rose border + line-through + abbreviated cost remain visible (so players see what's _in the catalogue_ but locked-out vs. what they can apply).
+
+**g. Consolidated House & Custom Rules editor** (`frontend/components/ReferenceEditor.jsx` + `campaignDetail/PrimerTab.jsx`)
+- ReferenceEditor (Atelier ▸ Table Tools) now hosts the campaign's `house_rules` free-text prose at the top via an expandable panel. Single editor manages both prose AND structured rule rows that the character builder applies mechanically.
+- PrimerTab keeps its fast-edit textarea (so primer setup flow is uninterrupted) but adds a deep-link to the consolidated editor.
+- Placeholder text adapts to active system (cypher / dnd-5e / besm-anime).
+
+**i. Worldbuilder + Storyteller writer roles** (`backend/core/models.py` + `frontend/components/Shell.jsx` + `frontend/components/writers/WriterPages.jsx` + `App.js` + `Auth.jsx` + `Dashboard.jsx`)
+- Backend: `RegisterIn.role` Literal now accepts `worldbuilder` and `storyteller`; rejects unknown roles with 422.
+- Shell uses `pickNav(user.role)` to swap sidebar nav per role.
+  - **Worldbuilder**: Dashboard · Worlds (=Campaigns) · Atlas · Magic Architect · Cultures & Languages · Cosmology & Calendar · How To · Account.
+  - **Storyteller**: Dashboard · Works (=Campaigns) · Manuscript · Outline & Beats · POV Bibles · Themes & Motifs · How To · Account.
+  - **Both writer roles hide**: Reference, Concept Forge, Canon, Marketplace, Discover.
+- 8 scaffold pages added under `/app/wb/*` and `/app/st/*` (atlas, magic-architect, cultures, cosmology, manuscript, outline, pov-bibles, themes) — each rendered with role-themed gradient + feature outline + "authoring tools land in the next ship" honest disclosure. Tests assert via `wb-*-page` / `st-*-page` data-testids.
+- Auth.jsx role picker expanded to 4 options with niche-style cards.
+- Dashboard mounts `<WriterRoleHeader>` banner when role is writer-typed (self-renders null for player/gm/admin).
+
+**Verified**: testing agent iteration 78 — **18/18 backend tests green** (3 new + 15 regression). No critical or minor issues. Report: `/app/test_reports/iteration_78.json`.
+
+**Known limitations**:
+- Writer scaffold pages are placeholders. Continents-editor / manuscript-editor / etc. are intentionally stubbed for the V6.25.45 drop; they'll land in V6.25.46+.
+- Evereantha LLM re-seed continues to be flaky (per-source-batched persistence + container `/tmp` ephemerality + LiteLLM proxy 502s). A chunk-incremental persistence rewrite is queued.
+
+
+
 ### V6.25.44 — Bug batch (a→d): Encounter overlap · Race/Class redirect · Reference sync · Scene location & threads (2026-02-13)
 
 **Bug A — Encounter Designer underlaying Encounters Library** (`frontend/components/SessionView.jsx`)
