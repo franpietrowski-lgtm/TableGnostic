@@ -14,6 +14,29 @@
 
 ## 2. Implemented (cumulative, condensed)
 
+### V6.25.49 — Reference conditions catalogue · PATCH /map/tokens/{tid} · deeper landing stats (2026-02-13)
+
+**Reference — universal status conditions catalogue** (`backend/system_data/status_conditions.py`)
+- Single shared palette (`COMMON_CONDITIONS`) of ~30 universal combat / environmental ailments — Burning · Immolation · Bleeding · Frostbite · Hypothermia · Suffocating · Drowning · Electrified · Corroded · Necrotic Decay · Radiation · Stunned · Paralyzed · Petrified · Restrained · Grappled · Prone · Incapacitated · Unconscious · Blinded · Deafened · Charmed · Frightened · Confused · Hexed · Invisible · Marked · Exhausted, plus Poisoned · Diseased. Every entry has `name / effect / severity / tags[]`.
+- **BESM 4E**: universal palette + 4 BESM extras (Pinned, Disarmed, Energy Drained, Soulshocked) → 34 conditions exposed at `GET /api/besm/reference`.
+- **D&D 5E**: SRD 13 codified names first, then non-duplicating universal extras → 30 conditions at `GET /api/systems/dnd-5e/reference`.
+- **Anime 5E**: universal palette + 3 genre conditions (Genre-Locked / Spotlit / Eclipsed) → 33 conditions.
+- **Cypher**: Damage Track (Hale / Impaired / Debilitated / Dead) + Distracted + Dazed + universal palette → 36 conditions.
+- **Frontend**: new "Conditions" tab under Reference ▸ Combat & Play (BESM); SystemReferenceView already renders the Section for non-BESM systems. Severity chips ([LIGHT]/[MODERATE]/[SEVERE]) + tags ("fire · physical · DoT") in each card. Filter input now matches `tags` and `effect` text too — typing "poison" finds Poisoned via its effect prose.
+
+**Battlemap — dedicated PATCH /api/sessions/{sid}/map/tokens/{tid}** (`backend/routes/battlemap.py`)
+- New `TokenPatchIn` (Pydantic `extra="forbid"`) with all token fields optional. Unknown field → 422. Non-existent token → 404. Empty body → 200 no-op.
+- Player gate identical to POST upsert (must own linked character or sit a companion seat). GM-locked tokens reject player position-changes with 403 (status/hp toggles still allowed).
+- Broadcasts the standard `map:token` WS event so the existing client subscriptions update without a poll.
+
+**Landing — deeper public statistics** (`backend/routes/dynamic_public.py` + `frontend/components/landing/ProductProof.jsx`)
+- `GET /api/public/stats` gains 6 new keys: `sessions_played`, `active_24h`, `gms_active`, `by_system` (per-system campaign counts), `latest_version` (auto-pulled from PRD.md's first `### V` heading), `pytest_passing` (parsed from the most-recent `/app/test_reports/iteration_N.json`).
+- New `GET /api/public/activity-pulse` — last-7-days timeseries (`campaigns_created`, `sessions_opened`, `characters_made` per day).
+- `ProductProof.jsx` rebuilt: hardcoded version + test counts removed; 9 live counter tiles now (added Sessions Played · Active in 24h · GMs Running Tables); new **ActivitySparkline** component renders 7 colour-coded bars (campaigns · sessions · heroes); per-system breakdown bar chart replaces the obsolete "Shipping Strip"; latest-milestone tile reads from `stats.latest_version` so this surface never goes stale again. New testids: `proof-stat-sessions-played`, `proof-stat-active-in-24h`, `proof-stat-gms-running-tables`, `proof-by-system`, `proof-activity-pulse`, `proof-card-latest-internal-milestone-value`.
+
+**Verified**: testing agent iteration 82 — **8/8 new backend tests pass** (`test_v62549_conditions_patch_stats.py`) **+ 19/19 regression** across V6.25.46-48 panes (writer tools, battlemap sidebar, vitals, atlas link). Frontend 100% — all required testids verified live, landing free of ESLint "Compiled with problems" shadow box.
+
+
 ### V6.25.48 — Battlemap right-sidebar overhaul + auto-fill vitals + atlas → map link (2026-02-13)
 
 **P0 — Right-sidebar control panel** (`frontend/components/BattlemapSidebar.jsx`)

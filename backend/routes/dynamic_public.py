@@ -150,7 +150,9 @@ async def public_stats():
                 latest = json.load(open(os.path.join(reports_dir, files[0]), encoding="utf-8"))
                 sr = latest.get("success_rate") or {}
                 rate = sr.get("backend") or ""
-                pm = re.search(r"\((\d+/\d+)\)", str(rate))
+                # Match the first N/N pair after an opening paren —
+                # tolerates "100% (8/8 new + 19/19 regression …)".
+                pm = re.search(r"\((\d+/\d+)", str(rate))
                 if pm:
                     pytest_passing = pm.group(1)
     except Exception:

@@ -195,8 +195,14 @@ function ProofCard({ card }) {
     ember: { text: "text-ember", border: "border-ember/45" },
   }[card.accent];
 
+  // V6.25.49 — stable, kebab-case testid per card so the test agent
+  // can target individual milestone tiles (e.g. proof-card-latest-
+  // internal-milestone) without scraping the DOM.
+  const cardTid = `proof-card-${card.title.toLowerCase().replace(/[^a-z0-9]/g, "-")}`;
+  const valueTid = `${cardTid}-value`;
+
   return (
-    <div className="card-mystic p-6 md:p-7" data-testid={`proof-card-${card.title.toLowerCase().replace(/[^a-z0-9]/g, "-")}`}>
+    <div className="card-mystic p-6 md:p-7" data-testid={cardTid}>
       <div className="flex items-center gap-3 mb-4">
         <div className={`w-9 h-9 rounded-sm border ${accent.border} ${accent.text} flex items-center justify-center bg-void/60`}>
           <Icon className="w-4 h-4" />
@@ -205,7 +211,8 @@ function ProofCard({ card }) {
       </div>
 
       {card.big && (
-        <div className={`font-display text-4xl md:text-5xl tracking-tight ${accent.text}`}>
+        <div className={`font-display text-4xl md:text-5xl tracking-tight ${accent.text}`}
+             data-testid={valueTid}>
           {card.big}
         </div>
       )}
