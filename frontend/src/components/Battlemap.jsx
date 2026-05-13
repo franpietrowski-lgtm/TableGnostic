@@ -5,6 +5,7 @@ import {
   Map as MapIcon, Image as ImageIcon, Eye, EyeOff, Plus, X,
   Hammer, Hand, MousePointer2, Trash2, Ruler, Sparkles, Maximize2, Minimize2,
 } from "lucide-react";
+import BattlemapSidebar, { MARKER_ICONS } from "./BattlemapSidebar";
 
 /**
  * Battlemap — square-grid canvas inside a SessionView.
@@ -48,6 +49,16 @@ export default function Battlemap({
   const [measureStart, setMeasureStart] = useState(null);
   const [measureEnd, setMeasureEnd] = useState(null);
   const [losEnabled, setLosEnabled] = useState(true);
+  // V6.25.48 — sidebar overhaul.
+  // `snapToGrid` controls whether token drops round to half-cell
+  // increments (default on). `pendingPlacement` holds a `{kind,
+  // marker_type|character, color, label, atlas_node_id?}` payload
+  // selected from the sidebar — next canvas click spawns it.
+  // `vitals` is a {character_id: {hp_pct, ep_pct, ...}} map polled
+  // from /map/vitals every 6s to auto-fill PC token rings (P1).
+  const [snapToGrid, setSnapToGrid] = useState(true);
+  const [pendingPlacement, setPendingPlacement] = useState(null);
+  const [vitals, setVitals] = useState({});
   // Mobile detector — strictly viewport-based; mobile users get a
   // view-only experience (no GM tools, locked to select mode). Desktop
   // gets the full editing kit. Tracks resize so a tablet rotation flips
@@ -189,6 +200,25 @@ export default function Battlemap({
     return () => { mounted = false; };
   }, [sessionId]);
 
+  // ─── P1 — poll PC vitals every 6s ───
+  // Backend computes HP%/EP% per linked character from
+  // /api/sessions/{sid}/map/vitals. Cheap (1 query per second-bucket
+  // of seated PCs) and avoids wiring HP broadcasts through every
+  // spend / damage code path.
+  useEffect(() => {
+    if (!sessionId) return;
+    let mounted = true;
+    const tick = async () => {
+      try {
+        const { data } = await api.get(`/sessions/${sessionId}/map/vitals`);
+        if (mounted) setVitals(data?.vitals || {});
+      } catch { /* swallow — sidebar handles empty */ }
+    };
+    tick();
+    const h = setInterval(tick, 6000);
+    return () => { mounted = false; clearInterval(h); };
+  }, [sessionId]);
+
   useEffect(() => {
     if (!subscribe) return;
     const off = subscribe((evt) => {
@@ -328,6 +358,29 @@ export default function Battlemap({
   const onMouseDown = (ev) => {
     if (!state) return;
     const cell = eventToCell(ev);
+    // V6.25.48 — sidebar-driven placement takes precedence over other
+    // modes. If the GM has armed a marker / PC spawn via the sidebar,
+    // the next canvas click drops it and clears the pending intent.
+    if (pendingPlacement && isGm) {
+      const x = snapToGrid ? Math.round(cell.x * 2) / 2 : cell.x;
+      const y = snapToGrid ? Math.round(cell.y * 2) / 2 : cell.y;
+      const base = {
+        x, y,
+        size: 1,
+        hp_pct: 100, ep_pct: 100,
+        status: [],
+        color: pendingPlacement.color || "#c8a34a",
+        label: pendingPlacement.label || "",
+        kind: pendingPlacement.kind,
+        marker_type: pendingPlacement.marker_type || null,
+        character_id: pendingPlacement.character_id || null,
+        atlas_node_id: pendingPlacement.atlas_node_id || null,
+        tooltip: pendingPlacement.tooltip || null,
+      };
+      sendToken(base);
+      setPendingPlacement(null);
+      return;
+    }
     if (mode === "fog" && isGm) {
       const x = Math.floor(cell.x), y = Math.floor(cell.y);
       const isShift = ev.shiftKey;
@@ -349,7 +402,7 @@ export default function Battlemap({
       const dx = cell.x - t.x, dy = cell.y - t.y;
       return Math.abs(dx) < t.size / 2 + 0.5 && Math.abs(dy) < t.size / 2 + 0.5;
     });
-    if (hit && tokenIsMine(hit)) {
+    if (hit && tokenIsMine(hit) && !hit.locked) {
       setDraggingId(hit.id);
       setDragPos({ x: hit.x, y: hit.y });
     }
@@ -379,7 +432,9 @@ export default function Battlemap({
     if (draggingId && dragPos) {
       const t = state.tokens.find((x) => x.id === draggingId);
       if (t) {
-        sendToken({ ...t, x: Math.round(dragPos.x * 2) / 2, y: Math.round(dragPos.y * 2) / 2 });
+        const nx = snapToGrid ? Math.round(dragPos.x * 2) / 2 : dragPos.x;
+        const ny = snapToGrid ? Math.round(dragPos.y * 2) / 2 : dragPos.y;
+        sendToken({ ...t, x: nx, y: ny });
       }
     }
     setDraggingId(null);
@@ -524,6 +579,38 @@ export default function Battlemap({
     await api.post(`/sessions/${sessionId}/map/fog`, { hide: cells });
   };
 
+  // ─── V6.25.48 — sidebar callbacks ───
+  // Arming a placement just sets state — the actual spawn happens on
+  // the next canvas click in onMouseDown.
+  const armPcSpawn = (character) => {
+    if (!isGm) return;
+    setMode("select");  // override any active fog/wall tool
+    setPendingPlacement({
+      kind: "pc",
+      character_id: character.id,
+      label: character.name,
+      color: character.token_color || "#c8a34a",
+      tooltip: null,
+    });
+  };
+  const armAtlasSpawn = (pin) => {
+    if (!isGm) return;
+    setMode("select");
+    const mt = pin?.fields?.location_type || "other";
+    const palette = MARKER_ICONS[mt] ? mt : "note";
+    setPendingPlacement({
+      kind: "marker",
+      marker_type: palette,
+      atlas_node_id: pin.id,
+      label: pin.title,
+      color: MARKER_ICONS[palette]?.color || "#fbbf24",
+      tooltip: pin.content || pin.fields?.description || null,
+    });
+  };
+  const zoomIn = () => setZoom((z) => clampZoom(z + 0.25));
+  const zoomOut = () => setZoom((z) => clampZoom(z - 0.25));
+  const zoomReset = () => { setZoom(1); setPan({ x: 0, y: 0 }); };
+
   // ─── render ───
   if (stillUnrolling || !state) return (
     <div className="card-mystic p-10 text-mist text-sm flex flex-col items-center justify-center gap-3 min-h-[40vh]" data-testid="battlemap-loading">
@@ -563,7 +650,9 @@ export default function Battlemap({
   );
 
   return (<Wrap>
-    <div className="card-mystic p-3 md:p-4 flex flex-col" data-testid="battlemap" data-mode={mode} data-mobile={isMobile ? "1" : "0"}>
+    <div className="flex flex-col lg:flex-row gap-3 lg:items-stretch"
+         data-testid="battlemap-shell">
+    <div className="card-mystic p-3 md:p-4 flex flex-col flex-1 min-w-0" data-testid="battlemap" data-mode={mode} data-mobile={isMobile ? "1" : "0"} data-pending-placement={pendingPlacement ? pendingPlacement.kind : ""}>
       <div className="flex items-center justify-between gap-2 mb-3">
         <div className="min-w-0">
           <div className="label-ref">Battlemap</div>
@@ -674,6 +763,19 @@ export default function Battlemap({
         <div className="mb-2 px-3 py-2 rounded-sm border border-arcane/40 bg-arcane/10 text-[10px] font-ui uppercase tracking-widest text-arcane-light"
              data-testid="map-mobile-viewonly-banner">
           Map is view-only on mobile. GMs prep walls / fog / tokens on desktop.
+        </div>
+      )}
+
+      {/* V6.25.48 — pending placement banner */}
+      {pendingPlacement && isGm && (
+        <div className="mb-2 px-3 py-1.5 rounded-sm border border-gold/60 bg-gold/10 text-[10px] font-ui uppercase tracking-widest text-gold-bright flex items-center justify-between"
+             data-testid="battlemap-placement-banner">
+          <span>Click canvas to drop · {pendingPlacement.label}</span>
+          <button type="button" onClick={() => setPendingPlacement(null)}
+                  className="btn btn-ghost text-[10px] px-2 py-0"
+                  data-testid="battlemap-placement-cancel">
+            cancel
+          </button>
         </div>
       )}
 
@@ -824,8 +926,26 @@ export default function Battlemap({
           const liveStatus = (t.character_id && effectsByCharacter[t.character_id]) || [];
           const allStatus = [...(t.status || []), ...liveStatus].slice(0, 4);
           // V2: line-of-sight occlusion — players don't see tokens behind walls.
-          const occluded = isOccluded(t);
+          // Markers are never LoS-occluded (treasure under a wall is still
+          // a treasure; GMs use fog if they want it hidden).
+          const occluded = t.kind === "marker" ? false : isOccluded(t);
           if (occluded) return null;
+          // V6.25.48 — live HP/EP from /vitals overrides static token values.
+          // Falls back to whatever's stored on the token (so unseated NPCs
+          // still render at their last persisted hp_pct).
+          const liveVitals = t.character_id ? (vitals[t.character_id] || null) : null;
+          const hpPct = Math.max(0, Math.min(100, liveVitals?.hp_pct ?? t.hp_pct ?? 100));
+          const epPct = Math.max(0, Math.min(100, liveVitals?.ep_pct ?? t.ep_pct ?? 100));
+          const isMarker = t.kind === "marker";
+          const Marker = isMarker ? MARKER_ICONS[t.marker_type]?.Icon : null;
+          // Rich hover tooltip: name, system vitals, atlas link, status.
+          const tip = isMarker
+            ? `${MARKER_ICONS[t.marker_type]?.label || "Marker"}: ${t.label || ""}`
+              + (t.tooltip ? ` — ${t.tooltip}` : "")
+            : `${t.label || ch?.name || ""}`
+              + (liveVitals ? ` · HP ${liveVitals.hp_current}/${liveVitals.hp_max} · EP ${liveVitals.ep_current}/${liveVitals.ep_max}` : "")
+              + (isActive ? " · ACTIVE" : "")
+              + (liveStatus.length ? " · " + liveStatus.join(", ") : "");
           return (
             <button
               key={t.id}
@@ -840,30 +960,74 @@ export default function Battlemap({
               } : undefined}
               className={`absolute rounded-full border-2 flex items-center justify-center font-display text-base shadow-[0_2px_8px_rgba(0,0,0,0.6)]
                 ${isActive ? "ring-2 ring-gold ring-offset-1 ring-offset-black animate-pulse" : ""}
-                ${tokenIsMine(t) ? "cursor-grab active:cursor-grabbing" : "cursor-not-allowed"}`}
+                ${tokenIsMine(t) && !t.locked ? "cursor-grab active:cursor-grabbing" : "cursor-not-allowed"}`}
               style={{
                 left: `calc(${px}% - ${sizePct / 2}%)`,
                 top: `calc(${py}% - ${sizePct / 2}%)`,
                 width: `${sizePct}%`,
                 aspectRatio: "1 / 1",
-                background: `${t.color || "#c8a34a"}cc`,
-                borderColor: t.color || "#c8a34a",
+                background: isMarker ? `${t.color || "#fbbf24"}33` : `${t.color || "#c8a34a"}cc`,
+                borderColor: t.color || (isMarker ? "#fbbf24" : "#c8a34a"),
                 color: "#0a0810",
                 zIndex: isDragging ? 30 : 10,
               }}
               data-testid={`map-token-${t.id}`}
+              data-token-kind={t.kind || "pc"}
               data-active={isActive ? "true" : "false"}
-              aria-label={t.label || ch?.name || "token"}
-              title={`${t.label || ch?.name || ""}${isActive ? " · ACTIVE" : ""}${liveStatus.length ? " · " + liveStatus.join(", ") : ""} ${isGm ? "· right-click to remove" : ""}`}
+              aria-label={tip}
+              title={tip + (isGm ? "  ·  right-click: remove · shift+right-click: cycle size" : "")}
             >
-              {initials}
-              {/* HP bar */}
-              {t.hp_pct < 100 && (
-                <div className="absolute -bottom-1 left-0 right-0 h-1 bg-black/80 rounded">
-                  <div className="h-full bg-ember rounded"
-                       style={{ width: `${Math.max(0, Math.min(100, t.hp_pct))}%` }}/>
-                </div>
+              {/* Marker = lucide icon; PC = initial letter */}
+              {isMarker && Marker
+                ? <Marker className="w-3/5 h-3/5" style={{ color: t.color || "#fbbf24" }}/>
+                : initials}
+
+              {/* V6.25.48 — invisible-when-full HP / EP arcs.
+                  Rendered only when there's something to show. The
+                  arcs sit around the token border without crowding
+                  the centre; subtle by default, vivid as they
+                  deplete. PC tokens only — markers don't have vitals. */}
+              {!isMarker && (hpPct < 100 || epPct < 100) && (
+                <svg className="absolute inset-0 w-full h-full pointer-events-none overflow-visible"
+                     viewBox="0 0 100 100" aria-hidden="true">
+                  {/* HP arc — red, top half, sweeps clockwise as HP drops */}
+                  {hpPct < 100 && (
+                    <circle cx="50" cy="50" r="48" fill="none"
+                            stroke="#f87171"
+                            strokeWidth="4"
+                            strokeOpacity={hpPct < 33 ? 0.95 : hpPct < 66 ? 0.7 : 0.45}
+                            strokeDasharray={`${(hpPct / 100) * 150.8} 301.6`}
+                            strokeDashoffset="-75.4"
+                            transform="rotate(-90 50 50)"
+                            data-testid={`map-token-${t.id}-hp-arc`}/>
+                  )}
+                  {/* EP arc — cyan, bottom half */}
+                  {epPct < 100 && (
+                    <circle cx="50" cy="50" r="48" fill="none"
+                            stroke="#67e8f9"
+                            strokeWidth="4"
+                            strokeOpacity={epPct < 33 ? 0.9 : 0.55}
+                            strokeDasharray={`${(epPct / 100) * 150.8} 301.6`}
+                            strokeDashoffset="75.4"
+                            transform="rotate(90 50 50)"
+                            data-testid={`map-token-${t.id}-ep-arc`}/>
+                  )}
+                </svg>
               )}
+
+              {/* Initiative-order dot — tiny gold pip at top of token
+                  when initiative_order is set. Active-actor pulse
+                  (the ring above) already conveys whose turn it is;
+                  this is a secondary always-visible badge for queue
+                  awareness. */}
+              {t.initiative_order != null && t.initiative_order >= 0 && (
+                <span className="absolute -top-2 -left-2 px-1 text-[8px] rounded-full
+                                bg-gold text-void font-display border border-gold-bright shadow"
+                      data-testid={`map-token-${t.id}-init`}>
+                  {t.initiative_order}
+                </span>
+              )}
+
               {/* Status rings — manual + live effects */}
               {allStatus.map((s, i) => (
                 <span key={`${s}-${i}`}
@@ -891,6 +1055,31 @@ export default function Battlemap({
             ? "GM · select to move tokens · fog: click hide / shift-click reveal · wall: click+drag · ruler: click+drag · right-click token to remove · shift+right-click to cycle size"
             : `Drag tokens you own. Gold ring = active turn. ${losEnabled ? "Walls block your line of sight." : "Line-of-sight off — seeing all."}`}
       </div>
+    </div>
+      {!isMobile && (
+        <BattlemapSidebar
+          isGm={isGm}
+          isMobile={isMobile}
+          characters={characters}
+          tokens={state.tokens}
+          vitals={vitals}
+          pendingPlacement={pendingPlacement}
+          onSetPendingPlacement={setPendingPlacement}
+          onSpawnPc={armPcSpawn}
+          onSpawnMarker={(mt) => setPendingPlacement({
+            kind: "marker", marker_type: mt,
+            color: MARKER_ICONS[mt]?.color, label: MARKER_ICONS[mt]?.label,
+          })}
+          onSpawnAtlasPin={armAtlasSpawn}
+          snapToGrid={snapToGrid}
+          onToggleSnap={() => setSnapToGrid((v) => !v)}
+          zoom={zoom}
+          onZoomIn={zoomIn}
+          onZoomOut={zoomOut}
+          onZoomReset={zoomReset}
+          campaignId={campaign?.id}
+        />
+      )}
     </div>
   </Wrap>);
 }

@@ -63,6 +63,17 @@ class TokenIn(BaseModel):
     size: float = 1.0  # multiplier of grid_size_px (1 = single cell)
     hp_pct: int = 100
     status: List[str] = []
+    # V6.25.48 — sidebar overhaul fields.
+    # `kind` distinguishes PC tokens from GM-placed map-markers (doors,
+    # traps, treasure, etc.). Markers render a lucide icon instead of
+    # the initial-letter circle and are not subject to LoS occlusion.
+    kind: Literal["pc", "npc", "marker"] = "pc"
+    marker_type: Optional[str] = None  # door|trap|treasure|chest|stairs|portal|ladder|monster|note
+    ep_pct: int = 100
+    initiative_order: Optional[int] = None
+    tooltip: Optional[str] = None
+    atlas_node_id: Optional[str] = None   # P2 — link a map-marker back to its codex location node
+    locked: bool = False                  # GM-locked tokens can't be moved by players
 
 
 class WallIn(BaseModel):
@@ -268,3 +279,92 @@ async def remove_wall(sid: str, wid: str,
     await db.battlemaps.replace_one({"session_id": sid}, state, upsert=True)
     await broadcast(sid, {"type": "map:wall", "data": {"removed": wid}})
     return {"ok": True}
+
+
+# ───────────────────────── V6.25.48 — PC vitals snapshot ─────────────────────────
+# Auto-fills battlemap token HP/EP rings from each linked character's
+# live derived stats. Polled by the frontend (no need to wire HP
+# broadcasts through every spend/damage code path) — cheap because we
+# only look up the characters the map actually references.
+
+def _pc_vitals_for(character: dict) -> dict:
+    """Best-effort HP/EP percentage per system. Returns {hp_pct, ep_pct}.
+
+    BESM 4E stores max HP/EP under `derived.health_points` /
+    `derived.energy_points`; live current values are mutated on
+    `folio.health_points` / `folio.energy_points` by the bundle/spend
+    pipeline (see routes/channels.py). Other systems write to their
+    own state buckets (anime5e_state.ep_current/ep_max, etc.). We
+    inspect each candidate field and fall back to 100% when nothing
+    sensible is recorded — surface gracefully rather than erroring.
+    """
+    derived = character.get("derived") or {}
+    folio = character.get("folio") or {}
+
+    # --- HP ---
+    hp_max = (derived.get("health_points")
+              or folio.get("hp_max")
+              or folio.get("health_points_max")
+              or 0)
+    hp_cur = folio.get("health_points")
+    if hp_cur is None:
+        hp_cur = folio.get("hp_current") or folio.get("hp_now")
+    # D&D 5E state shim — if hp shows up under a system bucket.
+    if hp_cur is None:
+        dnd = folio.get("dnd5e_state") or {}
+        hp_cur = dnd.get("hp_current")
+        if hp_max == 0:
+            hp_max = dnd.get("hp_max") or 0
+
+    # --- EP ---
+    ep_max = (derived.get("energy_points")
+              or folio.get("ep_max")
+              or folio.get("energy_points_max")
+              or 0)
+    ep_cur = folio.get("energy_points")
+    if ep_cur is None:
+        ep_cur = folio.get("ep_current")
+    if ep_cur is None:
+        anime = folio.get("anime5e_state") or {}
+        ep_cur = anime.get("ep_current")
+        if ep_max == 0:
+            ep_max = anime.get("ep_max") or 0
+
+    def _pct(cur, mx):
+        try:
+            mx = int(mx or 0)
+            if mx <= 0:
+                return 100
+            cur = int(cur if cur is not None else mx)
+            return max(0, min(100, int(round(cur / mx * 100))))
+        except (TypeError, ValueError):
+            return 100
+
+    return {
+        "hp_pct": _pct(hp_cur, hp_max),
+        "ep_pct": _pct(ep_cur, ep_max),
+        "hp_current": hp_cur if hp_cur is not None else hp_max,
+        "hp_max": hp_max,
+        "ep_current": ep_cur if ep_cur is not None else ep_max,
+        "ep_max": ep_max,
+    }
+
+
+@router.get("/sessions/{sid}/map/vitals")
+async def get_pc_vitals(sid: str, user: dict = Depends(get_current_user)):
+    """Return {character_id: {hp_pct, ep_pct, hp_current, hp_max, ...}} for
+    every PC token currently on this session's map. Polled by the
+    Battlemap to keep token rings in sync with the character sheets
+    (no per-route HP broadcast needed)."""
+    sess, camp = await _load_session_with_camp(sid)
+    if not _is_member(user, camp):
+        raise HTTPException(403, "Not seated at this table")
+    state = await _get_or_init_map(sid)
+    char_ids = list({t.get("character_id") for t in state.get("tokens", [])
+                     if t.get("character_id")})
+    if not char_ids:
+        return {"vitals": {}}
+    chars = await db.characters.find(
+        {"id": {"$in": char_ids}}, {"_id": 0},
+    ).to_list(200)
+    return {"vitals": {c["id"]: _pc_vitals_for(c) for c in chars}}
