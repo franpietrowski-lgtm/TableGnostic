@@ -1,0 +1,49 @@
+{
+  "summary": "V6.25.42 backend regression — 17 LIVE HTTP e2e tests against external REACT_APP_BACKEND_URL + 5 prior auto-queue unit tests, all 22 PASS. Validated: (1) auto-queue intercept on PUT /api/characters/{id} and PATCH /folio inventory_state — player gets 202 + change_request, GM/admin bypass, gate-off allows player write; (2) non-inventory folio bucket (dnd_state) ALWAYS passes through; (3) GET /api/public/stats, /api/public/roadmap, /api/public/featured return clean JSON with no `_id` leakage; (4) GET /api/seo/sitemap.xml returns valid XML with /discover URLs, content-type application/xml; (5) GET /api/seo/og/{slug}.svg returns SVG for known slug, deterministic 404 for unknown; (6) POST /api/convert/preview-cost-balance returns source_budget/target_budget/delta object; (7) Admin moderation endpoints (/api/admin/flags, /audit, /showcases, /roadmap CRUD) all return 200 for admin and 403 for non-admin (Aurora). Note: review_request referenced `/api/conversion/preview` — actual route is `/api/convert/preview-cost-balance` with shape `source_budget/target_budget/delta` (not `source_cost/target_cost`).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "review_request vs reality",
+        "issue": "Spec named the cost-balance route `/api/conversion/preview` and fields `source_cost/target_cost/delta`. Actual route is `/api/convert/preview-cost-balance` and fields are `source_budget/target_budget/delta/within_tolerance`. Functionally correct, naming drift only."
+      },
+      {
+        "endpoint": "review_request credentials",
+        "issue": "GM password listed as `PieBan2018!!` was wrong. Correct from /app/memory/test_credentials.md: `PieGod08!!` (GMFran admin/GM persona) or `PieBan18!!` (Fran player persona). Test now uses `PieGod08!!`."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_v62542_e2e_live.py",
+    "/app/backend/tests/test_v62541_auto_queue.py",
+    "/app/test_reports/pytest/iteration75_e2e.xml"
+  ],
+  "action_items": [
+    "Optional: align documentation/spec wording with actual route `/api/convert/preview-cost-balance` and response field names `source_budget/target_budget` to reduce future confusion.",
+    "Optional: update internal credential references to match /app/memory/test_credentials.md (PieGod08!! / PieBan18!! — not PieBan2018!!)."
+  ],
+  "critical_code_review_comments": [
+    "enforce_or_queue correctly bypasses for admin + gm_id and intercepts for any seated player when gm_approval_required=true. Whitelist of FORBIDDEN fields on approve is solid (blocks owner_id/system_id/role injection).",
+    "SEO sitemap has a 1h in-process cache — works for single-pod preview but will fragment across replicas in prod; consider Redis or DB-backed cache if horizontally scaling.",
+    "Public stats endpoint counts campaigns/characters/listings/issues/nodes — no PII leak. `_id` excluded everywhere via {_id:0} projection.",
+    "Admin moderation routes all gate via `_require_admin(user)` and write to admin_actions audit collection — no audit gap observed.",
+    "OG SVG: known slug 200, unknown slug 404 (deterministic). XML escape applied to user-supplied fields."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_v62542_e2e_live.py"
+  ],
+  "success_rate": {
+    "backend": "100% (22/22 — 17 live e2e + 5 unit)",
+    "frontend": "not tested (skipped per request)"
+  },
+  "test_credentials": "Admin: tablegnostic-admin@tablegnostic.com / LoremasterAurea2026!Forge. GM/admin: franpietrowski@gmail.com / PieGod08!!. Player (non-admin) for 403 + auto-queue: albanaszak@ymail.com / AuroraTest123!.",
+  "seed_data_creation": "Test creates an ephemeral campaign + character per TestAutoQueueLive class run and tears them down via DELETE in fixture teardown. All test artifacts prefixed TEST_.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Use /app/backend/tests/test_v62542_e2e_live.py as the regression for V6.25.42. It exercises the LIVE external URL end-to-end including JWT auth. The auto-queue setup uses Aurora (role=player) joining via the campaign's invite_token at POST /api/invites/{token}/accept — same flow real players use. Background process v62542_llm_reingest_evereantha.py (PID 3019) is still running and did NOT interfere — it writes to db.nodes/db.custom_attributes for a different campaign. Note actual route names: cost-balance is `/api/convert/preview-cost-balance` not `/api/conversion/preview`."
+}

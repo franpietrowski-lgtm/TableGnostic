@@ -31,8 +31,40 @@ CUSTOM_KINDS = {"attribute", "power_pack", "power_bundle",
                 "item", "weapon", "skill", "house_rule"}
 SEED_TAG = "evereantha-bible-llm-seed"
 
-CHUNK_SIZE_CHARS = 6000
-CHUNK_OVERLAP_CHARS = 400
+# V6.25.42b — smaller chunks + exponential-backoff retries to dodge
+# transient LiteLLM 502/BadGateway errors that plagued the prior run.
+CHUNK_SIZE_CHARS = 4200
+CHUNK_OVERLAP_CHARS = 350
+MAX_RETRIES = 4
+BASE_BACKOFF_S = 6.0          # 6, 12, 24, 48 seconds
+INTER_CHUNK_DELAY_S = 2.5     # gentle cool-down between successful chunks
+
+
+async def _call_claude_section_retry(filename: str, system_id: str,
+                                     heading: str, body: str,
+                                     bias_kind: str) -> list:
+    """Wrap `_call_claude_section` with exponential-backoff retries.
+
+    Retries any exception (covers LiteLLM 502 BadGateway / BadRequest /
+    transient proxy hiccups) up to MAX_RETRIES times. Last failure is
+    re-raised so the caller can record a `FAIL` against that chunk.
+    """
+    last_err: Exception | None = None
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            return await _call_claude_section(
+                filename, system_id, heading, body, bias_kind,
+            )
+        except Exception as e:  # noqa: BLE001 — broad on purpose
+            last_err = e
+            if attempt == MAX_RETRIES:
+                break
+            sleep_s = BASE_BACKOFF_S * (2 ** (attempt - 1))
+            print(f"\n      retry {attempt}/{MAX_RETRIES - 1} in "
+                  f"{sleep_s:.0f}s ({str(e)[:80]})", end="", flush=True)
+            await asyncio.sleep(sleep_s)
+    assert last_err is not None
+    raise last_err
 
 
 def _chunk_text(text: str) -> list:
@@ -137,14 +169,16 @@ async def main() -> None:
             heading = f"chunk-{chunk_no:02d}-of-{len(chunks):02d}"
             print(f"  • {heading} ({len(chunk_body):,} chars) … ", end="", flush=True)
             try:
-                sugs = await _call_claude_section(
+                sugs = await _call_claude_section_retry(
                     p.name, "besm-4e", heading, chunk_body, "lore",
                 )
                 print(f"{len(sugs)} suggestions")
                 all_sugs.extend(sugs)
             except Exception as e:
-                print(f"FAIL: {str(e)[:100]}")
+                print(f"FAIL after retries: {str(e)[:100]}")
                 continue
+            # Cool-down between chunks so we don't trigger LiteLLM proxy rate limits.
+            await asyncio.sleep(INTER_CHUNK_DELAY_S)
 
         await db.ingestions.insert_one({
             "id": ingest_id,
