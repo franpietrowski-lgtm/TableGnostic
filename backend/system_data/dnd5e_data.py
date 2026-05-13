@@ -171,7 +171,15 @@ ITEMS = [
 ]
 
 # Conditions reference.
-CONDITIONS = [
+# V6.25.49 — extend the SRD 13 with universal combat states (Burning,
+# Bleeding, Stunned, Frostbite, etc.) drawn from
+# system_data/status_conditions.py so D&D tables get the same shared
+# ailment vocabulary as the BESM / Anime / Cypher GMs.
+from system_data.status_conditions import COMMON_CONDITIONS as _UNIVERSAL_CONDITIONS  # noqa: E402
+
+# Keep the SRD-codified 13 first (those are CC-BY mechanic names); then
+# append additional universal ones not duplicating SRD entries by name.
+_SRD_CONDITIONS = [
     {"name": "Blinded",     "effect": "Auto-fail sight checks · attacks vs. you adv · your atks dis"},
     {"name": "Charmed",     "effect": "Cannot attack charmer · charmer adv on social checks"},
     {"name": "Deafened",    "effect": "Cannot hear · auto-fail hearing checks"},
@@ -187,6 +195,9 @@ CONDITIONS = [
     {"name": "Stunned",     "effect": "Incapacitated · auto-fail STR/DEX saves · atks vs. you adv"},
     {"name": "Unconscious", "effect": "Incapacitated · prone · auto-fail STR/DEX · melee crit"},
 ]
+_SRD_NAMES = {c["name"] for c in _SRD_CONDITIONS}
+CONDITIONS = _SRD_CONDITIONS + [c for c in _UNIVERSAL_CONDITIONS
+                                 if c["name"] not in _SRD_NAMES]
 
 # Action economy summary.
 ACTIONS = [

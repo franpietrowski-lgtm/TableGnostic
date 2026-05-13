@@ -6,6 +6,8 @@ type/focus paragraph descriptions, or numbered cypher-effect prose.
 Cypher System core dice mechanic: roll a single d20 ≥ (3 × difficulty).
 Difficulty 1-10. Effort, Edge, and Skills lower difficulty by 1 step each.
 """
+# V6.25.49 — universal status conditions ladder.
+from system_data.status_conditions import CYPHER_CONDITIONS as _CYPHER_CONDITIONS
 
 BOOK = {
     "title": "Cypher System Reference (Cypher System Creator programme)",
@@ -226,6 +228,8 @@ REFERENCE = {
     "artifacts": ARTIFACTS,
     "gm_intrusion": GM_INTRUSION,
     "power_levels": POWER_LEVELS,
+    # V6.25.49 — Cypher Damage Track + universal combat ailments.
+    "conditions": _CYPHER_CONDITIONS,
     "modifier_formula": "Difficulty × 3 = TN; lower difficulty by 1 step per Skill / Edge / Asset / Effort",
     "rule_note": (
         "Cypher: roll 1d20 ≥ (3 × difficulty). Train (-1 step), Specialise (-1 step), "

@@ -48,7 +48,7 @@ export default function Reference() {
   const lists = useMemo(() => {
     if (!ref) return {};
     const f = (arr) => (arr || []).filter((a) =>
-      ((a.name || a.difficulty || a.size || a.group || "") + " " + (a.summary || "")).toLowerCase().includes(ql));
+      ((a.name || a.difficulty || a.size || a.group || "") + " " + (a.summary || "") + " " + (a.effect || "") + " " + ((a.tags || []).join(" "))).toLowerCase().includes(ql));
     return {
       // Core
       attributes: f(ref.attributes),
@@ -69,6 +69,8 @@ export default function Reference() {
       weapons: f(ref.weapons),
       items_gear: f(ref.items_gear),
       armour: f(ref.armour),
+      // V6.25.49 — universal status conditions / ailments.
+      conditions: f(ref.conditions),
       // V6.25.45 — weapon/item-specific enhancement & limiter pools.
       // Already shipped in besm_data + /api/besm/reference; surfacing
       // them as Reference tabs so players can browse the full pool
@@ -115,6 +117,7 @@ export default function Reference() {
         ["weapons", "Weapons"],
         ["items_gear", "Items"],
         ["armour", "Armour"],
+        ["conditions", "Conditions"],
       ],
     },
     {
@@ -179,6 +182,12 @@ export default function Reference() {
       case "weapons":         return `${item.class} · DMG ${item.damage_mod >= 0 ? "+" : ""}${item.damage_mod}${item.range_m ? ` · range ${item.range_m}m` : ""}${item.note ? ` · ${item.note}` : ""}`;
       case "items_gear":      return `${item.category}${item.note ? ` · ${item.note}` : ""}`;
       case "armour":          return `AR ${item.armour_rating} · ${item.weight_class}${item.note ? ` · ${item.note}` : ""}`;
+      // V6.25.49 — Conditions list: severity chip · tags · effect.
+      case "conditions": {
+        const sev = item.severity ? item.severity.toUpperCase() : "";
+        const tags = (item.tags || []).join(" · ");
+        return `${sev ? `[${sev}]` : ""}${tags ? ` ${tags}` : ""}${item.effect ? ` — ${item.effect}` : ""}`;
+      }
       // V6.25.45 — Weapon / item-specific enhancement & limiter pools.
       // cost_modifier = + (enh) / − (lim) Character Points per rank.
       // rank_range may be a tuple [min, max|null] or a free string like "2 or 4".
@@ -699,9 +708,12 @@ function SystemReferenceView({ ref_, systemId, q }) {
       )}
       {f(ref_.conditions).length > 0 && (
         <Section title="Conditions">
-          {f(ref_.conditions).map((c, i) => (
-            <Card key={i} title={c.name} sub={c.effect}/>
-          ))}
+          {f(ref_.conditions).map((c, i) => {
+            const sev = c.severity ? String(c.severity).toUpperCase() : "";
+            const tags = (c.tags || []).join(" · ");
+            const sub = `${sev ? `[${sev}]` : ""}${tags ? ` ${tags}` : ""}${c.effect ? ` — ${c.effect}` : ""}`.trim();
+            return <Card key={i} title={c.name} sub={sub}/>;
+          })}
         </Section>
       )}
       {f(ref_.actions).length > 0 && (

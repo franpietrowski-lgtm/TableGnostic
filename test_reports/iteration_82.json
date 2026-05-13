@@ -1,0 +1,40 @@
+{
+  "summary": "V6.25.49 — Conditions catalogue + PATCH /map/tokens/{tid} + deeper public stats verified end-to-end. Backend 8/8 PASS in test_v62549_conditions_patch_stats.py (BESM conditions roster, all-systems conditions ≥12, Anime genre conds, Cypher damage track, PATCH partial / 422 unknown / 404 missing / 200 empty-body, GM-locked PATCH, deeper public_stats keys, 7-day activity-pulse). Regression 19/19 PASS across v62548 (battlemap_sidebar + supplemental), v62547 (writer_tools_perms + remainder), v62546 (writer_tools + supplemental). Frontend smoke (admin GM, viewport 1440x900): landing /#proof renders proof-stat-sessions-played=23, proof-stat-active-in-24h=1, proof-stat-gms-running-tables=2, proof-by-system shows BESM 4E|4 Cypher|2 D&D 5E|1 Anime 5E|1, proof-activity-pulse renders 7-day bars (CAMPAIGNS / SESSIONS / HEROES) with dates 05-07..05-13. No 'Compiled with problems' overlay. Reference page /app/reference: ref-tab-conditions renders Burning/Immolation/Poisoned/Stunned with severity chips [MODERATE]/[SEVERE]/[LIGHT]; regression tabs ref-tab-attributes/weapons/defects still mount; system switcher Anime 5E / D&D 5E / Cypher System all expose a 'Conditions' section in SystemReferenceView.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/public/stats", "issue": "`latest_version` returns 'V6.25.48' and `pytest_passing` returns '6/6' — these still point at the V6.25.48 milestone, not V6.25.49. Server-driven (no hardcode), so the field works; but the milestone metadata source needs an update for the just-shipped V6.25.49 (8 new tests). Verify whatever store feeds dynamic_public.public_stats has the V6.25.49 row written."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Landing /#proof — Latest milestone", "issues": ["No dedicated [data-testid='proof-latest-milestone'] tile rendered on landing. The 9 stat cards (campaigns/public-showcases/heroes-built/sessions-played/codex-nodes/gazettes-pressed/active-24h/gms-running-tables/marketplace-listings) + 7-day pulse are all visible, but the spec mentioned a 'latest milestone tile shows a version string'. If a milestone card is intended, expose it with the proof-latest-milestone testid or fold latest_version+pytest_passing into a visible tile. Currently latest_version is fetched by the API but is not visibly rendered as a milestone card on /#proof."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_v62549_conditions_patch_stats.py",
+    "/app/test_reports/pytest/iter82_v62549.xml"
+  ],
+  "action_items": [
+    "Refresh /api/public/stats `latest_version`/`pytest_passing` so they reflect V6.25.49 (8/8) instead of the stale V6.25.48 (6/6) milestone row.",
+    "OPTIONAL: surface a dedicated [data-testid='proof-latest-milestone'] tile on the landing /#proof grid that prints `latest_version` + `pytest_passing` so the asked-for 'latest milestone tile' is testable. Today the data is returned by the API but not rendered."
+  ],
+  "critical_code_review_comments": [
+    "routes/battlemap.py PATCH /map/tokens/{tid} TokenPatchIn correctly uses model_config = ConfigDict(extra='forbid') so unknown fields return 422 (verified). Non-existent token → 404, empty body → 200 no-op, partial fields preserved. Clean.",
+    "system_data/status_conditions.py COMMON_CONDITIONS palette is shared across BESM / D&D 5E / Anime 5E / Cypher — all four systems satisfy len(conditions) >= 12. Anime 5E correctly extends with Genre-Locked/Spotlit/Eclipsed; Cypher correctly appends the Hale/Impaired/Debilitated/Dead damage track. Reuse is DRY.",
+    "routes/dynamic_public.py public_activity_pulse returns exactly 7 days with date/campaigns_created/sessions_opened/characters_made. No off-by-one (verified — dates 05-07..05-13 are contiguous).",
+    "Frontend Reference.jsx Conditions tab supports filter on tags/effect/name and severity-aware sub-line — verified visually on BESM. SystemReferenceView Section title='Conditions' confirmed rendering on Anime 5E / D&D 5E / Cypher.",
+    "ProductProof.jsx — replaced the hardcoded PROOF array with a server-driven fetch and renders ActivitySparkline. No compile-overlay seen. However, `latest_version` and `pytest_passing` from /public/stats are NOT visibly rendered as a milestone card on the landing page (data is fetched but never surfaced)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (8/8 new + 19/19 regression v62548/47/46)", "frontend": "100% (all required testids + system switcher Conditions section verified)"},
+  "test_credentials": "Admin: tablegnostic-admin@tablegnostic.com / LoremasterAurea2026!Forge (used, working).",
+  "seed_data_creation": "Backend tests create ephemeral 'V49Test-*' campaigns and DELETE them in finally{}. No persistent seed data.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "V6.25.49 fully green. Two cosmetic gaps for the main agent: (1) /api/public/stats `latest_version` still says 'V6.25.48' / `pytest_passing` '6/6' — the dynamic source of truth needs a V6.25.49 row bump (8/8 if counting just the new file, or include the full regression). (2) The landing /#proof grid renders 9 stat cards + 7-day pulse but does NOT visibly render `latest_version` — if a milestone tile was intended, expose proof-latest-milestone testid. Neither blocks shipping. Reference page Conditions tab + system switcher + PATCH /map/tokens/{tid} all behave per spec. Login flow: POST /api/auth/login returns {id,email,name,role,access_token}; SPA reads tg_token from localStorage. Reference page is auth-gated → /auth redirect for anon.",
+  "rca of the issue": "N/A — no failures. Two minor cosmetic observations (stale milestone version metadata, missing proof-latest-milestone tile) noted as action_items for the main agent."
+}

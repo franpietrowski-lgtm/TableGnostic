@@ -357,11 +357,14 @@ ARMOR = [
 ]
 
 # Conditions — same as 5E but the genre adds three.
-CONDITIONS = [
-    {"name": "Genre-Locked", "effect": "Cannot break the campaign tone — invokes GM Intrusion."},
-    {"name": "Spotlit",      "effect": "+1 to one roll · ends after a turn unused."},
-    {"name": "Eclipsed",     "effect": "Lose Reaction · ends at start of your next turn."},
-]
+# V6.25.49 — surface the inherited 13 SRD conditions plus 3 genre
+# specifics, sharing the canonical entries via status_conditions.py
+# so every system speaks the same language at the table.
+from system_data.status_conditions import (  # noqa: E402
+    COMMON_CONDITIONS as _UNIVERSAL_CONDITIONS,
+    ANIME5E_GENRE_CONDITIONS as _ANIME5E_GENRE_CONDITIONS,
+)
+CONDITIONS = _UNIVERSAL_CONDITIONS + _ANIME5E_GENRE_CONDITIONS
 
 # Genre backgrounds — 8 anime tropes turned into 5E-shape backgrounds.
 BACKGROUNDS = [

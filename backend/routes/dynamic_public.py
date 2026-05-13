@@ -81,7 +81,25 @@ def _require_admin(user: dict) -> None:
 @router.get("/public/stats")
 async def public_stats():
     """Top-line counters for the landing page. Counts only public-safe
-    aggregates — no PII, no per-user totals."""
+    aggregates — no PII, no per-user totals.
+
+    V6.25.49 — deeper landing-page stats:
+      * sessions_played    — total sessions ever opened (any status)
+      * active_24h         — campaigns updated in the last 24 hours
+      * gms_active         — distinct GMs whose campaigns updated in 7d
+      * by_system          — per-system campaign counts (one row per
+                              supported system_id)
+      * latest_version     — the most-recent milestone tag (read from
+                              /app/memory/PRD.md so it stays in sync
+                              with the actual changelog, no manual
+                              version-bumping in JSX).
+      * pytest_passing     — `N / N` tests passing string (parsed from
+                              the most-recent test report).
+    """
+    import os
+    import re
+    from datetime import datetime, timedelta, timezone
+
     campaign_count = await db.campaigns.count_documents({})
     public_count = await db.campaigns.count_documents({"discover_published": True})
     char_count = await db.characters.count_documents({})
@@ -91,6 +109,53 @@ async def public_stats():
     )
     gazette_count = await db.news_issues.count_documents({})
     node_count = await db.nodes.count_documents({})
+    sessions_played = await db.sessions.count_documents({})
+
+    # Activity windows.
+    now = datetime.now(timezone.utc)
+    cutoff_24h = (now - timedelta(hours=24)).isoformat()
+    cutoff_7d = (now - timedelta(days=7)).isoformat()
+    active_24h = await db.campaigns.count_documents({"updated_at": {"$gte": cutoff_24h}})
+    gm_ids_7d = await db.campaigns.distinct("gm_id", {"updated_at": {"$gte": cutoff_7d}})
+    gms_active = len([g for g in gm_ids_7d if g])
+
+    # Per-system breakdown (aggregation pipeline). Limited to the
+    # systems we actually advertise on /api/systems.
+    by_system_rows = await db.campaigns.aggregate([
+        {"$group": {"_id": "$system_id", "count": {"$sum": 1}}},
+        {"$match": {"_id": {"$in": ["besm-4e", "anime-5e", "dnd-5e", "cypher"]}}},
+    ]).to_list(20)
+    by_system = {r["_id"]: r["count"] for r in by_system_rows}
+
+    # Latest milestone tag — first "### V" heading in PRD.md.
+    latest_version = ""
+    try:
+        prd = open("/app/memory/PRD.md", encoding="utf-8").read()
+        m = re.search(r"###\s+(V[\d.]+)", prd)
+        if m:
+            latest_version = m.group(1)
+    except Exception:
+        latest_version = ""
+
+    # Cumulative pytest-pass total: look for the most-recent test
+    # report JSON. Pull `success_rate.backend` if it parses as N/N.
+    pytest_passing = ""
+    try:
+        reports_dir = "/app/test_reports"
+        if os.path.isdir(reports_dir):
+            files = [f for f in os.listdir(reports_dir) if f.startswith("iteration_") and f.endswith(".json")]
+            files.sort(key=lambda f: int(re.search(r"(\d+)", f).group(1) or 0), reverse=True)
+            if files:
+                import json
+                latest = json.load(open(os.path.join(reports_dir, files[0]), encoding="utf-8"))
+                sr = latest.get("success_rate") or {}
+                rate = sr.get("backend") or ""
+                pm = re.search(r"\((\d+/\d+)\)", str(rate))
+                if pm:
+                    pytest_passing = pm.group(1)
+    except Exception:
+        pytest_passing = ""
+
     return {
         "campaigns": campaign_count,
         "public_campaigns": public_count,
@@ -98,7 +163,42 @@ async def public_stats():
         "marketplace_listings": listing_count,
         "gazettes_pressed": gazette_count,
         "codex_nodes": node_count,
+        # V6.25.49 deeper stats:
+        "sessions_played": sessions_played,
+        "active_24h": active_24h,
+        "gms_active": gms_active,
+        "by_system": by_system,
+        "latest_version": latest_version,
+        "pytest_passing": pytest_passing,
     }
+
+
+@router.get("/public/activity-pulse")
+async def public_activity_pulse():
+    """V6.25.49 — last-7-day timeseries for the landing-page sparkline.
+
+    Returns one row per day for the past 7 calendar days (UTC), each
+    with `campaigns_created`, `sessions_opened`, `characters_made`.
+    Cheap aggregate — no PII surfaced.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    now = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    days = []
+    for i in range(6, -1, -1):
+        d_start = now - timedelta(days=i)
+        d_end = d_start + timedelta(days=1)
+        s, e = d_start.isoformat(), d_end.isoformat()
+        camps = await db.campaigns.count_documents({"created_at": {"$gte": s, "$lt": e}})
+        sess = await db.sessions.count_documents({"created_at": {"$gte": s, "$lt": e}})
+        chars = await db.characters.count_documents({"created_at": {"$gte": s, "$lt": e}})
+        days.append({
+            "date": d_start.date().isoformat(),
+            "campaigns_created": camps,
+            "sessions_opened": sess,
+            "characters_made": chars,
+        })
+    return {"days": days}
 
 
 @router.get("/public/marketplace")

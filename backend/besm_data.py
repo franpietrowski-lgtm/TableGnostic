@@ -1334,6 +1334,20 @@ SIZE_MODIFIERS = [
     {"size": "Colossal",    "scale_metres": 32.0,   "atk_mod": +8,  "def_mod": -8,  "hp_mult": 6.00, "page": 149},
 ]
 
+# V6.25.49 — BESM 4E status conditions / ailments.
+# The BESM 4E rulebook leaves combat states largely to GM adjudication
+# (p.146-149 covers "Status Effects" lightly). We surface the
+# universal palette + 4 BESM-leaning extras so every table speaks the
+# same ailment vocabulary across systems. Each condition includes
+# `severity` (light/moderate/severe) and `tags` facets for filtering.
+from system_data.status_conditions import (  # noqa: E402
+    COMMON_CONDITIONS as _UNIVERSAL_CONDITIONS,
+    BESM_CONDITIONS_EXTRA as _BESM_EXTRA_CONDITIONS,
+)
+CONDITIONS = _UNIVERSAL_CONDITIONS + _BESM_EXTRA_CONDITIONS
+
+
+
 # Weapon table — names + class + damage; rules / page refs only.
 WEAPONS = [
     {"name": "Dagger",          "class": "Light Melee",  "damage_mod": +5,  "concealable": True,  "page": 184},

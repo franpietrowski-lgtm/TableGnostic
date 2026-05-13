@@ -227,6 +227,82 @@ async def remove_token(sid: str, tid: str,
     return {"ok": True}
 
 
+# ───────────── V6.25.49 — PATCH /map/tokens/{tid} ─────────────
+# Companion to POST upsert: an explicit partial-update path so other
+# routes (HP-from-sheet, status-from-encounter, atlas-relink) can
+# mutate a single field on a single token without resending the full
+# payload. `extra="forbid"` so unknown fields fail loudly (no silent
+# drops). Players are still gated to tokens they own / their companion
+# seats, identical to the existing upsert auth model.
+
+class TokenPatchIn(BaseModel):
+    """All fields optional — only the keys present in the body are
+    written. `id` and `session_id` are deliberately not patchable."""
+    model_config = {"extra": "forbid"}
+    character_id: Optional[str] = None
+    label: Optional[str] = None
+    color: Optional[str] = None
+    x: Optional[float] = None
+    y: Optional[float] = None
+    size: Optional[float] = None
+    hp_pct: Optional[int] = None
+    ep_pct: Optional[int] = None
+    status: Optional[List[str]] = None
+    kind: Optional[Literal["pc", "npc", "marker"]] = None
+    marker_type: Optional[str] = None
+    initiative_order: Optional[int] = None
+    tooltip: Optional[str] = None
+    atlas_node_id: Optional[str] = None
+    locked: Optional[bool] = None
+
+
+@router.patch("/sessions/{sid}/map/tokens/{tid}")
+async def patch_token(sid: str, tid: str, body: TokenPatchIn,
+                      user: dict = Depends(get_current_user)):
+    """Partial-update a single token. GM-write for any token; players
+    may only mutate tokens linked to characters they own or sit a
+    companion seat on (identical gate to the POST upsert).
+    """
+    sess, camp = await _load_session_with_camp(sid)
+    if not _is_member(user, camp):
+        raise HTTPException(403, "Not seated at this table")
+    state = await _get_or_init_map(sid)
+    existing = next((t for t in state["tokens"] if t["id"] == tid), None)
+    if not existing:
+        raise HTTPException(404, "Token not found")
+
+    is_gm = _is_gm(user, camp)
+    if not is_gm:
+        cid = existing.get("character_id")
+        if not cid:
+            raise HTTPException(403, "Only the GM may mutate unbound tokens")
+        ch = await db.characters.find_one(
+            {"id": cid}, {"_id": 0, "owner_id": 1, "companion_owners": 1},
+        )
+        if not ch:
+            raise HTTPException(403, "Linked character not found")
+        is_owner = ch.get("owner_id") == user["id"]
+        is_companion = user["id"] in (ch.get("companion_owners") or [])
+        if not (is_owner or is_companion):
+            raise HTTPException(403, "You do not own that character or its companion seat")
+        # GM-locked tokens cannot be moved by players, only the GM can
+        # patch them — but a locked token's owner can still toggle
+        # status / hp if explicitly allowed (none of those are gated
+        # by `locked`; lock only blocks position drift).
+        if existing.get("locked") and (body.x is not None or body.y is not None):
+            raise HTTPException(403, "Token is GM-locked — position cannot be changed")
+
+    # Apply only the fields the caller actually sent.
+    patch = {k: v for k, v in body.model_dump().items() if v is not None}
+    if not patch:
+        return existing
+    existing.update(patch)
+    state["updated_at"] = now_iso()
+    await db.battlemaps.replace_one({"session_id": sid}, state, upsert=True)
+    await broadcast(sid, {"type": "map:token", "data": existing})
+    return existing
+
+
 @router.post("/sessions/{sid}/map/fog")
 async def paint_fog(sid: str, body: FogPaintIn,
                     user: dict = Depends(get_current_user)):
