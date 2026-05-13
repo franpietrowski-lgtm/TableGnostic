@@ -14,6 +14,30 @@
 
 ## 2. Implemented (cumulative, condensed)
 
+### V6.25.46 — Writer real tools · Atelier integration · Chunk-incremental re-seed (2026-02-13)
+
+**(2) Chunk-incremental + resumable LLM re-seed** (`backend/scripts/v62546_evereantha_reseed_incremental.py` + `/usr/local/bin/tg-reseed`)
+- Suggestions are persisted to MongoDB **the instant each chunk's Claude call returns** (not buffered to source-end). Even if killed mid-chunk-15-of-21, chunks 1-14 are already saved.
+- `db.reseed_checkpoints` collection tracks `{source_tag, chunk_no, status}` so re-runs skip completed chunks automatically. `--fresh` flag wipes everything and starts over.
+- Durable logging to `/var/log/tablegnostic/reseed.log` and cached PDFs in `/var/cache/tablegnostic/` instead of `/tmp/` — survives container `/tmp` wipes.
+- Convenience launcher at `/usr/local/bin/tg-reseed` (loads `.env`, sets PYTHONPATH, execs script). Verified live: 126 nodes + 12 major-NPC stubs persisted with 7/21 chunks complete and 1 perma-fail logged-and-skipped without crashing.
+
+**(3) Atelier embeds Worldbuilder + Storyteller** (`frontend/components/AtelierTab.jsx`)
+- Two new top-level Atelier sub-tabs: `atelier-subtab-wb-studio` (Worldbuilder Studio) + `atelier-subtab-st-workshop` (Storyteller Workshop) — each opens a colour-themed mini-nav with 4 deeper sub-tabs that mount the SAME writer-role components (`WbAtlas`, `WbMagicArchitect`, `WbCultures`, `WbCosmology`, `StManuscript`, `StOutline`, `StPovBibles`, `StThemes`).
+- Component reuse via the `campId` prop: writer tools auto-bind to the current campaign when launched from Atelier; standalone `/app/wb/*` and `/app/st/*` routes show a `PickCampaignFirst` stub since the standalone writer nav doesn't pre-select a campaign yet.
+
+**(1-partial) Promoted 4 scaffolds → real authoring tools** (`backend/routes/writer_tools.py` + 4 new frontend components)
+- **Atlas (Worldbuilder)**: `GET/PATCH /api/writer/atlas/{cid}` (map URL + caption); `POST/DELETE /atlas/{cid}/pins/{node_id}` (click-to-drop pin anchored at normalised x/y on existing nodes collection — pin coords live on `node.fields.map_x/map_y`). UI: image URL input + click-canvas-to-place + hover-tooltip cards + unpin-keeps-codex-node + colour-coded `location_type` palette + attach-existing-unpinned-locations sidebar.
+- **Magic Architect (Worldbuilder)**: new `magic_systems` collection. `GET/POST/PATCH/DELETE /api/writer/magic/{cid}`. Fields: name, kind (primary|channel|effect), alignment (aurae|mortiscure|both|none), summary, invocation_cost, side_effects. Aurae & Mortiscure are encoded as Primary Sources (the user's lore model), not as a pantheon.
+- **Manuscript (Storyteller)**: new `manuscript_sections` collection. Strict chapter→scene→beat parent validation enforced (`chapter.parent==null`, `scene.parent==chapter`, `beat.parent==scene`; others return 400). Body persists as Markdown, `word_count` auto-computed on PATCH via whitespace tokenisation. Cascading delete returns full descendant count. Three-pane UI: tree + distraction-free `<textarea>` editor + word-count panel; debounced auto-save 1500ms; markdown preview toggle.
+- **Outline & Beats (Storyteller)**: same backend as Manuscript, reused with a beat-focused pacing view. Per-beat tension 0–5 slider + status chip (`planned/drafted/revised/cut`) with 6-colour ascending tension bar.
+
+**Verified**: testing agent iteration 79 — **19/19 backend tests green** (8 new V6.25.46 + 11 regression). Zero critical/minor issues. 4 advisory code-review notes documented (e.g. PATCH silently drops `kind`/`parent_id` — intentional but could log a hint). Report: `/app/test_reports/iteration_79.json`.
+
+**Remaining scaffolds** (Cultures, Cosmology, POV Bibles, Themes) updated with honest "Coming V6.25.47" label.
+
+
+
 ### V6.25.45 — Catalogue gaps · House Rules consolidation · Worldbuilder + Storyteller roles (2026-02-13)
 
 **e/f. Reference catalogue gaps filled** (`backend/besm_data.py` + `routes/besm.py` + `frontend/components/Reference.jsx`)
