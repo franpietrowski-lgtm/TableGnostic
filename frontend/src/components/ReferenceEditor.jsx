@@ -138,6 +138,40 @@ export default function ReferenceEditor({ campaignId, isGm, systemId }) {
   const [showTemplates, setShowTemplates] = useState(false);
   // V6.5 — Spell Conversion Atlas (read-only reference).
   const [showAtlas, setShowAtlas] = useState(false);
+  // V6.25.45 — consolidated House Rules prose panel. The campaign's
+  // `house_rules` free-text field is now editable inline here so GMs
+  // have a single editor for both prose rules and structured rows.
+  // PrimerTab still displays it read-only (and links here to edit).
+  const [houseRules, setHouseRules] = useState("");
+  const [houseRulesLoaded, setHouseRulesLoaded] = useState(false);
+  const [houseRulesBusy, setHouseRulesBusy] = useState(false);
+  const [houseRulesDirty, setHouseRulesDirty] = useState(false);
+  const [houseRulesExpanded, setHouseRulesExpanded] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data } = await api.get(`/campaigns/${campaignId}`);
+        if (!cancelled) {
+          setHouseRules(data?.house_rules || "");
+          setHouseRulesLoaded(true);
+        }
+      } catch { if (!cancelled) setHouseRulesLoaded(true); }
+    })();
+    return () => { cancelled = true; };
+  }, [campaignId]);
+
+  const saveHouseRules = async () => {
+    setHouseRulesBusy(true); setErr("");
+    try {
+      await api.patch(`/campaigns/${campaignId}`,
+                      { house_rules: houseRules });
+      setHouseRulesDirty(false);
+    } catch (e) {
+      setErr(formatApiErrorDetail(e.response?.data?.detail) || e.message);
+    } finally { setHouseRulesBusy(false); }
+  };
 
   const refresh = async () => {
     try {
@@ -273,6 +307,71 @@ export default function ReferenceEditor({ campaignId, isGm, systemId }) {
                     data-testid="reference-add-btn">
               <Plus className="w-3 h-3"/> Add {String(labelOf(tab)).split(" ")[0]}
             </button>
+          </div>
+        )}
+      </div>
+
+      {/* V6.25.45 — Consolidated House Rules (free-text prose) panel.
+          The single canonical editor for `campaign.house_rules`; the
+          Primer tab shows it read-only and deep-links here to edit.
+          Adapts to the active system (Cypher / D&D 5E / BESM / Anime 5E)
+          via the help blurb. */}
+      <div className="mb-3 card-mystic border-arcane/30 p-3"
+           data-testid="reference-house-rules-panel">
+        <button type="button"
+                onClick={() => setHouseRulesExpanded((v) => !v)}
+                className="w-full flex items-center justify-between gap-2"
+                data-testid="reference-house-rules-toggle">
+          <div className="flex items-center gap-2">
+            <BookOpen className="w-3 h-3 text-arcane-light"/>
+            <span className="label-ref text-arcane-light">House Rules (prose)</span>
+            {houseRules.trim().length > 0 ? (
+              <span className="text-[10px] text-mist/70 italic">
+                · {houseRules.trim().length} chars saved
+              </span>
+            ) : (
+              <span className="text-[10px] text-mist/50 italic">· empty</span>
+            )}
+            {houseRulesDirty && (
+              <span className="text-[10px] text-ember">· unsaved</span>
+            )}
+          </div>
+          <span className="text-[10px] text-mist/60 uppercase tracking-widest">
+            {houseRulesExpanded ? "Collapse" : "Edit"}
+          </span>
+        </button>
+        {houseRulesExpanded && (
+          <div className="mt-2 space-y-2" data-testid="reference-house-rules-body">
+            <div className="text-[11px] text-mist/70 italic leading-snug">
+              Free-text prose that travels with the campaign primer. Players
+              see this verbatim on the consent screen. Use the tabs below for
+              structured rule rows (weapons / power packs / items / etc) that
+              the character builder applies mechanically. <b>One editor, two
+              layers</b> — same purpose, different fidelity.
+            </div>
+            <textarea
+              value={houseRules}
+              onChange={(e) => { setHouseRules(e.target.value); setHouseRulesDirty(true); }}
+              placeholder={
+                systemId === "cypher"
+                  ? "e.g. Cyphers are recovered at full at every long rest; max cypher limit +1 vs RAW…"
+                  : systemId === "dnd-5e"
+                  ? "e.g. Critical hits roll damage dice twice (max not doubled); inspiration is shared at the table…"
+                  : "e.g. Combat is theatre-of-the-mind unless the GM brings out the map; we resolve ties in favour of the player…"
+              }
+              className="input text-xs w-full min-h-[120px] font-mono"
+              maxLength={8000}
+              disabled={!isGm || !houseRulesLoaded}
+              data-testid="reference-house-rules-textarea"/>
+            <div className="flex justify-end gap-2">
+              <button type="button"
+                      onClick={saveHouseRules}
+                      disabled={!isGm || houseRulesBusy || !houseRulesDirty}
+                      className="btn btn-primary text-xs"
+                      data-testid="reference-house-rules-save">
+                {houseRulesBusy ? "Saving…" : (houseRulesDirty ? "Save prose" : "Saved")}
+              </button>
+            </div>
           </div>
         )}
       </div>

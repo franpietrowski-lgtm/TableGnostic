@@ -59,6 +59,8 @@ export default function Auth() {
                     {[
                       ["player", "Take a seat", "Play in campaigns hosted by GMs."],
                       ["gm", "Run the table", "Host campaigns; build worlds; run sessions."],
+                      ["worldbuilder", "Build worlds", "Atlas · magic systems · cultures · cosmology. Niche dashboard, no dice."],
+                      ["storyteller", "Write stories", "Manuscript · outline · POV bibles · theme tracker. Niche dashboard, no dice."],
                     ].map(([v, t, sub]) => (
                       <button key={v} type="button" onClick={() => setForm({ ...form, role: v })}
                               data-testid={`auth-role-${v}`}
@@ -69,7 +71,9 @@ export default function Auth() {
                     ))}
                   </div>
                   <div className="text-[10px] text-mist/70 italic mt-1.5">
-                    Players can switch to GM later from their profile.
+                    Players can switch to GM later from their profile. Writer roles get a
+                    completely different sidebar (no dice, no encounters, no character sheets) —
+                    pick deliberately.
                   </div>
                 </div>
               </>

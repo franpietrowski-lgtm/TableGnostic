@@ -10,7 +10,7 @@ class RegisterIn(BaseModel):
     email: EmailStr
     password: str = Field(min_length=6)
     name: str = Field(min_length=1, max_length=80)
-    role: Literal["player", "gm"] = "player"
+    role: Literal["player", "gm", "worldbuilder", "storyteller"] = "player"
 
 
 class LoginIn(BaseModel):

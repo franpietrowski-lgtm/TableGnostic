@@ -25,6 +25,7 @@ import {
   BookOpen, Compass, Dices, BookMarked,
 } from "lucide-react";
 import PlayerHearth from "./PlayerHearth";
+import { WriterRoleHeader } from "./writers/WriterPages";
 
 const SYSTEM_TINT = {
   "besm-4e":  "#C8A34A",
@@ -84,6 +85,11 @@ export default function Dashboard() {
     <div className="px-5 md:px-12 py-8 md:py-10 max-w-6xl" data-testid="dashboard">
       {/* ── Player Hearth widget strip (shows when user has ≥1 seated PC) ── */}
       <PlayerHearth myChars={myChars}/>
+
+      {/* V6.25.45 — Writer-role welcome banner (Worldbuilder / Storyteller).
+          Self-renders null for player/gm/admin so the regular hero strip
+          still leads for them. */}
+      <WriterRoleHeader role={user?.role} userName={user?.name}/>
 
       {/* ── Hero strip ── */}
       <div className="flex items-end justify-between flex-wrap gap-4 mb-2">

@@ -64,10 +64,19 @@ export default function Reference() {
       actions: f(ref.actions),
       companions: f(ref.companions),
       race_templates: f(ref.race_templates),
+      class_templates: f(ref.class_templates),
       size_modifiers: f(ref.size_modifiers),
       weapons: f(ref.weapons),
       items_gear: f(ref.items_gear),
       armour: f(ref.armour),
+      // V6.25.45 — weapon/item-specific enhancement & limiter pools.
+      // Already shipped in besm_data + /api/besm/reference; surfacing
+      // them as Reference tabs so players can browse the full pool
+      // before choosing what to attach in the weapon/item builder.
+      weapon_enhancements: f(ref.weapon_enhancements),
+      weapon_limiters:     f(ref.weapon_limiters),
+      item_enhancements:   f(ref.item_enhancements),
+      item_limiters:       f(ref.item_limiters),
       // Custom (Aurea)
       custom_attributes: f(ref.custom?.attributes),
       custom_power_packs: f(ref.custom?.power_packs),
@@ -101,10 +110,20 @@ export default function Reference() {
         ["actions", "Actions"],
         ["companions", "Companions"],
         ["race_templates", "Race Templates"],
+        ["class_templates", "Class Templates"],
         ["size_modifiers", "Size Modifiers"],
         ["weapons", "Weapons"],
         ["items_gear", "Items"],
         ["armour", "Armour"],
+      ],
+    },
+    {
+      label: "Equipment Mods",
+      tabs: [
+        ["weapon_enhancements", "Weapon Enhancements"],
+        ["weapon_limiters",     "Weapon Limiters"],
+        ["item_enhancements",   "Item Enhancements"],
+        ["item_limiters",       "Item Limiters"],
       ],
     },
     {
@@ -123,6 +142,23 @@ export default function Reference() {
     },
   ];
 
+  // V6.25.45 — formatter for weapon/item enhancement & limiter rows.
+  // Renders `±N pts/rank · ranks <r> · <scope> · <note>`.
+  const _modLine = (item, sign, scopeLabel) => {
+    const mag = Math.abs(Number(item.cost_modifier ?? 1));
+    const rr = item.rank_range;
+    let rankStr = "";
+    if (Array.isArray(rr)) {
+      const lo = rr[0] ?? 1;
+      const hi = rr[1];
+      rankStr = hi === null || hi === undefined ? `ranks ${lo}+` :
+                lo === hi ? `rank ${lo}` : `ranks ${lo}–${hi}`;
+    } else if (typeof rr === "string" && rr.trim()) {
+      rankStr = `rank ${rr}`;
+    }
+    return `${sign}${mag} pts/rank${rankStr ? ` · ${rankStr}` : ""} · ${scopeLabel}${item.note ? ` · ${item.note}` : ""}`;
+  };
+
   // Per-tab card renderer — one row of bottom-line stats + the blurb if any.
   const lineFor = (item) => {
     switch (tab) {
@@ -138,10 +174,18 @@ export default function Reference() {
       case "actions":         return `${item.category} · AP ${item.ap_cost}${item.summary ? ` — ${item.summary}` : ""}`;
       case "companions":      return `${item.type}${item.summary ? ` — ${item.summary}` : ""}`;
       case "race_templates":  return `${item.cp_cost} CP${item.summary ? ` — ${item.summary}` : ""}`;
+      case "class_templates": return `${item.cp_cost} CP${item.bundle ? ` · ${item.bundle.length} entr${item.bundle.length === 1 ? "y" : "ies"}` : ""}${item.summary ? ` — ${item.summary}` : ""}`;
       case "size_modifiers":  return `Scale ${item.scale_metres}m · ATK ${item.atk_mod >= 0 ? "+" : ""}${item.atk_mod} · DEF ${item.def_mod >= 0 ? "+" : ""}${item.def_mod} · HP×${item.hp_mult}`;
       case "weapons":         return `${item.class} · DMG ${item.damage_mod >= 0 ? "+" : ""}${item.damage_mod}${item.range_m ? ` · range ${item.range_m}m` : ""}${item.note ? ` · ${item.note}` : ""}`;
       case "items_gear":      return `${item.category}${item.note ? ` · ${item.note}` : ""}`;
       case "armour":          return `AR ${item.armour_rating} · ${item.weight_class}${item.note ? ` · ${item.note}` : ""}`;
+      // V6.25.45 — Weapon / item-specific enhancement & limiter pools.
+      // cost_modifier = + (enh) / − (lim) Character Points per rank.
+      // rank_range may be a tuple [min, max|null] or a free string like "2 or 4".
+      case "weapon_enhancements": return _modLine(item, "+", "weapon-only");
+      case "weapon_limiters":     return _modLine(item, "−", "weapon-only");
+      case "item_enhancements":   return _modLine(item, "+", "item-only");
+      case "item_limiters":       return _modLine(item, "−", "item-only");
       case "custom_attributes":  return `Based on ${item.based_on} · ${item.base_cost_per_level} pts/level · Discipline: ${item.discipline}`;
       case "custom_power_packs": return `${item.discipline} · ${(item.components || []).length} component${(item.components || []).length === 1 ? "" : "s"}`;
       case "custom_skills":      return `${item.tier} · ${item.cost_per_level} pts/level · Discipline: ${item.discipline}`;

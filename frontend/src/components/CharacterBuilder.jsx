@@ -1210,10 +1210,28 @@ function ModSection({ kind, idx, a, ref_, label, hint, colorClass, onToggle, onR
             <button key={`${e.scope || "std"}-${e.name}`} type="button"
                     onClick={() => onToggle(e.name)}
                     disabled={!allowed && !selected}
-                    title={`${e.note || e.name}${e.page ? ` · p.${e.page} ${e.scope ? "BESM Extras" : "BESM 4E"}${costNote}` : ""}`}
+                    title={
+                      `${e.note || e.name}` +
+                      (e.page ? ` · p.${e.page} ${e.scope ? "BESM Extras" : "BESM 4E"}${costNote}` : "") +
+                      (!allowed && !selected ? "\n— Not on this attribute's whitelist (Primer locks this option)." : "")
+                    }
                     data-testid={`attr-${kind === "enhancements" ? "enh" : "lim"}-toggle-${idx}-${e.name.replace(/\s+/g,"-")}`}
-                    className={`tag ${selected ? colorClass : ""} ${!allowed && !selected ? "opacity-30 cursor-not-allowed" : ""}`}>
+                    className={`tag ${selected ? colorClass : ""} ${
+                      !allowed && !selected
+                        ? "opacity-50 cursor-not-allowed border-rose-900/40 text-rose-300/70 line-through decoration-rose-700/50"
+                        : ""
+                    }`}>
+              {/* V6.25.45 — render the lock glyph + abbreviated cost so
+                  prohibited / not-whitelisted entries read as "available
+                  in the catalogue, but locked by your campaign's primer"
+                  rather than just dimmed text. */}
+              {!allowed && !selected && (
+                <span className="text-[10px] mr-1 opacity-90" aria-label="Primer-locked">🔒</span>
+              )}
               {e.name}
+              {costNote && (
+                <span className="text-[9px] ml-1 opacity-70 font-mono">{costNote.replace(" · ","")}</span>
+              )}
               {selected && (
                 <span className="text-[10px] ml-1 opacity-80">
                   × {modRank(arr[selectedIdx])}

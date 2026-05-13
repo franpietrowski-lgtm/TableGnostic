@@ -8,6 +8,10 @@ import {
 import CmdKPalette from "./CmdKPalette";
 import ReferenceAutoLink from "./ReferenceAutoLink";
 import { TourProvider } from "./TourProvider";
+import {
+  Map as MapIcon, Sparkles as SparklesIcon, Globe2, Library,
+  PenTool, Feather, ListTree, Target,
+} from "lucide-react";
 
 /**
  * Sigil — TableGnostic platform mark.
@@ -32,7 +36,24 @@ const Sigil = ({ size = 32 }) => (
   </svg>
 );
 
-const NAV = [
+/**
+ * V6.25.45 — Role-aware navigation.
+ *
+ * The default game-system nav (player / gm / admin) keeps the full set
+ * of TableGnostic surfaces. Writer-role accounts (`worldbuilder`,
+ * `storyteller`) get a NICHE sidebar that hides game-system clutter
+ * (Concept Forge, Sacred Tome Reference, Marketplace, Canon) and
+ * surfaces writing-craft pages instead. Both writer roles RETAIN
+ * Dashboard / Campaigns / Codex / Account / Help — Campaigns become
+ * "Worlds" or "Works" by intent rather than by route.
+ *
+ * NB: The page routes themselves are added in App.js — this nav only
+ * controls visibility. Routes that aren't surfaced here still resolve
+ * if the user types them directly (so a worldbuilder CAN visit
+ * /app/reference, they just don't get a sidebar link). Same pattern
+ * the admin nav uses.
+ */
+const NAV_PLAYER_GM = [
   { to: "/app", end: true, icon: LayoutGrid, label: "Dashboard", testid: "nav-dashboard" },
   { to: "/app/campaigns", icon: Scroll, label: "Campaigns", testid: "nav-campaigns" },
   { to: "/app/discover", icon: Compass, label: "Discover", testid: "nav-discover" },
@@ -44,6 +65,34 @@ const NAV = [
   { to: "/app/account", icon: User, label: "Account", testid: "nav-account" },
 ];
 
+const NAV_WORLDBUILDER = [
+  { to: "/app", end: true, icon: LayoutGrid, label: "Dashboard", testid: "nav-dashboard" },
+  { to: "/app/campaigns", icon: Globe2, label: "Worlds", testid: "nav-wb-worlds" },
+  { to: "/app/wb/atlas", icon: MapIcon, label: "Atlas", testid: "nav-wb-atlas" },
+  { to: "/app/wb/magic-architect", icon: SparklesIcon, label: "Magic Architect", testid: "nav-wb-magic" },
+  { to: "/app/wb/cultures", icon: Library, label: "Cultures & Languages", testid: "nav-wb-cultures" },
+  { to: "/app/wb/cosmology", icon: Compass, label: "Cosmology & Calendar", testid: "nav-wb-cosmology" },
+  { to: "/app/help", icon: HelpCircle, label: "How To", testid: "nav-help" },
+  { to: "/app/account", icon: User, label: "Account", testid: "nav-account" },
+];
+
+const NAV_STORYTELLER = [
+  { to: "/app", end: true, icon: LayoutGrid, label: "Dashboard", testid: "nav-dashboard" },
+  { to: "/app/campaigns", icon: Scroll, label: "Works", testid: "nav-st-works" },
+  { to: "/app/st/manuscript", icon: PenTool, label: "Manuscript", testid: "nav-st-manuscript" },
+  { to: "/app/st/outline", icon: ListTree, label: "Outline & Beats", testid: "nav-st-outline" },
+  { to: "/app/st/pov-bibles", icon: Feather, label: "POV Bibles", testid: "nav-st-pov" },
+  { to: "/app/st/themes", icon: Target, label: "Themes & Motifs", testid: "nav-st-themes" },
+  { to: "/app/help", icon: HelpCircle, label: "How To", testid: "nav-help" },
+  { to: "/app/account", icon: User, label: "Account", testid: "nav-account" },
+];
+
+const pickNav = (role) => {
+  if (role === "worldbuilder") return NAV_WORLDBUILDER;
+  if (role === "storyteller")  return NAV_STORYTELLER;
+  return NAV_PLAYER_GM;
+};
+
 // V6.25.39 — Surfaced only when `user.role === "admin"`.
 const ADMIN_NAV = [
   { to: "/app/admin", icon: Shield, label: "Admin", testid: "nav-admin" },
@@ -54,6 +103,8 @@ export default function Shell() {
   const nav = useNavigate();
   const [drawer, setDrawer] = useState(false);
   const onLogout = async () => { await logout(); nav("/"); };
+  // V6.25.45 — role-aware nav selector. Computed once per render.
+  const NAV = pickNav(user?.role);
 
   const sideLink = ({ isActive }) =>
     `flex items-center gap-3 px-4 py-2.5 rounded-sm font-ui text-sm tracking-wide transition

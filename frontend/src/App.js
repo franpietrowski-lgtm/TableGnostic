@@ -12,6 +12,13 @@ import Invite from "./components/Invite";
 import ShareLink from "./components/ShareLink";
 import Reset from "./components/Reset";
 import TakedownsLog from "./components/TakedownsLog";
+// V6.25.45 — writer-role scaffold pages (Worldbuilder + Storyteller).
+// Imported eagerly (not lazy) because each scaffold is ~500 bytes and
+// keeping them named-import-able simplifies routing.
+import {
+  WbAtlas, WbMagicArchitect, WbCultures, WbCosmology,
+  StManuscript, StOutline, StPovBibles, StThemes,
+} from "./components/writers/WriterPages";
 
 // Lazy-load the heavy route components so initial bundle stays lean and
 // the Dashboard paints sooner. Each chunk is ~50–200KB minified.
@@ -32,6 +39,16 @@ const ConceptForge    = lazy(() => import("./components/ConceptForge"));
 const NewsRoom       = lazy(() => import("./components/NewsRoom"));
 const PublicGazette  = lazy(() => import("./components/PublicGazette"));
 const AdminConsole   = lazy(() => import("./components/AdminConsole"));
+
+// V6.25.45 — single-file writer pages — pick the right export by name.
+const WRITER_PAGES = {
+  WbAtlas, WbMagicArchitect, WbCultures, WbCosmology,
+  StManuscript, StOutline, StPovBibles, StThemes,
+};
+function WriterPagesLoader({ page }) {
+  const Comp = WRITER_PAGES[page];
+  return Comp ? <Comp /> : <RouteFallback/>;
+}
 
 function Protected({ children }) {
   const { user, loading } = useAuth();
@@ -108,6 +125,19 @@ export default function App() {
             <Route path="/app/concept-forge" element={<Suspense fallback={<RouteFallback/>}><ConceptForge /></Suspense>} />
             <Route path="/app/campaigns/:id/news" element={<Suspense fallback={<RouteFallback/>}><NewsRoom /></Suspense>} />
             <Route path="/app/admin" element={<Suspense fallback={<RouteFallback/>}><AdminConsole /></Suspense>} />
+            {/* V6.25.45 — Worldbuilder pages. Routed at /app/wb/* and
+                gated by sidebar visibility, not by hard role check;
+                deep-link works regardless of role for now so the user
+                can preview the writer surfaces from any account. */}
+            <Route path="/app/wb/atlas" element={<Suspense fallback={<RouteFallback/>}><WriterPagesLoader page="WbAtlas"/></Suspense>} />
+            <Route path="/app/wb/magic-architect" element={<Suspense fallback={<RouteFallback/>}><WriterPagesLoader page="WbMagicArchitect"/></Suspense>} />
+            <Route path="/app/wb/cultures" element={<Suspense fallback={<RouteFallback/>}><WriterPagesLoader page="WbCultures"/></Suspense>} />
+            <Route path="/app/wb/cosmology" element={<Suspense fallback={<RouteFallback/>}><WriterPagesLoader page="WbCosmology"/></Suspense>} />
+            {/* V6.25.45 — Storyteller pages. */}
+            <Route path="/app/st/manuscript" element={<Suspense fallback={<RouteFallback/>}><WriterPagesLoader page="StManuscript"/></Suspense>} />
+            <Route path="/app/st/outline" element={<Suspense fallback={<RouteFallback/>}><WriterPagesLoader page="StOutline"/></Suspense>} />
+            <Route path="/app/st/pov-bibles" element={<Suspense fallback={<RouteFallback/>}><WriterPagesLoader page="StPovBibles"/></Suspense>} />
+            <Route path="/app/st/themes" element={<Suspense fallback={<RouteFallback/>}><WriterPagesLoader page="StThemes"/></Suspense>} />
           </Route>
           <Route path="/discover/:slug/gazette" element={<Suspense fallback={<RouteFallback/>}><PublicGazette /></Suspense>} />
           <Route path="*" element={<Navigate to="/" replace />} />

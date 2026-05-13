@@ -2,6 +2,7 @@
 // Player Primer + GM-side Primer editor with system-aware Forge Caps,
 // House Rules, Cypher genre gating, etc. ~425 lines.
 import React, { useState } from "react";
+import { Link } from "react-router-dom";
 import { Save, Shield, X } from "lucide-react";
 import { api, formatApiErrorDetail } from "../../lib/api";
 
@@ -299,7 +300,21 @@ function PrimerTab({ camp, onRefresh }) {
           </div>
 
           <div className="mt-4">
-            <label className="label-ref block mb-1">House rules</label>
+            <label className="label-ref block mb-1 flex items-center justify-between gap-2"
+                   data-testid="primer-house-rules-label">
+              <span>House rules</span>
+              {/* V6.25.45 — single source of truth: the consolidated
+                  House & Custom Rules editor lives in Atelier ▸ Table
+                  Tools. Both the prose textarea below AND the structured
+                  rule rows are managed there. Keeping a writable
+                  textarea here too for fast edits during primer setup,
+                  but it saves to the same `campaign.house_rules` field. */}
+              <Link to={`/app/campaigns/${camp.id}/atelier?subtab=table-tools`}
+                    className="text-[10px] text-arcane-light underline normal-case font-body"
+                    data-testid="primer-house-rules-deeplink">
+                Open consolidated editor (prose + structured rows) →
+              </Link>
+            </label>
             <textarea className="input min-h-[70px] font-body" value={houseRules}
                       onChange={(e) => setHouseRules(e.target.value)}
                       placeholder="One-liners only — keep it scan-able. e.g. 'Crit on 19-20 with weapons; nat 1 on saves auto-fail.'"
