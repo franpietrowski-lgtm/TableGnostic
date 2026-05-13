@@ -14,6 +14,27 @@
 
 ## 2. Implemented (cumulative, condensed)
 
+### V6.25.44 — Bug batch (a→d): Encounter overlap · Race/Class redirect · Reference sync · Scene location & threads (2026-02-13)
+
+**Bug A — Encounter Designer underlaying Encounters Library** (`frontend/components/SessionView.jsx`)
+- Encounters Library wrapper now uses `relative z-20` + `clear:both` + a visible top divider; the dice-altar column uses `relative z-10`. Library can no longer underlay or visually collide with the Encounter Designer card.
+
+**Bug B — "Pick a Race / Class" kicked users to the landing/login page** (`frontend/components/AppliedTemplatesPanel.jsx`)
+- Root cause: link target was `/app/campaigns/${cid}/characters/${id}/edit?tab=templates` — a non-existent nested route — which fell through to the App.js catch-all `<Navigate to="/" replace />`. Fixed to canonical `/app/characters/${character.id}/edit?tab=templates`.
+
+**Bug C — Custom Reference Table rows not appearing on the Reference page** (`backend/routes/reference_editor.py`)
+- Root cause: `/api/reference/library` filtered the user's campaigns by the field `player_ids` — which the campaigns collection never sets. Fixed to filter by the actual field `member_ids` (matches how invite-token onboarding and the auto-queue tests both populate the roster). Verified live: `rows` is now non-empty for GMs/admins with existing custom rows.
+
+**Bug D — Scene Switcher: empty location dropdown, no on-the-fly input, missing threads** (`backend/routes/scenes.py` + `voice_lines.py` + `frontend/components/SceneSwitcher.jsx`)
+- Backend: `SceneCreateIn` now accepts `adhoc_location_label: str(max=200)` — used when GM types a location instead of picking a codex node. `scene.location_label` is populated; `location_id` stays None. Voice-line mirror now also resolves `target_thread_id` against `db.campaign_channels` (channels-as-root targets) in addition to `db.threads`.
+- Frontend: SceneSwitcher now uses array-shape-tolerant parsing for `/channels/{id}/threads` (was looking for `.threads` envelope, response is a plain array — dropdown was always empty). Added an "on-the-fly location" text input that's mutually exclusive with the codex picker. Target dropdown is now grouped: `Channels (root)` optgroup + `Threads` optgroup, with a graceful empty-state hint.
+
+**Verified**: testing agent iteration 77 — **31/31 backend tests green** (6 new V6.25.44 tests + 25 regression). Report: `/app/test_reports/iteration_77.json`. Bug B was source-verified (App.js route + canonical link).
+
+**Background job re-launched**: `v62543_evereantha_reseed.py` PID 1295 (was killed by /tmp wipe in last context). Currently processing chunk 3+ of source 1 (bible-v3).
+
+
+
 ### V6.25.43 — Scene Switcher · PTT auto-forward · WebRTC audio fixes · Lattice glow-up · Evereantha re-seed v3 (2026-02-13)
 
 **Scene Switcher** (`backend/routes/scenes.py` + `frontend/components/SceneSwitcher.jsx`)
