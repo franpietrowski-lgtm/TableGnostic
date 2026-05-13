@@ -14,6 +14,29 @@
 
 ## 2. Implemented (cumulative, condensed)
 
+### V6.25.51 — Refactor: Battlemap hooks · Reference split · macros & vitals consolidation (2026-02-13)
+
+**Pure refactor — zero behaviour change, 32/32 backend + 100% frontend regression green.**
+
+**Battlemap.jsx — extracted two custom hooks**
+- `frontend/src/lib/useBattlemapState.js` (NEW, 128 lines) — owns initial fetch of /map + /effects, 30s vitals heartbeat (push-based since V6.25.50), WS event router for `map:state | map:token | map:token-remove | map:fog | map:wall | effect | effect_remove | map:vitals`, plus the `effects → character_id` index. Returns `{state, setState, effects, setEffects, vitals, setVitals, effectsByCharacter}`.
+- `frontend/src/lib/useBattlemapZoom.js` (NEW, 114 lines) — owns `zoom / pan / pinching` state, ctrl-wheel handler, 1-finger pan (only above 1.05× zoom so it doesn't clash with measure/move at 100%), 2-finger pinch anchored to midpoint, plus a `zoomApi` object exposing in/out/reset for the sidebar buttons.
+- **Battlemap.jsx: 1096 → 916 lines** (~16 % reduction; clean separation of concerns).
+
+**Reference.jsx — extracted system view + presentational primitives**
+- `frontend/src/components/reference/SystemReferenceView.jsx` (NEW, 439 lines) — contains `SystemReferenceView` (the D&D 5E / Anime 5E / Cypher / scaffold renderer), `CustomLibrarySection` (campaign-scoped homebrew rows), plus the `Section / Card` primitives. Imports `CypherReferencePanel` from `../CypherReferencePanel`.
+- **Reference.jsx: 843 → 428 lines** (~49 % reduction). Parent file now focuses on the BESM 4E tab-group surface + system switcher.
+
+**Backend cleanup**
+- `backend/core/macros.py` (NEW, 210 lines) — extracted `_expand_macro_tokens` (200-line typed-token grammar resolver) into a single-responsibility module exposing `expand_macro_tokens(formula, char)`. Back-compat alias `from core.macros import expand_macro_tokens as _expand_macro_tokens` kept inside routes/channels.py so legacy cross-imports (e.g. `test_v62536_voice_admin_macros.py`) keep working without sweeping changes. **channels.py: 943 → 748 lines** (~21 % reduction).
+- `backend/core/vitals_broadcast._pc_vitals_for` is now the **single source-of-truth** for HP/EP percentage computation across systems. `routes/battlemap.py` removed its inline duplicate and re-exports the function (`bm_helper is core_helper == True`). Closes the drift-debt called out in V6.25.50.
+
+**Verified** (testing agent iteration 84):
+- 32/32 backend tests pass, including macro tests that import via the back-compat alias.
+- Live API smoke: `/map/vitals`, `/recap/auto-vitals`, `/channels/{chid}/messages` all 200 with correct shapes.
+- Frontend smoke: landing clean (no ESLint shadow-box), Battlemap full render with zoom/snap/conditions/vitals/effects, Reference 4-system switching + BESM Conditions tab + Custom Library all render identically to pre-refactor.
+
+
 ### V6.25.50 — Push-based vitals · Conditions quickbar · Recap auto-vitals (2026-02-13)
 
 **Push-based vitals broadcasts** (`backend/core/vitals_broadcast.py`)
