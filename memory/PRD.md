@@ -14,6 +14,54 @@
 
 ## 2. Implemented (cumulative, condensed)
 
+### V6.25.43 — Scene Switcher · PTT auto-forward · WebRTC audio fixes · Lattice glow-up · Evereantha re-seed v3 (2026-02-13)
+
+**Scene Switcher** (`backend/routes/scenes.py` + `frontend/components/SceneSwitcher.jsx`)
+- GM-only session segmentation. Each scene gets a deterministic id-slug `scene{N}-session{N}_{campaign-slug}` (e.g. `scene2-session3_evereantha-the-maiden-adventure`).
+- **No editing, no retcons**: closed scenes return 409 on any PATCH attempt.
+- **Click-to-confirm guard** on close: `POST /scenes/{id}/close` without `?confirmed=true` returns **412 Precondition Failed**.
+- Creating scene N+1 auto-closes scene N. GM picks scene name, anchor location (any campaign location node), and optional target thread for PTT mirroring at scene-start.
+- Session-wide `default_target_thread_id` settable via `PATCH /sessions/{sid}/default-thread` (GM-only) — becomes the fallback target for new scenes.
+- WebSocket events: `scene:start`, `scene:end`, `scene:update` — all clients re-render instantly.
+- System chat markers auto-posted at scene start (🎬) and end (🎬✂︎).
+
+**PTT pipeline overhaul** (`backend/routes/voice_lines.py` + `routes/sessions.py` + `routes/recap.py`)
+- PTT transcription now auto-broadcasts a session-chat message attributed as `Character "Name": "transcript"` so PTT is visible in-line in the chat rail.
+- If the active scene has a `target_thread_id` (or the session has `default_target_thread_id`), the line is also mirrored into that thread for play-by-post viewability.
+- Voice lines + chat are auto-tagged with `scene_id` + `scene_slug`.
+- **Recap engine rebuilt** to bucket transcript/dice/voice per-scene and emit segmented per-scene prose. The LLM prompt instructs preservation of the scene slug as a section divider.
+
+**Audio fixes** (`frontend/components/AVSeats.jsx`)
+- **Late-join mic transmission**: when a user finally taps "Join voice" after receiving offers from peers who joined first, we now iterate every existing PC, `pc.addTrack` the new local tracks, and renegotiate via `createOffer`. Without this, late-joiners broadcast silence.
+- **Per-peer volume slider** (`data-testid="av-volume-{conn_id}"`) — 0..1 slider per remote tile, value persisted in localStorage.
+- **Tap-to-enable audio fallback** — if `<audio>.play()` rejects (Chromium autoplay policy), a visible `av-audio-unblock-{conn_id}` button surfaces so the user can re-arm playback with a click.
+
+**Atelier `References` sub-tab removed** (`frontend/components/AtelierTab.jsx`)
+- The redundant `atelier-subtab-references` (which just redirected to Table Tools) is gone — sub-tab strip is now: Workshop · Table Tools · World Tree · Genesis · Epic Campaign · Timeline.
+
+**World Tree Lattice — organic branches** (`frontend/components/WorldTreeLattice.jsx`)
+- Replaced straight dashed `<line>` strokes with quadratic-Bezier `<path>` branches that curl perpendicular to the segment by ~28% of length.
+- Added a soft `feGaussianBlur`-based glow halo + tapered terminus nodes so the lattice actually reads as the **World Tree** branches reaching between pillars instead of a wireframe grid.
+- Mid-line relationship label now floats at the curve's control point on hover.
+
+**Evereantha re-seed v3** (`backend/scripts/v62543_evereantha_reseed.py`)
+- New 4-PDF source list (Bible v3, Suppliment v2, Evereantha extras, Artisans Tale).
+- Bespoke Claude prompt with kind-specific field schemas — extracts `is_major`, `location_type`, `magical_alignment` (aurae/mortiscure/both/none), `magic_source_kind` (face_of_aurae | face_of_mortiscure), associated_effects, parent_location.
+- **Faces of Aurae & Faces of Mortiscure are NOT a pantheon** — they're tagged as Primary Sources of magical power whose effects can be applied to characters / items / environment. The prompt enforces this distinction.
+- **Major NPCs auto-spawn stub BESM 4E character sheets** (admin-owned, unpublished, cross-linked to their codex node via `linked_character_id` / `linked_node_id`). Existing seeded characters (Eli/Vex/Lyra/Apo) are NEVER touched.
+- Idempotent — wipes prior v1/v2/v3 seed rows + prior stub sheets before re-running.
+- Status at PRD-write time: still running with LiteLLM proxy 502s / BadRequests — retry logic (4 attempts × exponential backoff) is firing. Persistence happens batched per-source after all chunks are processed.
+
+**Verified**:
+- `pytest tests/test_v62543_scenes.py` — **1/1 PASS** (live HTTP).
+- Testing agent iteration 76 — **25/25 green** including full V6.25.43 lifecycle, V6.25.41 auto-queue regression, V6.25.42 e2e regression. Report: `/app/test_reports/iteration_76.json`.
+
+**Known limitations**:
+- Lore re-seed depends on Claude/LiteLLM proxy stability; some chunks deterministically fail with content-policy BadRequest. The script logs+skips and continues.
+- World-map pin auto-sync from extracted locations is NOT in this drop — locations get `location_type` field, but the actual GM-pinnable map UI is in the backlog.
+
+
+
 ### V6.25.42 — Auto-queue character/inventory edits + resilient LLM re-ingest (2026-02-13)
 
 **Auto-queue intercept wired into character writes** (`backend/routes/characters.py`)
