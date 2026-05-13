@@ -1,0 +1,43 @@
+{
+  "summary": "V6.25.44 bug-fix batch backend regression: ran 6 new tests covering Bug C (reference library member_ids fix), Bug D (adhoc_location_label on scenes + voice_lines channel-or-thread route wiring), and Bug B (canonical character edit route presence-check) plus 25 prior regression tests (V6.25.41 auto-queue, V6.25.42 e2e live, V6.25.43 scenes). 31/31 passed. Bug A is frontend-only (z-index on EncountersLibrary section) — verified source-only since spec said PRESENCE-check only.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_v62544_bugfix_batch.py",
+    "/app/test_reports/pytest/v62544_results.xml",
+    "/app/test_reports/pytest/v62544_full_regression.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "routes/reference_editor.py L327-330: member_ids fix is correct; recommend also indexing `campaigns.member_ids` if not already, as this OR-query will table-scan for users on many campaigns.",
+    "routes/scenes.py create_scene: adhoc_location_label is silently truncated to 200 chars without warning — acceptable but should be documented in API response or returned as a flag.",
+    "routes/voice_lines.py L203-219: channel-or-thread lookup falls back gracefully but does TWO sequential db lookups per voice-line upload; could be merged to one $or query for a small perf win on the hot PTT path.",
+    "voice_lines.py L98-100: `await db.campaigns.find_one(...).get('gm_id')` — pattern is repeated; that campaign lookup was already done in `_seated_or_403`. Refactor candidate to avoid the double-fetch.",
+    "scenes.py L411-420: `attach_message_to_scene` has dead code path — if both `message_id` and `voice_line_id` are passed, the early `await db.scenes.update_one` runs then `upd = {}` clears the rest, losing the participant_character_ids $addToSet. Voice-line upload bypasses this helper (does its own update), so this only bites callers that pass both. Tracked for cleanup."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_v62544_bugfix_batch.py (new)"
+  ],
+  "success_rate": {
+    "backend": "100% (31/31)",
+    "frontend": "skipped per request"
+  },
+  "test_credentials": "Used GM franpietrowski@gmail.com / PieGod08!! and admin tablegnostic-admin@tablegnostic.com / LoremasterAurea2026!Forge from request.",
+  "seed_data_creation": "Tests create/cleanup TEST_v62544_rule_<ts> custom reference rows; reuses existing besm-4e campaign + session when possible.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "test_v62544_bugfix_batch.py covers all 4 V6.25.44 backend-affecting fixes. Bug A and Bug B are frontend-only — Bug A (z-index) needs UI visual check; Bug B (route path) was verified at source (AppliedTemplatesPanel.jsx L51 → /app/characters/${character.id}/edit?tab=templates AND App.js L100 has the route). Use iteration_78+ for next runs. Background reseed PID 1295 was NOT killed.",
+  "rca of the issue": {
+    "Bug A": "z-index layering — verified at source: SessionView.jsx wrapper has relative z-20 + clear-both (frontend visual only, presence-check spec).",
+    "Bug B": "AppliedTemplatesPanel.jsx L51 link target updated to canonical /app/characters/${id}/edit?tab=templates; App.js L100 registers that route. No more fall-through to catch-all <Navigate to='/'>.",
+    "Bug C": "reference_editor.py reference_library() now filters campaigns by member_ids (was non-existent player_ids). Regression test creates a custom row in a GM-owned campaign and confirms it surfaces via GET /api/reference/library?system_id=besm-4e with campaign_count >= 1.",
+    "Bug D": "scenes.py SceneCreateIn gained adhoc_location_label (max 200 chars); create_scene handler populates scene.location_label and leaves location_id=None when only the adhoc label is supplied. voice_lines.py mirror code now resolves target_thread_id against both db.threads and db.campaign_channels — route registration & 422 on missing form input both confirmed."
+  }
+}

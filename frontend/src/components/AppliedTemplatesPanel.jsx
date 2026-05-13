@@ -48,7 +48,7 @@ export default function AppliedTemplatesPanel({ character }) {
           a class chassis like Healer, Monk-Smith, Techgnostic-Wright.
         </div>
         {character?.campaign_id && (
-          <Link to={`/app/campaigns/${character.campaign_id}/characters/${character.id}/edit?tab=templates`}
+          <Link to={`/app/characters/${character.id}/edit?tab=templates`}
                 className="btn btn-primary text-xs"
                 data-testid="applied-templates-pick-cta">
             <GraduationCap className="w-3.5 h-3.5"/> Pick a Race / Class

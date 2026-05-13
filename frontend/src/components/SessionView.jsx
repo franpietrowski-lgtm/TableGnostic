@@ -523,7 +523,7 @@ export default function SessionView() {
       )}
 
       {/* RIGHT: Dice log + roller */}
-      <div className={`card-mystic p-4 flex-col min-h-[60vh] md:min-h-0 ${mobilePane === "dice" ? "flex" : "hidden md:flex"}`}
+      <div className={`card-mystic p-4 flex-col min-h-[60vh] md:min-h-0 relative z-10 ${mobilePane === "dice" ? "flex" : "hidden md:flex"}`}
            data-testid="dice-panel">
         <div className="label-ref mb-2 flex items-center justify-between">
           <span>Dice Altar</span>
@@ -613,9 +613,15 @@ export default function SessionView() {
         />
       )}
 
-      {/* V6.25.26 — Anti-railroad encounters library: GM picks live during a session. */}
+      {/* V6.25.26 — Anti-railroad encounters library: GM picks live during a session.
+          V6.25.44 — wrapped in `relative z-20 clear-both` + visible top divider so it
+          can no longer underlay/overlap the Encounter Designer card (which sits in
+          the right column's scroll context above). */}
       {campaign?.is_gm && session && (
-        <div className="mt-6 px-4">
+        <div className="mt-8 px-4 relative z-20"
+             style={{ clear: "both" }}
+             data-testid="encounters-library-section">
+          <div className="border-t border-gold/15 mb-4"/>
           <EncountersLibrary campId={campaign.id || campaign._id || session.campaign_id}
                                 sessionId={id} isGm={true}
                                 systemId={campaign?.system_id}/>

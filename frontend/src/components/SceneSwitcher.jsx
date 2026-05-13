@@ -33,11 +33,13 @@ export default function SceneSwitcher({ sessionId, campaignId, isGm, subscribe }
   const [active, setActive] = useState(null);
   const [scenes, setScenes] = useState([]);
   const [locations, setLocations] = useState([]);
+  const [channels, setChannels] = useState([]);   // for inline channel options
   const [threads, setThreads] = useState([]);
   const [showStart, setShowStart] = useState(false);
   const [showEnd, setShowEnd] = useState(false);
   const [name, setName] = useState("");
   const [locationId, setLocationId] = useState("");
+  const [adhocLocation, setAdhocLocation] = useState(""); // on-the-fly text
   const [targetThreadId, setTargetThreadId] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -67,28 +69,29 @@ export default function SceneSwitcher({ sessionId, campaignId, isGm, subscribe }
     });
   }, [subscribe]);
 
-  // ---------- lookups for GM (locations + threads) ----------
+  // ---------- lookups for GM (locations + channels + threads) ----------
   useEffect(() => {
     if (!isGm || !campaignId) return;
     (async () => {
       try {
-        // Pull only `location` nodes for the location picker. We keep the
-        // payload small via the search endpoint when possible; fall back
-        // to /nodes filter on type if not.
+        // Pull only `location` nodes for the location picker.
         const { data } = await api.get(`/campaigns/${campaignId}/nodes`);
         const all = Array.isArray(data) ? data : (data?.nodes || []);
         setLocations(all.filter((n) => n.type === "location").slice(0, 400));
       } catch (_e) { /* swallow */ }
       try {
-        const { data } = await api.get(`/campaigns/${campaignId}/channels`);
-        const chans = data?.channels || data || [];
-        // Threads live per-channel. Flatten.
+        // V6.25.44 — channels endpoint returns ARRAY directly (not
+        // {channels: [...]}). Same for threads. Previous shape-guess
+        // returned [] every time, leaving the dropdown empty.
+        const { data: chRaw } = await api.get(`/campaigns/${campaignId}/channels`);
+        const chans = Array.isArray(chRaw) ? chRaw : (chRaw?.channels || []);
+        setChannels(chans);
         const tlist = [];
         for (const ch of chans) {
           try {
-            const r = await api.get(`/channels/${ch.id}/threads`);
-            (r.data?.threads || []).forEach((t) =>
-              tlist.push({ ...t, channel_name: ch.name }));
+            const tr = await api.get(`/channels/${ch.id}/threads`);
+            const trArr = Array.isArray(tr.data) ? tr.data : (tr.data?.threads || []);
+            trArr.forEach((t) => tlist.push({ ...t, channel_name: ch.name }));
           } catch { /* ignore single-channel failure */ }
         }
         setThreads(tlist);
@@ -103,10 +106,11 @@ export default function SceneSwitcher({ sessionId, campaignId, isGm, subscribe }
       await api.post(`/sessions/${sessionId}/scenes`, {
         name: name.trim() || undefined,
         location_id: locationId || undefined,
+        adhoc_location_label: adhocLocation.trim() || undefined,
         target_thread_id: targetThreadId || undefined,
       });
       setShowStart(false);
-      setName(""); setLocationId(""); setTargetThreadId("");
+      setName(""); setLocationId(""); setAdhocLocation(""); setTargetThreadId("");
       await refresh();
     } catch (e) {
       setErr(e?.response?.data?.detail || "Failed to start scene.");
@@ -211,26 +215,57 @@ export default function SceneSwitcher({ sessionId, campaignId, isGm, subscribe }
               className="input text-xs w-full"
               data-testid="scene-start-name"/>
             <select value={locationId}
-                    onChange={(e) => setLocationId(e.target.value)}
+                    onChange={(e) => { setLocationId(e.target.value);
+                                       if (e.target.value) setAdhocLocation(""); }}
                     className="input text-xs w-full"
                     data-testid="scene-start-location">
-              <option value="">— Location (optional) —</option>
+              <option value="">— Codex location (optional) —</option>
+              {locations.length === 0 && (
+                <option value="" disabled>No location nodes in this campaign yet</option>
+              )}
               {locations.map((l) => (
                 <option key={l.id} value={l.id}>
                   {l.title}{l.fields?.location_type ? ` · ${l.fields.location_type}` : ""}
                 </option>
               ))}
             </select>
+            {/* V6.25.44 — on-the-fly custom location text input. Players
+                often need "in the dripping cellar" without authoring a
+                full codex node first. The text label persists on the
+                scene and the recap engine includes it as the location. */}
+            <input
+              type="text" maxLength={200} value={adhocLocation}
+              onChange={(e) => { setAdhocLocation(e.target.value);
+                                  if (e.target.value) setLocationId(""); }}
+              placeholder='Or describe an on-the-fly location ("the dripping cellar at dusk")'
+              className="input text-xs w-full"
+              data-testid="scene-start-adhoc-location"/>
             <select value={targetThreadId}
                     onChange={(e) => setTargetThreadId(e.target.value)}
                     className="input text-xs w-full"
                     data-testid="scene-start-thread">
-              <option value="">— Target thread for PTT mirror (optional) —</option>
-              {threads.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.channel_name ? `${t.channel_name} · ` : ""}{t.name}
-                </option>
-              ))}
+              <option value="">— Target for PTT mirror (optional) —</option>
+              {channels.length > 0 && (
+                <optgroup label="Channels (root)">
+                  {channels.map((c) => (
+                    <option key={`ch-${c.id}`} value={c.id}>
+                      #{c.name}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+              {threads.length > 0 && (
+                <optgroup label="Threads">
+                  {threads.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.channel_name ? `#${t.channel_name} · ` : ""}{t.name}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+              {channels.length === 0 && threads.length === 0 && (
+                <option value="" disabled>No channels or threads yet — create one in Channels first</option>
+              )}
             </select>
           </div>
         } confirmLabel={active ? "Switch scene" : "Start scene"}

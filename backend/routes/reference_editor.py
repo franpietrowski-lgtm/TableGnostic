@@ -317,12 +317,16 @@ async def reference_library(system_id: str = "",
     is_admin = user.get("role") == "admin"
 
     # Find every campaign the caller is involved in.
+    # V6.25.44 — was `player_ids` (legacy/never-set field) which caused
+    # custom reference rows authored in a campaign to NEVER surface on
+    # the dashboard Reference page. The campaigns collection stores
+    # rostered users under `member_ids`.
     if is_admin:
         camp_q: Dict[str, Any] = {}
     else:
         camp_q = {"$or": [
             {"gm_id": user["id"]},
-            {"player_ids": user["id"]},
+            {"member_ids": user["id"]},
         ]}
     camp_q["system_id"] = system_id
     campaigns = await db.campaigns.find(

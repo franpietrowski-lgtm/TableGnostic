@@ -197,37 +197,49 @@ async def create_voice_line(
             print(f"[voice_lines:chat-mirror] {e}")
             chat_msg = None
 
-        # ---- Mirror to the configured target thread ----------------
+        # ---- Mirror to the configured target thread/channel ----------
+        # V6.25.44 — target may be either a thread_id OR a channel_id
+        # (Scene Switcher dropdown groups both kinds). Resolve which.
         if target_thread_id and chat_msg:
             try:
-                thread_msg = {
-                    "id": new_id(),
-                    "channel_id": None,  # filled below from the thread record
-                    "thread_id": target_thread_id,
-                    "author_id": user["id"],
-                    "author_name": user.get("name", "Unknown"),
-                    "body": f'**{char.get("name") or "Unnamed"}** _(PTT, {(scene or {}).get("slug") or "no-scene"})_:\n\n"{text}"',
-                    "kind": "voice-mirror",
-                    "voice_line_id": doc["id"],
-                    "scene_id": scene_id,
-                    "session_id": sid,
-                    "created_at": now_iso(),
-                    "reactions": [],
-                    "pinned": False,
-                    "edited_at": None,
-                }
-                # Resolve channel_id from thread record (channels.py uses
-                # thread_id → threads table → channel_id chain).
                 th = await db.threads.find_one({"id": target_thread_id},
                                                {"_id": 0, "channel_id": 1})
                 if th:
-                    thread_msg["channel_id"] = th.get("channel_id")
-                await db.channel_msgs.insert_one(dict(thread_msg))
-                thread_msg.pop("_id", None)
-                await _broadcast(
-                    f"campaign:{s['campaign_id']}:channels",
-                    {"type": "channel:msg", "data": thread_msg},
-                )
+                    mirror_channel_id = th.get("channel_id")
+                    mirror_thread_id = target_thread_id
+                else:
+                    ch_row = await db.campaign_channels.find_one(
+                        {"id": target_thread_id}, {"_id": 0, "id": 1},
+                    )
+                    if ch_row:
+                        mirror_channel_id = target_thread_id
+                        mirror_thread_id = None
+                    else:
+                        mirror_channel_id = None
+                        mirror_thread_id = None
+                if mirror_channel_id:
+                    thread_msg = {
+                        "id": new_id(),
+                        "channel_id": mirror_channel_id,
+                        "thread_id": mirror_thread_id,
+                        "author_id": user["id"],
+                        "author_name": user.get("name", "Unknown"),
+                        "body": f'**{char.get("name") or "Unnamed"}** _(PTT, {(scene or {}).get("slug") or "no-scene"})_:\n\n"{text}"',
+                        "kind": "voice-mirror",
+                        "voice_line_id": doc["id"],
+                        "scene_id": scene_id,
+                        "session_id": sid,
+                        "created_at": now_iso(),
+                        "reactions": [],
+                        "pinned": False,
+                        "edited_at": None,
+                    }
+                    await db.channel_msgs.insert_one(dict(thread_msg))
+                    thread_msg.pop("_id", None)
+                    await _broadcast(
+                        f"campaign:{s['campaign_id']}:channels",
+                        {"type": "channel:msg", "data": thread_msg},
+                    )
             except Exception as e:
                 print(f"[voice_lines:thread-mirror] {e}")
 

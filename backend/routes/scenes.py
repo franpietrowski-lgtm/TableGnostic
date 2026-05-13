@@ -90,6 +90,7 @@ def _slugify(s: str) -> str:
 class SceneCreateIn(BaseModel):
     name: str = Field("", max_length=120)
     location_id: Optional[str] = None
+    adhoc_location_label: Optional[str] = Field(None, max_length=200)
     target_thread_id: Optional[str] = None
 
 
@@ -176,6 +177,11 @@ async def create_scene(sid: str, body: SceneCreateIn,
         # populated one; else use a snippet of the content.
         f = node.get("fields") or {}
         loc_desc = (f.get("description") or node.get("content") or "")[:600]
+    elif body.adhoc_location_label:
+        # V6.25.44 — on-the-fly custom location (no codex node). The
+        # scene records the label only; nothing is created in the codex.
+        loc_label = body.adhoc_location_label.strip()[:200]
+        loc_desc = None
 
     # Fall back to the session's default thread if none provided.
     target_thread = body.target_thread_id or s.get("default_target_thread_id")
