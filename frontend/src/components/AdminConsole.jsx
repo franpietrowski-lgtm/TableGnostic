@@ -14,12 +14,15 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Shield, AlertTriangle, EyeOff, Trash2, RefreshCw, ScrollText,
-         CheckCircle2, XCircle, ExternalLink, Flag } from "lucide-react";
+         CheckCircle2, XCircle, ExternalLink, Flag, Star, MessagesSquare,
+         X, Send } from "lucide-react";
 import { api, useAuth } from "../lib/api";
 
 const TABS = [
   { k: "campaigns",   l: "All Campaigns" },
   { k: "showcases",   l: "Public Showcases" },
+  { k: "featured",    l: "Featured Requests" },
+  { k: "roadmap",     l: "Roadmap" },
   { k: "marketplace", l: "Marketplace" },
   { k: "flags",       l: "Flag Queue" },
   { k: "audit",       l: "Audit Log" },
@@ -35,19 +38,25 @@ export default function AdminConsole() {
   const [flags, setFlags] = useState([]);
   const [flagStatus, setFlagStatus] = useState("open");
   const [audit, setAudit] = useState([]);
+  const [roadmap, setRoadmap] = useState([]);
+  const [featuredReqs, setFeaturedReqs] = useState([]);
+  const [threadFlag, setThreadFlag] = useState(null);
   const [err, setErr] = useState("");
 
   const reload = useCallback(async () => {
     setErr("");
     try {
-      const [c, s, m, f, a] = await Promise.all([
-        api.get("/admin/campaigns").then((r) => r.data.items).catch(() => []),
-        api.get("/admin/showcases").then((r) => r.data.items).catch(() => []),
-        api.get("/admin/marketplace").then((r) => r.data.items).catch(() => []),
-        api.get(`/admin/flags?status=${flagStatus}`).then((r) => r.data.items).catch(() => []),
-        api.get("/admin/audit").then((r) => r.data.items).catch(() => []),
+      const [c, s, m, f, a, r, fr] = await Promise.all([
+        api.get("/admin/campaigns").then((x) => x.data.items).catch(() => []),
+        api.get("/admin/showcases").then((x) => x.data.items).catch(() => []),
+        api.get("/admin/marketplace").then((x) => x.data.items).catch(() => []),
+        api.get(`/admin/flags?status=${flagStatus}`).then((x) => x.data.items).catch(() => []),
+        api.get("/admin/audit").then((x) => x.data.items).catch(() => []),
+        api.get("/admin/roadmap").then((x) => x.data.items).catch(() => []),
+        api.get("/admin/featured-requests").then((x) => x.data.items).catch(() => []),
       ]);
-      setCampaigns(c); setShowcases(s); setMarketplace(m); setFlags(f); setAudit(a);
+      setCampaigns(c); setShowcases(s); setMarketplace(m); setFlags(f);
+      setAudit(a); setRoadmap(r); setFeaturedReqs(fr);
     } catch (e) {
       setErr(e?.response?.data?.detail || "Failed to load admin data.");
     }
@@ -89,6 +98,14 @@ export default function AdminConsole() {
     const notes = window.prompt(`Notes (audited) for ${status}:`, "");
     if (notes === null) return;
     await api.patch(`/admin/flags/${fid}`, { status, notes });
+    await reload();
+  };
+  const approveFeature = async (cid) => {
+    await api.post(`/admin/campaigns/${cid}/feature`);
+    await reload();
+  };
+  const unfeature = async (cid) => {
+    await api.delete(`/admin/campaigns/${cid}/feature`);
     await reload();
   };
 
@@ -232,6 +249,11 @@ export default function AdminConsole() {
                   actions={(r) => (
                     r.status === "open" ? (
                       <>
+                        <button onClick={() => setThreadFlag(r)}
+                                className="btn btn-ghost text-[10px]"
+                                data-testid={`admin-flag-thread-${r.id}`}>
+                          <MessagesSquare className="w-3 h-3"/> Open
+                        </button>
                         <button onClick={() => reviewFlag(r.id, "actioned")}
                                 className="btn btn-primary text-[10px]"
                                 data-testid={`admin-flag-action-${r.id}`}>
@@ -244,7 +266,14 @@ export default function AdminConsole() {
                         </button>
                       </>
                     ) : (
-                      <span className="text-[10px] text-mist italic">{r.review_notes || "—"}</span>
+                      <>
+                        <button onClick={() => setThreadFlag(r)}
+                                className="btn btn-ghost text-[10px]"
+                                data-testid={`admin-flag-thread-${r.id}`}>
+                          <MessagesSquare className="w-3 h-3"/> Thread
+                        </button>
+                        <span className="text-[10px] text-mist italic">{r.review_notes || "—"}</span>
+                      </>
                     )
                   )}
                   testid="admin-table-flags"/>
@@ -262,6 +291,253 @@ export default function AdminConsole() {
                 ]}
                 testid="admin-table-audit"/>
       )}
+
+      {tab === "featured" && (
+        <Table rows={featuredReqs}
+                cols={[
+                  { l: "Campaign", k: "name" },
+                  { l: "System", k: "system_id" },
+                  { l: "GM", k: "gm_name" },
+                  { l: "Slug", render: (r) => <code className="text-[10px] text-gold-bright">{r.discover_slug}</code> },
+                  { l: "Requested", render: (r) => (r.featured_requested_at || "").slice(0, 16).replace("T", " ") },
+                  { l: "Note", render: (r) => <span className="text-xs italic">{r.featured_request_note || "—"}</span> },
+                ]}
+                actions={(r) => (
+                  <>
+                    <a href={`/discover/${r.discover_slug}`} target="_blank" rel="noopener noreferrer"
+                       className="btn btn-ghost text-[10px]" data-testid={`feat-preview-${r.id}`}>
+                      <ExternalLink className="w-3 h-3"/>
+                    </a>
+                    <button onClick={() => approveFeature(r.id)}
+                            className="btn btn-primary text-[10px]"
+                            data-testid={`feat-approve-${r.id}`}>
+                      <Star className="w-3 h-3"/> Feature
+                    </button>
+                  </>
+                )}
+                testid="admin-table-featured"/>
+      )}
+
+      {tab === "roadmap" && (
+        <RoadmapEditor rows={roadmap} onReload={reload}/>
+      )}
+
+      {threadFlag && (
+        <FlagThreadDrawer flag={threadFlag}
+                          onClose={() => setThreadFlag(null)}
+                          onAction={async (status) => {
+                            await reviewFlag(threadFlag.id, status);
+                            setThreadFlag(null);
+                          }}/>
+      )}
+    </div>
+  );
+}
+
+
+// ── Roadmap Editor ────────────────────────────────────────────────
+function RoadmapEditor({ rows, onReload }) {
+  const [editing, setEditing] = useState(null); // item id or "new"
+  const [draft, setDraft] = useState({
+    title: "", body_md: "", status: "next", eta: "", order: 0, public: true,
+  });
+  const startNew = () => {
+    setDraft({ title: "", body_md: "", status: "next", eta: "", order: 0, public: true });
+    setEditing("new");
+  };
+  const startEdit = (item) => {
+    setDraft({
+      title: item.title, body_md: item.body_md || "", status: item.status,
+      eta: item.eta || "", order: item.order || 0, public: item.public !== false,
+    });
+    setEditing(item.id);
+  };
+  const save = async () => {
+    if (editing === "new") {
+      await api.post("/admin/roadmap", draft);
+    } else {
+      await api.patch(`/admin/roadmap/${editing}`, draft);
+    }
+    setEditing(null);
+    onReload();
+  };
+  const remove = async (rid) => {
+    if (!window.confirm("Delete this roadmap item?")) return;
+    await api.delete(`/admin/roadmap/${rid}`);
+    onReload();
+  };
+  return (
+    <div className="space-y-4" data-testid="admin-roadmap-editor">
+      <div className="flex items-center justify-between">
+        <div className="text-mist text-sm">
+          Public landing reads from <code>/api/public/roadmap</code>. Items
+          flagged <code>public=true</code> appear there. Markdown supported in body.
+        </div>
+        <button onClick={startNew} className="btn btn-primary text-xs"
+                data-testid="roadmap-new-btn">+ New item</button>
+      </div>
+
+      {editing && (
+        <div className="card-mystic p-4 space-y-2" data-testid="roadmap-form">
+          <input className="input text-sm" value={draft.title}
+                 onChange={(e) => setDraft({ ...draft, title: e.target.value })}
+                 placeholder="Title" data-testid="roadmap-title"/>
+          <div className="grid grid-cols-3 gap-2">
+            <select className="select text-xs" value={draft.status}
+                    onChange={(e) => setDraft({ ...draft, status: e.target.value })}>
+              <option value="now">now</option>
+              <option value="next">next</option>
+              <option value="later">later</option>
+              <option value="shipped">shipped</option>
+            </select>
+            <input className="input text-xs" value={draft.eta}
+                   onChange={(e) => setDraft({ ...draft, eta: e.target.value })}
+                   placeholder="ETA (Q1, Live, —)"/>
+            <input type="number" className="input text-xs" value={draft.order}
+                   onChange={(e) => setDraft({ ...draft, order: Number(e.target.value) })}
+                   placeholder="order"/>
+          </div>
+          <textarea className="input text-sm min-h-[120px] font-mono"
+                    value={draft.body_md}
+                    onChange={(e) => setDraft({ ...draft, body_md: e.target.value })}
+                    placeholder="Markdown body — **bold**, lists, `code`, [links](#)"
+                    data-testid="roadmap-body"/>
+          <label className="flex items-center gap-2 text-xs text-mist">
+            <input type="checkbox" checked={draft.public}
+                   onChange={(e) => setDraft({ ...draft, public: e.target.checked })}/>
+            Public on landing
+          </label>
+          <div className="flex gap-2">
+            <button onClick={save} className="btn btn-primary text-xs"
+                    data-testid="roadmap-save">Save</button>
+            <button onClick={() => setEditing(null)} className="btn text-xs">Cancel</button>
+          </div>
+        </div>
+      )}
+
+      <Table rows={rows}
+              cols={[
+                { l: "Title", k: "title" },
+                { l: "Status", render: (r) => <code className="text-[10px]">{r.status}</code> },
+                { l: "ETA", k: "eta" },
+                { l: "Public?", render: (r) => r.public ? "✓" : "—" },
+                { l: "Order", k: "order" },
+              ]}
+              actions={(r) => (
+                <>
+                  <button onClick={() => startEdit(r)} className="btn btn-ghost text-[10px]"
+                          data-testid={`roadmap-edit-${r.id}`}>Edit</button>
+                  <button onClick={() => remove(r.id)} className="btn btn-danger text-[10px]"
+                          data-testid={`roadmap-delete-${r.id}`}>
+                    <Trash2 className="w-3 h-3"/>
+                  </button>
+                </>
+              )}
+              testid="admin-table-roadmap"/>
+    </div>
+  );
+}
+
+
+// ── Flag Thread Drawer ────────────────────────────────────────────
+function FlagThreadDrawer({ flag, onClose, onAction }) {
+  const [thread, setThread] = useState(null);
+  const [body, setBody] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const reload = useCallback(async () => {
+    try {
+      const r = await api.get(`/flags/${flag.id}`);
+      setThread(r.data);
+    } catch { /* ignore */ }
+  }, [flag.id]);
+  useEffect(() => { reload(); }, [reload]);
+
+  const send = async () => {
+    if (!body.trim()) return;
+    setBusy(true);
+    try {
+      await api.post(`/flags/${flag.id}/messages`, { body });
+      setBody("");
+      await reload();
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-stretch justify-end" onClick={onClose}
+         data-testid="flag-thread-drawer">
+      <div className="absolute inset-0 bg-void/70"/>
+      <div className="relative bg-ink border-l border-gold/20 w-full max-w-lg flex flex-col"
+           onClick={(e) => e.stopPropagation()}>
+        <div className="px-5 py-4 border-b border-gold/10 flex items-start justify-between gap-3">
+          <div>
+            <div className="text-[10px] uppercase tracking-widest text-gold/70">
+              Flag thread · {flag.status}
+            </div>
+            <div className="text-parchment font-display tracking-wide text-sm">
+              {flag.target_kind} · <code className="text-gold-bright text-[10px]">{flag.target_id.slice(0, 16)}…</code>
+            </div>
+          </div>
+          <button onClick={onClose} className="btn btn-ghost text-xs"
+                  data-testid="flag-thread-close">
+            <X className="w-3 h-3"/>
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-4 space-y-3"
+             data-testid="flag-thread-messages">
+          <div className="border-l-2 border-ember pl-3">
+            <div className="text-[10px] uppercase tracking-widest text-ember">
+              Original report · {flag.filed_by_name}
+              <span className="text-mist/60 ml-2 normal-case">
+                {(flag.filed_at || "").slice(0, 16).replace("T", " ")}
+              </span>
+            </div>
+            <p className="text-sm text-parchment mt-1 whitespace-pre-wrap">{flag.reason}</p>
+          </div>
+          {thread?.messages?.map((m) => (
+            <div key={m.id}
+                 className={`border-l-2 pl-3 ${m.author_role === "admin" ? "border-gold" : "border-arcane"}`}
+                 data-testid={`flag-message-${m.id}`}>
+              <div className={`text-[10px] uppercase tracking-widest ${m.author_role === "admin" ? "text-gold-bright" : "text-arcane"}`}>
+                {m.author_role === "admin" ? "Admin" : "User"} · {m.author_name}
+                <span className="text-mist/60 ml-2 normal-case">
+                  {(m.created_at || "").slice(0, 16).replace("T", " ")}
+                </span>
+              </div>
+              <p className="text-sm text-parchment mt-1 whitespace-pre-wrap">{m.body}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="px-4 py-3 border-t border-gold/10 space-y-2">
+          <textarea className="input text-sm min-h-[70px]" value={body}
+                    onChange={(e) => setBody(e.target.value)}
+                    placeholder="Reply (visible to filer and admins). Be specific — this is audit-traceable."
+                    data-testid="flag-thread-reply"/>
+          <div className="flex gap-2">
+            <button onClick={send} disabled={busy || !body.trim()}
+                    className="btn btn-primary text-xs"
+                    data-testid="flag-thread-send">
+              <Send className="w-3 h-3"/> {busy ? "Sending…" : "Send reply"}
+            </button>
+            {flag.status === "open" && (
+              <>
+                <button onClick={() => onAction("actioned")}
+                        className="btn text-xs"
+                        data-testid="flag-thread-action">
+                  <CheckCircle2 className="w-3 h-3"/> Mark Actioned
+                </button>
+                <button onClick={() => onAction("dismissed")}
+                        className="btn btn-ghost text-xs"
+                        data-testid="flag-thread-dismiss">
+                  <XCircle className="w-3 h-3"/> Dismiss
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

@@ -1,5 +1,8 @@
-import React from "react";
-import { CheckCircle2, GitBranch, Boxes, Activity } from "lucide-react";
+import React, { useEffect, useState } from "react";
+import axios from "axios";
+import { CheckCircle2, GitBranch, Boxes, Activity, Users, Map, Scroll, Newspaper, Globe2, Store } from "lucide-react";
+
+const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 const PROOF = [
   {
@@ -53,6 +56,27 @@ const PROOF = [
 ];
 
 export default function ProductProof() {
+  // V6.25.40 — Live "by the numbers" strip from `/api/public/stats`.
+  // Surfaces actual app activity above the static milestone cards so
+  // visitors see motion, not marketing.
+  const [stats, setStats] = useState(null);
+  useEffect(() => {
+    let cancel = false;
+    axios.get(`${API}/public/stats`)
+      .then((r) => !cancel && setStats(r.data))
+      .catch(() => !cancel && setStats({}));
+    return () => { cancel = true; };
+  }, []);
+
+  const counterTiles = stats ? [
+    { l: "Campaigns",          v: stats.campaigns ?? 0,            Icon: Map },
+    { l: "Public showcases",   v: stats.public_campaigns ?? 0,     Icon: Globe2 },
+    { l: "Heroes built",       v: stats.characters ?? 0,           Icon: Users },
+    { l: "Codex nodes",        v: stats.codex_nodes ?? 0,          Icon: Scroll },
+    { l: "Gazettes pressed",   v: stats.gazettes_pressed ?? 0,     Icon: Newspaper },
+    { l: "Marketplace listings", v: stats.marketplace_listings ?? 0, Icon: Store },
+  ] : [];
+
   return (
     <section
       id="proof"
@@ -70,6 +94,23 @@ export default function ProductProof() {
             the current internal milestone looks like.
           </p>
         </div>
+
+        {/* V6.25.40 — Live counters strip */}
+        {stats && (
+          <div className="mt-10 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3"
+               data-testid="proof-live-stats">
+            {counterTiles.map(({ l, v, Icon }) => (
+              <div key={l} className="card-mystic p-4 text-center"
+                   data-testid={`proof-stat-${l.toLowerCase().replace(/[^a-z0-9]/g, "-")}`}>
+                <Icon className="w-4 h-4 text-gold-bright mx-auto mb-1.5"/>
+                <div className="text-2xl md:text-3xl font-display text-parchment tabular-nums leading-none">
+                  {Number(v).toLocaleString()}
+                </div>
+                <div className="text-[9px] tracking-widest uppercase text-mist mt-1.5">{l}</div>
+              </div>
+            ))}
+          </div>
+        )}
 
         <div className="mt-14 grid md:grid-cols-2 gap-5">
           {PROOF.map((p, i) => (

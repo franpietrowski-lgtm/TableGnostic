@@ -66,6 +66,7 @@ from routes import leads as leads_routes
 from routes import public_discover as public_discover_routes
 from routes import news as news_routes
 from routes import admin_mod as admin_mod_routes
+from routes import dynamic_public as dynamic_public_routes
 
 app = FastAPI(title="Table-Gnostic API")
 
@@ -150,6 +151,7 @@ app.include_router(leads_routes.router)
 app.include_router(public_discover_routes.router)
 app.include_router(news_routes.router)
 app.include_router(admin_mod_routes.router)
+app.include_router(dynamic_public_routes.router)
 
 # Static-file mount: serve uploaded battlemap images from disk so GMs can
 # drop in renders from Inkarnate / DungeonCraft / Talespire / RPGEngine

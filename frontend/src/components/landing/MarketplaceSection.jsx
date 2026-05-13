@@ -1,5 +1,8 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
+import axios from "axios";
 import { Store, ArrowRight, Copy, Eye, Bell, BadgeDollarSign, ShieldCheck } from "lucide-react";
+
+const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 const BULLETS = [
   { icon: Copy, text: "Publish custom rules and clone marketplace entries with one click." },
@@ -10,6 +13,25 @@ const BULLETS = [
 ];
 
 export default function MarketplaceSection() {
+  // V6.25.40 — Live wire. Fetch up to 4 most-recent public listings.
+  // When zero are live we fall back to the curated showcase below so
+  // the section never bottoms out.
+  const [live, setLive] = useState(null);
+  useEffect(() => {
+    let cancel = false;
+    axios.get(`${API}/public/marketplace?limit=4`)
+      .then((r) => !cancel && setLive(r.data.items || []))
+      .catch(() => !cancel && setLive([]));
+    return () => { cancel = true; };
+  }, []);
+  const fallback = [
+    { id: "fb-1", title: "Pact of the Lantern",        kind: "Power Bundle",  system_id: "BESM 4E", price: 0 },
+    { id: "fb-2", title: "Apocophea AutoMakers Bag",   kind: "Item",          system_id: "BESM 4E", price: 0 },
+    { id: "fb-3", title: "Quick-Cast Glaive",          kind: "Class Tweak",   system_id: "Cypher",  price: 0 },
+    { id: "fb-4", title: "Eldritch Bargain",           kind: "House Rule",    system_id: "D&D 5E",  price: 0 },
+  ];
+  const cards = (live && live.length > 0) ? live : fallback;
+  const isLive = !!(live && live.length > 0);
   return (
     <section
       id="marketplace"
@@ -60,39 +82,43 @@ export default function MarketplaceSection() {
           </p>
         </div>
 
-        {/* Marketplace mock card */}
+        {/* Marketplace card — live wired in V6.25.40 */}
         <div className="card-mystic p-5 md:p-6 relative">
           <div className="flex items-center justify-between">
-            <div className="label-ref">Marketplace · public</div>
-            <span className="text-[10px] font-mono text-gold/70">v6.25.10</span>
+            <div className="label-ref">
+              Marketplace · {isLive ? "live" : "preview"}
+            </div>
+            <span className="text-[10px] font-mono text-gold/70">v6.25.40</span>
           </div>
-          <div className="mt-4 grid grid-cols-2 gap-3">
-            {[
-              { name: "Pact of the Lantern", type: "Power Bundle", system: "BESM 4E", price: "Free" },
-              { name: "Apocophea AutoMakers Bag", type: "Item", system: "BESM 4E", price: "Free" },
-              { name: "Quick-Cast Glaive", type: "Class Tweak", system: "Cypher", price: "Free" },
-              { name: "Eldritch Bargain", type: "House Rule", system: "D&D 5E", price: "Free" },
-            ].map((m, i) => (
-              <div
-                key={i}
-                className="rounded-sm border border-gold/20 bg-ink/60 p-3"
-                data-testid={`market-mock-card-${i}`}
+          <div className="mt-4 grid grid-cols-2 gap-3"
+               data-testid="market-cards-grid">
+            {cards.slice(0, 4).map((m, i) => (
+              <a
+                key={m.id}
+                href={isLive ? `/discover/browse` : "#"}
+                className="rounded-sm border border-gold/20 bg-ink/60 p-3 hover:border-gold/50 transition-colors block"
+                data-testid={`market-card-${i}`}
               >
                 <div className="text-[10px] font-ui tracking-widest uppercase text-arcane">
-                  {m.type}
+                  {m.kind}
                 </div>
                 <div className="mt-1 font-display text-sm text-parchment leading-tight">
-                  {m.name}
+                  {m.title}
                 </div>
                 <div className="mt-3 flex items-center justify-between text-[10px] font-mono">
-                  <span className="text-gold-bright">{m.system}</span>
-                  <span className="text-mist/70">{m.price}</span>
+                  <span className="text-gold-bright">{m.system_id}</span>
+                  <span className="text-mist/70">
+                    {(m.price ?? 0) === 0 ? "Free" : `${m.price} ${m.currency || ""}`}
+                  </span>
                 </div>
-              </div>
+              </a>
             ))}
           </div>
           <div className="mt-4 px-3 py-2 rounded-sm bg-gold/10 border border-gold/30 text-[11px] font-ui tracking-wide text-gold-bright flex items-center gap-2">
-            <Copy className="w-3 h-3" /> Cloned 23 times this week
+            <Copy className="w-3 h-3" />
+            {isLive
+              ? <>Currently {cards.length} public listing{cards.length === 1 ? "" : "s"} — clone with one click.</>
+              : <>Marketplace warming up — first listings drop with the seed worlds.</>}
           </div>
         </div>
       </div>

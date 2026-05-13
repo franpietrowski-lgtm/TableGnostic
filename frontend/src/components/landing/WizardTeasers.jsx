@@ -1,5 +1,9 @@
-import React from "react";
-import { Compass, Upload, Megaphone, Rocket, Lock } from "lucide-react";
+import React, { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import axios from "axios";
+import { Compass, Upload, Megaphone, Rocket, Lock, Star, ArrowRight } from "lucide-react";
+
+const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 /**
  * Wizards are V2 per blueprint scope. Render teaser cards so visitors
@@ -33,9 +37,55 @@ const TEASERS = [
 ];
 
 export default function WizardTeasers() {
+  // V6.25.40 — Featured showcase ribbon. Pulls from `/api/public/featured`
+  // (admin-curated, falls back to most-recently-published showcase).
+  const [featured, setFeatured] = useState(null);
+  useEffect(() => {
+    let cancel = false;
+    axios.get(`${API}/public/featured`)
+      .then((r) => !cancel && setFeatured(r.data.item))
+      .catch(() => !cancel && setFeatured(null));
+    return () => { cancel = true; };
+  }, []);
+
   return (
     <section id="wizards" className="relative z-10 px-5 md:px-10 py-24 md:py-32" data-testid="wizards-section">
       <div className="max-w-6xl mx-auto">
+        {featured && (
+          <div className="card-mystic p-6 md:p-8 mb-14 grid md:grid-cols-[1fr_auto] items-center gap-6"
+               data-testid="featured-showcase">
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <Star className="w-3 h-3 text-gold-bright"/>
+                <span className="text-[10px] tracking-widest uppercase text-gold-bright">
+                  {featured.featured ? "Featured table" : "Most recent showcase"}
+                </span>
+              </div>
+              <h3 className="font-display text-2xl md:text-3xl text-parchment uppercase tracking-tight leading-tight">
+                {featured.name}
+              </h3>
+              <div className="text-[11px] uppercase tracking-widest text-mist mt-1">
+                {featured.system_id} · GM {featured.gm_name}
+              </div>
+              {featured.blurb && (
+                <p className="mt-3 text-sm text-mist font-body leading-relaxed max-w-2xl">{featured.blurb}</p>
+              )}
+            </div>
+            <div className="flex flex-col gap-2 shrink-0">
+              <Link to={`/discover/${featured.slug}`}
+                    className="btn btn-primary text-xs"
+                    data-testid="featured-cta-showcase">
+                Visit the showcase <ArrowRight className="w-3 h-3"/>
+              </Link>
+              <Link to={`/discover/${featured.slug}/gazette`}
+                    className="btn btn-ghost text-xs"
+                    data-testid="featured-cta-gazette">
+                Read the Gazette <ArrowRight className="w-3 h-3"/>
+              </Link>
+            </div>
+          </div>
+        )}
+
         <div className="max-w-3xl">
           <div className="label-ref mb-4">Wizards &amp; helper flows</div>
           <h2 className="font-display text-3xl md:text-5xl leading-tight text-parchment uppercase tracking-tight">

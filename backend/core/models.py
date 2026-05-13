@@ -136,6 +136,17 @@ class CampaignIn(BaseModel):
     # Defaults FALSE so existing campaigns are NOT surprise-exposed.
     discover_published: bool = False
     discover_slug: str = ""
+    # V6.25.40 — Admin-curated featured showcase. Surfaces in the
+    # landing's WizardTeasers ribbon. Singleton-ish (admin can flip one
+    # campaign to `featured=True` at a time; flipping a new one auto-
+    # clears the old). `featured_requested` is GM-driven: campaign
+    # owners submit themselves into the admin queue via the Discover
+    # Publish card; admin approves via /app/admin → Featured Requests.
+    featured: bool = False
+    featured_at: Optional[str] = None
+    featured_requested: bool = False
+    featured_request_note: str = ""
+    featured_requested_at: Optional[str] = None
 
 
 class CampaignOut(CampaignIn):

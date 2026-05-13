@@ -1005,6 +1005,8 @@ function DiscoverPublishCard({ camp, onRefresh }) {
   const [err, setErr] = useState("");
   const slug = camp.discover_slug || "";
   const publicUrl = slug ? `/discover/${slug}` : "";
+  const featured = !!camp.featured;
+  const requested = !!camp.featured_requested;
   const save = async () => {
     setBusy(true); setErr("");
     try {
@@ -1018,6 +1020,21 @@ function DiscoverPublishCard({ camp, onRefresh }) {
       setErr(formatApiErrorDetail(e.response?.data?.detail) || e.message);
     } finally { setBusy(false); }
   };
+  const requestFeature = async () => {
+    if (!camp.discover_published) {
+      window.alert("Publish to /discover first, then request a featured slot.");
+      return;
+    }
+    const note = window.prompt("Short note for the admin (why should this be featured?):", "");
+    if (note === null) return;
+    setBusy(true); setErr("");
+    try {
+      await api.post(`/campaigns/${camp.id}/request-feature`, { requested: true, note });
+      onRefresh && onRefresh();
+    } catch (e) {
+      setErr(formatApiErrorDetail(e.response?.data?.detail) || e.message);
+    } finally { setBusy(false); }
+  };
   return (
     <div className="card-mystic p-5 mt-4" data-testid="discover-publish-card">
       <div className="label-ref mb-2 flex items-center gap-2">
@@ -1025,6 +1042,11 @@ function DiscoverPublishCard({ camp, onRefresh }) {
         {camp.discover_published && (
           <span className="tag bg-gold/20 text-gold-bright text-[9px] uppercase tracking-widest">
             live
+          </span>
+        )}
+        {featured && (
+          <span className="tag bg-arcane/30 text-parchment text-[9px] uppercase tracking-widest">
+            featured ★
           </span>
         )}
       </div>
@@ -1061,6 +1083,13 @@ function DiscoverPublishCard({ camp, onRefresh }) {
              data-testid="discover-publish-preview-link">
             Preview public showcase →
           </a>
+        )}
+        {camp.discover_published && !featured && (
+          <button onClick={requestFeature} disabled={busy || requested}
+                  className="btn btn-ghost text-xs"
+                  data-testid="discover-request-feature-btn">
+            {requested ? "Feature request pending admin review" : "Request featured slot"}
+          </button>
         )}
         {err && <span className="text-ember text-[11px]" data-testid="discover-publish-error">{err}</span>}
       </div>

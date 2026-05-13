@@ -14,6 +14,50 @@
 
 ## 2. Implemented (cumulative, condensed)
 
+### V6.25.40 — Dynamic landing · Flag threads · Roadmap CRUD · Featured showcases (2026-02-12)
+
+User asked the landing-page sections to **reflect live app state**, plus a flag thread/chat for moderation reports. All "already established sections" wired without inventing new ones. No private fields ever exposed to public surfaces — admin-only data stays in the admin console.
+
+**New backend route file** — `routes/dynamic_public.py` (mounted in `server.py`):
+- `GET /api/public/stats` — campaign/character/codex/gazette/marketplace counters (zero PII).
+- `GET /api/public/marketplace?limit=12` — recent public listings, taken-down filtered out, only safe fields (id/title/kind/blurb/price/currency/system_id/created_at).
+- `GET /api/public/roadmap` — only items flagged `public=true`.
+- `GET /api/public/recent-gazettes?limit=6` — last issues from `discover_published` campaigns with masthead + slug for deep-link.
+- `GET /api/public/featured` — admin-curated; falls back to most-recently-published showcase when nothing is featured.
+- `GET/POST/PATCH/DELETE /api/admin/roadmap` — admin CRUD; Markdown supported in `body_md` (≤2400 chars).
+- `POST /api/campaigns/{cid}/request-feature` (GM owner or admin) → flips `featured_requested=true`; requires `discover_published=true`.
+- `GET /api/admin/featured-requests` — review queue.
+- `POST /api/admin/campaigns/{cid}/feature` — auto-clears prior featured + audited.
+- `DELETE /api/admin/campaigns/{cid}/feature` — clear featured.
+- `GET /api/flags/{fid}` + `POST /api/flags/{fid}/messages` — flag-thread chat; filer OR admin gated on both. Messages tagged with `author_role` so the drawer can colour-divide admin replies vs filer follow-ups.
+
+**Campaign model fields added** (`backend/core/models.py`): `featured`, `featured_at`, `featured_requested`, `featured_request_note`, `featured_requested_at`. All default to falsy.
+
+**Frontend — landing sections live-wired:**
+- `landing/Roadmap.jsx` — fully rewritten. Pulls `/api/public/roadmap`, renders four columns (Live now / Next 90 days / Horizon / Recently shipped). Markdown rendered via `react-markdown` (added to deps).
+- `landing/MarketplaceSection.jsx` — left bullets unchanged; right card fetches live listings via `/api/public/marketplace?limit=4`. Falls back to a curated preview deck if zero listings (so the section never bottoms out).
+- `landing/ProductProof.jsx` — added a 6-tile live counters strip above the static milestone grid (campaigns / showcases / heroes / codex nodes / gazettes / listings).
+- `landing/FeatureHighlights.jsx` — added "Recently pressed" gazette ribbon under the feature grid; hidden when zero issues exist.
+- `landing/WizardTeasers.jsx` — added featured-showcase hero ribbon above the wizard cards. Pulls `/api/public/featured`; deep-links to `/discover/{slug}` and `/discover/{slug}/gazette`.
+- `landing/PublicTables.jsx` — confirmed already live from V6.25.37.
+
+**Frontend — admin console expansions** (`AdminConsole.jsx`):
+- 2 new tabs: **Featured Requests** (queue with approve→feature action), **Roadmap** (full CRUD editor with status/eta/order/public flag/markdown body; inline form).
+- Flag Queue rows now have an "Open" thread button → opens a slide-in `FlagThreadDrawer` showing the original report + all messages (color-coded by role: gold=admin, arcane=user) + reply box + Mark Actioned / Dismiss buttons.
+- Flag count badge displayed in tab pill when ≥ 1 open.
+
+**Frontend — GM-side "Request featured slot"** (`CampaignDetail.jsx` → `DiscoverPublishCard`):
+- New button visible only when the campaign is `discover_published=true` and not yet `featured`. Captures a short note for the admin via `window.prompt`. Button text reflects pending state.
+
+**Seeded data:**
+- `scripts/v62540_seed_roadmap.py` — 10 starter roadmap items (2 now, 3 next, 3 later, 2 shipped). Idempotent: re-runs wipe + re-seed entries tagged `created_by="v62540_seed"`.
+
+**Testing — V6.25.40**
+- Backend: `tests/test_v62540_dynamic.py` 10/10 PASS — public endpoint shapes, no-auth allowed, admin roadmap CRUD, GM request-feature → admin approve → public/featured surfaces it, flag thread message + read.
+- **45/45 PASS combined regression** (`v62540` 10 + `v62539` 7 + `v62538` 8 + `v62536` 10 + `iter61_leads` 10).
+- Frontend: smoke-tested live — all 8 wired landing sections render (Hero, ProductProof live counters, FeaturedShowcase, Roadmap with markdown, MarketplaceSection live grid, RecentGazettes ribbon, PublicTables). Admin Roadmap tab shows 10 seed items with full CRUD; new Featured Requests tab; flag queue shows count badge "2".
+
+
 ### V6.25.39 — Evereantha canonical seed · Admin moderation · BESM templates · Two-handed equipping · HTML ingest (2026-02-09)
 
 **Critical finding — Emergent LLM key budget exceeded** ($5.00 cap reached). This is the actual cause of the user's reported "error/failure/something went wrong" messages from the Knowledge Web mechanic ingestion AND Atelier Workshop one-shot scaffold. Concept Forge / News auto-draft / LLM recaps will all silently fail until the budget is topped up via Profile → Universal Key → Add Balance.
