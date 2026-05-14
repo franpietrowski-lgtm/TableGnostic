@@ -14,6 +14,23 @@
 
 ## 2. Implemented (cumulative, condensed)
 
+### V6.25.54 — Phase C: Campaign export/import (.tgcampaign.json round-trip, no LLM) (2026-02-14)
+
+**Backend** (`backend/routes/campaign_export.py` NEW)
+- `GET /api/campaigns/{cid}/export` (owner / admin only) — returns a self-contained `.tgcampaign.json` bundle with envelope `{schema_version, exported_at, exported_by, source, campaign, collections, per_session, stats}`. Bundles **33 campaign-bound collections** (codex / characters / writer-tool tables — cultures · cosmology · manuscript · pov · themes · magic — sessions / scenes / channels / encounters / atlas pins / roll tables / macros / materials / news / cypher_xp / kill logs / change requests / etc.) plus **6 per-session collections** (battlemaps / effects / initiative / dice_rolls / chat_logs / recaps). Skips moderation rows (`flags`, `flag_messages`, `admin_actions`), `voice_lines` (audio binaries don't round-trip cleanly), `marketplace_listings`, and `campaign_deltas` (cross-campaign). Response carries `Content-Disposition: attachment; filename="<slug>-<id8>.tgcampaign.json"` plus `X-TG-Bundle-Schema: 1` / `X-TG-Bundle-Bytes: <n>` headers.
+- `POST /api/campaigns/import` (GM / admin only) — multipart `file` upload (32 MB cap) → strict `schema_version==1` validation → pre-allocates fresh ids for every doc → walks every collection, remapping 22 id-bearing fields (`parent_id`, `character_id`, `session_id`, `node_id`, `from_node`, `to_node`, `encounter_id`, `linked_*`, `atlas_node_id`, plus list-of-id refs like `revealed_to`, `article_ids`, `related_section_ids`, etc.). Importer becomes owner; characters/nodes/edges are re-stamped to the importing user; `member_ids` reset; fresh `invite_token`; **public-surface flags wiped** (`discover_published` / `canon_published` / `featured` / `featured_*` cleansed so a fresh import never inherits a public publication).
+- Per-collection insert_many is wrapped in try/except so one failing collection cannot orphan the rest of the import; `counts` reports either a row-count or an error tag per collection.
+
+**Frontend** (`frontend/src/components/CampaignExportImport.jsx` NEW)
+- `<CampaignExportCard camp/>` (testid `campaign-export-card`) drops into Invite & Share next to Canon / Discover cards. Owner / admin only. `campaign-export-btn` triggers a `responseType: "blob"` GET, wraps the response in a `Blob`, and uses a programmatic `<a download>` to ship the file.
+- `<CampaignImportButton onImported/>` (testid `campaign-import-btn` + hidden `campaign-import-file-input`) renders next to "Forge a campaign" in the Hall of Tables. GM / admin only. After POST `/api/campaigns/import` succeeds, navigates to `/app/campaigns/{new_cid}`.
+
+**Verified** (testing agent iteration 87):
+- Backend 7/7 PASS (`test_v62554_campaign_export.py`): export shape with all required headers + envelope keys; 403 for non-owner non-admin; 404 unknown campaign; full round-trip producing fresh cid + `(imported)` suffix + `imported_from` + counts.nodes ≥ 1 + remapped_ids ≥ 1 + seeded node preserved with new id; schema_version=99 → 400; non-JSON → 400; public-surface flags (`discover_published` / `featured` / `canon_published`) all reset on import.
+- Phase B regression: 6/6 PASS (cosmology endpoints untouched).
+- Frontend: Hall of Tables shows the new import button next to Forge CTA; Campaign Detail Invite & Share renders the export card; export button click → 200 with correct headers → Blob download. Zero ESLint shadowbox.
+
+
 ### V6.25.53 — Phase B: Evereantha cosmology hard-seed · Magic Architect quick-ref · Cosmological Tension picker (2026-02-14)
 
 **Backend — hard-seeded canon** (`backend/system_data/evereantha_cosmology.py` + `backend/routes/cosmology.py`)
