@@ -14,6 +14,21 @@
 
 ## 2. Implemented (cumulative, condensed)
 
+### V6.25.52 — Phase A: BESM picker fix · Z-index sweep · Session grid (2026-02-14)
+
+**A1 — BESM Race/Class Template Picker bug (the silently-broken-for-months one)**
+- **Root cause**: `<BesmTemplatePicker ref={ref}>` — React **swallows `ref`** as a reserved prop. Function components never receive it. The picker has been getting `besmRef === undefined` since V6.25.2, falling through to `if (templates.length === 0) return null` and rendering nothing. Users clicked "Pick a Race / Class" from the empty-state AppliedTemplatesPanel CTA and saw the regular edit form with no picker anywhere — the bug looked like "the page does nothing."
+- **Fix**: renamed prop to `besmRef`; picker now receives the reference catalogue, shows 26 templates (8 canon races + 18 canon classes + custom homebrew). Live-verified on Eli.
+- **Polish**: added `?tab=templates` query handler (set by AppliedTemplatesPanel's CTA) → scrolls picker into view + flashes a gold ring for 2.5s so the user can't miss it. Added inline preview card showing stat adjustments / attributes / skills / defects BEFORE Apply commits.
+
+**A2 — Z-Index standardisation + session-view spacing**
+- Migrated 8 legacy modals (`Encounter Editor`, `Encounter Complete`, `MacroBuilder`, `CypherReferencePanel`, `QuickRollBar`, `CypherXPPanel`, `WorldTreeLattice`, `CraftingServicePanel`, `builders/Cypher`) from arbitrary `z-[200]` → canonical `z-[8800]`. Resolves the chronic complaint that the Encounter Designer modal vanished under newer surfaces (CodexChartView / Convert / Convertbuttons rendered at 8800 since V6.25.x).
+- Added `/lib/zLayers.js` — single source-of-truth constants (STICKY=30, POPOVER=100, DRAWER=1200, MODAL=8800, TOAST=9500, TOUR=10000) so future modals don't recreate the chaos.
+- `SessionView.jsx` grid widened: `280px / 1fr / 320px` → `300px / 1fr / 360px` with `lg:gap-8` for more breathing room on 1080p+. Right column (Dice Altar + Encounter Designer) no longer truncates.
+
+**Verified** (testing agent iteration 85): **20/20 backend regression** (3 new template_picker contract tests + 17 adjacent BESM/picker tests pass) + **100% frontend live-confirmed** (picker visible with flash-pulse, preview bundle rendering, Encounter modal `z-[8800]` + backdrop-blur computed at runtime, gridTemplateColumns = '300px 876px 360px' exactly matches new spec, zero ESLint compile overlay across landing/session/reference).
+
+
 ### V6.25.51 — Refactor: Battlemap hooks · Reference split · macros & vitals consolidation (2026-02-13)
 
 **Pure refactor — zero behaviour change, 32/32 backend + 100% frontend regression green.**
