@@ -597,7 +597,7 @@ function CustomDraftModal({ campId, kind, genre, onClose }) {
   };
 
   return (
-    <div className="fixed inset-0 bg-void/80 z-[200] flex items-center justify-center p-4"
+    <div className="fixed inset-0 bg-void/80 z-[8800] backdrop-blur-sm flex items-center justify-center p-4"
          onClick={onClose}
          data-testid={`cypher-custom-modal-${kind}`}>
       <div className="card-mystic p-5 max-w-2xl w-full max-h-[90vh] overflow-y-auto

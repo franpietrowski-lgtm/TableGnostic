@@ -134,7 +134,7 @@ export default function MacroBuilder({
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-0 sm:p-4
+    <div className="fixed inset-0 z-[8800] flex items-end sm:items-center justify-center p-0 sm:p-4
                        bg-void/90 backdrop-blur-sm overflow-y-auto"
          onClick={onClose}
          data-testid="macro-builder">

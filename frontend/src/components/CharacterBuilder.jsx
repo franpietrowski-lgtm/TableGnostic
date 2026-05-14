@@ -545,8 +545,15 @@ export default function CharacterBuilder() {
               there within the CP budget.
               V6.25.32 — Now also exposes the BESM 4E book canon races
               (RACE_TEMPLATES, p.35-41) and class archetypes
-              (CLASS_TEMPLATES, p.142-153) from `/api/besm/reference`. */}
-          <BesmTemplatePicker customs={customs} ref={ref} ch={ch} setCh={setCh}/>
+              (CLASS_TEMPLATES, p.142-153) from `/api/besm/reference`.
+              V6.25.52 — `?tab=templates` query (set by AppliedTemplatesPanel's
+              "Pick a Race / Class" deep-link) scrolls and flashes this
+              picker on mount so it's discoverable.
+              V6.25.52 — Long-standing bug fixed: previously passed
+              `ref={ref}` which React swallows (reserved prop name).
+              Now passed as `besmRef` so the function component
+              actually receives the reference catalogue. */}
+          <BesmTemplatePicker customs={customs} besmRef={ref} ch={ch} setCh={setCh}/>
 
           <div className="divider-sigil" />
           <div className="label-ref">Derived · ch.8 p.168 BESM 4E</div>
@@ -1433,14 +1440,39 @@ function _canonToCustomShape(row, kind) {
   };
 }
 
-function BesmTemplatePicker({ customs, ref, ch, setCh }) {
+function BesmTemplatePicker({ customs, besmRef, ch, setCh }) {
   const [sel, setSel] = React.useState("");
+  const cardRef = React.useRef(null);
+  const [flash, setFlash] = React.useState(false);
+
   const customTemplates = (customs || []).filter(
     (c) => (c.kind === "race" || c.kind === "class")
       && c.effects && (c.effects.components || c.effects.stat_adjustments));
-  const canonRaces = (ref?.race_templates || []).map((r) => _canonToCustomShape(r, "race"));
-  const canonClasses = (ref?.class_templates || []).map((r) => _canonToCustomShape(r, "class"));
+  const canonRaces = (besmRef?.race_templates || []).map((r) => _canonToCustomShape(r, "race"));
+  const canonClasses = (besmRef?.class_templates || []).map((r) => _canonToCustomShape(r, "class"));
   const templates = [...canonRaces, ...canonClasses, ...customTemplates];
+
+  // V6.25.52 — `?tab=templates` deep-link from AppliedTemplatesPanel
+  // ("Pick a Race / Class" empty-state CTA). We scroll the picker
+  // into view and pulse the border for ~2.5s so the user can't miss
+  // it. Effect depends on `templates.length` so it fires the moment
+  // ref data lands (initial render may have it empty while /api
+  // /besm/reference is still in flight, in which case the picker
+  // returns null and the ref isn't attached yet).
+  React.useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("tab") !== "templates") return;
+    if (templates.length === 0) return;
+    if (!cardRef.current) return;
+    const t = setTimeout(() => {
+      cardRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+      setFlash(true);
+      setTimeout(() => setFlash(false), 2500);
+    }, 80);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [templates.length]);
+
   if (templates.length === 0) return null;
   const chosen = templates.find((t) => t.id === sel);
   // V6.25.3 — applied templates persist via `folio.applied_templates`
@@ -1598,9 +1630,22 @@ function BesmTemplatePicker({ customs, ref, ch, setCh }) {
   };
 
   return (
-    <div className="mt-3 border border-gold/20 rounded-sm p-3 bg-void/30"
-         data-testid="besm-template-picker">
+    <div ref={cardRef}
+         className={`mt-3 border rounded-sm p-3 bg-void/30 transition-colors
+                    ${flash ? "border-gold ring-2 ring-gold/40 animate-pulse" : "border-gold/20"}`}
+         data-testid="besm-template-picker"
+         data-flash={flash ? "1" : "0"}>
       <div className="label-ref mb-2">Race / Class Templates · BESM Canon + Campaign Homebrew</div>
+      {/* V6.25.52 — counts banner so the user sees there's content even
+          before opening the dropdown (previous version of this panel
+          looked empty on first glance). */}
+      <div className="text-[10px] text-mist mb-2"
+           data-testid="besm-template-counts">
+        {templates.length} templates available
+        {canonRaces.length + canonClasses.length > 0 &&
+          ` · ${canonRaces.length} canon races · ${canonClasses.length} canon classes`}
+        {customTemplates.length > 0 && ` · ${customTemplates.length} campaign homebrew`}
+      </div>
       <div className="flex gap-2 items-end flex-wrap">
         <div className="flex-1 min-w-[240px]">
           <label className="label-ref block mb-1 text-[9px]">Template</label>
@@ -1653,8 +1698,69 @@ function BesmTemplatePicker({ customs, ref, ch, setCh }) {
         </button>
       </div>
       {chosen && (
-        <div className="mt-2 text-[11px] text-mist italic" data-testid="besm-template-preview">
-          {chosen.description_note || "No GM description."}
+        <div className="mt-2 space-y-2" data-testid="besm-template-preview">
+          {chosen.description_note && (
+            <div className="text-[11px] text-mist italic">{chosen.description_note}</div>
+          )}
+          {/* V6.25.52 — inline preview of what `Apply` will inject so
+              the player sees the bundle before committing. */}
+          {(() => {
+            const eff = chosen.effects || {};
+            const sa = eff.stat_adjustments || {};
+            const comps = eff.components || [];
+            const attrs = comps.filter((c) => c.kind === "attribute");
+            const skills = comps.filter((c) => c.kind === "skill");
+            const defects = comps.filter((c) => c.kind === "defect");
+            const statBits = ["body", "mind", "soul"]
+              .filter((k) => (sa[k] ?? 0) !== 0)
+              .map((k) => `${k[0].toUpperCase()}${k.slice(1)} ${sa[k] > 0 ? "+" : ""}${sa[k]}`);
+            return (
+              <div className="border border-gold/15 rounded-sm p-2 bg-ink/40 text-[11px] space-y-1"
+                   data-testid="besm-template-preview-bundle">
+                <div className="flex flex-wrap gap-x-3 gap-y-1">
+                  <span className="text-gold-bright font-display">{chosen.name}</span>
+                  <span className="text-mist/70">
+                    {(eff.total_cp ?? 0)} CP · {chosen.kind}
+                  </span>
+                </div>
+                {statBits.length > 0 && (
+                  <div data-testid="besm-template-preview-stats">
+                    <span className="text-gold/60 uppercase tracking-widest text-[9px]">Stat adj:</span>{" "}
+                    <span className="text-parchment">{statBits.join(" / ")}</span>
+                  </div>
+                )}
+                {attrs.length > 0 && (
+                  <div data-testid="besm-template-preview-attrs">
+                    <span className="text-gold/60 uppercase tracking-widest text-[9px]">Attrs:</span>{" "}
+                    <span className="text-parchment">
+                      {attrs.map((a) => `${a.name} L${a.level || 1}`).join(", ")}
+                    </span>
+                  </div>
+                )}
+                {skills.length > 0 && (
+                  <div data-testid="besm-template-preview-skills">
+                    <span className="text-gold/60 uppercase tracking-widest text-[9px]">Skills:</span>{" "}
+                    <span className="text-parchment">
+                      {skills.map((s) => `${s.name} L${s.level || 1}`).join(", ")}
+                    </span>
+                  </div>
+                )}
+                {defects.length > 0 && (
+                  <div data-testid="besm-template-preview-defects">
+                    <span className="text-gold/60 uppercase tracking-widest text-[9px]">Defects:</span>{" "}
+                    <span className="text-parchment">
+                      {defects.map((d) => `${d.name} R${d.rank || 1}`).join(", ")}
+                    </span>
+                  </div>
+                )}
+                {comps.length === 0 && statBits.length === 0 && (
+                  <div className="text-[10px] text-mist/60 italic">
+                    No components — this is a baseline (0 CP) entry.
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </div>
       )}
       {(applied || []).length > 0 && (

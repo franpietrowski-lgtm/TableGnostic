@@ -262,7 +262,7 @@ export default function SessionView() {
         />
       </div>
 
-      <div className="md:flex-1 md:min-h-0 md:grid md:grid-cols-[280px_1fr_320px] gap-4 md:gap-6">
+      <div className="md:flex-1 md:min-h-0 md:grid md:grid-cols-[300px_1fr_360px] gap-4 md:gap-6 lg:gap-8">
       {/* Mobile pane switcher */}
       <div className="md:hidden flex border-b border-gold/10 mb-3 sticky top-[52px] bg-void/90 backdrop-blur z-20" data-testid="session-mobile-tabs">
         {[

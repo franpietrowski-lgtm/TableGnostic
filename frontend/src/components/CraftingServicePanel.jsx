@@ -189,7 +189,7 @@ function MaterialEditor({ draft, setDraft, allRows, busy, onSave, onCancel }) {
   };
 
   return (
-    <div className="fixed inset-0 z-[200] bg-void/80 flex items-center justify-center p-4"
+    <div className="fixed inset-0 z-[8800] bg-void/80 backdrop-blur-sm flex items-center justify-center p-4"
          onClick={onCancel} data-testid="material-editor-modal">
       <div className="card-mystic p-5 max-w-md w-full max-h-[90vh] overflow-y-auto space-y-3 relative"
            onClick={(e) => e.stopPropagation()}>

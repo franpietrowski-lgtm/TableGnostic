@@ -185,7 +185,7 @@ export default function QuickRollBar({ character, campaignId, systemId, channelI
 
 function SlotPicker({ slot, macros, onPick, onCreate, onUnbind, onClose }) {
   return createPortal(
-    <div className="fixed inset-0 z-[200] bg-void/80 flex items-center justify-center p-4"
+    <div className="fixed inset-0 z-[8800] bg-void/80 backdrop-blur-sm flex items-center justify-center p-4"
          onClick={onClose}
          data-testid={`qrb-picker-${slot}`}>
       <div className="card-mystic p-5 max-w-md w-full"
