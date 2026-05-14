@@ -14,6 +14,45 @@
 
 ## 2. Implemented (cumulative, condensed)
 
+### V6.25.57 — Phase F: GM Bestiary spawn-into-Battlemap (2026-02-14)
+
+**Backend** (`backend/routes/bestiary.py` NEW)
+- `GET /api/campaigns/{cid}/bestiary?q=&limit=` (GM / admin only) returns a merged monster roster: SRD MONSTERS for D&D 5E + Anime 5E (60 iconic creatures each), Cypher BESTIARY for Cypher, custom Codex `nodes` with `type/node_kind` in `{monster, creature, npc, person, faction}` for any system (BESM 4E has no canon list so it's custom-only).
+- Each row: `{id, name, system, source, cr, hp, ac, type, atks, color, tooltip}` — `_color_for(cr)` maps to a 5-tier palette (leaf <CR1 / gold <5 / rose <11 / arcane <17 / rust ≥17) matching landing-page semantics. Id-namespaced (`dnd5e:` / `cypher:` / `custom:`) so cross-system spawns can't collide.
+
+**Frontend** (`frontend/src/components/BattlemapSidebar.jsx` + `Battlemap.jsx`)
+- New collapsible "Bestiary" section (`battlemap-sidebar-bestiary` + `battlemap-bestiary-toggle`) — GM only, lazy-loaded on first expand. Search box (`battlemap-bestiary-search`) filters by name / type / source. Each row is a click-to-arm button (`battlemap-bestiary-spawn-{id}`) with a coloured circle (CR-tier tint) + name + CR. Clicking arms `pendingPlacement = {kind:"npc", color, label:name, tooltip, bestiary_id}` — next canvas click drops the NPC token.
+
+**Verified**: 6/6 backend (`test_v62557_bestiary.py`); sidebar testids confirmed in source by testing agent iteration 88.
+
+
+### V6.25.56 — Phase E: Audio architecture overhaul — single shared mic stream + per-peer mute (2026-02-14)
+
+**New shared-mic singleton** (`frontend/src/lib/useSharedMicStream.js` NEW)
+- Module-level singleton — `_stream` + `_refcount` + in-flight `_pending` Promise so concurrent callers (`AVSeats` + `PushToTalkButton` mounting in the same render) share a SINGLE `getUserMedia({audio})` call. Releases stop tracks only when refcount → 0; OS mic LED goes off the moment no consumer is listening. Fixes the long-standing "mic tied up by two layers" bug where joining voice and using PTT each grabbed their own MediaStream.
+- `acquireSharedMic()` / `releaseSharedMic()` / `peekSharedMic()` / `composeAVStream(videoStream)` (builds a fresh MediaStream from the shared audio track + caller-owned video track) / `usePeerMix()` (volume+muted state for future centralised mixer).
+
+**AVSeats refactor** — `joinCall()` now: (1) `acquireSharedMic()` for audio, (2) own `getUserMedia({video})` for camera, (3) `composeAVStream()` to build the PC stream. `leaveCall()` stops local video tracks and releases the mic refcount — audio stays alive if PTT is still holding.
+
+**PushToTalkButton refactor** — no own `streamRef` for the mic. `ensureStream()` calls the shared singleton; cleanup `useEffect` releases on unmount. Guards prevent refcount drift on repeated presses.
+
+**Per-peer mute toggle** (V6.25.56 polish) — every remote tile gains a `data-testid="av-mute-{conn_id}"` button alongside the existing volume slider. Mute is orthogonal to volume (preserves slider position so unmuting restores the per-peer level). Both persist to localStorage (`av-vol-{cid}` / `av-mute-{cid}`).
+
+**Verified**: testing agent iteration 88 — STATIC REVIEW (headless Playwright cannot grant mic in preview iframe). Singleton race-safety, refcount discipline, refactor wiring all hold up to code review. No 'Compiled with problems' overlay; no console errors.
+
+
+### V6.25.55 — Phase D: Virtual "The Game Master" character (foundation for Phase E) (2026-02-14)
+
+**Backend** (`backend/routes/gm_voice.py` NEW)
+- `GET /api/campaigns/{cid}/gm-voice-character` lazy-creates a single canonical GM character per campaign: name `"The Game Master"`, `is_gm_voice=True`, `omniscient=True`, `total_points=0`, every stat zeroed, `published=True`, owned by `camp.gm_id`. Idempotent — repeated calls return the same id. Available to all seated members; mutations remain GM-owned. Foundation for Phase E audio — gives the GM's mic a stable speaker identity for in-character narration / NPC voice lines.
+- Latent bug fix in `routes/voice_lines.py` — projection of `characters.user_id` was wrong (real field is `owner_id`), which meant every player-side PTT silently 403'd. Fixed to project + check `owner_id`. Verified by testing agent iter 88.
+
+**Frontend** (`frontend/src/components/SessionView.jsx`)
+- `loadAll()` lazy-fetches the GM voice character for GM/admin and prepends it to the local characters list. Dice/PTT picker labels it as `🎙 The Game Master (GM voice)` with `data-testid="dice-char-gm-voice-option"`. Auto-select effect now prefers `is_gm_voice` for the GM (and `owner_id` matching for players — previously checked `user_id`, which never existed on character rows).
+
+**Verified**: 5/5 backend (`test_v62555_gm_voice.py`); the `🎙 The Game Master (GM voice)` option exact match confirmed live by testing agent iter 88.
+
+
 ### V6.25.54 — Phase C: Campaign export/import (.tgcampaign.json round-trip, no LLM) (2026-02-14)
 
 **Backend** (`backend/routes/campaign_export.py` NEW)
