@@ -14,6 +14,28 @@
 
 ## 2. Implemented (cumulative, condensed)
 
+### V6.25.53 — Phase B: Evereantha cosmology hard-seed · Magic Architect quick-ref · Cosmological Tension picker (2026-02-14)
+
+**Backend — hard-seeded canon** (`backend/system_data/evereantha_cosmology.py` + `backend/routes/cosmology.py`)
+- New module exposes 8 canonical Faces (4 Aurae: Luxantia / Cryptosha / Confluo / Expanzis · 4 Mortiscura: Obscuritia / Spectros / Exutus / Stasis), each with 3 sub-nodes (name + domain + rank_1 / rank_3 / failure prose), plus an opposition matrix of 20 pre-tabulated rows (16 cross-side ×2 directions + 4 documented same-side returns) and a magnitude legend (`advantage` · `edge` · `neutral` · `obstacle`).
+- `GET /api/cosmology/evereantha` (auth-gated) returns the full payload — Magic Architect quick-ref and the Encounter chat-roller both consume this single endpoint.
+- `GET /api/cosmology/evereantha/opposition?attacker=<id>&defender=<id>` (auth-gated) returns a single tension row; unknown face → 404; same-side pairings → synthetic `neutral` row with `Fiction-led` note (no 404 — they're valid pairings just not pre-tabulated).
+- Faces of Aurae & Mortiscura are encoded as **Primary Sources** of magic, NOT a pantheon — matches the user's canon distinction.
+
+**Frontend — Magic Architect quick-ref panel** (`frontend/src/components/writers/WbMagicArchitectTool.jsx`)
+- New collapsible panel (`data-testid="cosmology-quickref"`, toggle `cosmology-quickref-toggle`, body `cosmology-quickref-body`) shows two side-by-side grids: Aurae (emerald-themed) + Mortiscura (rose-themed). Clicking any of the 8 face buttons (`cosmology-aurae-{id}` / `cosmology-mortiscura-{id}`) opens an inline detail card (`cosmology-face-detail`) with the 3 node cards (`cosmology-node-{name}`) rendering Domain / Rank 1 / Rank 3 / Failure with explicit field-label chips. Legend (`cosmology-legend`) explains the tension magnitudes.
+
+**Frontend — Encounter Designer "Cosmological Tension" picker** (`frontend/src/components/EncounterDesigner.jsx`)
+- New `CosmologicalTension` subcomponent inside the AUTHOR ENCOUNTER modal. Two selects (`cosmology-attacker` + `cosmology-defender`) drive a real-time fetch to `/opposition`; the result row (`cosmology-tension-result`) shows the tension prose + a magnitude badge (`cosmology-tension-magnitude`) coloured per legend. All 4 magnitudes (advantage / edge / neutral / obstacle) reachable from canonical pairings.
+
+**Verified** (testing agent iteration 86):
+- Backend 6/6 PASS (`test_v62553_cosmology.py`): payload shape, canon ids round-trip, 4 cardinal pairs return advantage both directions, same-side fallback returns neutral with 'Fiction-led' note, unknown face 404, no-auth 401/403.
+- Frontend 100%: quick-ref panel + toggle + 8 face buttons + 3-node detail + close + legend all verified live on Evereantha campaign. Encounter Designer picker produces all 4 magnitudes via live combinations (luxantia/obscuritia=advantage, luxantia/spectros=edge, luxantia/cryptosha=neutral, cryptosha/stasis=obstacle). Zero console errors, no ESLint shadowbox.
+- Polish applied post-iter-86: explicit Domain / Rank 1 / Rank 3 / Failure label chips inside each node card for non-canon-reader scanability (testing agent's only design suggestion).
+
+**Known limitation** (orthogonal to Phase B): LLM key budget exceeded — `tg-reseed` background job logs `litellm.BadRequestError: Budget has been exceeded! Current cost: 3`. User needs to top up via Profile → Universal Key → Add Balance for the deeper Evereantha PDF re-ingest to resume. NOT a Phase B regression.
+
+
 ### V6.25.52 — Phase A: BESM picker fix · Z-index sweep · Session grid (2026-02-14)
 
 **A1 — BESM Race/Class Template Picker bug (the silently-broken-for-months one)**

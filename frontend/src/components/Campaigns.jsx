@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { api, formatApiErrorDetail, useAuth } from "../lib/api";
 import { Plus, Scroll, X, Users, Lock, Globe2 } from "lucide-react";
 import SystemBadge from "./SystemBadge";
+import { CampaignImportButton } from "./CampaignExportImport";
 
 export default function Campaigns() {
   const { user } = useAuth();
@@ -28,12 +29,15 @@ export default function Campaigns() {
           <h1 className="font-display text-4xl tracking-wide text-parchment">Campaigns</h1>
           <p className="text-mist mt-2 font-body">Browse public tables or host your own.</p>
         </div>
-        <button onClick={() => setShowCreate(true)} className="btn btn-primary"
-                disabled={isPlayerOnly}
-                title={isPlayerOnly ? "Player accounts can't host campaigns. Switch your role to GM in your profile to host a table." : undefined}
-                data-testid="new-campaign-btn">
-          <Plus className="w-4 h-4" /> {isPlayerOnly ? "GMs only" : "Forge a campaign"}
-        </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <CampaignImportButton onImported={load}/>
+          <button onClick={() => setShowCreate(true)} className="btn btn-primary"
+                  disabled={isPlayerOnly}
+                  title={isPlayerOnly ? "Player accounts can't host campaigns. Switch your role to GM in your profile to host a table." : undefined}
+                  data-testid="new-campaign-btn">
+            <Plus className="w-4 h-4" /> {isPlayerOnly ? "GMs only" : "Forge a campaign"}
+          </button>
+        </div>
       </div>
 
       <div className="mt-6 flex gap-2">

@@ -276,10 +276,10 @@ function CosmologyQuickRef() {
                   <div key={n.name} className="border border-mist/15 rounded-sm p-2 bg-ink/40 text-[10px]"
                        data-testid={`cosmology-node-${n.name.toLowerCase()}`}>
                     <div className="text-amber-300 font-display">{n.name}</div>
-                    <div className="text-mist/70 italic mb-1">{n.domain}</div>
-                    <div><b className="text-mist/60">R1:</b> {n.rank_1}</div>
-                    <div><b className="text-mist/60">R3:</b> {n.rank_3}</div>
-                    <div className="text-rose-300/80"><b>Fail:</b> {n.failure}</div>
+                    <div className="mb-1"><span className="text-[9px] tracking-widest uppercase text-mist/45 mr-1">Domain</span><span className="text-mist/80 italic">{n.domain}</span></div>
+                    <div className="mb-0.5"><span className="text-[9px] tracking-widest uppercase text-mist/45 mr-1">Rank 1</span>{n.rank_1}</div>
+                    <div className="mb-0.5"><span className="text-[9px] tracking-widest uppercase text-mist/45 mr-1">Rank 3</span>{n.rank_3}</div>
+                    <div className="text-rose-300/80"><span className="text-[9px] tracking-widest uppercase text-rose-300/55 mr-1">Failure</span>{n.failure}</div>
                   </div>
                 ))}
               </div>

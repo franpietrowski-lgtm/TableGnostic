@@ -1,0 +1,35 @@
+{
+  "summary": "V6.25.54 Phase C (Campaign export/import .tgcampaign.json round-trip, NO LLM dependency) — ALL GREEN end-to-end. Backend: 7/7 PASS (test_v62554_campaign_export.py — export shape with Content-Disposition + X-TG-Bundle-Schema header, 403 for non-owner non-admin, 404 unknown campaign, full round-trip producing fresh cid + '(imported)' suffix + imported_from + counts.nodes≥1 + remapped_ids≥1 + seeded node preserved with new id, schema_version=99→400 with 'schema_version' in body, non-JSON payload→400, public-surface flags discover_published/featured/canon_published all reset to falsy on import). Phase B regression: 6/6 PASS (test_v62553_cosmology.py untouched). Frontend (admin @1920x1080): Hall of Tables /app/campaigns shows campaign-import-btn next to new-campaign-btn (visible+enabled), hidden campaign-import-file-input present with type=file accept='.tgcampaign.json,application/json,.json'. Campaign detail /app/campaigns/af461ae0…: Invite & Share tab renders campaign-export-card with campaign-export-btn (visible+enabled). Clicking export-btn produced GET /api/campaigns/{cid}/export → 200, response headers content-disposition='attachment; filename=\"evereantha-the-maiden-adventure-af461ae0.tgcampaign.json\"', x-tg-bundle-schema=1, content-type=application/json — frontend wraps blob and triggers anchor download (no campaign-export-error rendered). Zero 'Compiled with problems' overlay on landing, post-login /app dashboard, /app/campaigns, /app/campaigns/{cid}, or /app/campaigns/{cid}/atelier. Only benign React Router v7 future-flag warnings in console.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/test_reports/pytest/iter87_v62554.xml",
+    "/app/test_reports/pytest/iter87_regression_phaseB.xml",
+    "/app/backend/tests/test_v62554_campaign_export.py",
+    "/app/backend/tests/test_v62553_cosmology.py"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "campaign_export.py is well-structured for a 320-line endpoint pair — clear CAMPAIGN_BOUND / PER_SESSION / SKIP_ALWAYS partitioning makes future schema growth easy (just append to CAMPAIGN_BOUND).",
+    "Sanitisation on import is correct & defence-in-depth: discover_published / canon_published / featured / featured_at / featured_requested / discover_slug / invite_token / member_ids / created_at / gm_id / gm_name are all explicitly stripped from the source bundle before reconstruction — verified by test_import_resets_public_surface_flags PASS.",
+    "id_map seeding via setdefault correctly handles the (very-unlikely) duplicate-id case — first-wins is the right policy.",
+    "Per-collection insert_many is wrapped in try/except so a single bad collection cannot orphan the rest of the import. counts['collection_name'] reflects the per-collection error string for observability.",
+    "Schema-version gate is strict (==1) rather than ≤1 — correct for the current single-version bundle; revisit when schema_version=2 lands so a v1 bundle stays importable.",
+    "Frontend CampaignExportCard / CampaignImportButton both correctly auth-gate on user.role + camp.gm_id ⇒ return null for non-owner non-admin, matching the backend 403 path. No client-side leak of the action surface.",
+    "FormData multipart upload uses the 'file' field name that exactly matches the FastAPI UploadFile = File(...) parameter — no field-name mismatch risk.",
+    "Minor nit: the import button accepts '.tgcampaign.json,application/json,.json' — wide enough to cover most browsers + cross-pod re-uploads, but the client regex /\\.tgcampaign\\.json$|\\.json$/i still gates the actual upload, so the wide accept= filter is fine UX-wise."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (7/7 V6.25.54 Phase C + 6/6 V6.25.53 Phase B regression)", "frontend": "100% (Hall of Tables import button + hidden file input present & properly typed; Campaign Detail ▸ Invite & Share export card+button render, click triggers 200 export with correct headers; zero ESLint overlay on visited routes)"},
+  "test_credentials": "Admin: tablegnostic-admin@tablegnostic.com / LoremasterAurea2026!Forge (working).",
+  "seed_data_creation": "Tests create transient PhC-* campaigns (one per test) which persist in the admin's Hall of Tables. Not destructive — they're flagged 'PhC-' prefixed and easy to bulk-cleanup later if desired. Phase C round-trip test creates source + '(imported)' pair — both visible in the campaigns grid screenshot.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "V6.25.54 Phase C fully GREEN. Conventions worth preserving for the next agent: (1) The export endpoint sets THREE telling headers — Content-Disposition (attachment + filename ending in .tgcampaign.json), X-TG-Bundle-Schema=1, X-TG-Bundle-Bytes=<n>. Test these via response.all_headers() in Playwright. (2) The import endpoint is multipart with field 'file'. From pytest use requests files={'file': (name, BytesIO, 'application/json')}. From Playwright use page.set_input_files() against [data-testid='campaign-import-file-input']. (3) The campaign-import-btn is gated to user.role in ('gm','admin') and the campaign-export-card is gated to (user.role=='admin' OR user.id==camp.gm_id) — both correctly mirror the backend 403 paths. (4) Phase C tests create persistent PhC-* campaigns each run. Consider a cleanup pass if the admin's Hall of Tables gets cluttered. (5) Phase B routes (/api/cosmology/evereantha + /opposition) remained untouched & green during Phase C work.",
+  "rca of the issue": "No bug to RCA — V6.25.54 Phase C implementation is correct as built. Round-trip: export bundles 33 campaign-bound collections + 6 per-session collections + 7 SKIP_ALWAYS guards + 22 id-ref fields (singletons + lists) remapped through a fresh id_map; importer becomes owner; public-surface flags cleansed; fresh invite_token minted. Frontend correctly responseType:'blob' + Blob + URL.createObjectURL + programmatic anchor.click() for the download. All assertions in the brief are met."
+}

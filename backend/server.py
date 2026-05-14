@@ -163,6 +163,9 @@ app.include_router(writer_tools_routes.router)
 # V6.25.53 — Evereantha cosmology (Faces of Aurae × Mortiscura + opposition matrix).
 from routes import cosmology as cosmology_routes
 app.include_router(cosmology_routes.router)
+# V6.25.54 — Phase C: Campaign export / import (.tgcampaign.json round-trip, no LLM dep).
+from routes import campaign_export as campaign_export_routes
+app.include_router(campaign_export_routes.router)
 
 # Static-file mount: serve uploaded battlemap images from disk so GMs can
 # drop in renders from Inkarnate / DungeonCraft / Talespire / RPGEngine
