@@ -23,6 +23,9 @@
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import { Mic, MicOff, Loader2, Undo2, AlertTriangle } from "lucide-react";
 import { api } from "../lib/api";
+import {
+  acquireSharedMic, releaseSharedMic, lastSharedMicError,
+} from "../lib/useSharedMicStream";
 
 const MAX_PUSH_SECONDS = 60;          // soft cap — release auto-fires
 const AUTHOR_UNDO_WINDOW_MS = 60_000; // matches backend grace window
@@ -33,27 +36,39 @@ export default function PushToTalkButton({ sessionId, characterId, characterName
   const [permission, setPermission] = useState("idle"); // idle | granted | denied
   const [lastLine, setLastLine] = useState(null);
   const [err, setErr] = useState("");
-  const streamRef = useRef(null);
+  // V6.25.56 Phase E — no per-PTT getUserMedia. We acquire/release the
+  // SHARED microphone singleton (also used by AVSeats) so the OS sees
+  // exactly one mic consumer at a time. heldRef tracks whether THIS
+  // component currently holds a refcount on the shared stream.
+  const heldRef = useRef(false);
   const recorderRef = useRef(null);
   const chunksRef = useRef([]);
   const startedAtRef = useRef(null);
   const timeoutRef = useRef(null);
 
   // Acquire / cache the microphone stream. Called lazily on first press.
+  // Only acquires once per component lifetime; subsequent calls are no-ops
+  // that return the existing shared stream.
   const ensureStream = useCallback(async () => {
-    if (streamRef.current) return streamRef.current;
-    try {
-      const s = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-      });
-      streamRef.current = s;
-      setPermission("granted");
-      return s;
-    } catch (e) {
+    const s = await acquireSharedMic();
+    if (!s) {
       setPermission("denied");
-      setErr("Microphone permission denied or unavailable.");
+      const e = lastSharedMicError();
+      setErr(e?.name === "NotAllowedError"
+        ? "Microphone permission denied."
+        : "Microphone unavailable.");
       return null;
     }
+    // First successful acquire becomes the persistent refcount this
+    // component holds; later acquires must immediately release so the
+    // shared refcount never drifts above 1 from PTT.
+    if (heldRef.current) {
+      releaseSharedMic();
+    } else {
+      heldRef.current = true;
+    }
+    setPermission("granted");
+    return s;
   }, []);
 
   // Pick the best supported mime — webm/opus is ubiquitous in Chromium
@@ -152,12 +167,14 @@ export default function PushToTalkButton({ sessionId, characterId, characterName
     } catch (e) { /* swallow */ }
   };
 
-  // Cleanup when leaving the session.
+  // Cleanup when leaving the session. Release our refcount on the
+  // shared mic so the OS mic LED goes off the moment we unmount (and
+  // AVSeats isn't also holding it).
   useEffect(() => () => {
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((t) => t.stop());
-      streamRef.current = null;
+    if (heldRef.current) {
+      heldRef.current = false;
+      releaseSharedMic();
     }
   }, []);
 

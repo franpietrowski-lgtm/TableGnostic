@@ -900,6 +900,13 @@ export default function Battlemap({
             color: MARKER_ICONS[mt]?.color, label: MARKER_ICONS[mt]?.label,
           })}
           onSpawnAtlasPin={armAtlasSpawn}
+          onSpawnNpc={(row) => setPendingPlacement(row ? {
+            kind: "npc",
+            color: row.color || "#B22222",
+            label: row.name,
+            tooltip: row.tooltip,
+            bestiary_id: row.id,
+          } : null)}
           snapToGrid={snapToGrid}
           onToggleSnap={() => setSnapToGrid((v) => !v)}
           zoom={zoom}

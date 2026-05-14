@@ -26,6 +26,7 @@ import React, { useEffect, useState, useMemo } from "react";
 import {
   Plus, ZoomIn, ZoomOut, Crosshair, Magnet, MapPin, ShieldAlert,
   DoorOpen, Skull, Gem, Box, ArrowUpDown, Sparkle, Footprints, StickyNote,
+  Search,
 } from "lucide-react";
 import { api } from "../lib/api";
 
@@ -43,13 +44,20 @@ export const MARKER_ICONS = {
 export default function BattlemapSidebar({
   isGm, isMobile, characters = [], tokens = [], vitals = {},
   pendingPlacement, onSetPendingPlacement,
-  onSpawnPc, onSpawnMarker, onSpawnAtlasPin,
+  onSpawnPc, onSpawnMarker, onSpawnAtlasPin, onSpawnNpc,
   snapToGrid, onToggleSnap,
   zoom, onZoomIn, onZoomOut, onZoomReset,
   campaignId, systemId, sessionId,
 }) {
   const [atlasPins, setAtlasPins] = useState([]);
   const [atlasLoaded, setAtlasLoaded] = useState(false);
+  // V6.25.57 Phase F — Bestiary state: lazy-loaded the first time the
+  // GM opens it (collapsed by default so we don't burn a request on
+  // every session join). Filtered locally by the search box.
+  const [bestiaryOpen, setBestiaryOpen] = useState(false);
+  const [bestiaryRows, setBestiaryRows] = useState([]);
+  const [bestiaryLoaded, setBestiaryLoaded] = useState(false);
+  const [bestiaryQ, setBestiaryQ] = useState("");
   // V6.25.50 — system-aware conditions quickbar.
   // The GM clicks a condition chip → arms it. The next click on a
   // roster row applies the condition to that PC via POST /effects
@@ -74,6 +82,19 @@ export default function BattlemapSidebar({
       })
       .catch(() => { setAtlasLoaded(true); });
   }, [campaignId, atlasLoaded]);
+
+  // V6.25.57 Phase F — lazy-load the bestiary the first time the GM
+  // opens the section. Silent fail = GM just sees an empty list with
+  // a re-try button.
+  useEffect(() => {
+    if (!campaignId || !isGm || !bestiaryOpen || bestiaryLoaded) return;
+    api.get(`/campaigns/${campaignId}/bestiary`)
+      .then((r) => {
+        setBestiaryRows(r.data?.rows || []);
+        setBestiaryLoaded(true);
+      })
+      .catch(() => { setBestiaryLoaded(true); });
+  }, [campaignId, isGm, bestiaryOpen, bestiaryLoaded]);
 
   // V6.25.50 — lazy-load the system's condition catalogue. We hit
   // the BESM reference for BESM 4E, the generic per-system endpoint
@@ -380,6 +401,73 @@ export default function BattlemapSidebar({
               );
             })}
           </div>
+        </section>
+      )}
+
+      {/* ── 4b. Bestiary (V6.25.57 Phase F — GM-only spawn-from-reference) ── */}
+      {isGm && (
+        <section data-testid="battlemap-sidebar-bestiary">
+          <button type="button"
+                  onClick={() => setBestiaryOpen((v) => !v)}
+                  className="w-full flex items-center justify-between text-[10px] uppercase tracking-widest text-mist/70 mb-1 hover:text-gold-bright"
+                  data-testid="battlemap-bestiary-toggle">
+            <span>Bestiary {bestiaryLoaded ? `(${bestiaryRows.length})` : ""}</span>
+            <span className="text-mist/40">{bestiaryOpen ? "collapse" : "expand"}</span>
+          </button>
+          {bestiaryOpen && (
+            <div data-testid="battlemap-bestiary-body">
+              <div className="flex items-center gap-1 mb-1">
+                <Search className="w-3 h-3 text-mist/50"/>
+                <input
+                  type="text" value={bestiaryQ}
+                  onChange={(e) => setBestiaryQ(e.target.value)}
+                  placeholder={bestiaryLoaded ? "Search by name / type…" : "Loading…"}
+                  className="input text-[10px] py-0.5 px-1 w-full"
+                  data-testid="battlemap-bestiary-search"/>
+              </div>
+              <div className="space-y-0.5 max-h-44 overflow-y-auto pr-1">
+                {bestiaryRows
+                  .filter((r) => {
+                    if (!bestiaryQ) return true;
+                    const ql = bestiaryQ.toLowerCase();
+                    return (r.name || "").toLowerCase().includes(ql)
+                        || (r.type || "").toLowerCase().includes(ql)
+                        || (r.source || "").toLowerCase().includes(ql);
+                  })
+                  .slice(0, 80)
+                  .map((r) => {
+                    const armed = pendingPlacement?.kind === "npc"
+                                  && pendingPlacement?.bestiary_id === r.id;
+                    return (
+                      <button key={r.id} type="button"
+                              onClick={() => onSpawnNpc?.(armed ? null : r)}
+                              className={`w-full text-left text-[10px] px-2 py-1 rounded-sm border flex items-center gap-2 transition
+                                         ${armed
+                                           ? "border-rose-400 bg-rose-900/30 text-rose-200"
+                                           : "border-mist/10 hover:border-rose-400/60 hover:bg-rose-900/15"}`}
+                              data-testid={`battlemap-bestiary-spawn-${r.id}`}
+                              title={r.tooltip}>
+                        <span className="w-3 h-3 rounded-full border shrink-0"
+                              style={{ background: `${r.color}cc`, borderColor: r.color }}/>
+                        <span className="flex-1 truncate">{r.name}</span>
+                        {r.cr !== null && r.cr !== undefined && (
+                          <span className="text-[8px] text-mist/40 shrink-0">
+                            {r.source === "srd" || r.system === "cypher" ? "CR " : ""}
+                            {r.cr}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                {bestiaryLoaded && bestiaryRows.length === 0 && (
+                  <div className="text-[10px] text-mist/50 italic px-1 py-2">
+                    No monsters seeded for this system. Add custom NPCs in the
+                    Codex (kind: monster / creature / npc) — they'll appear here.
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </section>
       )}
 

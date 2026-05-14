@@ -1,6 +1,9 @@
 import React, { useEffect, useRef, useState, useCallback } from "react";
 import { Mic, MicOff, Video, VideoOff, PhoneOff, Phone, Crown } from "lucide-react";
 import ActorPopover from "./ActorPopover";
+import {
+  acquireSharedMic, releaseSharedMic, composeAVStream,
+} from "../lib/useSharedMicStream";
 
 /**
  * AVSeats — mesh WebRTC voice/video, mobile-first.
@@ -64,6 +67,13 @@ export default function AVSeats({ subscribe, send, sessionTitle, characters = []
   })();
   const popoutHref = typeof window !== "undefined" ? window.location.href : "#";
 
+  // V6.25.56 Phase E — refcount on the shared mic singleton so we never
+  // double-acquire alongside PushToTalkButton (the "mic-tied-up-by-two-
+  // layers" bug). We also keep the video MediaStream separate so that
+  // releaseSharedMic() can free the mic LED while we keep video alive
+  // for screen-share workflows in a future ship.
+  const heldMicRef = useRef(false);
+  const localVideoStreamRef = useRef(null);
   const localStreamRef = useRef(null);
   const localVideoRef = useRef(null);
   const pcsRef = useRef({});         // conn_id -> RTCPeerConnection
@@ -228,10 +238,22 @@ export default function AVSeats({ subscribe, send, sessionTitle, characters = []
   const joinCall = async () => {
     setError("");
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true },
+      // V6.25.56 Phase E — single shared mic acquisition. The shared
+      // helper handles the OS-level dedupe with PushToTalkButton so we
+      // never trigger "mic in use by another app" on the same page.
+      const audioStream = await acquireSharedMic();
+      if (!audioStream) {
+        throw Object.assign(new Error("Mic denied"), {
+          name: "NotAllowedError",
+        });
+      }
+      heldMicRef.current = true;
+      // Video gets its own MediaStream (camera doesn't need refcount sharing).
+      const videoStream = await navigator.mediaDevices.getUserMedia({
         video: { width: { ideal: 480 }, height: { ideal: 360 }, facingMode: "user" },
       });
+      localVideoStreamRef.current = videoStream;
+      const stream = composeAVStream(videoStream);
       localStreamRef.current = stream;
       // NOTE: do NOT attach srcObject here — the self <Tile>/<video> only
       // mounts AFTER setJoined(true) re-renders, so localVideoRef.current
@@ -279,6 +301,11 @@ export default function AVSeats({ subscribe, send, sessionTitle, characters = []
       setMicOn(true);
       setCamOn(true);
     } catch (e) {
+      // Release the shared mic if we acquired it before failing.
+      if (heldMicRef.current) {
+        heldMicRef.current = false;
+        releaseSharedMic();
+      }
       console.warn("getUserMedia failed", e);
       const inIframe = (() => { try { return window.self !== window.top; } catch { return true; } })();
       let msg;
@@ -303,10 +330,18 @@ export default function AVSeats({ subscribe, send, sessionTitle, characters = []
     });
     pcsRef.current = {};
     pendingIceRef.current = {};
-    if (localStreamRef.current) {
-      localStreamRef.current.getTracks().forEach((t) => t.stop());
-      localStreamRef.current = null;
+    // Stop our locally-owned video tracks, then release the shared mic
+    // refcount (the shared singleton stops the mic tracks when refcount
+    // hits zero — so PTT can keep speaking if it's still holding).
+    if (localVideoStreamRef.current) {
+      try { localVideoStreamRef.current.getTracks().forEach((t) => t.stop()); } catch {}
+      localVideoStreamRef.current = null;
     }
+    if (heldMicRef.current) {
+      heldMicRef.current = false;
+      releaseSharedMic();
+    }
+    localStreamRef.current = null;
     if (localVideoRef.current) localVideoRef.current.srcObject = null;
     // wipe remote streams from local state (peers stay listed as seats with no media)
     setPeers((prev) => {
@@ -359,9 +394,18 @@ export default function AVSeats({ subscribe, send, sessionTitle, characters = []
     return () => {
       Object.values(pcsRef.current).forEach((pc) => { try { pc.close(); } catch {} });
       pcsRef.current = {};
-      if (localStreamRef.current) {
-        localStreamRef.current.getTracks().forEach((t) => t.stop());
+      // V6.25.56 Phase E — stop locally-owned video tracks AND release
+      // the shared mic refcount. We must NOT call .stop() on shared mic
+      // tracks directly — they're owned by the singleton.
+      if (localVideoStreamRef.current) {
+        try { localVideoStreamRef.current.getTracks().forEach((t) => t.stop()); } catch {}
+        localVideoStreamRef.current = null;
       }
+      if (heldMicRef.current) {
+        heldMicRef.current = false;
+        releaseSharedMic();
+      }
+      localStreamRef.current = null;
     };
   }, []);
 
@@ -557,12 +601,22 @@ function PeerTile({ peer, characterName, tokenColor, isActive, enlarged, onToggl
   // V6.25.43 — per-peer volume (0..1). Persisted in localStorage so the
   // GM doesn't need to re-balance the call every session. Defaults loud.
   const storageKey = `av-vol-${peer.conn_id}`;
+  const muteStorageKey = `av-mute-${peer.conn_id}`;
   const [volume, setVolume] = useState(() => {
     try {
       const v = parseFloat(localStorage.getItem(storageKey));
       return Number.isFinite(v) ? Math.max(0, Math.min(1, v)) : 1;
     } catch { return 1; }
   });
+  // V6.25.56 Phase E — per-peer mute toggle alongside the existing
+  // volume slider. The two interact orthogonally: muting preserves the
+  // slider position so you can quickly "rejoin the table" by unmuting
+  // without losing your preferred level for that peer.
+  const [muted, setMuted] = useState(() => {
+    try { return localStorage.getItem(muteStorageKey) === "1"; }
+    catch { return false; }
+  });
+  const effectiveVolume = muted ? 0 : volume;
   const [audioBlocked, setAudioBlocked] = useState(false);
   useEffect(() => {
     const v = ref.current;
@@ -575,7 +629,7 @@ function PeerTile({ peer, characterName, tokenColor, isActive, enlarged, onToggl
     // hears no sound": display:none halts media in Chromium and WebKit;
     // a separately-attached <audio> is immune.
     if (a && a.srcObject !== stream) a.srcObject = stream;
-    if (a) a.volume = volume;
+    if (a) a.volume = effectiveVolume;
     // Defeat autoplay quirks once the user has already gestured (Join voice).
     // Without this, some Chromium builds + Safari hold the element on the
     // first frame and present a black tile until a manual click.
@@ -585,12 +639,15 @@ function PeerTile({ peer, characterName, tokenColor, isActive, enlarged, onToggl
         .then(() => setAudioBlocked(false))
         .catch(() => setAudioBlocked(true));
     }
-  }, [peer.stream, peer.camOn, volume]);
+  }, [peer.stream, peer.camOn, effectiveVolume]);
 
-  // Persist volume on change.
+  // Persist volume + mute on change.
   useEffect(() => {
     try { localStorage.setItem(storageKey, String(volume)); } catch {}
   }, [storageKey, volume]);
+  useEffect(() => {
+    try { localStorage.setItem(muteStorageKey, muted ? "1" : "0"); } catch {}
+  }, [muteStorageKey, muted]);
 
   const enableAudio = () => {
     audioRef.current?.play?.()
@@ -616,19 +673,28 @@ function PeerTile({ peer, characterName, tokenColor, isActive, enlarged, onToggl
         testId={`av-tile-${peer.conn_id}`}
       />
       {/* V6.25.43 — per-peer volume slider. Hidden until the peer is
-          actually streaming so it doesn't clutter empty seats. */}
+          actually streaming so it doesn't clutter empty seats.
+          V6.25.56 — added mute toggle as part of Phase E per-user mixing. */}
       {peer.stream && (
         <div className="flex items-center gap-1 px-1"
              data-testid={`av-volume-row-${peer.conn_id}`}>
-          <span className="text-[9px] text-mist/70 uppercase tracking-wider w-3">
-            {volume === 0 ? "M" : "♪"}
-          </span>
+          <button type="button"
+                  onClick={() => setMuted((m) => !m)}
+                  className={`text-[10px] tracking-wider w-4 h-4 flex items-center justify-center rounded-sm border transition
+                              ${muted
+                                ? "border-rose-500/60 text-rose-300 bg-rose-900/30"
+                                : "border-mist/20 text-mist/70 hover:text-gold-bright hover:border-gold/50"}`}
+                  title={muted ? `Unmute ${characterName || peer.name}` : `Mute ${characterName || peer.name}`}
+                  data-testid={`av-mute-${peer.conn_id}`}>
+            {muted ? "M" : "♪"}
+          </button>
           <input
             type="range" min={0} max={1} step={0.02}
             value={volume}
+            disabled={muted}
             onChange={(e) => setVolume(parseFloat(e.target.value))}
-            className="w-full h-1 accent-gold"
-            title={`Volume for ${characterName || peer.name}`}
+            className={`w-full h-1 accent-gold ${muted ? "opacity-40" : ""}`}
+            title={`Volume for ${characterName || peer.name}${muted ? " (muted)" : ""}`}
             data-testid={`av-volume-${peer.conn_id}`}
           />
         </div>

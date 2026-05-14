@@ -93,6 +93,18 @@ export default function SessionView() {
       ]);
       setChat(c); setDice(d); setInit(i); setEffects(e); setCharacters(chs);
       setCampaign(camp);
+
+      // V6.25.55 Phase D — lazy-fetch the virtual GM character so it shows
+      // up in the dice / PTT pickers for GMs / admins. Member players never
+      // own it, so we only burn the call for GMs / admins.
+      const isGm = camp && (camp.gm_id === user?.id || user?.role === "admin");
+      if (isGm && !chs.some((c2) => c2.is_gm_voice)) {
+        try {
+          const gv = await api.get(`/campaigns/${s.campaign_id}/gm-voice-character`)
+            .then((r) => r.data);
+          if (gv && gv.id) setCharacters((prev) => [gv, ...prev]);
+        } catch (_) { /* non-fatal — picker just won't include the GM voice row */ }
+      }
     } catch (err) {
       // Session fetch failed — surface real message instead of hanging
       // on the OPENING THE TABLE min-delay forever.
@@ -109,10 +121,20 @@ export default function SessionView() {
   useEffect(() => {
     if (characterId) return;
     if (!characters.length) return;
-    const mine = characters.find((c) => c.user_id === user?.id);
-    setCharacterId((mine || characters[0]).id);
+    const isGm = campaign && (campaign.gm_id === user?.id || user?.role === "admin");
+    // GMs/admins: prefer the virtual "The Game Master" character so PTT
+    // and macro context default to narration. Players: prefer the
+    // character they actually own.
+    const pick = isGm
+      ? (characters.find((c) => c.is_gm_voice)
+         || characters.find((c) => c.owner_id === user?.id)
+         || characters[0])
+      : (characters.find((c) => c.owner_id === user?.id && !c.is_gm_voice)
+         || characters.find((c) => !c.is_gm_voice)
+         || characters[0]);
+    if (pick) setCharacterId(pick.id);
     // eslint-disable-next-line
-  }, [characters]);
+  }, [characters, campaign]);
   useEffect(() => { chatEnd.current?.scrollIntoView({ behavior: "smooth" }); }, [chat]);
 
   // WebSocket live updates (token-authenticated)
@@ -533,7 +555,12 @@ export default function SessionView() {
           <select className="select" value={characterId}
                   onChange={(e) => setCharacterId(e.target.value)} data-testid="dice-char-select">
             <option value="">— no character (flat) —</option>
-            {characters.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            {characters.map((c) => (
+              <option key={c.id} value={c.id}
+                      data-testid={c.is_gm_voice ? "dice-char-gm-voice-option" : undefined}>
+                {c.is_gm_voice ? `🎙 ${c.name} (GM voice)` : c.name}
+              </option>
+            ))}
           </select>
           <input className="input" placeholder="e.g. 2d6-body" value={roll}
                  onChange={(e) => setRoll(e.target.value)} data-testid="session-roll-notation"/>

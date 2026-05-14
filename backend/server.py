@@ -166,6 +166,12 @@ app.include_router(cosmology_routes.router)
 # V6.25.54 — Phase C: Campaign export / import (.tgcampaign.json round-trip, no LLM dep).
 from routes import campaign_export as campaign_export_routes
 app.include_router(campaign_export_routes.router)
+# V6.25.55 — Phase D: Virtual "The Game Master" character (foundation for Phase E audio).
+from routes import gm_voice as gm_voice_routes
+app.include_router(gm_voice_routes.router)
+# V6.25.57 — Phase F: GM Bestiary aggregator (spawn from Reference / Custom).
+from routes import bestiary as bestiary_routes
+app.include_router(bestiary_routes.router)
 
 # Static-file mount: serve uploaded battlemap images from disk so GMs can
 # drop in renders from Inkarnate / DungeonCraft / Talespire / RPGEngine

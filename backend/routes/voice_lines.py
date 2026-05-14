@@ -90,7 +90,7 @@ async def create_voice_line(
 
     char = await db.characters.find_one(
         {"id": character_id, "campaign_id": s["campaign_id"]},
-        {"_id": 0, "id": 1, "name": 1, "user_id": 1},
+        {"_id": 0, "id": 1, "name": 1, "owner_id": 1, "is_gm_voice": 1},
     )
     if not char:
         raise HTTPException(404, "Character not found on this campaign.")
@@ -98,7 +98,7 @@ async def create_voice_line(
     is_gm = user["id"] == (await db.campaigns.find_one(
         {"id": s["campaign_id"]}, {"_id": 0, "gm_id": 1}
     )).get("gm_id")
-    if char.get("user_id") != user["id"] and not (is_gm or user.get("role") == "admin"):
+    if char.get("owner_id") != user["id"] and not (is_gm or user.get("role") == "admin"):
         raise HTTPException(403, "Not the owner of this character.")
 
     # Whisper transcription — file is uploaded straight from RAM.
