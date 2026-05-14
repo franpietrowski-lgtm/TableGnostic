@@ -10,7 +10,7 @@
  * Backend: GET/POST/PATCH/DELETE /api/writer/magic/{cid}
  */
 import React, { useEffect, useState } from "react";
-import { Sparkles, Plus, Trash2, Save, X } from "lucide-react";
+import { Sparkles, Plus, Trash2, Save, X, Eye } from "lucide-react";
 import { api } from "../../lib/api";
 
 const KIND_OPTIONS = [
@@ -210,6 +210,135 @@ export default function WbMagicArchitectTool({ campId }) {
       {(data.sources || []).length === 0 && !editId && (
         <div className="text-[12px] text-mist/60 italic text-center py-6">
           No magic sources defined yet. {data.writable ? "Click 'New source' to begin." : ""}
+        </div>
+      )}
+
+      {/* V6.25.53 — Evereantha cosmology quick-ref. Hard-seeded
+          Faces of Aurae × Mortiscura + opposition matrix. Lazy-load
+          so non-Evereantha campaigns don't pay the network cost,
+          but always available as a writer aid. */}
+      <CosmologyQuickRef/>
+    </div>
+  );
+}
+
+// ─────────────── V6.25.53 — Evereantha cosmology quick-ref ───────────────
+
+function CosmologyQuickRef() {
+  const [open, setOpen] = React.useState(false);
+  const [data, setData] = React.useState(null);
+  const [selectedFace, setSelectedFace] = React.useState(null);
+
+  React.useEffect(() => {
+    if (!open || data) return;
+    api.get("/cosmology/evereantha")
+      .then((r) => setData(r.data))
+      .catch(() => setData({ aurae: [], mortiscura: [] }));
+  }, [open, data]);
+
+  return (
+    <div className="card-mystic p-3 mt-4 border-amber-700/30"
+         data-testid="cosmology-quickref">
+      <button type="button"
+              onClick={() => setOpen((v) => !v)}
+              className="w-full flex items-center justify-between gap-3 text-left"
+              data-testid="cosmology-quickref-toggle">
+        <div className="flex items-center gap-2">
+          <Eye className="w-4 h-4 text-amber-300"/>
+          <div>
+            <div className="label-ref text-amber-300">Evereantha Cosmology · Quick-Ref</div>
+            <div className="text-[10px] text-mist/60 italic">
+              Faces of Aurae × Mortiscura — canon for every Evereantha campaign
+            </div>
+          </div>
+        </div>
+        <span className="text-[10px] text-mist/70">{open ? "Hide" : "Show"}</span>
+      </button>
+
+      {open && data && (
+        <div className="mt-3 space-y-3" data-testid="cosmology-quickref-body">
+          {/* Selected face detail */}
+          {selectedFace && (
+            <div className="border border-amber-500/40 bg-amber-900/10 rounded-sm p-3"
+                 data-testid="cosmology-face-detail">
+              <div className="flex items-center justify-between mb-1">
+                <div className="font-display text-amber-200 text-lg">
+                  {selectedFace.name} <span className="text-[10px] text-mist/60 uppercase tracking-widest">· {selectedFace.axis}</span>
+                </div>
+                <button type="button" onClick={() => setSelectedFace(null)}
+                        className="text-[10px] text-mist/60 hover:text-parchment"
+                        data-testid="cosmology-face-detail-close">close</button>
+              </div>
+              <div className="text-[11px] text-mist mb-2">{selectedFace.summary}</div>
+              <div className="text-[10px] text-amber-200/80 uppercase tracking-widest mb-1">Core: {selectedFace.core_uses}</div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2 mt-2">
+                {(selectedFace.nodes || []).map((n) => (
+                  <div key={n.name} className="border border-mist/15 rounded-sm p-2 bg-ink/40 text-[10px]"
+                       data-testid={`cosmology-node-${n.name.toLowerCase()}`}>
+                    <div className="text-amber-300 font-display">{n.name}</div>
+                    <div className="text-mist/70 italic mb-1">{n.domain}</div>
+                    <div><b className="text-mist/60">R1:</b> {n.rank_1}</div>
+                    <div><b className="text-mist/60">R3:</b> {n.rank_3}</div>
+                    <div className="text-rose-300/80"><b>Fail:</b> {n.failure}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Aurae faces grid */}
+          <div data-testid="cosmology-aurae-grid">
+            <div className="label-ref text-emerald-300 text-[10px] uppercase tracking-widest mb-1">
+              Faces of Aurae · creation, expansion, life
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+              {(data.aurae || []).map((f) => (
+                <button type="button"
+                        key={f.id}
+                        onClick={() => setSelectedFace(f)}
+                        className={`text-left p-2 rounded-sm border transition-colors
+                                   ${selectedFace?.id === f.id
+                                     ? "border-emerald-400 bg-emerald-900/30"
+                                     : "border-emerald-700/30 bg-emerald-950/20 hover:border-emerald-500/60"}`}
+                        data-testid={`cosmology-aurae-${f.id}`}>
+                  <div className="text-emerald-200 font-display text-sm">{f.name}</div>
+                  <div className="text-[9px] uppercase tracking-widest text-mist/60">{f.axis}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Mortiscura faces grid */}
+          <div data-testid="cosmology-mortiscura-grid">
+            <div className="label-ref text-rose-300 text-[10px] uppercase tracking-widest mb-1">
+              Faces of Mortiscura · concealment, distortion, negation
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+              {(data.mortiscura || []).map((f) => (
+                <button type="button"
+                        key={f.id}
+                        onClick={() => setSelectedFace(f)}
+                        className={`text-left p-2 rounded-sm border transition-colors
+                                   ${selectedFace?.id === f.id
+                                     ? "border-rose-400 bg-rose-900/30"
+                                     : "border-rose-800/30 bg-rose-950/20 hover:border-rose-500/60"}`}
+                        data-testid={`cosmology-mortiscura-${f.id}`}>
+                  <div className="text-rose-200 font-display text-sm">{f.name}</div>
+                  <div className="text-[9px] uppercase tracking-widest text-mist/60">{f.axis}</div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Opposition legend */}
+          <div className="border-t border-mist/10 pt-2 text-[9px] text-mist/60 uppercase tracking-widest"
+               data-testid="cosmology-legend">
+            <b className="text-mist/80">Cosmological tension:</b>{" "}
+            ADVANTAGE = +1 step / 2d20 take-higher ·{" "}
+            EDGE = +d4 ·{" "}
+            NEUTRAL = fiction-led ·{" "}
+            OBSTACLE = +1 difficulty
+          </div>
         </div>
       )}
     </div>

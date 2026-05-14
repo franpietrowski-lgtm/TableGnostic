@@ -180,6 +180,114 @@ export default function EncounterDesigner({ partySize = 4, className = "",
           {result.warnings.map((w, i) => <div key={i}>⚠ {w}</div>)}
         </div>
       )}
+
+      {/* V6.25.53 — Cosmological Tension picker. Lets the GM compare
+          an attacker's Face (Aurae or Mortiscura) against the
+          defender's Face and read out a ready-to-apply edge / advantage
+          / obstacle modifier for the next roll. Lazy-loaded so non-
+          Evereantha campaigns don't pay the network cost. */}
+      <CosmologicalTension/>
+    </div>
+  );
+}
+
+function CosmologicalTension() {
+  const [data, setData] = useState(null);
+  const [attackerId, setAttackerId] = useState("");
+  const [defenderId, setDefenderId] = useState("");
+  const [opp, setOpp] = useState(null);
+
+  useEffect(() => {
+    api.get("/cosmology/evereantha")
+      .then((r) => setData(r.data))
+      .catch(() => setData({ aurae: [], mortiscura: [] }));
+  }, []);
+
+  useEffect(() => {
+    if (!attackerId || !defenderId) { setOpp(null); return; }
+    api.get(`/cosmology/evereantha/opposition?attacker=${attackerId}&defender=${defenderId}`)
+      .then((r) => setOpp(r.data))
+      .catch(() => setOpp(null));
+  }, [attackerId, defenderId]);
+
+  if (!data) return null;
+  const allFaces = [
+    ...(data.aurae || []).map((f) => ({ ...f, side: "aurae" })),
+    ...(data.mortiscura || []).map((f) => ({ ...f, side: "mortiscura" })),
+  ];
+  if (allFaces.length === 0) return null;
+
+  const magClass = {
+    advantage: "border-emerald-400/60 bg-emerald-900/20 text-emerald-200",
+    edge:      "border-amber-400/60 bg-amber-900/20 text-amber-200",
+    neutral:   "border-mist/30 bg-mist/5 text-mist",
+    obstacle:  "border-rose-400/60 bg-rose-900/20 text-rose-200",
+  }[opp?.magnitude || "neutral"];
+
+  const FaceOption = ({ f }) => (
+    <option value={f.id}>
+      {f.side === "aurae" ? "☼ " : "☾ "}{f.name} · {f.axis}
+    </option>
+  );
+
+  return (
+    <div className="mt-3 border-t border-amber-700/30 pt-3"
+         data-testid="cosmological-tension">
+      <div className="label-ref text-amber-300 text-[10px] uppercase tracking-widest mb-2">
+        Cosmological Tension · Evereantha
+      </div>
+      <div className="grid grid-cols-2 gap-2 mb-2">
+        <div>
+          <label className="text-[9px] uppercase tracking-widest text-mist/60 block mb-0.5">
+            Attacker Face
+          </label>
+          <select value={attackerId}
+                  onChange={(e) => setAttackerId(e.target.value)}
+                  className="input text-xs w-full"
+                  data-testid="cosmology-attacker">
+            <option value="">— select —</option>
+            <optgroup label="Aurae">
+              {(data.aurae || []).map((f) => <FaceOption key={f.id} f={{ ...f, side: "aurae" }}/>)}
+            </optgroup>
+            <optgroup label="Mortiscura">
+              {(data.mortiscura || []).map((f) => <FaceOption key={f.id} f={{ ...f, side: "mortiscura" }}/>)}
+            </optgroup>
+          </select>
+        </div>
+        <div>
+          <label className="text-[9px] uppercase tracking-widest text-mist/60 block mb-0.5">
+            Defender Face
+          </label>
+          <select value={defenderId}
+                  onChange={(e) => setDefenderId(e.target.value)}
+                  className="input text-xs w-full"
+                  data-testid="cosmology-defender">
+            <option value="">— select —</option>
+            <optgroup label="Aurae">
+              {(data.aurae || []).map((f) => <FaceOption key={f.id} f={{ ...f, side: "aurae" }}/>)}
+            </optgroup>
+            <optgroup label="Mortiscura">
+              {(data.mortiscura || []).map((f) => <FaceOption key={f.id} f={{ ...f, side: "mortiscura" }}/>)}
+            </optgroup>
+          </select>
+        </div>
+      </div>
+
+      {opp && (
+        <div className={`border rounded-sm p-2 ${magClass}`}
+             data-testid="cosmology-tension-result">
+          <div className="flex items-center justify-between text-[10px] uppercase tracking-widest mb-1">
+            <span>Magnitude</span>
+            <span className="font-display text-sm tracking-normal" data-testid="cosmology-tension-magnitude">
+              {opp.magnitude}
+            </span>
+          </div>
+          <div className="text-[11px] italic leading-snug">{opp.note}</div>
+          <div className="text-[9px] text-mist/60 mt-1">
+            {data.magnitude_legend?.[opp.magnitude]}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
