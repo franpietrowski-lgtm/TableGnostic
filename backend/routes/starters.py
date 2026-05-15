@@ -45,11 +45,28 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
+from pymongo.errors import DuplicateKeyError
 
 from core.db import db, new_id, now_iso, sanitize
 from core.security import get_current_user
 
 router = APIRouter(prefix="/api", tags=["starters"])
+
+# Ensure slug uniqueness at the DB layer — eliminates the race window
+# between "check slug → free" and the subsequent insert. Idempotent
+# create_index; safe to call repeatedly across worker restarts.
+_INDEX_READY = False
+
+
+async def _ensure_index():
+    global _INDEX_READY
+    if _INDEX_READY:
+        return
+    try:
+        await db.starter_campaigns.create_index("slug", unique=True)
+    except Exception:
+        pass
+    _INDEX_READY = True
 
 
 _SLUG_RE = re.compile(r"[^a-z0-9-]+")
@@ -90,10 +107,13 @@ def _public_view(row: Dict[str, Any]) -> Dict[str, Any]:
 async def list_starters():
     """Public — landing-page gallery. Featured first, then by order ASC."""
     rows = await db.starter_campaigns.find({}, {"_id": 0, "bundle": 0}).to_list(200)
+    # Python sort is stable — apply least-significant sort first.
+    # `created_at` is ISO-8601 so lexicographic descending = newer first
+    # (deterministic, unlike hash-of-string which depends on PYTHONHASHSEED).
+    rows.sort(key=lambda r: r.get("created_at") or "", reverse=True)
     rows.sort(key=lambda r: (
         0 if r.get("featured") else 1,
         r.get("order", 9999),
-        -((r.get("created_at") or "")).__hash__(),
     ))
     return {"rows": [_public_view(r) for r in rows], "total": len(rows)}
 
@@ -234,6 +254,14 @@ async def upload_starter(
         raise HTTPException(400, f"Bundle is not valid JSON: {e}")
     if not isinstance(bundle, dict) or "campaign" not in bundle:
         raise HTTPException(400, "Bundle missing required `campaign` field.")
+    # Reject future-incompatible bundles up-front so we don't store a
+    # payload the import endpoint will later refuse with a 400.
+    from routes.campaign_export import EXPORT_SCHEMA_VERSION
+    if bundle.get("schema_version") != EXPORT_SCHEMA_VERSION:
+        raise HTTPException(400,
+            f"Unsupported bundle schema_version "
+            f"{bundle.get('schema_version')!r} (this pod expects "
+            f"{EXPORT_SCHEMA_VERSION}). Re-export the source campaign first.")
 
     meta = StarterMetaIn(
         title=title, system_id=system_id, blurb=blurb,
@@ -245,35 +273,39 @@ async def upload_starter(
 async def _persist_starter(
     body: StarterMetaIn, raw: bytes, bundle: Dict[str, Any], user: dict,
 ) -> Dict[str, Any]:
-    slug = body.slug or _slugify(body.title)
-    # Unique-slug guard: bump with -2 / -3 … if needed so admin can re-upload.
-    base = slug
-    n = 1
-    while await db.starter_campaigns.find_one({"slug": slug}, {"_id": 0, "slug": 1}):
-        n += 1
-        slug = f"{base}-{n}"
-
+    await _ensure_index()
+    base = body.slug or _slugify(body.title)
     order = body.order if body.order is not None else await _next_order()
-
-    doc = {
-        "id": new_id(),
-        "slug": slug,
-        "title": body.title,
-        "system_id": body.system_id,
-        "blurb": body.blurb or "",
-        "blurb_long": body.blurb_long or "",
-        "featured": bool(body.featured),
-        "order": int(order),
-        "downloads": 0,
-        "bytes": len(raw),
-        "stats": bundle.get("stats") or {},
-        "bundle": bundle,
-        "created_at": now_iso(),
-        "created_by": user["id"],
-        "created_by_name": user.get("name", ""),
-    }
-    await db.starter_campaigns.insert_one(doc)
-    return {"ok": True, "starter": _public_view(doc)}
+    # Retry-on-DuplicateKey loop replaces the previous non-atomic
+    # "check then insert" pattern — two concurrent uploads with the
+    # same title both inserting `evereantha-starter` will now have
+    # the loser caught by the unique index and retried with a -2 / -3 …
+    # suffix automatically.
+    for attempt in range(50):
+        slug = base if attempt == 0 else f"{base}-{attempt + 1}"
+        doc = {
+            "id": new_id(),
+            "slug": slug,
+            "title": body.title,
+            "system_id": body.system_id,
+            "blurb": body.blurb or "",
+            "blurb_long": body.blurb_long or "",
+            "featured": bool(body.featured),
+            "order": int(order),
+            "downloads": 0,
+            "bytes": len(raw),
+            "stats": bundle.get("stats") or {},
+            "bundle": bundle,
+            "created_at": now_iso(),
+            "created_by": user["id"],
+            "created_by_name": user.get("name", ""),
+        }
+        try:
+            await db.starter_campaigns.insert_one(doc)
+            return {"ok": True, "starter": _public_view(doc)}
+        except DuplicateKeyError:
+            continue
+    raise HTTPException(409, "Could not allocate a unique slug after 50 attempts.")
 
 
 @router.patch("/admin/starters/{slug}")

@@ -170,3 +170,20 @@ def test_starter_public_list_is_anonymous():
     r = requests.get(f"{API}/public/starters", timeout=10)
     assert r.status_code == 200
     assert "rows" in r.json()
+
+
+def test_starter_upload_rejects_future_schema_version():
+    """Reject bundles with a schema_version the import endpoint would
+    later refuse — fail fast at upload time."""
+    admin = _login()
+    body = json.dumps({
+        "schema_version": 99,
+        "campaign": {"id": "x", "name": "Future"},
+        "source": {"campaign_id": "x"},
+    }).encode("utf-8")
+    files = {"file": ("future.tgcampaign.json", io.BytesIO(body), "application/json")}
+    data = {"title": "Future bundle", "system_id": "besm-4e"}
+    r = requests.post(f"{API}/admin/starters",
+                      headers=_h(admin), files=files, data=data, timeout=10)
+    assert r.status_code == 400
+    assert "schema_version" in r.text

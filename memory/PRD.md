@@ -14,6 +14,36 @@
 
 ## 2. Implemented (cumulative, condensed)
 
+### V6.25.58 — Featured Starter Campaigns gallery — public landing surface + admin curation (2026-02-14)
+
+**Backend** (`backend/routes/starters.py` NEW)
+- New `starter_campaigns` collection. Schema: `{slug, title, system_id, blurb, blurb_long, featured, order, downloads, bytes, stats, bundle, created_at, created_by}`. Unique index on `slug` created lazily on first write (`_ensure_index()` is idempotent).
+- **Public endpoints (NO AUTH)**:
+  - `GET /api/public/starters` — list, featured-first, then ascending order, then created_at DESC (stable ISO-string sort, deterministic across processes).
+  - `GET /api/public/starters/{slug}/download` — streams `.tgcampaign.json` with `Content-Disposition`, `X-TG-Bundle-Schema: 1`, `X-TG-Bundle-Bytes`. Increments the `downloads` counter (fire-and-forget; never blocks the download).
+- **Admin endpoints (admin role only)**:
+  - `POST /api/admin/starters/from-campaign/{cid}` — capture an existing in-pod campaign as a starter. Reuses the Phase C export assembly so the format stays in sync with what GMs download from their own export button.
+  - `POST /api/admin/starters` — direct upload of a pre-existing `.tgcampaign.json` (multipart `file` + metadata fields). Rejects bundles with `schema_version != 1` up-front so we never store payloads the import endpoint would later refuse.
+  - `PATCH /api/admin/starters/{slug}` — edit title / blurb / blurb_long / featured / order.
+  - `DELETE /api/admin/starters/{slug}` — removes the row; public download goes 404 immediately.
+  - `GET /api/admin/starters` — admin queue with download counts & sizes.
+- **Race-safe persistence** — `_persist_starter()` uses an insert + `DuplicateKeyError`-retry loop against the unique slug index instead of the previous non-atomic `find_one → insert` (caught by the testing agent's code review).
+
+**Frontend — public landing gallery** (`frontend/src/components/landing/StarterCampaigns.jsx` NEW)
+- New section between `<WizardTeasers/>` and `<MarketplaceSection/>` on the landing page. Mounted by `Landing.jsx`. testid `landing-starter-campaigns`. Hides entirely when the admin hasn't curated any starters (no empty rail).
+- Card grid (`starter-grid` / `starter-card-{slug}`) with system badge (`starter-system-{slug}`), Featured crown for featured rows (`starter-featured-{slug}`), download counter + bundle bytes, and a one-click download button (`starter-download-{slug}`) that builds an anchor with `download` attribute and clicks it programmatically — browser saves the file directly. Optimistic local counter bump on click.
+
+**Frontend — admin tab** (`frontend/src/components/AdminConsole.jsx`)
+- New `TABS` entry `"Starter Campaigns"`. Renders `<StarterCampaignsAdmin/>` with: (1) a publish-from-campaign form that auto-fills title/system from the selected source campaign, with optional `featured` checkbox; (2) a live starters table with feature-toggle stars, download counts, byte sizes, and Delete buttons.
+
+**Seeded**: One starter — `evereantha-the-maiden-adventure-starter` (BESM 4E, 702 KB, 538 nodes + 23 characters + 8 sessions, featured=true).
+
+**Verified** (testing agent iteration 89):
+- Backend 8/8 PASS (`test_v62558_starters.py`): round-trip from-campaign, multipart file upload, slug collision → `-2` suffix, public list anonymous, download increments counter, 404 for unknown slug, admin-only enforcement, schema_version=99 rejection.
+- Regression: 24/24 PASS across Phase B/C/D/F.
+- Frontend 100%: landing section visible on `/`, `/landing`, `/discover` without auth; admin tab full CRUD wired; download triggers actual browser download with correct suggested filename.
+
+
 ### V6.25.57 — Phase F: GM Bestiary spawn-into-Battlemap (2026-02-14)
 
 **Backend** (`backend/routes/bestiary.py` NEW)
