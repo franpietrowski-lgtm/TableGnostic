@@ -172,6 +172,9 @@ app.include_router(gm_voice_routes.router)
 # V6.25.57 — Phase F: GM Bestiary aggregator (spawn from Reference / Custom).
 from routes import bestiary as bestiary_routes
 app.include_router(bestiary_routes.router)
+# V6.25.58 — Featured Starter Campaigns gallery (public download + admin curate).
+from routes import starters as starters_routes
+app.include_router(starters_routes.router)
 
 # Static-file mount: serve uploaded battlemap images from disk so GMs can
 # drop in renders from Inkarnate / DungeonCraft / Talespire / RPGEngine

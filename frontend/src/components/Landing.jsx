@@ -9,6 +9,7 @@ import RoleTour from "./landing/RoleTour";
 import ProductProof from "./landing/ProductProof";
 import FeatureHighlights from "./landing/FeatureHighlights";
 import WizardTeasers from "./landing/WizardTeasers";
+import StarterCampaigns from "./landing/StarterCampaigns";
 import MarketplaceSection from "./landing/MarketplaceSection";
 import Roadmap from "./landing/Roadmap";
 import PublicTables from "./landing/PublicTables";
@@ -92,6 +93,7 @@ export default function Landing() {
         <ProductProof />
         <FeatureHighlights />
         <WizardTeasers />
+        <StarterCampaigns />
         <MarketplaceSection />
         <Roadmap />
         <PublicTables />

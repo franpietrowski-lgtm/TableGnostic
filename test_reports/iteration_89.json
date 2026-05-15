@@ -1,0 +1,25 @@
+{
+  "summary": "V6.25.58 — Featured Starter Campaigns: ALL GREEN. 7/7 starter pytest tests pass; 24/24 regression (Phase B/D/E/F: cosmology, campaign-export, gm-voice, bestiary) still green. Public endpoints work without auth: GET /api/public/starters returns the seeded Evereantha row (slug=evereantha-the-maiden-adventure-starter, featured=true, bytes=702055, stats include 538 nodes/23 chars/8 sessions). GET /api/public/starters/{slug}/download streams .tgcampaign.json with Content-Disposition + X-TG-Bundle-Schema=1 + valid schema_version=1 bundle, increments downloads counter (verified 0→1→2). 404 returned for unknown slug. Frontend: landing-starter-campaigns section visible on /, /landing, and /discover (no login); starter-grid, starter-card-evereantha-..., starter-featured-... (Crown badge), starter-system-... ('BESM 4E'), and starter-download-... all present and wired. Clicking Download actually fires a browser-level download with correct suggested_filename. Admin /app/admin shows 'STARTER CAMPAIGNS' tab; clicking renders admin-starters-panel with all expected form inputs (source-select, title, blurb, blurb-long, featured-check, publish-btn) and admin-starter-list with admin-starter-row-evereantha-... featuring star toggle + Delete action. No 'Compiled with problems' overlay.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_v62558_starters.py",
+    "/app/test_reports/pytest/iter89_v62558.xml",
+    "/app/test_reports/pytest/iter89_regression.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "routes/starters.py — sort key uses `-((created_at or '')).__hash__()` for tie-breaking — hash of strings is non-deterministic across Python processes since PYTHONHASHSEED is random by default. Replace with sort by created_at descending using the iso string directly (since iso strings are lexicographically sortable) for deterministic ordering.",
+    "routes/starters.py — _persist_starter race condition: the slug uniqueness loop (`while find_one(... slug)`) is not atomic with the subsequent insert_one. Two concurrent admin uploads with the same title could both pass the check and both insert the same slug. Add a unique index on starter_campaigns.slug at startup, and retry-on-DuplicateKeyError to make it race-safe.",
+    "routes/starters.py — upload_starter accepts any UploadFile with no Content-Type or file-extension guard; only checks JSON parseability. Consider also asserting bundle.get('schema_version') matches EXPORT_SCHEMA_VERSION to avoid storing future-incompatible bundles.",
+    "StarterCampaigns.jsx — `r.featured` cards are rendered with a Crown but the section heading doesn't differentiate; consider an explicit 'Featured' rail above 'All starters' for better visual hierarchy as the gallery grows (cosmetic, not blocking)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "tablegnostic-admin@tablegnostic.com / LoremasterAurea2026!Forge (admin) — login flow lives at /signin → /auth?mode=login; redirects to /app on success.",
+  "seed_data_creation": "None created. Used pre-seeded Evereantha starter (slug=evereantha-the-maiden-adventure-starter). The 7 pytest tests create transient starters and clean them up via DELETE /api/admin/starters/{slug}.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "V6.25.58 Featured Starter Campaigns shipped GREEN: 7/7 backend + 24/24 regression + all landing/admin UI testids verified. Public endpoints (list + download) work without auth and the download counter increments correctly. Slug auto-derived from title via _slugify (kebab-case, non-alphanumeric → '-'). The seeded starter slug is `evereantha-the-maiden-adventure-starter`. Note one race-condition + non-deterministic sort tie-break in routes/starters.py that should be addressed but didn't affect test outcomes.",
+  "rca of the issue": "N/A — no issues found."
+}

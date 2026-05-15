@@ -22,6 +22,7 @@ const TABS = [
   { k: "campaigns",   l: "All Campaigns" },
   { k: "showcases",   l: "Public Showcases" },
   { k: "featured",    l: "Featured Requests" },
+  { k: "starters",    l: "Starter Campaigns" },
   { k: "roadmap",     l: "Roadmap" },
   { k: "marketplace", l: "Marketplace" },
   { k: "flags",       l: "Flag Queue" },
@@ -322,6 +323,10 @@ export default function AdminConsole() {
         <RoadmapEditor rows={roadmap} onReload={reload}/>
       )}
 
+      {tab === "starters" && (
+        <StarterCampaignsAdmin/>
+      )}
+
       {threadFlag && (
         <FlagThreadDrawer flag={threadFlag}
                           onClose={() => setThreadFlag(null)}
@@ -575,6 +580,175 @@ function Table({ rows, cols, actions, testid }) {
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+
+
+// ── Starter Campaigns Admin (V6.25.58) ───────────────────────────
+function StarterCampaignsAdmin() {
+  const [rows, setRows] = useState([]);
+  const [myCampaigns, setMyCampaigns] = useState([]);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const [draft, setDraft] = useState({
+    sourceCampaignId: "", title: "", system_id: "besm-4e",
+    blurb: "", blurb_long: "", featured: false,
+  });
+
+  const reload = useCallback(async () => {
+    try {
+      const [r, c] = await Promise.all([
+        api.get("/admin/starters").then((x) => x.data.rows || []).catch(() => []),
+        api.get("/campaigns").then((x) => x.data || []).catch(() => []),
+      ]);
+      setRows(r); setMyCampaigns(c);
+    } catch (e) {
+      setErr(e?.response?.data?.detail || "Failed to load starters.");
+    }
+  }, []);
+  useEffect(() => { reload(); }, [reload]);
+
+  const onPublishFromCampaign = async () => {
+    if (!draft.sourceCampaignId || !draft.title) {
+      setErr("Pick a source campaign and give it a title."); return;
+    }
+    setBusy(true); setErr("");
+    try {
+      await api.post(`/admin/starters/from-campaign/${draft.sourceCampaignId}`, {
+        title: draft.title, system_id: draft.system_id,
+        blurb: draft.blurb, blurb_long: draft.blurb_long,
+        featured: draft.featured,
+      });
+      setDraft({ sourceCampaignId: "", title: "", system_id: "besm-4e",
+                 blurb: "", blurb_long: "", featured: false });
+      await reload();
+    } catch (e) {
+      setErr(e?.response?.data?.detail || "Publish failed.");
+    } finally { setBusy(false); }
+  };
+
+  const onToggleFeatured = async (slug, featured) => {
+    try {
+      await api.patch(`/admin/starters/${slug}`, { featured: !featured });
+      await reload();
+    } catch (e) { /* swallow */ }
+  };
+
+  const onDelete = async (slug) => {
+    if (!window.confirm(`Remove starter "${slug}"? Public download link goes 404 immediately.`)) return;
+    try {
+      await api.delete(`/admin/starters/${slug}`);
+      await reload();
+    } catch (e) { /* swallow */ }
+  };
+
+  return (
+    <div className="space-y-6" data-testid="admin-starters-panel">
+      {/* Publish-from-campaign form */}
+      <div className="card-mystic p-4">
+        <div className="label-ref mb-2">Publish a starter from one of your campaigns</div>
+        <div className="grid md:grid-cols-2 gap-3">
+          <select className="select" value={draft.sourceCampaignId}
+                  onChange={(e) => {
+                    const c = myCampaigns.find((cc) => cc.id === e.target.value);
+                    setDraft((d) => ({
+                      ...d,
+                      sourceCampaignId: e.target.value,
+                      title: c?.name || "",
+                      system_id: c?.system_id || "besm-4e",
+                    }));
+                  }}
+                  data-testid="admin-starter-source-select">
+            <option value="">— pick source campaign —</option>
+            {myCampaigns.map((c) =>
+              <option key={c.id} value={c.id}>{c.name} · {c.system_id}</option>
+            )}
+          </select>
+          <input className="input" placeholder="Public title"
+                 value={draft.title}
+                 onChange={(e) => setDraft((d) => ({ ...d, title: e.target.value }))}
+                 data-testid="admin-starter-title-input"/>
+          <input className="input" placeholder="Short blurb (≤200 chars)"
+                 value={draft.blurb}
+                 onChange={(e) => setDraft((d) => ({ ...d, blurb: e.target.value }))}
+                 data-testid="admin-starter-blurb-input"/>
+          <input className="input" placeholder="Long description (≤2000 chars)"
+                 value={draft.blurb_long}
+                 onChange={(e) => setDraft((d) => ({ ...d, blurb_long: e.target.value }))}
+                 data-testid="admin-starter-blurb-long-input"/>
+          <label className="flex items-center gap-2 text-[11px]">
+            <input type="checkbox" checked={draft.featured}
+                   onChange={(e) => setDraft((d) => ({ ...d, featured: e.target.checked }))}
+                   data-testid="admin-starter-featured-check"/>
+            Feature this starter (sorts above non-featured)
+          </label>
+          <button onClick={onPublishFromCampaign} disabled={busy}
+                  className="btn btn-primary text-xs"
+                  data-testid="admin-starter-publish-btn">
+            {busy ? "Publishing…" : "Publish as starter"}
+          </button>
+        </div>
+        {err && <div className="text-rose-300 text-[11px] mt-2"
+                     data-testid="admin-starter-error">{err}</div>}
+      </div>
+
+      {/* Existing starters list */}
+      <div className="card-mystic p-4">
+        <div className="flex items-center justify-between mb-2">
+          <div className="label-ref">Live starters ({rows.length})</div>
+          <span className="text-[10px] text-mist/60 font-ui">
+            Drops directly onto /landing → "Starter Campaigns"
+          </span>
+        </div>
+        {rows.length === 0
+          ? <div className="text-[11px] text-mist/60 italic">No starters yet — pick a campaign above and publish one.</div>
+          : (
+            <table className="text-[11px] w-full" data-testid="admin-starter-list">
+              <thead>
+                <tr className="text-left text-mist/60 uppercase tracking-widest text-[9px]">
+                  <th className="py-1.5 px-1">Title</th>
+                  <th className="py-1.5 px-1">System</th>
+                  <th className="py-1.5 px-1">Downloads</th>
+                  <th className="py-1.5 px-1">Featured</th>
+                  <th className="py-1.5 px-1">Bytes</th>
+                  <th className="py-1.5 px-1 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.slug} className="border-t border-mist/10"
+                      data-testid={`admin-starter-row-${r.slug}`}>
+                    <td className="py-1.5 px-1">
+                      <div className="text-parchment font-display">{r.title}</div>
+                      <div className="text-[10px] text-mist/60">/{r.slug}</div>
+                    </td>
+                    <td className="py-1.5 px-1 uppercase text-[10px] text-mist/80">{r.system_id}</td>
+                    <td className="py-1.5 px-1 tabular-nums">{r.downloads}</td>
+                    <td className="py-1.5 px-1">
+                      <button onClick={() => onToggleFeatured(r.slug, r.featured)}
+                              className={`btn btn-ghost text-[10px] ${r.featured ? "text-gold-bright" : ""}`}
+                              data-testid={`admin-starter-feature-toggle-${r.slug}`}>
+                        {r.featured ? "★" : "☆"}
+                      </button>
+                    </td>
+                    <td className="py-1.5 px-1 tabular-nums text-mist/60">
+                      {r.bytes ? `${Math.round(r.bytes / 1024)} KB` : "—"}
+                    </td>
+                    <td className="py-1.5 px-1 text-right">
+                      <button onClick={() => onDelete(r.slug)}
+                              className="btn btn-ghost text-[10px] text-rose-300"
+                              data-testid={`admin-starter-delete-${r.slug}`}>
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+      </div>
     </div>
   );
 }
